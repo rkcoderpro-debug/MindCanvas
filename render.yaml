@@ -33,17 +33,3 @@ services:
         value: gemini-3.6-flash
       - key: MAX_DOCUMENT_BYTES
         value: "10485760"
-
-  - type: static
-    name: mindcanvas-web
-    rootDir: .
-    autoDeployTrigger: commit
-    buildCommand: npm install && npm run build --workspace apps/web
-    staticPublishPath: apps/web/dist
-    envVars:
-      - key: VITE_SUPABASE_URL
-        sync: false
-      - key: VITE_SUPABASE_PUBLISHABLE_KEY
-        sync: false
-      - key: VITE_API_BASE_URL
-        value: https://mindcanvas-api.onrender.com
