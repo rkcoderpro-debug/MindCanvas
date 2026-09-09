@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: mindcanvas-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build --workspace apps/server
+    startCommand: npm run start --workspace apps/server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PORT
+        value: "10000"
+      - key: WEB_ORIGIN
+        value: https://mindcanvas-web.onrender.com
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: EXPERIENTIAL_LABS_BASE_URL
+        sync: false
+      - key: EXPERIENTIAL_LABS_API_KEY
+        sync: false
+      - key: EXPERIENTIAL_LABS_MODEL
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: MAX_DOCUMENT_BYTES
+        value: "10485760"
+
+  - type: static
+    name: mindcanvas-web
+    rootDir: .
+    buildCommand: npm install && npm run build --workspace apps/web
+    staticPublishPath: apps/web/dist
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_API_BASE_URL
+        value: https://mindcanvas-api.onrender.com
