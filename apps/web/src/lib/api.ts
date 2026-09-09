@@ -8,17 +8,18 @@ async function authHeaders(): Promise<Record<string, string>> {
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
 
-export async function uploadPdf(file: File) {
+export async function uploadPdf(file: File, signal?: AbortSignal) {
   const body = new FormData();
   body.append("file", file);
-  const response = await fetch(`${apiBase}/api/documents/upload`, { method: "POST", headers: await authHeaders(), body });
+  const response = await fetch(`${apiBase}/api/documents/upload`, { method: "POST", headers: await authHeaders(), body, signal });
   if (!response.ok) throw new Error("Không thể tải PDF lên máy chủ.");
   return response.json() as Promise<{ id: string; fileName: string; text: string; pageCount?: number }>;
 }
 
-export async function generateMindMap(text: string, documentId?: string) {
+export async function generateMindMap(text: string, documentId?: string, signal?: AbortSignal) {
   const response = await fetch(`${apiBase}/api/ai/mind-map`, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({ text, documentId }),
   });

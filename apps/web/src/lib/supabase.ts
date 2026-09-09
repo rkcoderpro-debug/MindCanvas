@@ -19,8 +19,9 @@ export async function getCurrentSession() {
 
 export async function getCurrentUser() {
   if (!supabase) return null;
-  const { data } = await supabase.auth.getUser();
-  return data.user;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session?.user ?? null;
 }
 
 export type ProjectSummary = { id: string; title: string; folderId: string | null; updatedAt: string };
@@ -108,13 +109,13 @@ export async function saveBoardNote(board: import("@mindcanvas/shared").BoardSta
   return id;
 }
 
-export async function saveDocumentToStorage(file: File, documentId: string, extractedText: string, pageCount?: number) {
+export async function saveDocumentToStorage(file: File, documentId: string, extractedText: string, pageCount?: number, noteId?: string) {
   if (!supabase) return;
   const user = await getCurrentUser();
   if (!user) throw new Error("Bạn cần đăng nhập để lưu PDF.");
   const path = `${user.id}/${documentId}.pdf`;
-  const upload = await supabase.storage.from("documents").upload(path, file, { contentType: "application/pdf", upsert: true });
+  const upload = await supabase.storage.from("documents").upload(path, file, { contentType: "application/pdf", upsert: false });
   if (upload.error) throw upload.error;
-  const { error } = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
+  const { error } = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
   if (error) throw error;
 }

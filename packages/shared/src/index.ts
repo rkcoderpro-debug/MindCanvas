@@ -1,4 +1,4 @@
-export type ToolMode = "select" | "text" | "pen" | "highlighter" | "rect" | "ellipse" | "connector";
+export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "rect" | "ellipse" | "connector";
 
 export type Vec2 = { x: number; y: number };
 
@@ -45,6 +45,9 @@ export type CanvasText = {
   x: number;
   y: number;
   width: number;
+  height?: number;
+  fontSize?: number;
+  color?: string;
 };
 
 export type Viewport = { x: number; y: number; scale: number };

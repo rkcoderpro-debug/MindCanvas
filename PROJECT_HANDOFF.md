@@ -1,5 +1,58 @@
 # MindCanvas — V1 handoff
 
+## Update 2026-09-09 — Workspace + editable elements (authoritative for this slice)
+
+This section supersedes older shell/demo UI descriptions below.
+
+### Implemented
+
+- Workspace is a real home view with owned project cards, last-edited sorting, search, folder filtering and reopen.
+- No blank project is auto-created just by visiting the dashboard. No sample/demo notes are loaded.
+- New project/folder and move flows use styled native HTML dialogs (focus trapping, Escape, form validation), never browser prompt/alert.
+- Project title edits inline. Double-click text/node (or press Enter with selection) to edit on canvas.
+- Text, shapes, nodes and individual strokes can be selected, dragged, resized via bottom-right handle, nudged, duplicated and deleted.
+- Connections can link nodes or shapes and follow endpoints. Removing an endpoint removes its connections.
+- Inspector changes position/size/color, text font size, stroke width/opacity; layers list selects items. Node branches collapse/expand.
+- Drawing prevents native text selection; only the active textarea allows selecting text. Pointer capture + cancel handling prevent stray strokes. One drag/draw commits once for undo.
+- Vietnamese/English UI dictionary, persisted language preference and document lang. Existing project titles/content are never translated automatically.
+- Download/import versioned .mindcanvas.json files (10 MB input bound, graph/geometry validation, new project ID on import).
+- AI preview labels editable before Apply; Apply remaps IDs and places new graph after existing content. Existing title/content preserved, undo supported. Demo-provider responses are explicitly rejected in UI.
+- PDF upload retains private Supabase Storage and now sets documents.note_id.
+
+### Architecture and safety
+
+- App.tsx: auth boundary (preserves working OAuth), per-user keyed workspace, navigation/forms.
+- components/WorkspaceHome.tsx: dashboard cards and search; preview uses available cached data, uncached cloud projects show file icon until opened.
+- components/CanvasBoard.tsx: pointer gestures, inline editing, toolbar/inspector and shortcuts.
+- components/Dialog.tsx / AiPanel.tsx: accessible form shell and cancellable AI workflow.
+- lib/i18n.tsx: bilingual UI only; lib/board.ts: pure geometry, selection, graph and file operations.
+- lib/projectStore.ts: user-scoped local drafts + Supabase repository, explicit user filters in addition to existing RLS, serial save queue.
+- hooks/useWorkspace.ts: latest board ref, bounded undo history, flush before navigation, account isolation, exact-snapshot acknowledgement, retry on reconnection, unload warning for unsynced edits.
+- Existing notes.content JSON remains compatible. Optional text height/fontSize/color fields added to shared types. No new SQL migration or dependency required.
+- Local v3 caches keyed by user ID; migrate only v2 per-user/guest board. Never read shared v1 demo key; no existing user data is deleted.
+- Legacy v2 snapshots are never automatically replayed to cloud: older board.id could differ from notes.id. Keep old browser storage untouched, reopen the authoritative cloud record. Only v3 pending drafts auto-sync.
+- API/provider credentials never appear in this patch. Auth listener is synchronous, no nested Supabase calls.
+
+### Verified vs pending
+
+- npm run typecheck, npm run build, npm test passed (27 meaningful tests).
+- Tests cover pure geometry, cache isolation, queue ordering/errors, stale-save acknowledgement, home/create/open/undo, form UI, language, first node, drag commit, draw cancellation and inline edit cancellation.
+- Component/hook tests run in jsdom, not a real browser. Live OAuth, Supabase RLS/storage, AI generation and Render deployment require the user's environment and were NOT end-to-end tested here.
+- The live website could not be retrieved from this environment. Existing successful OAuth behavior was preserved instead of changing client IDs/redirects.
+- No .git directory in this working copy; no GitHub commit/push or Render deployment was performed.
+
+### Remaining limitations
+
+- Single-element selection only; not full Figma parity (no multi-select, rotation, custom layer ordering, realtime collaboration).
+- Cross-device cloud cards show file icons until opened; preview only renders up to 40 elements per type.
+- LocalStorage capacity is browser-dependent. A quota/error is shown and navigation is blocked if the current board cannot be cached. Export JSON for a portable backup.
+- Concurrent editing in different tabs/devices remains last-write-wins (no optimistic-locking/version conflict protocol yet).
+- Recovering old cloud demo records is not automated: do not delete existing notes based on title alone.
+- Raw service errors may remain in their original language; all application labels/forms/tooltips are bilingual.
+- PDF extraction/provider limits remain as previously documented. No new OCR, paid fallback, sharing permissions or cloud infrastructure has been introduced.
+
+See UPGRADE_WORKSPACE_VI.md for changed-file manifest, replacement and Git/Render steps.
+
 ## Mục tiêu hiện tại
 
 MindCanvas là workspace học tập dạng infinite canvas: ghi chú, vẽ tự do, highlighter, hình cơ bản, connector và mind map có cấu trúc chỉnh sửa được. V1 ưu tiên PDF → graph editable, Google OAuth/Supabase persistence và autosave. Các phạm vi V2/V3 như flashcard, quiz, realtime collaboration, semantic search/RAG, handwriting OCR, analytics, tutor và presentation mode chưa được triển khai.
@@ -24,35 +77,41 @@ supabase/       Postgres tables, RLS và private documents Storage policies
 
 Canvas data không được flatten thành ảnh. `BoardState` giữ text, drawings, shapes, nodes, edges và viewport riêng; edge lấy vị trí node ở mỗi render nên tự bám khi node di chuyển. Undo/redo hiện hoạt động ở frontend cho các thay đổi canvas và thao tác Apply graph.
 
-## Đã hoàn thành trong V1 foundation
+## Đã hoàn thành trong V1 hiện tại
 
 - UI desktop-first theo hướng Notion/Excalidraw/XMind: light surface, navy text, indigo accent, dot-grid.
-- Sidebar workspace, folders placeholder, recent navigation, profile/auth state.
+- Sidebar workspace, user-scoped folders/projects, recent navigation, profile/auth state and logout.
 - Toolbar: select, text, pen, highlighter, rectangle, ellipse và connector.
 - Pan canvas, zoom, drag node, double-click để đổi label, add child node, nối node bằng connector.
 - Autosave localStorage với trạng thái `Đang lưu`, `Đã lưu`, `Offline · đã lưu trên máy`.
 - PDF picker và API flow upload → extract text → provider router → structured graph preview → Apply vào canvas.
 - Provider abstraction server-side; browser chỉ gọi API, không nhận provider key.
 - Supabase migration cho profiles, folders, notes, documents, RLS và bucket `documents` private.
-- Demo mode hiển thị rõ khi Supabase/API credentials chưa có.
+- Google OAuth client scaffolding và session listener; access token được gửi trong API requests.
+- Cloud note sync: load note gần nhất theo RLS và debounce autosave board vào `notes.content` khi user đã đăng nhập.
+- Blank-canvas start: không còn `demoBoard`/folder hard-code; mỗi user có local key riêng, project mới và mở project từ `notes`.
+- Project/folder actions: tạo project trắng, mở project, tạo folder, lọc theo folder, di chuyển project, copy link và xem cài đặt.
+- PDF được upload trực tiếp vào Supabase Storage theo path `{user_id}/{document_id}.pdf`, đồng thời tạo record `documents`.
+- Render Blueprint gồm API Node service; frontend deploy riêng bằng Render Static Site vì Blueprint parser hiện không nhận `type: static`.
+- Demo mode hiển thị rõ khi credentials chưa có; live cloud cần chạy checklist trong `DEPLOY_V1_VI.md`.
 
 ## Chưa hoàn thành / việc tiếp theo
 
-1. Kết nối `supabase.auth.onAuthStateChange` ở frontend, gửi access token trong API requests và sync profile.
-2. Thay localStorage persistence bằng repository layer Supabase cho folders/notes/boards/snapshots; debounce autosave và retry/backoff.
-3. Tạo document record + upload file thật vào Supabase Storage theo path `{user_id}/{document_id}.pdf`.
-4. Thêm preview graph dạng mini-map trước Apply, validate graph bằng schema chặt hơn, chống duplicate node và giữ source-page metadata.
-5. Hoàn thiện thao tác collapse branch, resize/edit text trực tiếp và keyboard shortcuts.
-6. Xác minh contract API chính thức của Experiential Labs khi có endpoint/model cụ thể; hiện adapter không tự giả định endpoint ngoài giá trị env.
-7. Thêm test component/integration cho reducer/history, graph validation, provider fallback và upload size/type limits.
+1. Chạy migration và cấu hình OAuth/Render theo `DEPLOY_V1_VI.md` với project Supabase thật.
+2. Tách repository layer rõ hơn cho folders/notes/boards/documents và thêm retry/backoff khi autosave cloud lỗi.
+3. Thêm preview graph dạng mini-map, validate graph bằng schema chặt hơn, chống duplicate node và giữ source-page metadata.
+4. Hoàn thiện thao tác collapse branch, resize/edit text trực tiếp và keyboard shortcuts.
+5. Xác minh contract API chính thức của Experiential Labs khi có endpoint/model cụ thể; hiện adapter không tự giả định endpoint ngoài giá trị env.
+6. Thêm test component/integration cho reducer/history, graph validation, provider fallback và upload size/type limits.
 
 ## Environment variables
 
 Xem `.env.example`. Các biến `VITE_*` được phép đi vào browser: Supabase URL/anon key và API base URL. Các biến provider, model và Supabase server boundary không có prefix `VITE_`, không được đưa vào frontend bundle.
 
-- Supabase: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, server `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
+- Supabase: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, server `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`.
 - Experiential Labs: `EXPERIENTIAL_LABS_BASE_URL`, `EXPERIENTIAL_LABS_API_KEY`, `EXPERIENTIAL_LABS_MODEL`.
 - Gemini: `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`.
+- Model mặc định hiện tại: `gemini-3.6-flash`; có thể đổi bằng `GEMINI_MODEL` mà không sửa code.
 - Giới hạn: `MAX_DOCUMENT_BYTES` mặc định 10 MB.
 
 Không điền credentials vào git, `.env.example`, hoặc client code. Fallback Gemini chỉ chạy khi `GEMINI_API_KEY` được cấu hình rõ ràng; khi không có provider nào, demo provider tạo graph local.
@@ -73,18 +132,18 @@ npm run dev
 ## Quyết định và trade-off
 
 - Chọn SVG canvas tự quản lý thay vì ghép nhiều engine canvas ở V1: đủ rõ để giữ node/edge/drawing trong một model, dễ kiểm thử và không khóa vào license/pricing chưa xác minh. Có thể thay implementation bằng engine chuyên dụng sau khi data contract ổn định.
-- Express boundary được tách khỏi Vite để secrets và PDF/AI work luôn server-side. Đây là scaffold deploy-neutral; khi chọn nơi deploy cần giữ cùng API contract.
+- Express boundary được tách khỏi Vite để secrets và PDF/AI work luôn server-side; frontend chỉ nhận publishable/anon Supabase key.
 - PDF extraction hiện dùng `pdf-parse` và giới hạn text trước khi đưa vào provider. Page references phụ thuộc text extractor/provider; không bịa page nếu nguồn không có.
-- Demo mode là fallback có chủ đích, không giả vờ rằng cloud auth, storage hay live AI đã được test.
+- Demo mode là fallback có chủ đích, không giả vờ rằng cloud auth, storage hay live AI đã được test khi chưa có credentials.
 
 ## Known issues
 
-- Frontend chưa gửi Supabase access token trong `uploadPdf`/`generateMindMap`; auth boundary server đã có nhưng integration cần nối ở bước tiếp theo.
-- Nút folder/chia sẻ/cài đặt mới là shell UI; chưa có backend behavior.
+- Khi frontend deploy trên Render, `VITE_*` phải được set trước build vì chúng được bake vào static bundle.
+- Chia sẻ hiện copy URL; quyền chia sẻ project đa tài khoản chưa triển khai và vẫn được bảo vệ bởi RLS.
 - Connector hiện tạo edge khi click node đích sau khi chọn node nguồn; chưa có edge selection/delete UI.
-- `ExperientialLabsProvider` dùng contract cấu hình `/v1/generate` làm adapter placeholder vì chưa có endpoint/model chính thức được cung cấp trong environment; không nên bật production nếu chưa xác minh contract.
-- Chưa có credentials trong environment này, nên chưa claim cloud auth, Supabase Storage, Experiential Labs hoặc Gemini live request đã chạy thành công.
+- `ExperientialLabsProvider` dùng endpoint OpenAI-compatible `https://api.experientiallabs.ai/v1/chat/completions`; model phải là model ID có trong catalog Experiential.
+- Chưa có credentials trong environment này, nên chưa claim Google OAuth, Supabase Storage, Experiential Labs hoặc Gemini live request đã chạy thành công.
 
 ## Next safe slice
 
-Tách `boardReducer`/`historyReducer`, thêm Supabase session-aware API client, sau đó viết repository interface (`BoardRepository`, `DocumentRepository`) với local adapter và Supabase adapter. Chỉ khi slice này ổn định mới nối live AI Apply và persistence cloud end-to-end.
+Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → local cloud test → Render API → Render frontend → cập nhật allow-list. Sau đó tách `boardReducer`/`historyReducer` và hoàn thiện repository/retry layer.
