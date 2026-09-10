@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Circle, Copy, Hand, Highlighter, MousePointer2, PenLine, Plus, Square, Trash2, Type, ArrowUpRight } from "lucide-react";
+import { Circle, Copy, Hand, Highlighter, MousePointer2, PenLine, Plus, Square, Trash2, Type, ArrowUpRight, Network } from "lucide-react";
 import type { BoardState, ToolMode, Vec2 } from "@mindcanvas/shared";
-import { clamp, connect, duplicateElement, elementBounds, hiddenNodes, moveElement, pathData, removeElement, resizeElement, type Selection } from "../lib/board";
+import { arrangeMindMap, clamp, connect, duplicateElement, elementBounds, hiddenNodes, moveElement, pathData, removeElement, resizeElement, type Selection } from "../lib/board";
 import { useLanguage, type MessageKey } from "../lib/i18n";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void };
@@ -158,7 +158,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
     <div className="editor-frame">
       <div className="drawing-toolbar" role="toolbar" aria-label={t("properties")}>{tools.map(({ id, icon: Icon, key }) =>
         <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
-        <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button></div>
+        <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
+        <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button></div>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
         <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="#8a99b5"/></marker></defs>

@@ -1,4 +1,5 @@
 import type { BoardState, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
+import { layoutMindMap } from "./mindMapLayout";
 
 export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "edges";
 export type Selection = { kind: ElementKind; id: string };
@@ -77,10 +78,24 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
   if (graph.edges.length > 400 || graph.edges.some(e => !ids.has(e.source) || !ids.has(e.target))) throw new Error("Invalid AI edge");
   const bounds = (["nodes", "shapes", "texts", "drawings"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
   const x = bounds.length ? Math.max(...bounds.map(b => b.x + b.width)) + 100 : 100;
-  return { ...board, nodes: [...board.nodes, ...graph.nodes.map((n, i) => ({
+  const nodes = graph.nodes.map((n, i) => ({
     id: ids.get(n.id)!, label: n.label, sourcePage: Number.isInteger(n.sourcePage) && n.sourcePage! > 0 ? n.sourcePage : undefined,
     x: x + (i % 3) * 250, y: 100 + Math.floor(i / 3) * 130, width: 190, height: 76, color: i === 0 ? "#e1e7ff" : "#ffffff",
-  }))], edges: [...board.edges, ...graph.edges.map(e => ({ id: crypto.randomUUID(), source: ids.get(e.source)!, target: ids.get(e.target)!, label: e.label }))] };
+  }));
+  const edges = graph.edges.map(e => ({ id: crypto.randomUUID(), source: ids.get(e.source)!, target: ids.get(e.target)!, label: e.label }));
+  // Prefer explicit hierarchy for placement, retain the provider's cross-links.
+  const hierarchy = graph.nodes.filter(n => n.parentId && ids.has(n.parentId) && n.parentId !== n.id).map(n => ({ id: crypto.randomUUID(), source: ids.get(n.parentId!)!, target: ids.get(n.id)! }));
+  for (const edge of hierarchy) if (!edges.some(e => e.source === edge.source && e.target === edge.target)) edges.push({ ...edge, label: undefined });
+  const explicitChildren = new Set(hierarchy.map(e => e.target));
+  const layoutEdges = [...hierarchy, ...edges.filter(e => !explicitChildren.has(e.target))];
+  return { ...board, nodes: [...board.nodes, ...layoutMindMap(nodes, layoutEdges, { x, y: 100 })], edges: [...board.edges, ...edges] };
+}
+
+export function arrangeMindMap(board: BoardState): BoardState {
+  if (!board.nodes.length) return board;
+  const other = (["shapes", "texts", "drawings"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
+  const x = other.length ? Math.max(...other.map(b => b.x + b.width)) + 100 : Math.min(...board.nodes.map(n => n.x));
+  return { ...board, nodes: layoutMindMap(board.nodes, board.edges, { x, y: Math.min(...board.nodes.map(n => n.y)) }) };
 }
 
 const obj = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);

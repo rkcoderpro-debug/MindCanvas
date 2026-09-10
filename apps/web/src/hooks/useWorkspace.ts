@@ -68,25 +68,34 @@ export function useWorkspace(owner: string | null) {
     return () => { alive.current = false; clearTimeout(timer.current); window.removeEventListener("online", online); window.removeEventListener("offline", offline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner]);
 
-  const stage = (next: BoardState) => {
+  const stage = (next: BoardState, delay = 750) => {
     dirty.current = !!owner;
     current.current = next; setBoard(next);
     const p: CachedProject = { id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
     try {
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
       setStatus(!navigator.onLine ? "offline" : owner ? "pending" : "localSaved");
-      clearTimeout(timer.current); if (owner) timer.current = setTimeout(() => void flush(), 750);
+      clearTimeout(timer.current); if (owner) timer.current = setTimeout(() => void flush(), delay);
     } catch (err) { cacheFailed.current = true; setStatus("saveError"); report(err); }
   };
   const change = (next: BoardState) => {
     if (current.current && current.current.id !== next.id) return;
     if (current.current && JSON.stringify(current.current) === JSON.stringify(next)) return;
     const previous = current.current;
+    // Navigation is persisted, but is not a document edit or an undo entry.
+    if (previous) {
+      const { viewport: _oldView, updatedAt: _oldTime, ...oldContent } = previous;
+      const { viewport: _newView, updatedAt: _newTime, ...newContent } = next;
+      if (JSON.stringify(oldContent) === JSON.stringify(newContent)) {
+        stage({ ...next, updatedAt: previous.updatedAt }, 2000);
+        return;
+      }
+    }
     setPast(p => previous ? [...p.slice(-49), previous] : p); setFuture([]);
     stage({ ...next, updatedAt: new Date().toISOString() });
   };
-  const undo = () => { const previous = past.at(-1), now = current.current; if (!previous || !now) return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, updatedAt: new Date().toISOString() }); };
-  const redo = () => { const next = future[0], now = current.current; if (!next || !now) return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, updatedAt: new Date().toISOString() }); };
+  const undo = () => { const previous = past.at(-1), now = current.current; if (!previous || !now) return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
+  const redo = () => { const next = future[0], now = current.current; if (!next || !now) return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
   const open = async (p: Project) => {
     const ticket = ++navigation.current;
     await flush();

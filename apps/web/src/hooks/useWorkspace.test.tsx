@@ -9,6 +9,27 @@ function Harness({ owner = null }: { owner?: string | null }) { api = useWorkspa
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace lifecycle", () => {
+  it("pan/zoom persists but does not add undo steps or destroy redo", async () => {
+    await act(async () => root.render(<Harness/>));
+    await act(async () => api.create("Map"));
+    await act(async () => api.change({ ...api.board!, texts: [{ id: "t", text: "edit", x: 0, y: 0, width: 200 }] }));
+    const editTime = api.board!.updatedAt;
+    for (let i = 0; i < 20; i++) await act(async () => api.change({ ...api.board!, viewport: { x: i * 10, y: 30, scale: 1.5 } }));
+    const view = api.board!.viewport;
+    expect(api.board!.updatedAt).toBe(editTime);
+    expect(store.readCache(null)[0].board.viewport).toEqual(view);
+    await act(async () => api.undo());
+    expect(api.board!.texts).toHaveLength(0); expect(api.canUndo).toBe(false); expect(api.board!.viewport).toEqual(view);
+    await act(async () => api.change({ ...api.board!, viewport: { ...view, x: 999 } }));
+    expect(api.canRedo).toBe(true);
+    await act(async () => api.redo());
+    expect(api.board!.texts[0].text).toBe("edit"); expect(api.board!.viewport.x).toBe(999);
+  });
+  it("navigation on a blank canvas creates no undo entry", async () => {
+    await act(async () => root.render(<Harness/>)); await act(async () => api.create("Blank"));
+    await act(async () => api.change({ ...api.board!, viewport: { x: 100, y: 100, scale: 2 } }));
+    expect(api.canUndo).toBe(false);
+  });
   it("opens on dashboard without creating a blank saved record", async () => { await act(async () => root.render(<Harness/>)); expect(api.board).toBeNull(); expect(api.projects).toEqual([]); });
   it("preserves the last edit when going home, opening, and undoing", async () => {
     await act(async () => root.render(<Harness/>));

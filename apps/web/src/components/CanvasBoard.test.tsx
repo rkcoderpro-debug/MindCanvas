@@ -23,6 +23,13 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("Canvas interactions", () => {
+  it("arranges an existing map with one commit while preserving its labels and edges", async () => {
+    const b = { ...blankBoard(), nodes: ["a", "b"].map(id => ({ id, label: id, x: 0, y: 0, width: 190, height: 76 })), edges: [{ id: "e", source: "a", target: "b" }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Sắp xếp mind map"]') as HTMLButtonElement).click());
+    expect(commit).toHaveBeenCalledTimes(1); expect(current.nodes[1].x).toBeGreaterThan(current.nodes[0].x);
+    expect(current.edges).toEqual(b.edges); expect(current.nodes.map(n => n.label)).toEqual(["a", "b"]);
+  });
   it("adds the first editable mind-map node to an empty board", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     await act(async () => (host.querySelector('[aria-label="Node sơ đồ tư duy"]') as HTMLButtonElement).click());

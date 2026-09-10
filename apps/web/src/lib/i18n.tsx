@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export const en = {
+  arrangeMap: "Arrange mind map",
   workspace: "Workspace", recent: "Recent files", folders: "Folders", newFolder: "New folder",
   newProject: "New project", projects: "Projects", untitled: "Untitled canvas", name: "Name",
   create: "Create", cancel: "Cancel", close: "Close", save: "Save", open: "Open",
@@ -40,6 +41,7 @@ export const en = {
 } as const;
 export type MessageKey = keyof typeof en;
 export const vi: Record<MessageKey, string> = {
+  arrangeMap: "Sắp xếp mind map",
   workspace: "Workspace", recent: "File gần đây", folders: "Thư mục", newFolder: "Thư mục mới",
   newProject: "Project mới", projects: "Project", untitled: "Canvas chưa đặt tên", name: "Tên",
   create: "Tạo", cancel: "Hủy", close: "Đóng", save: "Lưu", open: "Mở",
