@@ -3,6 +3,21 @@ import { z } from "zod";
 export class AIError extends Error {
   constructor(public code: string, message: string, public status = 502) { super(message); }
 }
+// Classify upstream details without returning arbitrary upstream text (which may
+// contain credentials, project identifiers or submitted document content).
+export function permissionHint(payload: unknown): string {
+  const error = (payload as { error?: { message?: unknown; details?: Array<{ reason?: unknown }> } } | null)?.error;
+  const message = typeof error?.message === "string" ? error.message.toLowerCase() : "";
+  const reasons = Array.isArray(error?.details) ? error.details.map(d => typeof d?.reason === "string" ? d.reason : "").join(" ") : "";
+  if (message.includes("leaked")) return "Google báo API key đã bị lộ và chặn key. Tạo key mới trong Google AI Studio, cập nhật GEMINI_API_KEY trên backend rồi deploy lại.";
+  if (/API_KEY_HTTP_REFERRER_BLOCKED/.test(reasons) || message.includes("referer") || message.includes("referrer")) return "Key bị giới hạn theo website/referrer, không phù hợp request từ backend Render. Cấu hình key dành cho backend với giới hạn phù hợp.";
+  if (/API_KEY_IP_ADDRESS_BLOCKED/.test(reasons) || message.includes("ip address")) return "IP của backend không được phép dùng key. Kiểm tra giới hạn IP của key và IP outbound của Render.";
+  if (/SERVICE_DISABLED/.test(reasons) || message.includes("has not been used") || message.includes("api is disabled")) return "Generative Language API chưa được bật hoặc đã bị tắt trong Google Cloud project chứa key. Bật API cho đúng project.";
+  if (/API_KEY_SERVICE_BLOCKED/.test(reasons)) return "API restrictions của key chưa cho phép Generative Language API. Kiểm tra giới hạn API của key.";
+  if (message.includes("blocked") || message.includes("suspended")) return "Google báo key hoặc project bị chặn/tạm ngưng. Kiểm tra trạng thái trong Google AI Studio và Google Cloud.";
+  if (message.includes("model") && /access|permission|allow/.test(message)) return "Google báo không có quyền truy cập model đang chọn. Kiểm tra quyền model của project trong Google AI Studio.";
+  return "Google từ chối quyền truy cập. Kiểm tra trạng thái key, API restrictions và quyền project trong Google AI Studio/Google Cloud; chưa xác định được nguyên nhân cụ thể.";
+}
 type Options = { apiKey: string; baseUrl: string; models: string; timeoutMs: number };
 const id = z.string().min(1).max(100);
 const graphSchema = z.object({
@@ -61,7 +76,9 @@ export async function generateGemini(input: { text: string; documentId?: string 
       if (!response.ok) {
         reason = `HTTP_${response.status}`;
         if (![404, 408, 429].includes(response.status) && response.status < 500) {
-          throw new AIError(reason, `Gemini HTTP ${response.status}: kiểm tra key, quyền truy cập và cấu hình request. Không chuyển model cho lỗi này.`);
+          const detail: unknown = await response.json().catch(() => null);
+          const hint = response.status === 403 ? permissionHint(detail) : "Kiểm tra key và cấu hình request; không chuyển model cho lỗi này.";
+          throw new AIError(reason, `Gemini ${model} HTTP ${response.status}: ${hint}`);
         }
         const retryHeader = response.headers.get("retry-after");
         const retryMs = retryHeader ? (/^\d+(\.\d+)?$/.test(retryHeader) ? Number(retryHeader) * 1000 : Date.parse(retryHeader) - Date.now()) : 0;
