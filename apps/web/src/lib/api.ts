@@ -23,6 +23,9 @@ export async function generateMindMap(text: string, documentId?: string, signal?
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({ text, documentId }),
   });
-  if (!response.ok) throw new Error("AI chưa sẵn sàng hoặc request đã quá giới hạn.");
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.error === "string" ? detail.error.slice(0, 2000) : `AI HTTP ${response.status}`);
+  }
   return response.json() as Promise<{ provider: string; graph: StructuredMindMap }>;
 }

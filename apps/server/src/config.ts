@@ -12,7 +12,9 @@ const envSchema = z.object({
   EXPERIENTIAL_LABS_MODEL: z.string().default(""),
   GEMINI_BASE_URL: z.string().url().default("https://generativelanguage.googleapis.com"),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.6-flash"),
+  GEMINI_MODELS: z.string().optional(),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(25000),
   MAX_DOCUMENT_BYTES: z.coerce.number().default(10 * 1024 * 1024),
 });
 

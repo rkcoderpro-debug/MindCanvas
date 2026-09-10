@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { generateGemini } from "./gemini.js";
 
 type AIProviderName = "experiential-labs" | "gemini" | "demo";
 type StructuredMindMap = { title: string; nodes: Array<{ id: string; label: string; parentId?: string; sourcePage?: number }>; edges: Array<{ id: string; source: string; target: string; label?: string }>; sourceDocumentId?: string };
@@ -27,10 +28,11 @@ export class ExperientialLabsProvider implements AIProvider {
   isConfigured() { return Boolean(config.EXPERIENTIAL_LABS_BASE_URL && config.EXPERIENTIAL_LABS_API_KEY && this.model); }
   async generate(input: GenerateInput) {
     if (!this.isConfigured()) throw new Error("Experiential Labs is not configured.");
-    const response = await fetch(`${config.EXPERIENTIAL_LABS_BASE_URL}/v1/generate`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.EXPERIENTIAL_LABS_API_KEY}` }, body: JSON.stringify({ model: this.model, prompt: instruction(input.text), response_format: "json" }), signal: AbortSignal.timeout(45000) });
+    const response = await fetch(`${config.EXPERIENTIAL_LABS_BASE_URL}/chat/completions`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.EXPERIENTIAL_LABS_API_KEY}` }, body: JSON.stringify({ model: this.model, messages: [{ role: "user", content: instruction(input.text) }] }), signal: AbortSignal.timeout(45000) });
     if (!response.ok) throw new Error(`Experiential Labs returned ${response.status}.`);
-    const payload = await response.json() as { output?: string; text?: string; result?: string };
-    return parseGraph(payload.output ?? payload.text ?? payload.result ?? JSON.stringify(payload), this.name, this.model, input.documentId);
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const output = payload.choices?.[0]?.message?.content ?? "";
+    return parseGraph(output, this.name, this.model, input.documentId);
   }
 }
 
@@ -55,7 +57,11 @@ export class DemoProvider implements AIProvider {
 }
 
 export async function generateWithFallback(input: GenerateInput) {
-  const providers: AIProvider[] = [new ExperientialLabsProvider(), new GeminiProvider(), new DemoProvider()];
-  for (const provider of providers) { if (!provider.isConfigured()) continue; try { return await provider.generate(input); } catch (error) { if (provider.name === "demo") throw error; } }
-  return providers[2].generate(input);
+  // Production route is Gemini-only. Never silently replace failures with demo data.
+  return generateGemini(input, {
+    apiKey: config.GEMINI_API_KEY ?? "",
+    baseUrl: config.GEMINI_BASE_URL,
+    models: config.GEMINI_MODELS ?? config.GEMINI_MODEL,
+    timeoutMs: config.GEMINI_TIMEOUT_MS,
+  });
 }

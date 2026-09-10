@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { requireUser } from "./auth.js";
 import { extractPdf } from "./pdf.js";
 import { generateWithFallback } from "./providers.js";
+import { AIError } from "./gemini.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
@@ -20,7 +21,11 @@ app.post("/api/documents/upload", requireUser, upload.single("file"), async (req
 const aiInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional() });
 app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   const parsed = aiInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid document input." });
-  try { const result = await generateWithFallback(parsed.data); return res.json(result); } catch { return res.status(502).json({ error: "All configured AI providers failed." }); }
+  try { const result = await generateWithFallback(parsed.data); return res.json(result); }
+  catch (error) {
+    if (error instanceof AIError) return res.status(error.status).json({ error: error.message, code: error.code });
+    return res.status(502).json({ error: "AI processing failed.", code: "AI_FAILED" });
+  }
 });
 
 app.listen(config.PORT, () => console.log(`MindCanvas API listening on ${config.PORT}`));
