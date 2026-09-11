@@ -67,7 +67,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V1</span></button>
+      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V2.2</span></button>
       <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user ? t("cloud") : t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
         <button className={!ws.board && !recent && !filter ? "active" : ""} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, null)} onClick={home}><LayoutGrid size={18}/>{t("workspace")}</button>
