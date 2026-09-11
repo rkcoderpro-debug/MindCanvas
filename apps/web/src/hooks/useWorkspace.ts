@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoardState } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
+import { normalizeEditor } from "../lib/editorCommands";
+import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { acknowledge, addFolder, cacheProject, fetchBoard, fetchFolders, fetchProjects, mergeProjects, persistProject, readCache, SaveQueue, type CachedProject, type Project, type ProjectFolder } from "../lib/projectStore";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
@@ -69,9 +71,11 @@ export function useWorkspace(owner: string | null) {
   }, [refresh, flush, owner]);
 
   const stage = (next: BoardState, delay = 750) => {
+    next = normalizeEditor(next, current.current ?? undefined);
     dirty.current = !!owner;
     current.current = next; setBoard(next);
-    const p: CachedProject = { id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
+    const existing = projects.find(p => p.id === next.id);
+    const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
     try {
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
       setStatus(!navigator.onLine ? "offline" : owner ? "pending" : "localSaved");
@@ -79,6 +83,7 @@ export function useWorkspace(owner: string | null) {
     } catch (err) { cacheFailed.current = true; setStatus("saveError"); report(err); }
   };
   const change = (next: BoardState) => {
+    next = normalizeEditor(next, current.current ?? undefined);
     if (current.current && current.current.id !== next.id) return;
     if (current.current && JSON.stringify(current.current) === JSON.stringify(next)) return;
     const previous = current.current;
@@ -97,6 +102,7 @@ export function useWorkspace(owner: string | null) {
   const undo = () => { const previous = past.at(-1), now = current.current; if (!previous || !now) return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
   const redo = () => { const next = future[0], now = current.current; if (!next || !now) return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
   const open = async (p: Project) => {
+    if (p.deletedAt) return;
     const ticket = ++navigation.current;
     await flush();
     if (cacheFailed.current || ticket !== navigation.current) return;
@@ -105,7 +111,7 @@ export function useWorkspace(owner: string | null) {
       const next = cached && (!owner || cached.pending || !navigator.onLine) ? cached.board : owner ? await fetchBoard(owner, p.id) : cached?.board;
       if (!next) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
-      current.current = next; folderId.current = p.folderId; setBoard(next); setPast([]); setFuture([]);
+      current.current = normalizeEditor(next); folderId.current = p.folderId; setBoard(current.current); setPast([]); setFuture([]);
       if (!cached?.pending) cacheProject(owner, { ...p, board: next, pending: false });
     } catch (err) { report(err); }
   };
@@ -118,5 +124,21 @@ export function useWorkspace(owner: string | null) {
   const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); setPast([]); setFuture([]); await refresh(); };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
   const move = (id: string | null) => { if (!current.current) return; folderId.current = id; stage({ ...current.current, updatedAt: new Date().toISOString() }); };
-  return { board, projects, folders, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, open, create, home, newFolder, move };
+  const manageProject = async (project: Project, patch: ProjectPatch) => {
+    try { if (!await flush()) throw new Error("Please save your pending changes and reconnect first."); await updateProject(owner, project, patch); await refresh(); }
+    catch (err) { report(err); throw err; }
+  };
+  const duplicateProject = async (project: Project, title: string) => {
+    try {
+      if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
+      const cached = readCache(owner).find(p => p.id === project.id);
+      const source = owner ? await fetchBoard(owner, project.id) : cached?.board;
+      if (!source) throw new Error("Project unavailable");
+      const copy = { ...structuredClone(source), id: crypto.randomUUID(), title, updatedAt: new Date().toISOString() };
+      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: project.folderId, board: copy, pending: !!owner, favorite: false, deletedAt: null });
+      if (!await flush()) throw new Error("Copy is kept locally; retry saving to finish cloud sync.");
+      await refresh();
+    } catch (err) { report(err); throw err; }
+  };
+  return { board, projects, folders, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, open, create, home, newFolder, move, manageProject, duplicateProject };
 }

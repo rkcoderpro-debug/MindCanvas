@@ -12,6 +12,7 @@ export type MindMapNode = {
   color?: string;
   sourcePage?: number;
   collapsed?: boolean;
+  parentId?: string;
 };
 
 export type MindMapEdge = {
@@ -53,6 +54,8 @@ export type CanvasText = {
 export type Viewport = { x: number; y: number; scale: number };
 
 export type BoardState = {
+  layerOrder?: string[];
+  groups?: Array<{ id: string; elementIds: string[] }>;
   id: string;
   title: string;
   updatedAt: string;

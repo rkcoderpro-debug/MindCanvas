@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { ArrowLeft, Clock3, Download, Folder, FolderPlus, Globe2, LayoutGrid, LogIn, LogOut, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { ArrowLeft, Clock3, Download, Folder, FolderPlus, Globe2, LayoutGrid, LogIn, LogOut, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
 import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
@@ -59,8 +59,8 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     if (fileInput.current) fileInput.current.value = "";
   };
   const accountName = user?.user_metadata.full_name ?? user?.user_metadata.name ?? user?.email ?? t("guest");
-  const visible = ws.projects.filter(p => !filter || p.folderId === filter);
-  const pageTitle = filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
+  const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : !filter || p.folderId === filter));
+  const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -68,7 +68,9 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user ? t("cloud") : t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
         <button className={!ws.board && !recent && !filter ? "active" : ""} onClick={home}><LayoutGrid size={18}/>{t("workspace")}</button>
-        <button className={!ws.board && recent ? "active" : ""} onClick={() => { void ws.home(); setFilter(null); setRecent(true); }}><Clock3 size={18}/>{t("recent")}<span>{ws.projects.length}</span></button>
+        <button className={!ws.board && recent ? "active" : ""} onClick={() => { void ws.home(); setFilter(null); setRecent(true); }}><Clock3 size={18}/>{t("recent")}<span>{ws.projects.filter(p => !p.deletedAt).length}</span></button>
+        <button className={!ws.board && filter === "__favorites" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__favorites"); setRecent(false); }}><Star size={18}/>{t("favorites")}</button>
+        <button className={!ws.board && filter === "__trash" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__trash"); setRecent(false); }}><Trash2 size={18}/>{t("trash")}</button>
       </nav>
       <div className="section-label">{t("folders")}<button className="icon-button" aria-label={t("newFolder")} onClick={() => askName("folder")}><Plus size={17}/></button></div>
       <div className="folder-list">{ws.folders.map(f => <button key={f.id} className={filter === f.id && !ws.board ? "active" : ""} onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
@@ -91,7 +93,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
           <button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button>
           <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button></div></div>
         <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onUndo={ws.undo} onRedo={ws.redo} onSave={() => void ws.flush()}/>
-      </> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}
+      </> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}
     </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>

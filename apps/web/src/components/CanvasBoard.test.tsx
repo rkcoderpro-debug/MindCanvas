@@ -11,8 +11,8 @@ function Harness({ initial }: { initial: BoardState }) {
   const [board, setBoard] = useState(initial); current = board;
   return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
 }
-function pointer(target: Element, type: string, x: number, y: number) {
-  const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
+function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit = {}) {
+  const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
   Object.defineProperty(e, "pointerId", { value: 1 }); target.dispatchEvent(e);
 }
 beforeEach(() => {
@@ -23,6 +23,42 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("Canvas interactions", () => {
+  it("selects a marquee, moves multiple elements once, and groups/ungroups them", async () => {
+    const b = { ...blankBoard(), shapes: ["a","b"].map((id,i) => ({id,kind:"rect" as const,x:20+i*80,y:20,width:50,height:50,color:"#ffffff"})) };
+    await act(async () => root.render(<Harness initial={b}/>)); const svg=host.querySelector("svg.canvas-svg")!;
+    await act(async () => { pointer(svg,"pointerdown",0,0); pointer(svg,"pointermove",200,100); pointer(svg,"pointerup",200,100); });
+    expect(commit).not.toHaveBeenCalled(); expect(host.querySelectorAll(".selection-box")).toHaveLength(1);
+    await act(async () => pointer(host.querySelector('[data-element="a"]')!,"pointerdown",30,30));
+    await act(async () => { pointer(svg,"pointermove",60,60); pointer(svg,"pointerup",60,60); });
+    expect(commit).toHaveBeenCalledTimes(1); expect(current.shapes.map(n=>n.x)).toEqual([50,130]);
+    await act(async () => [...host.querySelectorAll("button")].find(b=>b.textContent==="Gộp nhóm")!.click());
+    expect(current.groups?.[0].elementIds).toEqual(["a","b"]);
+    await act(async () => [...host.querySelectorAll("button")].find(b=>b.textContent==="Tách nhóm")!.click()); expect(current.groups).toEqual([]);
+  });
+  it("renders cross-type layers in the requested order", async () => {
+    const b={...blankBoard(),texts:[{id:"text",text:"Text",x:0,y:20,width:200}],shapes:[{id:"shape",kind:"rect" as const,x:0,y:0,width:200,height:100,color:"#ffffff"}],layerOrder:["shape","text"]};
+    await act(async()=>root.render(<Harness initial={b}/>));
+    const order=()=>[...host.querySelectorAll('[data-layer-stack] > [data-element]')].map(n=>n.getAttribute("data-element")); expect(order()).toEqual(["shape","text"]);
+    await act(async()=>pointer(host.querySelector('[data-element="shape"]')!,"pointerdown",10,10));
+    await act(async()=>pointer(host.querySelector("svg.canvas-svg")!,"pointerup",10,10));
+    await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Đưa lên trên cùng")!.click());
+    expect(order()).toEqual(["text","shape"]);
+  });
+  it("Tab creates an editable child and Escape cancels it", async()=>{
+    const b={...blankBoard(),nodes:[{id:"root",label:"Root",x:0,y:0,width:190,height:76}]};
+    await act(async()=>root.render(<Harness initial={b}/>)); const svg=host.querySelector("svg.canvas-svg")!;
+    await act(async()=>{pointer(host.querySelector('[data-element="root"]')!,"pointerdown",10,10);pointer(svg,"pointerup",10,10);});
+    await act(async()=>svg.dispatchEvent(new KeyboardEvent("keydown",{key:"Tab",bubbles:true,cancelable:true})));
+    expect(host.querySelector("textarea")).not.toBeNull(); expect(commit).not.toHaveBeenCalled();
+    await act(async()=>host.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true})));
+    expect(current.nodes).toHaveLength(1);
+  });
+  it("fit canvas changes only viewport", async()=>{
+    const b={...blankBoard(),nodes:[{id:"root",label:"Root",x:2000,y:2000,width:190,height:76}]};
+    await act(async()=>root.render(<Harness initial={b}/>));
+    await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Vừa màn hình")!.click());
+    expect(current.nodes).toEqual(b.nodes); expect(current.viewport.x).toBeLessThan(0);
+  });
   it("arranges an existing map with one commit while preserving its labels and edges", async () => {
     const b = { ...blankBoard(), nodes: ["a", "b"].map(id => ({ id, label: id, x: 0, y: 0, width: 190, height: 76 })), edges: [{ id: "e", source: "a", target: "b" }] };
     await act(async () => root.render(<Harness initial={b}/>));

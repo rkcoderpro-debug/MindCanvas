@@ -1,5 +1,20 @@
 # MindCanvas — V1 handoff
 
+## Update 2026-09-11 — Selection, layers, groups, navigation and project management
+
+This section supersedes older statements about missing multi-selection/layers or Enter-to-edit on mind-map nodes. See `EDITOR_WORKSPACE_UPGRADE_VI.md` for exact replacement files and deployment instructions.
+
+- `editorCommands.ts` owns pure commands: legacy-compatible global layer order, normalized additions/deletions, multi-move/delete/duplicate/paste, flat groups, atomic layer movement, safe node reparenting, relative-node creation and fit viewport.
+- `BoardState.layerOrder` stores bottom-to-top element IDs across every type. Old files retain their old visual stacking; new items append above existing items. `groups` stores flat sets of element IDs. `MindMapNode.parentId` preserves hierarchy for AI imports and subsequent edits. Existing JSON remains readable; import validates layer/group references.
+- `CanvasBoard` supports marquee, Shift-click, Ctrl/Cmd+A/C/V/D/G/Shift+G, Delete, moving a multi-selection in one undo entry, front/back/step ordering in the inspector, and layer selection. Clipboard is editor-session memory (not OS clipboard or cross-project). Groups are flat; no nested groups or group resize/rotation.
+- Mind maps: Tab creates a child; Enter creates a sibling; Shift+Enter/double-click edits. New relative nodes commit with their text in one operation; Escape cancels. Alt-drag a single node onto another reparents with cycle protection; direct node +/- controls collapse branches. Existing cross-links remain.
+- `LayerStack.tsx` renders one global order; `CanvasNavigator.tsx` adds Fit canvas, Go to selection and a clickable minimap. Pan/zoom/fit retain the previous navigation-free Undo behavior.
+- Workspace cards have favorites, rename, folder move, duplicate, soft trash and restore. `projectStore.updateProject` writes metadata only with explicit user filters and existing RLS; cloud failures are visible. Local guest metadata is stored under the existing owner-scoped cache. Duplicating a project copies its canvas, not PDF storage objects.
+- Migration `supabase/migrations/0002_project_management.sql` is REQUIRED before deploying this frontend: adds `is_favorite` and `deleted_at` to notes, keeps all rows and RLS policies. No key/backend/provider changes for this slice. Cloud calls are not tested live and migration has not been applied to the user's account.
+- Metadata mutations require successful flush before acting. Cloud content saves do not overwrite trash/favorite columns. Clean-cache merges accept remote metadata even when content timestamp is unchanged. Cross-device concurrent content remains last-write-wins, as before.
+- No permanent deletion, PDF preview, exported images/PDF, nested groups, multi-resize or persistent version history in this slice. Those were not in the approved scope.
+- Validation uses TypeScript/build and local unit/component tests with jsdom/mocked cloud calls; no real Render/Supabase account or browser QA performed.
+
 ## Update 2026-09-09 — Workspace + editable elements (authoritative for this slice)
 
 This section supersedes older shell/demo UI descriptions below.

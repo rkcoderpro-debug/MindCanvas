@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export const en = {
+  copyElements: "Copy elements", pasteElements: "Paste elements",
+  selectedElements: "elements selected", bringFront: "Bring to front", sendBack: "Send to back", bringForward: "Bring forward", sendBackward: "Send backward",
+  group: "Group", ungroup: "Ungroup", addChild: "Add child", addSibling: "Add sibling", reparentHint: "Alt-drag one node onto another to change its parent. Shift+Enter edits the label.",
+  fitCanvas: "Fit canvas", fitSelection: "Go to selection", minimap: "Minimap", favorites: "Favorites", trash: "Trash", restore: "Restore", favorite: "Add to favorites", unfavorite: "Remove favorite", moveToTrash: "Move to trash", projectActions: "Project actions", copySuffix: "copy", trashEmpty: "Trash is empty", trashHint: "Files here can be restored. They are not permanently deleted.",
   arrangeMap: "Arrange mind map",
   workspace: "Workspace", recent: "Recent files", folders: "Folders", newFolder: "New folder",
   newProject: "New project", projects: "Projects", untitled: "Untitled canvas", name: "Name",
@@ -22,7 +26,7 @@ export const en = {
   zoomOut: "Zoom out", resetZoom: "Reset view", properties: "Properties", layers: "Elements",
   color: "Color", width: "Width", height: "Height", fontSize: "Font size", opacity: "Opacity",
   stroke: "Stroke width", collapse: "Collapse branch", expand: "Expand branch",
-  canvasHint: "Double-click text to edit · Space + drag to pan · Delete to remove",
+  canvasHint: "Drag empty space to select · Shift+click to add · Space+drag to pan",
   connectorHint: "Select a source node or shape, then a destination.",
   selectHint: "Select an element to change its position, size or color.",
   textHint: "Click anywhere to type. Escape cancels; Ctrl/⌘ + Enter finishes.",
@@ -37,10 +41,14 @@ export const en = {
   fileTooLarge: "This file exceeds 10 MB.", noFolders: "No folders yet", copied: "Copy downloaded",
   updated: "Updated", saveBeforeLeave: "Keep this tab open until saving finishes, or export a backup.",
   drawHint: "Drag to draw. Switch to Select to move individual strokes.",
-  unsaved: "Unsynced changes", restore: "Recovered local changes", refresh: "Refresh",
+  unsaved: "Unsynced changes", refresh: "Refresh",
 } as const;
 export type MessageKey = keyof typeof en;
 export const vi: Record<MessageKey, string> = {
+  copyElements: "Sao chép phần tử", pasteElements: "Dán phần tử",
+  selectedElements: "phần tử đã chọn", bringFront: "Đưa lên trên cùng", sendBack: "Đưa xuống dưới cùng", bringForward: "Lên một lớp", sendBackward: "Xuống một lớp",
+  group: "Gộp nhóm", ungroup: "Tách nhóm", addChild: "Thêm nhánh con", addSibling: "Thêm nhánh cùng cấp", reparentHint: "Giữ Alt rồi kéo một node lên node khác để đổi cha. Shift+Enter sửa nhãn.",
+  fitCanvas: "Vừa màn hình", fitSelection: "Đến phần đã chọn", minimap: "Bản đồ nhỏ", favorites: "Yêu thích", trash: "Thùng rác", restore: "Khôi phục", favorite: "Thêm yêu thích", unfavorite: "Bỏ yêu thích", moveToTrash: "Đưa vào thùng rác", projectActions: "Thao tác project", copySuffix: "bản sao", trashEmpty: "Thùng rác trống", trashHint: "Bạn có thể khôi phục các file tại đây. File chưa bị xóa vĩnh viễn.",
   arrangeMap: "Sắp xếp mind map",
   workspace: "Workspace", recent: "File gần đây", folders: "Thư mục", newFolder: "Thư mục mới",
   newProject: "Project mới", projects: "Project", untitled: "Canvas chưa đặt tên", name: "Tên",
@@ -62,7 +70,7 @@ export const vi: Record<MessageKey, string> = {
   zoomOut: "Thu nhỏ", resetZoom: "Đặt lại góc nhìn", properties: "Thuộc tính", layers: "Phần tử",
   color: "Màu", width: "Rộng", height: "Cao", fontSize: "Cỡ chữ", opacity: "Độ đậm",
   stroke: "Độ dày nét", collapse: "Thu nhánh", expand: "Mở nhánh",
-  canvasHint: "Nhấp đúp chữ để sửa · Space + kéo để di chuyển canvas · Delete để xóa",
+  canvasHint: "Kéo vùng trống để chọn · Shift+bấm để chọn thêm · Space+kéo để di chuyển canvas",
   connectorHint: "Chọn node hoặc hình nguồn, sau đó chọn đích.",
   selectHint: "Chọn phần tử để thay đổi vị trí, kích thước hoặc màu.",
   textHint: "Bấm vị trí để nhập chữ. Escape hủy; Ctrl/⌘ + Enter hoàn tất.",
@@ -77,7 +85,7 @@ export const vi: Record<MessageKey, string> = {
   fileTooLarge: "File vượt quá 10 MB.", noFolders: "Chưa có thư mục", copied: "Đã tải bản sao",
   updated: "Cập nhật", saveBeforeLeave: "Giữ tab mở đến khi lưu xong, hoặc tải bản sao dự phòng.",
   drawHint: "Kéo để vẽ. Đổi sang Chọn để di chuyển từng nét vẽ.",
-  unsaved: "Thay đổi chưa đồng bộ", restore: "Đã khôi phục thay đổi trên máy", refresh: "Tải lại",
+  unsaved: "Thay đổi chưa đồng bộ", refresh: "Tải lại",
 };
 type Language = "vi" | "en";
 const Context = createContext({ language: "vi" as Language, setLanguage: (_: Language) => {}, t: (key: MessageKey): string => vi[key] });

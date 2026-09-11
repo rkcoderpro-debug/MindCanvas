@@ -94,6 +94,23 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .canvas-copy { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; min-height: 100%; padding: 0; }
 .node-copy { font-size: 16px; font-weight: 500; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .node-copy small { display: block; margin-top: 3px; }
+.selection-actions { display: grid; gap: 8px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e4e8f1; }
+.selection-actions button { padding: 8px; border: 1px solid #dce2ef; border-radius: 7px; background: white; font-size: 14px; text-align: left; }
+.selection-actions button:hover { background: #eef2ff; }
+.selection-actions small { color: #65718a; line-height: 1.5; }
+.canvas-navigator { position: absolute; bottom: 58px; right: 16px; z-index: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.navigator-actions { display: flex; gap: 4px; padding: 4px; background: #fff; border: 1px solid #dce2ef; border-radius: 9px; box-shadow: 0 3px 12px #18213b0d; }
+.navigator-actions button { font-size: 14px; padding: 6px 8px; border-radius: 6px; }
+.navigator-actions button:hover { background: #eef2ff; }
+.minimap { width: 180px; height: 112px; background: #ffffffed; border: 1px solid #dce2ef; border-radius: 8px; cursor: crosshair; }
+.project-card { position: relative; overflow: visible; }
+.project-open { display: block; width: 100%; padding: 0; text-align: left; border-radius: inherit; overflow: hidden; }
+.project-open:disabled { opacity: 1; }
+.project-card-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; background: white; border-radius: 8px; box-shadow: 0 2px 8px #18213b12; }
+.project-menu { position: absolute; z-index: 15; top: 48px; right: 10px; min-width: 190px; background: white; border: 1px solid #dce2ef; border-radius: 10px; padding: 6px; box-shadow: 0 8px 28px #18213b20; display: grid; }
+.project-menu button { text-align: left; padding: 9px 12px; border-radius: 6px; font-size: 14px; }
+.project-menu button:hover { background: #eef2ff; }
+@media (max-width: 700px) { .canvas-navigator { right: 8px; bottom: 60px; } .minimap { width: 130px; height: 80px; } .navigator-actions button { font-size: 12px; padding: 5px; } }
 .canvas-svg .inline-editor { display: block; width: 100%; height: 100%; padding: 0; border: 1px solid var(--accent); border-radius: 2px; resize: none; white-space: pre-wrap; line-height: 1.4; outline: none; user-select: text; -webkit-user-select: text; background: #fff; color: #18213b; }
 .resize-handle { cursor: nwse-resize; }
 .drawing-toolbar { display: flex; position: absolute; z-index: 3; top: 16px; left: 50%; transform: translateX(-50%); align-items: center; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 11px; background: #fff; box-shadow: 0 5px 20px #263c6b0f; }

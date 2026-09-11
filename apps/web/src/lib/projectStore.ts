@@ -2,7 +2,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { parseBoard } from "./board";
 
-export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean };
+export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export const cacheKey = (owner: string | null) => `mindcanvas:projects:v3:${owner ?? "guest"}`;
@@ -36,7 +36,7 @@ export function mergeProjects(remote: Project[], cache: CachedProject[], owner: 
   const result = new Map(remote.map(p => [p.id, p]));
   for (const p of cache) {
     if (p.pending) result.set(p.id, p);
-    else if (result.has(p.id) && result.get(p.id)!.updatedAt === p.updatedAt) result.set(p.id, p);
+    else if (result.has(p.id) && result.get(p.id)!.updatedAt === p.updatedAt) result.set(p.id, { ...p, ...result.get(p.id)!, board: p.board });
   }
   return [...result.values()];
 }
@@ -47,9 +47,9 @@ async function clientFor(owner: string) {
 }
 export async function fetchProjects(owner: string): Promise<Project[]> {
   const client = await clientFor(owner);
-  const { data, error } = await client.from("notes").select("id,title,folder_id,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+  const { data, error } = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
   if (error) throw error;
-  return (data ?? []).map(p => ({ id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at }));
+  return (data ?? []).map(p => ({ id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at }));
 }
 export async function fetchBoard(owner: string, id: string): Promise<BoardState> {
   const client = await clientFor(owner);
@@ -69,6 +69,24 @@ export async function fetchFolders(owner: string | null): Promise<ProjectFolder[
   const { data, error } = await client.from("folders").select("id,name").eq("user_id", owner).order("created_at").abortSignal(AbortSignal.timeout(20000));
   if (error) throw error;
   return data ?? [];
+}
+export type ProjectPatch = { favorite?: boolean; deletedAt?: string | null; title?: string; folderId?: string | null };
+export async function updateProject(owner: string | null, project: Project, patch: ProjectPatch) {
+  // Metadata writes never replace content. Cloud actions must complete before
+  // the UI announces success; a failed request leaves the local record intact.
+  const timestamp = patch.title !== undefined ? new Date().toISOString() : project.updatedAt;
+  if (owner) {
+    const client = await clientFor(owner);
+    const changes = { ...(patch.favorite !== undefined ? { is_favorite: patch.favorite } : {}),
+      ...(patch.deletedAt !== undefined ? { deleted_at: patch.deletedAt } : {}),
+      ...(patch.folderId !== undefined ? { folder_id: patch.folderId } : {}),
+      ...(patch.title !== undefined ? { title: patch.title, updated_at: timestamp } : {}) };
+    const { error } = await client.from("notes").update(changes).eq("user_id", owner).eq("id", project.id).select("id").abortSignal(AbortSignal.timeout(20000)).single();
+    if (error) throw error;
+  }
+  const cached = readCache(owner).find(p => p.id === project.id);
+  if (cached) cacheProject(owner, { ...cached, ...patch, updatedAt: timestamp,
+    board: patch.title !== undefined ? { ...cached.board, title: patch.title, updatedAt: timestamp } : cached.board });
 }
 export async function addFolder(owner: string | null, name: string): Promise<ProjectFolder> {
   const folder = { id: crypto.randomUUID(), name };

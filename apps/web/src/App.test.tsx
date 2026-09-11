@@ -14,12 +14,28 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace UI", () => {
+  it("favorites, duplicates, trashes and restores real projects from cards", async()=>{
+    const board=blankBoard("Keep me");cacheProject(null,{id:board.id,title:board.title,board,folderId:null,updatedAt:board.updatedAt,pending:false});
+    await act(async()=>root.render(<App/>));
+    await act(async()=>(host.querySelector('[aria-label="Thêm yêu thích"]') as HTMLButtonElement).click());
+    expect(host.querySelector('[aria-label="Bỏ yêu thích"]')).not.toBeNull();
+    const menu=()=>host.querySelector('[aria-label="Thao tác project: Keep me"]') as HTMLButtonElement;
+    await act(async()=>menu().click());
+    await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Nhân đôi")?.dispatchEvent(new MouseEvent("click",{bubbles:true})));
+    expect(host.querySelectorAll(".project-card")).toHaveLength(2);
+    await act(async()=>menu().click());await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Đưa vào thùng rác")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
+    expect(host.querySelectorAll(".project-card")).toHaveLength(1);
+    await act(async()=>[...host.querySelectorAll("nav button")].find(b=>b.textContent==="Thùng rác")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
+    expect(host.querySelector(".project-card")?.textContent).toContain("Keep me");
+    await act(async()=>menu().click());await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Khôi phục")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
+    expect(host.querySelectorAll(".project-card")).toHaveLength(0);
+  });
   it("renders real projects as home cards and opens a selected project", async () => {
     const board = blankBoard("My notes"); cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
     expect(host.querySelector(".project-card")?.textContent).toContain("My notes");
     expect(host.querySelector("svg.canvas-svg")).toBeNull();
-    await act(async () => (host.querySelector(".project-card") as HTMLButtonElement).click());
+    await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());
     expect(host.querySelector("svg.canvas-svg")).not.toBeNull();
     await act(async () => (host.querySelector(".brand") as HTMLButtonElement).click());
     expect(host.querySelector(".project-card")).not.toBeNull();

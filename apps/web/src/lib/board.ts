@@ -60,7 +60,7 @@ export function hiddenNodes(board: BoardState): Set<string> {
     const visited = new Set([root.id]), stack = [root.id];
     while (stack.length) {
       const current = stack.pop();
-      for (const e of board.edges.filter(e => e.source === current)) if (!visited.has(e.target)) {
+      for (const e of board.edges.filter(e => e.source === current && (!board.nodes.find(n => n.id === e.target)?.parentId || board.nodes.find(n => n.id === e.target)?.parentId === current))) if (!visited.has(e.target)) {
         visited.add(e.target); hidden.add(e.target); stack.push(e.target);
       }
     }
@@ -79,7 +79,7 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
   const bounds = (["nodes", "shapes", "texts", "drawings"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
   const x = bounds.length ? Math.max(...bounds.map(b => b.x + b.width)) + 100 : 100;
   const nodes = graph.nodes.map((n, i) => ({
-    id: ids.get(n.id)!, label: n.label, sourcePage: Number.isInteger(n.sourcePage) && n.sourcePage! > 0 ? n.sourcePage : undefined,
+    id: ids.get(n.id)!, label: n.label, parentId: n.parentId ? ids.get(n.parentId) : undefined, sourcePage: Number.isInteger(n.sourcePage) && n.sourcePage! > 0 ? n.sourcePage : undefined,
     x: x + (i % 3) * 250, y: 100 + Math.floor(i / 3) * 130, width: 190, height: 76, color: i === 0 ? "#e1e7ff" : "#ffffff",
   }));
   const edges = graph.edges.map(e => ({ id: crypto.randomUUID(), source: ids.get(e.source)!, target: ids.get(e.target)!, label: e.label }));
@@ -127,6 +127,17 @@ export function parseBoard(value: unknown): BoardState {
     }
   }
   if (points > 200000 || b.edges.some((e: any) => !ids.has(e.source) || !ids.has(e.target))) throw new Error("Invalid graph");
+  if (b.layerOrder !== undefined && (!Array.isArray(b.layerOrder) || b.layerOrder.length > ids.size || new Set(b.layerOrder).size !== b.layerOrder.length || b.layerOrder.some((id: unknown) => typeof id !== "string" || !ids.has(id)))) throw new Error("Invalid layers");
+  if (b.groups !== undefined) {
+    if (!Array.isArray(b.groups) || b.groups.length > 5000) throw new Error("Invalid groups");
+    const grouped = new Set<string>(), groupIds = new Set<string>();
+    for (const g of b.groups) {
+      if (!obj(g) || !string(g.id, 200) || groupIds.has(g.id) || !Array.isArray(g.elementIds) || g.elementIds.length < 2) throw new Error("Invalid group");
+      groupIds.add(g.id);
+      for (const id of g.elementIds) { if (!ids.has(id) || grouped.has(id)) throw new Error("Invalid group member"); grouped.add(id); }
+    }
+  }
+  if (b.nodes.some((n: any) => n.parentId !== undefined && (!string(n.parentId, 200) || !b.nodes.some((p: any) => p.id === n.parentId) || n.parentId === n.id))) throw new Error("Invalid parent");
   return structuredClone(b) as BoardState;
 }
 export function exportBoard(board: BoardState) {
