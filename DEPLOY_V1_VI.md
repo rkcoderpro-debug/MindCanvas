@@ -1,5 +1,9 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.3 — Vibrant Themes
+
+V3.3 chỉ thay đổi frontend. Không thêm migration, không đổi Supabase/OAuth/Gemini và không thêm biến môi trường. Sau khi push các file trong `V3_3_VIBRANT_THEMES_VI.md`, chỉ cần deploy latest commit cho service `mindcanvas-web`; `mindcanvas-api` có thể giữ nguyên.
+
 Tài liệu này dùng đúng codebase hiện tại. Quy trình gồm Supabase (Auth + Database + Storage), Google Cloud (Google OAuth), Render API và Render frontend.
 
 ## A. Chuẩn bị code local

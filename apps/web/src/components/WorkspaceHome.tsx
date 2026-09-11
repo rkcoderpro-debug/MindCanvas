@@ -3,6 +3,7 @@ import { FilePlus2, FileText, FolderOpen, Search, Upload, Star, MoreHorizontal }
 import type { Project, ProjectFolder, ProjectPatch } from "../lib/projectStore";
 import { useLanguage } from "../lib/i18n";
 import { elementBounds, hiddenNodes } from "../lib/board";
+import { canvasTextColor, readableTextColor } from "../lib/color";
 import { orderedElements, selectionBounds } from "../lib/editorCommands";
 import Dialog from "./Dialog";
 
@@ -13,9 +14,9 @@ function Preview({ project }: { project: Project }) {
   return <svg width="100%" height="100%" viewBox={box}>{entries.slice(0, 200).map(s => {
     if (s.kind === "shapes") { const n = b.shapes.find(n => n.id === s.id)!; return n.kind === "rect" ? <rect key={n.id} x={n.x} y={n.y} width={n.width} height={n.height} fill={n.color}/> : <ellipse key={n.id} cx={n.x+n.width/2} cy={n.y+n.height/2} rx={n.width/2} ry={n.height/2} fill={n.color}/>; }
     if (s.kind === "drawings") { const n = b.drawings.find(n => n.id === s.id)!; return <polyline key={n.id} points={n.points.map(p => `${p.x},${p.y}`).join(" ")} fill="none" stroke={n.color} strokeWidth={n.width} opacity={n.opacity}/>; }
-    if (s.kind === "edges") { const e = b.edges.find(e => e.id === s.id)!; if (hidden.has(e.source) || hidden.has(e.target)) return null; const source = [...b.nodes,...b.shapes].find(n => n.id === e.source), target = [...b.nodes,...b.shapes].find(n => n.id === e.target); return source && target ? <line key={e.id} x1={source.x+source.width} y1={source.y+source.height/2} x2={target.x} y2={target.y+target.height/2} stroke="#8a99b5" strokeWidth={2}/> : null; }
+    if (s.kind === "edges") { const e = b.edges.find(e => e.id === s.id)!; if (hidden.has(e.source) || hidden.has(e.target)) return null; const source = [...b.nodes,...b.shapes].find(n => n.id === e.source), target = [...b.nodes,...b.shapes].find(n => n.id === e.target); return source && target ? <line key={e.id} x1={source.x+source.width} y1={source.y+source.height/2} x2={target.x} y2={target.y+target.height/2} stroke="var(--connector)" strokeWidth={2}/> : null; }
     const n = b[s.kind].find(n => n.id === s.id)!, r = elementBounds(b,s)!;
-    return <g key={n.id}>{s.kind === "nodes" && <rect {...r} fill={n.color ?? "#e1e7ff"} stroke="#a5b4ef" rx={10}/>}<text x={r.x+10} y={r.y+25} fontSize={16} fill="#18213b">{("label" in n ? n.label : n.text).slice(0,28)}</text></g>;
+    return <g key={n.id}>{s.kind === "nodes" && <rect {...r} fill={n.color ?? "var(--node-fill)"} stroke="var(--element-stroke)" rx={10}/>}<text x={r.x+10} y={r.y+25} fontSize={16} fill={s.kind === "nodes" ? readableTextColor(n.color) : canvasTextColor(n.color)}>{("label" in n ? n.label : n.text).slice(0,28)}</text></g>;
   })}</svg>;
 }
 export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, onDragProject, trash = false }: {

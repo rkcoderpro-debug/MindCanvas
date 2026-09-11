@@ -1,6 +1,44 @@
 # MindCanvas — project handoff
 
-## Update 2026-09-11 — V3.2.1 Mobile Cloud Sync Hotfix (latest)
+## Update 2026-09-11 — V3.3 Vibrant Themes (latest)
+
+### Implemented
+
+- Replaced the old two-color override with a reusable semantic token system covering the app background, surfaces, canvas, controls, borders, text, status colors, shadows and editor chrome.
+- Added five persisted themes: Aurora Light, Midnight Dark, Sunset Coral, Emerald Forest and Berry Pop. Liquid Glass is not present.
+- Added a visual, keyboard-accessible theme picker in Settings and kept a compact five-theme selector in the sidebar/mobile menu. Changes apply immediately and persist in `mindcanvas:theme`.
+- Added an early theme bootstrap in `index.html` to reduce the wrong-theme flash during reload, and synchronize the browser `theme-color` metadata after a change.
+- Removed the remaining dark-theme-only CSS patches by making project cards, folder manager, dialogs, AI/PDF panels, flashcards, conflict/error states, toolbar, inspector, minimap and mobile controls consume the same theme tokens.
+- Canvas selection, connectors, handles and new-element colors now follow the active palette. Existing custom element colors remain data, while legacy default canvas text adapts for readability. Node labels calculate light/dark contrast from their fill.
+- Updated the visible app badge to `V3.3`. No sample content, Liquid Glass animation or service credential was added.
+
+### Architecture and deployment
+
+- `lib/theme.ts` is the source of truth for theme IDs, validation, browser colors and new-canvas palettes.
+- `components/ThemePicker.tsx` owns the visual selector; `lib/i18n.tsx` owns persistence/application and bilingual labels; `styles.css` owns semantic CSS tokens.
+- V3.3 is frontend-only. It requires no Supabase migration, backend change or new environment variable. Redeploy only `mindcanvas-web` after pushing the changed files.
+- Local verification covers TypeScript, production builds, 69 frontend tests and 13 backend regression tests. Live Render/Supabase/OAuth/Gemini and physical-device visual QA still require the production environment.
+
+### Changed files
+
+- `apps/web/index.html`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/components/CanvasBoard.tsx`
+- `apps/web/src/components/CanvasNavigator.tsx`
+- `apps/web/src/components/ThemePicker.tsx`
+- `apps/web/src/components/WorkspaceHome.tsx`
+- `apps/web/src/lib/color.ts`
+- `apps/web/src/lib/color.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/theme.ts`
+- `apps/web/src/lib/theme.test.ts`
+- `apps/web/src/styles.css`
+- `DEPLOY_V1_VI.md`
+- `V3_3_VIBRANT_THEMES_VI.md`
+- `PROJECT_HANDOFF.md`
+
+## Update 2026-09-11 — V3.2.1 Mobile Cloud Sync Hotfix
 
 ### Fixed
 

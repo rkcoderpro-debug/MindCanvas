@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, Circle, Copy, Hand, Highlighter, Magnet, MousePointer2, PenLine, Plus, SlidersHorizontal, Square, Trash2, Type, ArrowUpRight, Network, X } from "lucide-react";
 import type { BoardState, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { arrangeMindMap, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, type Selection } from "../lib/board";
-import { useLanguage, type MessageKey } from "../lib/i18n";
+import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
+import { canvasTextColor, readableTextColor } from "../lib/color";
+import { THEME_CANVAS_PALETTES } from "../lib/theme";
 import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, selectionBounds, setElementFlags, snapMoveSelection, ungroupSelection } from "../lib/editorCommands";
 import LayerStack from "./LayerStack";
 import CanvasNavigator from "./CanvasNavigator";
@@ -19,6 +21,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
 ];
 export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }: Props) {
   const { t } = useLanguage();
+  const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null);
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
   const selected = selections.at(-1) ?? null;
@@ -30,13 +33,15 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
-  const [ink, setInk] = useState("#4562df"), [strokeWidth, setStrokeWidth] = useState(3);
+  const previousThemeInk = useRef(palette.ink);
+  const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   const b = preview ?? editing?.fresh ?? board;
   const bounds = selectionBounds(b, selections);
   const selectedEl = selected && selections.length === 1 ? b[selected.kind].find(el => el.id === selected.id) : null;
   const hidden = hiddenNodes(b);
   const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
   const isLocked = (s: Selection) => s.kind !== "edges" && !!b[s.kind].find(e => e.id === s.id && "locked" in e && e.locked);
+  useEffect(() => { setInk(current => current === previousThemeInk.current ? palette.ink : current); previousThemeInk.current = palette.ink; }, [palette.ink]);
   useEffect(() => { const ids = new Set(orderedElements(board).map(s => s.id)); if (!editing && selections.some(s => !ids.has(s.id))) setSelections(selections.filter(s => ids.has(s.id))); }, [board, editing, selections]);
   const interactive = tool === "select" || tool === "connector";
   const point = (clientX: number, clientY: number, base = board): Vec2 => {
@@ -102,10 +107,10 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
       setTool("select"); return;
     } else if (tool === "pen" || tool === "highlighter") {
-      const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: tool === "highlighter" ? "#f5c542" : ink, width: tool === "highlighter" ? 20 : strokeWidth, opacity: tool === "highlighter" ? .3 : 1 }] };
+      const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: tool === "highlighter" ? palette.highlighter : ink, width: tool === "highlighter" ? 20 : strokeWidth, opacity: tool === "highlighter" ? .3 : 1 }] };
       setSelected(null); setPreview(next); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: e.pointerId, next };
     } else if (tool === "rect" || tool === "ellipse") {
-      const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: tool, x: p.x, y: p.y, width: 1, height: 1, color: "#e1e7ff" }] };
+      const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: tool, x: p.x, y: p.y, width: 1, height: 1, color: palette.fill }] };
       setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: e.pointerId, next };
     }
     svg.current?.setPointerCapture(e.pointerId);
@@ -159,7 +164,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
   const addNode = () => {
     const parent = selected?.kind === "nodes" ? board.nodes.find(n => n.id === selected.id) : undefined;
     const id = crypto.randomUUID(), p = parent ? { x: parent.x + parent.width + 90, y: parent.y + 20 } : point((svg.current?.getBoundingClientRect().left ?? 0) + 250, (svg.current?.getBoundingClientRect().top ?? 0) + 180);
-    const next = { ...board, nodes: [...board.nodes.map(n => n.id === parent?.id ? { ...n, collapsed: false } : n), { id, parentId: parent?.id, label: parent ? t("newNode") : t("rootNode"), ...p, width: 190, height: 76, color: "#e1e7ff" }] };
+    const next = { ...board, nodes: [...board.nodes.map(n => n.id === parent?.id ? { ...n, collapsed: false } : n), { id, parentId: parent?.id, label: parent ? t("newNode") : t("rootNode"), ...p, width: 190, height: 76, color: palette.fill }] };
     onChange(parent ? connect(next, parent.id, id) : next); setTool("select"); setSelected({ kind: "nodes", id });
   };
 
@@ -210,7 +215,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
 
   const editBounds = editing ? elementBounds(b, editing.selection) : null;
   const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", edges: "connector" };
-  const selectedColor = selectedEl && "color" in selectedEl ? selectedEl.color ?? "#e1e7ff" : "#4562df";
+  const selectedColor = selectedEl && "color" in selectedEl ? selectedEl.color ?? palette.fill : palette.ink;
   return <div className="editor-layout">
     <div className="editor-frame">
       <div className="drawing-toolbar" role="toolbar" aria-label={t("properties")}>{tools.map(({ id, icon: Icon, key }) =>
@@ -220,11 +225,11 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
         <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button></div>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
-        <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="#8a99b5"/></marker></defs>
+        <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="var(--connector)"/></marker></defs>
         <g transform={`translate(${b.viewport.x} ${b.viewport.y}) scale(${b.viewport.scale})`}>
           <LayerStack board={b} interactive={interactive && !space}>
           {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
-            {s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="#a6b5db"/> : <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="#a6b5db"/>}</g>)}
+            {s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="var(--element-stroke)"/> : <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="var(--element-stroke)"/>}</g>)}
           {b.drawings.filter(p => !hiddenElements.has(p.id)).map(p => { const r = elementBounds(b, { kind: "drawings", id: p.id })!; return <g key={p.id} data-element={p.id} transform={`rotate(${p.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "drawings", id: p.id })}>
             <path d={pathData(p.points)} fill="none" stroke={p.color} strokeWidth={p.width} opacity={p.opacity} strokeLinecap="round" strokeLinejoin="round"/>
             <path d={pathData(p.points)} fill="none" stroke="transparent" strokeWidth={Math.max(12 / b.viewport.scale, p.width)} pointerEvents={interactive && !space ? "stroke" : "none"}/></g>; })}
@@ -233,25 +238,25 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
             const s = [...b.nodes, ...b.shapes].find(n => n.id === e.source), d = [...b.nodes, ...b.shapes].find(n => n.id === e.target); if (!s || !d) return null;
             const x1 = s.x + s.width, y1 = s.y + s.height / 2, x2 = d.x, y2 = d.y + d.height / 2, c = Math.max(40, Math.abs(x2 - x1) * .45);
             const path = `M${x1},${y1} C${x1+c},${y1} ${x2-c},${y2} ${x2},${y2}`;
-            return <g key={e.id} data-element={e.id} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "#4562df" : "#8a99b5"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="#65718a" pointerEvents="none">{e.label}</text>}</g>;
+            return <g key={e.id} data-element={e.id} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
           })}
           {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; return <g key={text.id} data-element={text.id} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "texts", id: text.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}>
-            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height}><div className="canvas-copy" style={{ fontSize: text.fontSize ?? 16, color: text.color ?? "#18213b" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
+            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height}><div className="canvas-copy" style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color) }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
           </g>; })}
           {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => <g key={n.id} data-element={n.id} className="mind-node" transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, { kind: "nodes", id: n.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}>
-            <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "#ffffff"} stroke={dropTarget === n.id ? "#4562df" : "#bcc8e4"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
-            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)}><div className="node-copy">{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && <small>{t("page")} {n.sourcePage}</small>}{n.collapsed && <small>…</small>}</div></foreignObject>
-            {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="white" stroke="#4562df"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16}>{n.collapsed ? "+" : "−"}</text></g>}
+            <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "var(--node-fill)"} stroke={dropTarget === n.id ? "var(--accent)" : "var(--element-stroke)"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
+            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)}><div className="node-copy" style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && <small>{t("page")} {n.sourcePage}</small>}{n.collapsed && <small>…</small>}</div></foreignObject>
+            {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
           </g>)}
           </LayerStack>
-          {marquee && <rect {...marquee} fill="#4562df18" stroke="#4562df" strokeWidth={1 / b.viewport.scale} pointerEvents="none"/>}
-          {selections.length > 1 && selections.map(s => { const r = elementBounds(b, s); return r && <rect key={s.id} {...r} fill="none" stroke="#4562df" strokeDasharray="4 3" pointerEvents="none"/>; })}
+          {marquee && <rect {...marquee} fill="color-mix(in srgb, var(--accent) 12%, transparent)" stroke="var(--accent)" strokeWidth={1 / b.viewport.scale} pointerEvents="none"/>}
+          {selections.length > 1 && selections.map(s => { const r = elementBounds(b, s); return r && <rect key={s.id} {...r} fill="none" stroke="var(--accent)" strokeDasharray="4 3" pointerEvents="none"/>; })}
           {bounds && selected && !editing && tool === "select" && <g className="selection-box">
-            <rect x={bounds.x - 3} y={bounds.y - 3} width={bounds.width + 6} height={bounds.height + 6} fill="none" stroke="#4562df" strokeWidth={1.5 / b.viewport.scale} pointerEvents="none"/>
-            {selected.kind !== "edges" && <rect className="resize-handle" x={bounds.x + bounds.width - 4 / b.viewport.scale} y={bounds.y + bounds.height - 4 / b.viewport.scale} width={8 / b.viewport.scale} height={8 / b.viewport.scale} fill="white" stroke="#4562df" strokeWidth={1 / b.viewport.scale}
-              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "resize", start: point(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board }; }}/>} {selected.kind !== "edges" && <g className="rotation-handle" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); const p = point(e.clientX, e.clientY); const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }; svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "rotate", start: p, screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board, center, startAngle: Math.atan2(p.y - center.y, p.x - center.x) * 180 / Math.PI }; }}><line x1={bounds.x + bounds.width / 2} y1={bounds.y - 3} x2={bounds.x + bounds.width / 2} y2={bounds.y - 25} stroke="#8d6be8"/><circle cx={bounds.x + bounds.width / 2} cy={bounds.y - 30} r={6 / b.viewport.scale} fill="white" stroke="#8d6be8"/></g>}</g>}
+            <rect x={bounds.x - 3} y={bounds.y - 3} width={bounds.width + 6} height={bounds.height + 6} fill="none" stroke="var(--accent)" strokeWidth={1.5 / b.viewport.scale} pointerEvents="none"/>
+            {selected.kind !== "edges" && <rect className="resize-handle" x={bounds.x + bounds.width - 4 / b.viewport.scale} y={bounds.y + bounds.height - 4 / b.viewport.scale} width={8 / b.viewport.scale} height={8 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent)" strokeWidth={1 / b.viewport.scale}
+              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "resize", start: point(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board }; }}/>} {selected.kind !== "edges" && <g className="rotation-handle" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); const p = point(e.clientX, e.clientY); const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }; svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "rotate", start: p, screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board, center, startAngle: Math.atan2(p.y - center.y, p.x - center.x) * 180 / Math.PI }; }}><line x1={bounds.x + bounds.width / 2} y1={bounds.y - 3} x2={bounds.x + bounds.width / 2} y2={bounds.y - 25} stroke="var(--accent-2)"/><circle cx={bounds.x + bounds.width / 2} cy={bounds.y - 30} r={6 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent-2)"/></g>}</g>}
           {editing && editBounds && <foreignObject x={editBounds.x} y={editBounds.y} width={Math.max(editBounds.width, 120)} height={Math.max(editBounds.height, 100)}>
             <textarea className="inline-editor" autoFocus aria-label={t("editText")} placeholder={t("newText")} maxLength={10000}
               style={{ fontSize: selectedEl && "fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16 }}

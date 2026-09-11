@@ -33,6 +33,6 @@ export default function CanvasNavigator({ board, selection, svg, onChange }: { b
       const matrix = e.currentTarget.getScreenCTM(); if (!matrix) return;
       const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix.inverse());
       onChange({ ...board, viewport: { ...board.viewport, x: size.width / 2 - point.x * board.viewport.scale, y: size.height / 2 - point.y * board.viewport.scale } });
-    }}>{entries.filter(s => s.kind !== "edges").map(s => { const b = elementBounds(board, s); return b && <rect key={s.id} {...b} fill={selection.some(item => item.id === s.id) ? "#4562df" : "#b8c6ef"}/>; })}<rect {...view} fill="#4562df11" stroke="#4562df" strokeWidth={Math.max(w, h) / 180}/></svg>}
+    }}>{entries.filter(s => s.kind !== "edges").map(s => { const b = elementBounds(board, s); return b && <rect key={s.id} {...b} fill={selection.some(item => item.id === s.id) ? "var(--accent)" : "var(--accent-border)"}/>; })}<rect {...view} fill="color-mix(in srgb, var(--accent) 8%, transparent)" stroke="var(--accent)" strokeWidth={Math.max(w, h) / 180}/></svg>}
   </div>;
 }
