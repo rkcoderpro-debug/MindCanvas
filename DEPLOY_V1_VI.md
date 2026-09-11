@@ -92,12 +92,14 @@ SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 WEB_ORIGIN=http://localhost:5173
 
-EXPERIENTIAL_LABS_BASE_URL=
+EXPERIENTIAL_LABS_BASE_URL=https://api.experientiallabs.ai/v1
 EXPERIENTIAL_LABS_API_KEY=
 EXPERIENTIAL_LABS_MODEL=
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-3.6-flash
+# Tùy chọn: thử theo thứ tự, ví dụ 3.8 → 3.7 → 2.5 nếu model đầu bận/lỗi tạm thời
+GEMINI_MODELS=gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash
 MAX_DOCUMENT_BYTES=10485760
 ```
 
@@ -112,25 +114,39 @@ Mở `http://localhost:5173`. Bấm **Đăng nhập Google**, tạo/kéo node, r
 
 ## E. Deploy lên Render
 
-Project đã có `render.yaml` cho hai service:
+Render Blueprint hiện dùng để tạo backend API. Frontend tạo bằng Static Site riêng, vì Blueprint của Render không nhận `type: static` trong cấu hình này.
 
-- `mindcanvas-api`: Node/Express API.
-- `mindcanvas-web`: static Vite frontend.
+### E1. Tạo backend API bằng Blueprint
 
 1. Đẩy code lên GitHub repository. Không đẩy `.env`.
 2. Vào [Render Dashboard](https://dashboard.render.com/) → **New → Blueprint**.
 3. Chọn repository chứa `render.yaml` rồi bấm **Apply**.
-4. Ở `mindcanvas-api`, nhập:
+4. Blueprint chỉ tạo service `mindcanvas-api`.
+5. Ở `mindcanvas-api`, nhập:
 
 ```text
 SUPABASE_URL
 SUPABASE_PUBLISHABLE_KEY
 WEB_ORIGIN=https://mindcanvas-web.onrender.com
 GEMINI_API_KEY (nếu muốn dùng Gemini)
+GEMINI_MODELS (tùy chọn, danh sách model cách nhau bằng dấu phẩy)
 EXPERIENTIAL_LABS_BASE_URL/API_KEY/MODEL (chỉ khi đã xác minh contract provider)
 ```
 
-5. Ở `mindcanvas-web`, nhập:
+### E2. Tạo frontend bằng Static Site
+
+1. Vào Render → **New → Static Site**.
+2. Chọn đúng GitHub repository `mindcanvas`.
+3. Chọn branch `main`.
+4. Điền các trường:
+
+```text
+Root Directory: .
+Build Command: npm install && npm run build --workspace apps/web
+Publish Directory: apps/web/dist
+```
+
+5. Ở phần Environment Variables, nhập:
 
 ```text
 VITE_SUPABASE_URL
@@ -138,7 +154,12 @@ VITE_SUPABASE_PUBLISHABLE_KEY
 VITE_API_BASE_URL=https://mindcanvas-api.onrender.com
 ```
 
-6. Deploy API trước nếu Render không tự xử lý thứ tự. Kiểm tra:
+6. Bấm **Create Static Site**.
+7. Sau khi API có URL thật, đặt `VITE_API_BASE_URL` bằng URL API đó rồi chọn **Save, rebuild, and deploy**.
+
+### E3. Kiểm tra API và liên kết hai service
+
+1. Mở:
 
 ```text
 https://mindcanvas-api.onrender.com/api/health
@@ -146,8 +167,8 @@ https://mindcanvas-api.onrender.com/api/health
 
 Kết quả đúng phải có `ok: true`.
 
-7. Deploy frontend. Nếu Render cấp domain khác tên dự kiến, cập nhật `VITE_API_BASE_URL` của frontend và `WEB_ORIGIN` của API theo domain thật rồi redeploy.
-8. Quay lại Supabase URL Configuration và Google Cloud OAuth, thay domain dự kiến bằng domain Render thật nếu khác.
+2. Nếu Render cấp domain khác tên dự kiến, cập nhật `VITE_API_BASE_URL` của frontend và `WEB_ORIGIN` của API theo domain thật rồi redeploy.
+3. Quay lại Supabase URL Configuration và Google Cloud OAuth, thay domain dự kiến bằng domain Render thật nếu khác.
 
 ## F. Checklist nghiệm thu V1
 

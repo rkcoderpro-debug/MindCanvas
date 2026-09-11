@@ -1,5 +1,47 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-11 — V3.2 AI Flashcards (latest)
+
+### Implemented
+
+- Added `/api/ai/flashcards`, protected by the existing server-side Supabase session boundary.
+- Gemini generation accepts source text, a selected project canvas, or a PDF. PDF input uses the existing server extraction endpoint and private document storage flow.
+- AI returns a bounded structured preview (`title` plus up to 50 cards). The server trims/validates fields, removes duplicate question/answer pairs, validates source pages and never falls back to demo cards.
+- Flashcards UI now has Generate with AI → editable preview → Apply to deck. Users can edit the title, question, answer and source page, remove generated cards or add a preview card before applying.
+- Reused the existing Gemini model priority/cooldown behavior. `GEMINI_MODELS` can hold a comma-separated priority list; `GEMINI_API_KEY`, model configuration and provider calls remain server-only.
+- Refactored the Gemini JSON request runner so mind-map and flashcard generation share timeout, model fallback, safety-block and controlled-error handling.
+
+### Changed files
+
+- `apps/server/src/gemini.ts`
+- `apps/server/src/flashcards.ts`
+- `apps/server/src/index.ts`
+- `apps/server/tests/flashcards.test.ts`
+- `apps/server/package.json`
+- `apps/web/src/lib/api.ts`
+- `apps/web/src/components/FlashcardsPage.tsx`
+- `apps/web/src/hooks/useFlashcards.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/styles.css`
+- `.env.example`
+- `DEPLOY_V1_VI.md`
+- `package.json`
+- `PROJECT_HANDOFF.md`
+- `V3_2_AI_FLASHCARDS_VI.md`
+
+### Verification and deployment
+
+- V3.2 requires both services to redeploy because `apps/server` now exposes `/api/ai/flashcards`; the existing `0005_flashcards.sql` migration is still required for cloud persistence.
+- Set `GEMINI_API_KEY` and optionally `GEMINI_MODELS` only on `mindcanvas-api`. Do not add either to frontend `VITE_*` variables or Git.
+- Local typecheck/build and frontend/server tests are run before handoff. Live Gemini, Supabase, Google OAuth and Render were not tested from this workspace.
+- If AI generation fails, the user keeps the existing deck unchanged because cards are only written after preview approval.
+
+### Known limits
+
+- AI source text is bounded at 120,000 characters and generated output at 50 cards. The project source currently includes readable text, mind-map labels and labeled connectors; shapes without text are not meaningful AI input.
+- The first apply implementation writes generated cards one by one. If the network fails in the middle, retry only after checking the deck to avoid intentional duplicate content; a transactional batch endpoint is a later hardening slice.
+- AI-generated cards are not automatically scheduled as reviewed; new cards remain due immediately and follow the V3.1 scheduler after review.
+
 ## Update 2026-09-11 — V3.1 Flashcards MVP (latest)
 
 ### Implemented
@@ -169,7 +211,7 @@ Xem `.env.example`. Các biến `VITE_*` được phép đi vào browser: Supaba
 
 - Supabase: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, server `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`.
 - Experiential Labs: `EXPERIENTIAL_LABS_BASE_URL`, `EXPERIENTIAL_LABS_API_KEY`, `EXPERIENTIAL_LABS_MODEL`.
-- Gemini: `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`.
+- Gemini: `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, optional priority list `GEMINI_MODELS`.
 - Model mặc định hiện tại: `gemini-3.6-flash`; có thể đổi bằng `GEMINI_MODEL` mà không sửa code.
 - Giới hạn: `MAX_DOCUMENT_BYTES` mặc định 10 MB.
 

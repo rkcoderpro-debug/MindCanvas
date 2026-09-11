@@ -9,7 +9,7 @@
     "dev:server": "npm run dev --workspace apps/server",
     "build": "npm run build --workspace apps/web && npm run build --workspace apps/server",
     "typecheck": "npm run typecheck --workspace apps/web && npm run typecheck --workspace apps/server",
-    "test": "npm run test --workspace apps/web"
+    "test": "npm run test --workspace apps/web && npm run test --workspace apps/server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

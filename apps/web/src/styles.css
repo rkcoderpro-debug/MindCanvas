@@ -283,8 +283,14 @@ html[data-theme="dark"] .graph-preview, html[data-theme="dark"] .pdf-controls { 
 .review-finished { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); text-align: center; }
 .review-finished > svg { color: var(--accent); }
 .review-finished h3, .review-finished p { margin: 0; }
+.ai-flashcards-preview { display: grid; gap: 10px; max-height: 48vh; overflow: auto; margin: 14px 0; padding: 2px; }
+.ai-preview-card { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+.ai-preview-card-heading { display: flex; align-items: center; justify-content: space-between; color: var(--accent); }
+.ai-preview-card label { font-size: 12px; }
+.ai-preview-card textarea { resize: vertical; }
 html[data-theme="dark"] .flashcards-decks { background: #151b2b; }
 html[data-theme="dark"] .flashcard-row, html[data-theme="dark"] .flashcard-storage { background: var(--surface); }
+html[data-theme="dark"] .ai-preview-card { background: #151b2b; }
 html[data-theme="dark"] .deck-item.active { background: #232c46; }
 html[data-theme="dark"] .flashcards-error { background: #351e2a; border-color: #633040; color: #ffb1c1; }
 html[data-theme="dark"] .rating-again { background: #3b2528; color: #ffb2ad; }

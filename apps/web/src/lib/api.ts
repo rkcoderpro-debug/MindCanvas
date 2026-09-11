@@ -29,3 +29,20 @@ export async function generateMindMap(text: string, documentId?: string, signal?
   }
   return response.json() as Promise<{ provider: string; graph: StructuredMindMap }>;
 }
+
+export type GeneratedFlashcard = { front: string; back: string; sourcePage?: number };
+export type GeneratedFlashcards = { provider: string; model: string; title: string; cards: GeneratedFlashcard[]; sourceDocumentId?: string };
+
+export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal) {
+  const response = await fetch(`${apiBase}/api/ai/flashcards`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ text, documentId, maxCards }),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.error === "string" ? detail.error.slice(0, 2000) : `AI HTTP ${response.status}`);
+  }
+  return response.json() as Promise<GeneratedFlashcards>;
+}

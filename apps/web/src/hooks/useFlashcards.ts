@@ -108,20 +108,31 @@ export function useFlashcards(owner: string | null) {
     } finally { setBusy(false); }
   }, [owner, selectedDeckId]);
 
-  const createCard = useCallback(async (front: string, back: string, sourcePage: number | null = null) => {
+  const createCards = useCallback(async (inputs: Array<{ front: string; back: string; sourcePage?: number | null }>) => {
     if (!selectedDeck) throw new Error("Choose a deck first.");
-    const card = makeCard(selectedDeck.id, front, back, selectedDeck.projectId, sourcePage);
+    if (!inputs.length) return [];
+    const cards = inputs.map(input => makeCard(selectedDeck.id, input.front, input.back, selectedDeck.projectId, input.sourcePage ?? null));
     setBusy(true); setError("");
     try {
-      const source = await upsertFlashcard(owner, card);
+      const saved: Flashcard[] = [];
+      let source: FlashcardStorage = owner ? "cloud" : "local";
+      for (const card of cards) {
+        source = await upsertFlashcard(owner, card);
+        saved.push({ ...card, source });
+      }
       setStorageMode(source);
-      setCards(items => [...items, { ...card, source }]);
-      return card;
+      setCards(items => [...items, ...saved]);
+      return saved;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create card.");
+      setError(err instanceof Error ? err.message : "Could not create cards.");
       throw err;
     } finally { setBusy(false); }
   }, [owner, selectedDeck]);
+
+  const createCard = useCallback(async (front: string, back: string, sourcePage: number | null = null) => {
+    const [card] = await createCards([{ front, back, sourcePage }]);
+    return card;
+  }, [createCards]);
 
   const updateCard = useCallback(async (card: Flashcard, patch: FlashcardPatch) => {
     const next = { ...card, ...patch, front: patch.front?.trim() ?? card.front, back: patch.back?.trim() ?? card.back, updatedAt: new Date().toISOString() };
@@ -180,9 +191,9 @@ export function useFlashcards(owner: string | null) {
     renameDeck,
     removeDeck,
     createCard,
+    createCards,
     updateCard,
     removeCard,
     reviewCard,
   };
 }
-
