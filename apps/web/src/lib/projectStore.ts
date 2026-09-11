@@ -96,6 +96,26 @@ export async function addFolder(owner: string | null, name: string): Promise<Pro
   if (error) throw error;
   return folder;
 }
+export async function updateFolder(owner: string | null, folder: ProjectFolder, name: string) {
+  if (owner) {
+    const client = await clientFor(owner);
+    const { error } = await client.from("folders").update({ name }).eq("user_id", owner).eq("id", folder.id).select("id").single();
+    if (error) throw error;
+  }
+  const folders = await fetchFolders(owner);
+  localStorage.setItem(cacheKey(owner) + ":folders", JSON.stringify(folders.map(f => f.id === folder.id ? { ...f, name } : f)));
+}
+export async function deleteFolder(owner: string | null, folder: ProjectFolder) {
+  if (owner) {
+    const client = await clientFor(owner);
+    const { error } = await client.from("folders").delete().eq("user_id", owner).eq("id", folder.id);
+    if (error) throw error;
+  }
+  const folders = (await fetchFolders(owner)).filter(f => f.id !== folder.id);
+  localStorage.setItem(cacheKey(owner) + ":folders", JSON.stringify(folders));
+  const entries = readCache(owner).map(p => p.folderId === folder.id ? { ...p, folderId: null } : p);
+  localStorage.setItem(cacheKey(owner), JSON.stringify(entries));
+}
 // A rejected save must not poison subsequent saves. Requests remain ordered.
 export class SaveQueue {
   private tail: Promise<unknown> = Promise.resolve();

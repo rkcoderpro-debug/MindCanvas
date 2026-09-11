@@ -18,9 +18,9 @@ function Preview({ project }: { project: Project }) {
     return <g key={n.id}>{s.kind === "nodes" && <rect {...r} fill={n.color ?? "#e1e7ff"} stroke="#a5b4ef" rx={10}/>}<text x={r.x+10} y={r.y+25} fontSize={16} fill="#18213b">{("label" in n ? n.label : n.text).slice(0,28)}</text></g>;
   })}</svg>;
 }
-export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, trash = false }: {
+export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, onDragProject, trash = false }: {
   projects: Project[]; title: string; loading: boolean; onOpen: (p: Project) => void; onCreate: () => void; onImport: () => void;
-  folders?: ProjectFolder[]; onManage?: (p: Project, patch: ProjectPatch) => Promise<void>; onDuplicate?: (p: Project, title: string) => Promise<void>; trash?: boolean;
+  folders?: ProjectFolder[]; onManage?: (p: Project, patch: ProjectPatch) => Promise<void>; onDuplicate?: (p: Project, title: string) => Promise<void>; onDragProject?: (p: Project) => void; trash?: boolean;
 }) {
   const { t, language } = useLanguage();
   const [query, setQuery] = useState(""), [sort, setSort] = useState("newest"), [busy, setBusy] = useState(false);
@@ -33,7 +33,7 @@ export default function WorkspaceHome({ projects, title, loading, onOpen, onCrea
       <button className="secondary-button" onClick={onImport}><Upload size={18}/>{t("import")}</button><button className="primary-button" onClick={onCreate}><FilePlus2 size={18}/>{t("newProject")}</button></div></div>
     {trash && <p>{t("trashHint")}</p>}{error && <p role="alert">{error}</p>}
     <div className="home-controls"><label className="search-field"><Search size={18}/><input aria-label={t("search")} placeholder={t("search")} value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label={t("newest")} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">{t("newest")}</option><option value="name">{t("alphabetical")}</option></select></div>
-    {loading ? <p role="status">{t("loading")}</p> : !visible.length ? <div className="empty-state"><FolderOpen size={42}/><h2>{query ? t("noResults") : trash ? t("trashEmpty") : t("empty")}</h2>{!trash && <><p>{t("emptyHint")}</p><button className="primary-button" onClick={onCreate}>{t("newProject")}</button></>}</div> : <div className="project-grid">{visible.map(p => <article className="project-card" key={p.id}>
+    {loading ? <p role="status">{t("loading")}</p> : !visible.length ? <div className="empty-state"><FolderOpen size={42}/><h2>{query ? t("noResults") : trash ? t("trashEmpty") : t("empty")}</h2>{!trash && <><p>{t("emptyHint")}</p><button className="primary-button" onClick={onCreate}>{t("newProject")}</button></>}</div> : <div className="project-grid">{visible.map(p => <article className="project-card" key={p.id} draggable={!trash} onDragStart={e => { e.dataTransfer.setData("text/mindcanvas-project", p.id); e.dataTransfer.effectAllowed = "move"; onDragProject?.(p); }}>
       <button className="project-open" disabled={trash || busy} onClick={() => onOpen(p)}><div className="project-preview" aria-hidden="true"><Preview project={p}/></div><div className="project-meta"><FileText size={19}/><div><strong>{p.title}</strong><small>{t("updated")} · {new Date(p.updatedAt).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}</small>{p.pending && <small>{t("unsaved")}</small>}</div></div></button>
       <div className="project-card-actions">{!trash && onManage && <button className="icon-button" disabled={busy} aria-label={t(p.favorite ? "unfavorite" : "favorite")} aria-pressed={!!p.favorite} onClick={() => void run(() => onManage(p,{ favorite: !p.favorite }))}><Star size={18} fill={p.favorite ? "#f5c542" : "none"}/></button>}
         <button className="icon-button" disabled={busy} aria-label={t("projectActions") + ": " + p.title} aria-expanded={menu === p.id} onClick={() => setMenu(menu === p.id ? null : p.id)}><MoreHorizontal size={20}/></button></div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { ArrowLeft, Clock3, Download, Folder, FolderPlus, Globe2, LayoutGrid, LogIn, LogOut, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
+import type { ProjectFolder } from "./lib/projectStore";
+import { ArrowLeft, Clock3, Download, Folder, FolderPlus, Globe2, LayoutGrid, LogIn, LogOut, MoreHorizontal, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
 import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
@@ -33,7 +34,7 @@ function AuthenticatedApp() {
 function Workspace({ user, authError }: { user: User | null; authError: string }) {
   const { t, language, setLanguage } = useLanguage(), { theme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null);
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | null>(null);
-  const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null);
+  const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
@@ -44,6 +45,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     try { if (modal === "project") await ws.create(name.trim()); else await ws.newFolder(name.trim()); setModal(null); }
     finally { setWorking(false); }
   };
+  const dropProjectInto = (e: React.DragEvent, folderId: string | null) => { e.preventDefault(); const id = e.dataTransfer.getData("text/mindcanvas-project"); const project = ws.projects.find(p => p.id === id); if (project && project.folderId !== folderId) void ws.manageProject(project, { folderId }); };
   const auth = async () => {
     setWorking(true);
     try {
@@ -67,16 +69,16 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V1</span></button>
       <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user ? t("cloud") : t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
-        <button className={!ws.board && !recent && !filter ? "active" : ""} onClick={home}><LayoutGrid size={18}/>{t("workspace")}</button>
+        <button className={!ws.board && !recent && !filter ? "active" : ""} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, null)} onClick={home}><LayoutGrid size={18}/>{t("workspace")}</button>
         <button className={!ws.board && recent ? "active" : ""} onClick={() => { void ws.home(); setFilter(null); setRecent(true); }}><Clock3 size={18}/>{t("recent")}<span>{ws.projects.filter(p => !p.deletedAt).length}</span></button>
         <button className={!ws.board && filter === "__favorites" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__favorites"); setRecent(false); }}><Star size={18}/>{t("favorites")}</button>
         <button className={!ws.board && filter === "__trash" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__trash"); setRecent(false); }}><Trash2 size={18}/>{t("trash")}</button>
       </nav>
       <div className="section-label">{t("folders")}<button className="icon-button" aria-label={t("newFolder")} onClick={() => askName("folder")}><Plus size={17}/></button></div>
-      <div className="folder-list">{ws.folders.map(f => <button key={f.id} className={filter === f.id && !ws.board ? "active" : ""} onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
+      <div className="folder-list">{ws.folders.map(f => <div className={`folder-row ${filter === f.id && !ws.board ? "active" : ""}`} key={f.id} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, f.id)}><button className="folder-open" onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button><button className="folder-more" aria-label={`${t("folderActions")}: ${f.name}`} onClick={() => { setName(f.name); setFolderAction({ folder: f, kind: "rename" }); }}><MoreHorizontal size={16}/></button></div>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
       <div className="sidebar-bottom">
         <label className="language-control"><Globe2 size={17}/><select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
-        <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as "light" | "dark" | "liquid")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option><option value="liquid">{t("themeLiquid")}</option></select></label>
+        <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as "light" | "dark")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option></select></label>
         <button onClick={() => setModal("settings")}><Settings2 size={17}/>{t("settings")}</button>
         <button disabled={working || (!user && !isSupabaseConfigured)} onClick={() => void auth()}>{user ? <LogOut size={17}/> : <LogIn size={17}/>} {user ? t("logout") : t("login")}</button>
       </div>
@@ -100,8 +102,10 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
       <label>{t("name")}<input autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button" disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}
+    {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => setFolderAction(null)); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
+    {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
-    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label><label>{t("theme")}<select value={theme} onChange={e => setTheme(e.target.value as "light" | "dark" | "liquid")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option><option value="liquid">{t("themeLiquid")}</option></select></label><p>{t("themeHint")}</p><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></Dialog>}
+    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label><label>{t("theme")}<select value={theme} onChange={e => setTheme(e.target.value as "light" | "dark")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option></select></label><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></Dialog>}
     {modal === "ai" && ws.board && <AiPanel key={ws.board.id} projectId={ws.board.id} canUse={!!user} beforeGenerate={ws.flush} onClose={() => setModal(null)} onApply={graph => { try { ws.change(applyGraph(ws.board!, graph)); setModal(null); } catch { ws.setError(t("aiError")); setModal(null); } }}/>}
   </div>;
 }

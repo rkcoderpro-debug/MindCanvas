@@ -162,3 +162,10 @@ npm run dev
 ## Next safe slice
 
 Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → local cloud test → Render API → Render frontend → cập nhật allow-list. Sau đó tách `boardReducer`/`historyReducer` và hoàn thiện repository/retry layer.
+# UPDATE — 2026-09-11: Folder management and theme cleanup
+
+- Folder management now supports local/cloud rename and delete; deleting a folder moves its projects to Workspace.
+- Projects are draggable from the home grid into a folder, or onto Workspace to remove folder assignment.
+- Liquid Glass was removed. The supported themes are Light and Dark; accent color is now a warmer purple.
+- Dark theme coverage was expanded across workspace surfaces, cards, dialogs, controls and empty states.
+- No Gemini, OAuth, server API or Supabase migration changes were made in this update.

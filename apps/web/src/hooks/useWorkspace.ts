@@ -3,7 +3,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
 import { normalizeEditor } from "../lib/editorCommands";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
-import { acknowledge, addFolder, cacheProject, fetchBoard, fetchFolders, fetchProjects, mergeProjects, persistProject, readCache, SaveQueue, type CachedProject, type Project, type ProjectFolder } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, deleteFolder, fetchBoard, fetchFolders, fetchProjects, mergeProjects, persistProject, readCache, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder } from "../lib/projectStore";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
 // Mount once per account (App keys this component by user.id).
@@ -123,6 +123,8 @@ export function useWorkspace(owner: string | null) {
   };
   const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); setPast([]); setFuture([]); await refresh(); };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
+  const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
+  const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };
   const move = (id: string | null) => { if (!current.current) return; folderId.current = id; stage({ ...current.current, updatedAt: new Date().toISOString() }); };
   const manageProject = async (project: Project, patch: ProjectPatch) => {
     try { if (!await flush()) throw new Error("Please save your pending changes and reconnect first."); await updateProject(owner, project, patch); await refresh(); }
@@ -140,5 +142,5 @@ export function useWorkspace(owner: string | null) {
       await refresh();
     } catch (err) { report(err); throw err; }
   };
-  return { board, projects, folders, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, open, create, home, newFolder, move, manageProject, duplicateProject };
+  return { board, projects, folders, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
 }
