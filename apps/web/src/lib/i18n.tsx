@@ -6,7 +6,7 @@ export const en = {
   group: "Group", ungroup: "Ungroup", addChild: "Add child", addSibling: "Add sibling", reparentHint: "Alt-drag one node onto another to change its parent. Shift+Enter edits the label.",
   fitCanvas: "Fit canvas", fitSelection: "Go to selection", minimap: "Minimap", favorites: "Favorites", trash: "Trash", restore: "Restore", favorite: "Add to favorites", unfavorite: "Remove favorite", moveToTrash: "Move to trash", projectActions: "Project actions", copySuffix: "copy", trashEmpty: "Trash is empty", trashHint: "Files here can be restored. They are not permanently deleted.",
   arrangeMap: "Arrange mind map",
-  workspace: "Workspace", recent: "Recent files", folders: "Folders", newFolder: "New folder",
+  workspace: "Workspace", recent: "Recent files", folders: "Folders", newFolder: "New folder", theme: "Appearance", themeLight: "Light", themeDark: "Dark", themeLiquid: "Liquid glass", themeHint: "Liquid glass uses an animated soft background while keeping the canvas readable.",
   newProject: "New project", projects: "Projects", untitled: "Untitled canvas", name: "Name",
   create: "Create", cancel: "Cancel", close: "Close", save: "Save", open: "Open",
   rename: "Rename", move: "Move to folder", noFolder: "No folder", search: "Search projects…",
@@ -50,7 +50,7 @@ export const vi: Record<MessageKey, string> = {
   group: "Gộp nhóm", ungroup: "Tách nhóm", addChild: "Thêm nhánh con", addSibling: "Thêm nhánh cùng cấp", reparentHint: "Giữ Alt rồi kéo một node lên node khác để đổi cha. Shift+Enter sửa nhãn.",
   fitCanvas: "Vừa màn hình", fitSelection: "Đến phần đã chọn", minimap: "Bản đồ nhỏ", favorites: "Yêu thích", trash: "Thùng rác", restore: "Khôi phục", favorite: "Thêm yêu thích", unfavorite: "Bỏ yêu thích", moveToTrash: "Đưa vào thùng rác", projectActions: "Thao tác project", copySuffix: "bản sao", trashEmpty: "Thùng rác trống", trashHint: "Bạn có thể khôi phục các file tại đây. File chưa bị xóa vĩnh viễn.",
   arrangeMap: "Sắp xếp mind map",
-  workspace: "Workspace", recent: "File gần đây", folders: "Thư mục", newFolder: "Thư mục mới",
+  workspace: "Workspace", recent: "File gần đây", folders: "Thư mục", newFolder: "Thư mục mới", theme: "Giao diện", themeLight: "Sáng", themeDark: "Tối", themeLiquid: "Liquid glass", themeHint: "Liquid glass dùng nền chuyển động mềm, nhưng vẫn giữ canvas dễ đọc.",
   newProject: "Project mới", projects: "Project", untitled: "Canvas chưa đặt tên", name: "Tên",
   create: "Tạo", cancel: "Hủy", close: "Đóng", save: "Lưu", open: "Mở",
   rename: "Đổi tên", move: "Chuyển thư mục", noFolder: "Không có thư mục", search: "Tìm project…",
@@ -88,10 +88,15 @@ export const vi: Record<MessageKey, string> = {
   unsaved: "Thay đổi chưa đồng bộ", refresh: "Tải lại",
 };
 type Language = "vi" | "en";
+export type Theme = "light" | "dark" | "liquid";
+const ThemeContext = createContext({ theme: "light" as Theme, setTheme: (_: Theme) => {} });
 const Context = createContext({ language: "vi" as Language, setLanguage: (_: Language) => {}, t: (key: MessageKey): string => vi[key] });
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => { try { return localStorage.getItem("mindcanvas:language") === "en" ? "en" : "vi"; } catch { return "vi"; } });
+  const [theme, setTheme] = useState<Theme>(() => { try { const v = localStorage.getItem("mindcanvas:theme"); return v === "dark" || v === "liquid" ? v : "light"; } catch { return "light"; } });
   useEffect(() => { document.documentElement.lang = language; try { localStorage.setItem("mindcanvas:language", language); } catch {} }, [language]);
-  return <Context.Provider value={{ language, setLanguage, t: key => (language === "vi" ? vi : en)[key] }}>{children}</Context.Provider>;
+  useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem("mindcanvas:theme", theme); } catch {} }, [theme]);
+  return <Context.Provider value={{ language, setLanguage, t: key => (language === "vi" ? vi : en)[key] }}><ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider></Context.Provider>;
 }
 export const useLanguage = () => useContext(Context);
+export const useTheme = () => useContext(ThemeContext);

@@ -5,7 +5,7 @@ import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
 import AiPanel from "./components/AiPanel";
-import { LanguageProvider, useLanguage } from "./lib/i18n";
+import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
 import { applyGraph, exportBoard, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
@@ -31,7 +31,7 @@ function AuthenticatedApp() {
   return <Workspace key={user?.id ?? "guest"} user={user} authError={error}/>;
 }
 function Workspace({ user, authError }: { user: User | null; authError: string }) {
-  const { t, language, setLanguage } = useLanguage(), ws = useWorkspace(user?.id ?? null);
+  const { t, language, setLanguage } = useLanguage(), { theme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null);
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
@@ -76,6 +76,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <div className="folder-list">{ws.folders.map(f => <button key={f.id} className={filter === f.id && !ws.board ? "active" : ""} onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
       <div className="sidebar-bottom">
         <label className="language-control"><Globe2 size={17}/><select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+        <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as "light" | "dark" | "liquid")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option><option value="liquid">{t("themeLiquid")}</option></select></label>
         <button onClick={() => setModal("settings")}><Settings2 size={17}/>{t("settings")}</button>
         <button disabled={working || (!user && !isSupabaseConfigured)} onClick={() => void auth()}>{user ? <LogOut size={17}/> : <LogIn size={17}/>} {user ? t("logout") : t("login")}</button>
       </div>
@@ -100,7 +101,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <label>{t("name")}<input autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button" disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
-    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></Dialog>}
+    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label><label>{t("theme")}<select value={theme} onChange={e => setTheme(e.target.value as "light" | "dark" | "liquid")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option><option value="liquid">{t("themeLiquid")}</option></select></label><p>{t("themeHint")}</p><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></Dialog>}
     {modal === "ai" && ws.board && <AiPanel key={ws.board.id} projectId={ws.board.id} canUse={!!user} beforeGenerate={ws.flush} onClose={() => setModal(null)} onApply={graph => { try { ws.change(applyGraph(ws.board!, graph)); setModal(null); } catch { ws.setError(t("aiError")); setModal(null); } }}/>}
   </div>;
 }
