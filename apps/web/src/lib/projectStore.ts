@@ -1,6 +1,7 @@
 import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { parseBoard } from "./board";
+import type { Flashcard, FlashcardDeck, FlashcardStorage } from "./flashcards";
 
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number };
 export type ProjectFolder = { id: string; name: string };
@@ -10,6 +11,8 @@ export type ProjectVersion = { id: string; projectId: string; version: number; c
 export const MAX_PROJECT_VERSIONS = 30;
 export const cacheKey = (owner: string | null) => `mindcanvas:projects:v3:${owner ?? "guest"}`;
 export const versionCacheKey = (owner: string | null, projectId: string) => `mindcanvas:versions:v1:${owner ?? "guest"}:${projectId}`;
+export const flashcardDeckCacheKey = (owner: string | null) => `mindcanvas:flashcards:v1:${owner ?? "guest"}:decks`;
+export const flashcardCacheKey = (owner: string | null, deckId: string) => `mindcanvas:flashcards:v1:${owner ?? "guest"}:cards:${deckId}`;
 export function readCache(owner: string | null): CachedProject[] {
   const raw = localStorage.getItem(cacheKey(owner));
   if (raw) {
@@ -200,6 +203,155 @@ export async function deleteFolder(owner: string | null, folder: ProjectFolder) 
   const entries = readCache(owner).map(p => p.folderId === folder.id ? { ...p, folderId: null } : p);
   localStorage.setItem(cacheKey(owner), JSON.stringify(entries));
 }
+
+export type FlashcardRepositoryResult<T> = { items: T[]; source: FlashcardStorage };
+
+function readLocalList<T>(key: string): T[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalList<T>(key: string, value: T[]) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function deckFromRow(row: any, source: FlashcardStorage): FlashcardDeck | null {
+  if (!row || typeof row.id !== "string" || typeof row.name !== "string") return null;
+  const timestamp = typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString();
+  return { id: row.id, name: row.name, projectId: typeof row.project_id === "string" ? row.project_id : null, folderId: typeof row.folder_id === "string" ? row.folder_id : null, createdAt: typeof row.created_at === "string" ? row.created_at : timestamp, updatedAt: timestamp, source };
+}
+
+function cardFromRow(row: any, source: FlashcardStorage): Flashcard | null {
+  if (!row || typeof row.id !== "string" || typeof row.deck_id !== "string" || typeof row.front !== "string" || typeof row.back !== "string") return null;
+  const timestamp = typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString();
+  const page = Number(row.source_page);
+  return { id: row.id, deckId: row.deck_id, projectId: typeof row.project_id === "string" ? row.project_id : null, front: row.front, back: row.back, sourcePage: Number.isInteger(page) && page > 0 ? page : null, dueAt: typeof row.due_at === "string" ? row.due_at : timestamp, intervalDays: Number.isFinite(Number(row.interval_days)) ? Math.max(0, Number(row.interval_days)) : 0, ease: Number.isFinite(Number(row.ease)) ? Math.max(1.3, Number(row.ease)) : 2.5, repetitions: Number.isInteger(Number(row.repetitions)) ? Math.max(0, Number(row.repetitions)) : 0, lapses: Number.isInteger(Number(row.lapses)) ? Math.max(0, Number(row.lapses)) : 0, createdAt: typeof row.created_at === "string" ? row.created_at : timestamp, updatedAt: timestamp, source };
+}
+
+function localDecks(owner: string | null) {
+  return readLocalList<FlashcardDeck>(flashcardDeckCacheKey(owner)).filter(deck => typeof deck?.id === "string" && typeof deck.name === "string");
+}
+
+function localCards(owner: string | null, deckId: string) {
+  return readLocalList<Flashcard>(flashcardCacheKey(owner, deckId)).filter(card => typeof card?.id === "string" && card.deckId === deckId && typeof card.front === "string" && typeof card.back === "string");
+}
+
+function cacheDeck(owner: string | null, deck: FlashcardDeck) {
+  const items = localDecks(owner).filter(item => item.id !== deck.id);
+  writeLocalList(flashcardDeckCacheKey(owner), [{ ...deck }, ...items].slice(0, 200));
+}
+
+function cacheCard(owner: string | null, card: Flashcard) {
+  const items = localCards(owner, card.deckId).filter(item => item.id !== card.id);
+  writeLocalList(flashcardCacheKey(owner, card.deckId), [{ ...card }, ...items].slice(0, 1000));
+}
+
+export function readFlashcardDecks(owner: string | null) {
+  return localDecks(owner);
+}
+
+export function readFlashcards(owner: string | null, deckId: string) {
+  return localCards(owner, deckId);
+}
+
+export async function fetchFlashcardDecks(owner: string | null): Promise<FlashcardRepositoryResult<FlashcardDeck>> {
+  if (!owner) return { items: localDecks(null), source: "local" };
+  try {
+    const client = await clientFor(owner);
+    const { data, error } = await client.from("flashcard_decks").select("id,name,project_id,folder_id,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+    if (error) throw error;
+    const items = (data ?? []).map(row => deckFromRow(row, "cloud")).filter((item): item is FlashcardDeck => !!item);
+    writeLocalList(flashcardDeckCacheKey(owner), items);
+    return { items, source: "cloud" };
+  } catch {
+    return { items: localDecks(owner), source: "local" };
+  }
+}
+
+export async function fetchFlashcards(owner: string | null, deckId: string): Promise<FlashcardRepositoryResult<Flashcard>> {
+  if (!owner) return { items: localCards(null, deckId), source: "local" };
+  try {
+    const client = await clientFor(owner);
+    const { data, error } = await client.from("flashcards").select("id,deck_id,project_id,front,back,source_page,due_at,interval_days,ease,repetitions,lapses,created_at,updated_at").eq("user_id", owner).eq("deck_id", deckId).order("created_at", { ascending: true }).abortSignal(AbortSignal.timeout(20000));
+    if (error) throw error;
+    const items = (data ?? []).map(row => cardFromRow(row, "cloud")).filter((item): item is Flashcard => !!item);
+    writeLocalList(flashcardCacheKey(owner, deckId), items);
+    return { items, source: "cloud" };
+  } catch {
+    return { items: localCards(owner, deckId), source: "local" };
+  }
+}
+
+export async function upsertFlashcardDeck(owner: string | null, deck: FlashcardDeck): Promise<FlashcardStorage> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const { error } = await client.from("flashcard_decks").upsert({ id: deck.id, user_id: owner, name: deck.name, project_id: deck.projectId, folder_id: deck.folderId, created_at: deck.createdAt, updated_at: deck.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      if (error) throw error;
+      cacheDeck(owner, { ...deck, source: "cloud" });
+      return "cloud";
+    } catch {
+      // A missing migration or unavailable network keeps the edit usable locally.
+    }
+  }
+  cacheDeck(owner, { ...deck, source: "local" });
+  return "local";
+}
+
+export async function deleteFlashcardDeck(owner: string | null, deckId: string): Promise<FlashcardStorage> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const { error } = await client.from("flashcard_decks").delete().eq("user_id", owner).eq("id", deckId).abortSignal(AbortSignal.timeout(20000));
+      if (error) throw error;
+      writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
+      localStorage.removeItem(flashcardCacheKey(owner, deckId));
+      return "cloud";
+    } catch {
+      // Keep the app usable until the flashcard migration/network is available.
+    }
+  }
+  writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
+  localStorage.removeItem(flashcardCacheKey(owner, deckId));
+  return "local";
+}
+
+export async function upsertFlashcard(owner: string | null, card: Flashcard): Promise<FlashcardStorage> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const { error } = await client.from("flashcards").upsert({ id: card.id, deck_id: card.deckId, user_id: owner, project_id: card.projectId, front: card.front, back: card.back, source_page: card.sourcePage, due_at: card.dueAt, interval_days: card.intervalDays, ease: card.ease, repetitions: card.repetitions, lapses: card.lapses, created_at: card.createdAt, updated_at: card.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      if (error) throw error;
+      cacheCard(owner, { ...card, source: "cloud" });
+      return "cloud";
+    } catch {
+      // A missing migration or unavailable network keeps the edit usable locally.
+    }
+  }
+  cacheCard(owner, { ...card, source: "local" });
+  return "local";
+}
+
+export async function deleteFlashcard(owner: string | null, card: Flashcard): Promise<FlashcardStorage> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const { error } = await client.from("flashcards").delete().eq("user_id", owner).eq("id", card.id).abortSignal(AbortSignal.timeout(20000));
+      if (error) throw error;
+      writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
+      return "cloud";
+    } catch {
+      // Keep the app usable until the flashcard migration/network is available.
+    }
+  }
+  writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
+  return "local";
+}
+
 // A rejected save must not poison subsequent saves. Requests remain ordered.
 export class SaveQueue {
   private tail: Promise<unknown> = Promise.resolve();

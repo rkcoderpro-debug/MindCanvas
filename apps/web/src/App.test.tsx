@@ -58,4 +58,12 @@ describe("Workspace UI", () => {
     expect(document.documentElement.lang).toBe("en"); expect(localStorage.getItem("mindcanvas:language")).toBe("en");
     expect(host.textContent).toContain("Recent files"); expect(host.textContent).toContain("Ghi chú của tôi");
   });
+  it("opens the flashcards workspace without injecting demo decks or cards", async () => {
+    await act(async () => root.render(<App/>));
+    const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Flashcard") as HTMLButtonElement;
+    await act(async () => button.click());
+    expect(host.textContent).toContain("Bộ thẻ");
+    expect(host.textContent).toContain("Chưa có bộ thẻ");
+    expect(host.querySelector(".flashcard-row")).toBeNull();
+  });
 });

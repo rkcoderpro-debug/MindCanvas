@@ -1,4 +1,46 @@
-# MindCanvas — V1 handoff
+# MindCanvas — project handoff
+
+## Update 2026-09-11 — V3.1 Flashcards MVP (latest)
+
+### Implemented
+
+- Added a first-class Flashcards workspace in the sidebar. It starts empty and never injects sample decks/cards.
+- Added deck CRUD: create, rename and delete, with an optional link to an existing user-owned project/folder.
+- Added card CRUD through accessible in-app dialogs: question, answer and optional source page. No browser `prompt`/`alert` is used.
+- Added a basic review loop with four ratings: Again, Hard, Good and Easy. Review metadata (`due_at`, interval, ease, repetitions and lapses) is stored with each card.
+- Added owner-scoped local fallback/cache and Supabase persistence. The UI shows Cloud or On this device so a missing migration/network does not masquerade as cloud sync.
+- Added bilingual Vietnamese/English labels and dark-theme coverage for the flashcard workspace.
+
+### Architecture and setup
+
+- `components/FlashcardsPage.tsx`: deck list, card list, CRUD dialogs and review UI.
+- `hooks/useFlashcards.ts`: lifecycle, selected deck, CRUD and review actions.
+- `lib/flashcards.ts`: portable types plus deterministic review scheduler; no network or React dependency.
+- `lib/projectStore.ts`: owner-scoped cache and Supabase repository for `flashcard_decks` and `flashcards`.
+- `supabase/migrations/0005_flashcards.sql`: tables, indexes, ownership checks and RLS policies.
+- No server/API/provider environment variable changed in V3.1. AI-generated flashcards from PDF/mind-map are deliberately a later slice after this data contract is proven.
+
+### Verification and limitations
+
+- `npm run typecheck --offline`, `npm run build --offline`, and `npm test --offline` pass locally; the suite has 60 tests.
+- Live Supabase migration, Google OAuth, Gemini, Render and browser/device QA were not run from this workspace.
+- Apply migration `0005_flashcards.sql` in the same Supabase project before expecting cloud decks/cards. Until then, signed-in fallback data is local and is labeled as such.
+- The MVP scheduler is intentionally simple. It does not include quiz modes, analytics, AI generation, spaced-repetition history charts, sharing, collaboration or RAG.
+
+### Changed files
+
+- `apps/web/src/App.tsx`
+- `apps/web/src/components/FlashcardsPage.tsx`
+- `apps/web/src/hooks/useFlashcards.ts`
+- `apps/web/src/lib/flashcards.ts`
+- `apps/web/src/lib/flashcards.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/projectStore.ts`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/styles.css`
+- `supabase/migrations/0005_flashcards.sql`
+- `PROJECT_HANDOFF.md`
+- `V3_1_FLASHCARDS_MVP_VI.md`
 
 ## Update 2026-09-11 — Selection, layers, groups, navigation and project management
 
@@ -70,7 +112,7 @@ See UPGRADE_WORKSPACE_VI.md for changed-file manifest, replacement and Git/Rende
 
 ## Mục tiêu hiện tại
 
-MindCanvas là workspace học tập dạng infinite canvas: ghi chú, vẽ tự do, highlighter, hình cơ bản, connector và mind map có cấu trúc chỉnh sửa được. V1 ưu tiên PDF → graph editable, Google OAuth/Supabase persistence và autosave. Các phạm vi V2/V3 như flashcard, quiz, realtime collaboration, semantic search/RAG, handwriting OCR, analytics, tutor và presentation mode chưa được triển khai.
+MindCanvas là workspace học tập dạng infinite canvas: ghi chú, vẽ tự do, highlighter, hình cơ bản, connector và mind map có cấu trúc chỉnh sửa được. V1 ưu tiên PDF → graph editable, Google OAuth/Supabase persistence và autosave. V3.1 đã thêm flashcard CRUD và ôn tập cơ bản; quiz, realtime collaboration, semantic search/RAG, handwriting OCR, analytics, tutor và presentation mode vẫn chưa nằm trong phạm vi.
 
 ## Kiến trúc
 
@@ -78,6 +120,7 @@ MindCanvas là workspace học tập dạng infinite canvas: ghi chú, vẽ tự
 apps/web        React 19 + Vite + TypeScript
   ├─ App.tsx     Shell, toolbar, autosave, undo/redo, AI panel
   ├─ CanvasBoard Infinite canvas SVG foundation; nodes/edges follow drag
+  ├─ FlashcardsPage Flashcard deck/card CRUD and basic review workspace
   └─ lib/        Supabase browser client và API client
 
 apps/server     Express + TypeScript
@@ -109,6 +152,7 @@ Canvas data không được flatten thành ảnh. `BoardState` giữ text, drawi
 - PDF được upload trực tiếp vào Supabase Storage theo path `{user_id}/{document_id}.pdf`, đồng thời tạo record `documents`.
 - Render Blueprint gồm API Node service; frontend deploy riêng bằng Render Static Site vì Blueprint parser hiện không nhận `type: static`.
 - Demo mode hiển thị rõ khi credentials chưa có; live cloud cần chạy checklist trong `DEPLOY_V1_VI.md`.
+- V3.1 Flashcards MVP: bộ thẻ/thẻ học theo user, liên kết project tùy chọn, review Again/Hard/Good/Easy, local fallback và migration RLS riêng.
 
 ## Chưa hoàn thành / việc tiếp theo
 
@@ -161,7 +205,7 @@ npm run dev
 
 ## Next safe slice
 
-Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → local cloud test → Render API → Render frontend → cập nhật allow-list. Sau đó tách `boardReducer`/`historyReducer` và hoàn thiện repository/retry layer.
+Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → local cloud test → Render API → Render frontend → cập nhật allow-list. Với V3.1, chạy thêm `supabase/migrations/0005_flashcards.sql`, kiểm tra tạo deck/card sau khi đăng nhập, rồi mới làm AI-generated flashcards ở slice kế tiếp.
 # UPDATE — 2026-09-11: Folder management and theme cleanup
 
 - Folder management now supports local/cloud rename and delete; deleting a folder moves its projects to Workspace.
