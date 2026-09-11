@@ -13,6 +13,9 @@ export type MindMapNode = {
   sourcePage?: number;
   collapsed?: boolean;
   parentId?: string;
+  rotation?: number;
+  hidden?: boolean;
+  locked?: boolean;
 };
 
 export type MindMapEdge = {
@@ -20,6 +23,8 @@ export type MindMapEdge = {
   source: string;
   target: string;
   label?: string;
+  hidden?: boolean;
+  locked?: boolean;
 };
 
 export type DrawingPath = {
@@ -28,6 +33,9 @@ export type DrawingPath = {
   color: string;
   width: number;
   opacity: number;
+  rotation?: number;
+  hidden?: boolean;
+  locked?: boolean;
 };
 
 export type CanvasShape = {
@@ -38,6 +46,9 @@ export type CanvasShape = {
   width: number;
   height: number;
   color: string;
+  rotation?: number;
+  hidden?: boolean;
+  locked?: boolean;
 };
 
 export type CanvasText = {
@@ -49,6 +60,9 @@ export type CanvasText = {
   height?: number;
   fontSize?: number;
   color?: string;
+  rotation?: number;
+  hidden?: boolean;
+  locked?: boolean;
 };
 
 export type Viewport = { x: number; y: number; scale: number };

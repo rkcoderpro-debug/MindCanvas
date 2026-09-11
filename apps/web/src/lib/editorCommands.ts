@@ -102,6 +102,37 @@ export function reorderSelection(board: BoardState, selections: Selection[], dir
   else { for (let i = 1; i < blocks.length; i++) if (chosen(blocks[i]) && !chosen(blocks[i - 1])) [blocks[i], blocks[i - 1]] = [blocks[i - 1], blocks[i]]; }
   return { ...board, layerOrder: blocks.flat() };
 }
+const editable = (board: BoardState, selections: Selection[]) => expandGroups(board, selections).filter(s => s.kind !== "edges");
+export function setElementFlags(board: BoardState, selections: Selection[], flags: { hidden?: boolean; locked?: boolean }): BoardState {
+  const ids = new Set(expandGroups(board, selections).map(s => s.id));
+  return { ...board, nodes: board.nodes.map(e => ids.has(e.id) ? { ...e, ...flags } : e), texts: board.texts.map(e => ids.has(e.id) ? { ...e, ...flags } : e), shapes: board.shapes.map(e => ids.has(e.id) ? { ...e, ...flags } : e), drawings: board.drawings.map(e => ids.has(e.id) ? { ...e, ...flags } : e), edges: board.edges.map(e => ids.has(e.id) ? { ...e, ...flags } : e) };
+}
+export function rotateSelection(board: BoardState, selections: Selection[], degrees: number): BoardState {
+  const ids = new Set(editable(board, selections).map(s => s.id));
+  const rotate = <T extends { id: string; rotation?: number }>(items: T[]) => items.map(e => ids.has(e.id) ? { ...e, rotation: ((e.rotation ?? 0) + degrees) % 360 } : e);
+  return { ...board, nodes: rotate(board.nodes), texts: rotate(board.texts), shapes: rotate(board.shapes), drawings: rotate(board.drawings) };
+}
+export function resizeSelection(board: BoardState, selections: Selection[], width: number, height: number): BoardState {
+  const active = editable(board, selections), box = selectionBounds(board, active); if (!box || !active.length) return board;
+  const sx = Math.max(.05, width / Math.max(1, box.width)), sy = Math.max(.05, height / Math.max(1, box.height)), ids = new Set(active.map(s => s.id));
+  const resize = <T extends { id: string; x: number; y: number; width: number; height?: number }>(items: T[]) => items.map(e => ids.has(e.id) ? { ...e, x: box.x + (e.x - box.x) * sx, y: box.y + (e.y - box.y) * sy, width: Math.max(24, e.width * sx), height: Math.max(24, (e.height ?? 32) * sy) } : e);
+  const drawings = board.drawings.map(e => { if (!ids.has(e.id)) return e; return { ...e, points: e.points.map(p => ({ x: box.x + (p.x - box.x) * sx, y: box.y + (p.y - box.y) * sy })), width: Math.max(1, e.width * Math.min(sx, sy)) }; });
+  return { ...board, nodes: resize(board.nodes), texts: resize(board.texts), shapes: resize(board.shapes), drawings };
+}
+export function alignSelection(board: BoardState, selections: Selection[], axis: "left" | "center" | "right" | "top" | "middle" | "bottom"): BoardState {
+  const active = editable(board, selections), box = selectionBounds(board, active); if (!box) return board;
+  return active.reduce((next, s) => { const r = elementBounds(next, s); if (!r) return next; const dx = axis === "left" ? box.x - r.x : axis === "center" ? box.x + box.width / 2 - (r.x + r.width / 2) : axis === "right" ? box.x + box.width - r.x - r.width : 0; const dy = axis === "top" ? box.y - r.y : axis === "middle" ? box.y + box.height / 2 - (r.y + r.height / 2) : axis === "bottom" ? box.y + box.height - r.y - r.height : 0; return moveElement(next, s, dx, dy); }, board);
+}
+export function distributeSelection(board: BoardState, selections: Selection[], axis: "horizontal" | "vertical"): BoardState {
+  const active = editable(board, selections).map(s => ({ s, r: elementBounds(board, s) })).filter(v => v.r) as Array<{ s: Selection; r: Bounds }>;
+  if (active.length < 3) return board; active.sort((a,b) => axis === "horizontal" ? a.r.x - b.r.x : a.r.y - b.r.y);
+  const first = active[0].r, last = active.at(-1)!.r, span = axis === "horizontal" ? last.x + last.width - first.x : last.y + last.height - first.y, total = active.reduce((n,v) => n + (axis === "horizontal" ? v.r.width : v.r.height), 0), gap = (span - total) / (active.length - 1); let cursor = axis === "horizontal" ? first.x : first.y;
+  return active.reduce((next, v) => { const pos = axis === "horizontal" ? v.r.x : v.r.y, delta = cursor - pos; cursor += (axis === "horizontal" ? v.r.width : v.r.height) + gap; return moveElement(next, v.s, axis === "horizontal" ? delta : 0, axis === "vertical" ? delta : 0); }, board);
+}
+export function snapMoveSelection(board: BoardState, selections: Selection[], dx: number, dy: number, grid = 8): BoardState {
+  const box = selectionBounds(board, editable(board, selections)); if (!box) return moveSelection(board, selections, dx, dy);
+  const snap = (v: number) => Math.round(v / grid) * grid; return moveSelection(board, selections, snap(box.x + dx) - box.x, snap(box.y + dy) - box.y);
+}
 export function parentOf(board: BoardState, id: string) {
   return board.nodes.find(n => n.id === id)?.parentId ?? board.edges.find(e => e.target === id && board.nodes.some(n => n.id === e.source))?.source;
 }

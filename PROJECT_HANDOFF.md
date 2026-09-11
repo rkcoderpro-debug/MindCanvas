@@ -176,3 +176,11 @@ Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → loca
 - Sidebar folders show a compact canvas dropdown; the folder name still opens the complete folder view.
 - Added `FolderManager.tsx` with file-style selection, copy, paste, duplicate, move, rename and trash actions.
 - Dragging a project onto a folder or Workspace updates its folder assignment.
+
+# UPDATE — 2026-09-11: V2.1 Editor Pro
+
+- Added backward-compatible optional element fields: `rotation`, `locked`, and `hidden`.
+- Added multi-element resize, rotation handle, align/distribute commands, optional grid snap, and lock/hide controls.
+- Canvas rendering and layer list now respect element visibility and rotation.
+- Added editor command coverage; current frontend test suite has 53 passing tests.
+- V2.1 intentionally does not include sharing, realtime collaboration, version history, or flashcards; those remain later V2 phases.

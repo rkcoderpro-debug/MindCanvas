@@ -113,6 +113,7 @@ export function parseBoard(value: unknown): BoardState {
     for (const el of b[kind]) {
       if (!obj(el) || !string(el.id, 200) || ids.has(el.id)) throw new Error("Invalid element id");
       ids.add(el.id);
+      if (el.rotation !== undefined && (!number(el.rotation) || el.rotation < -3600 || el.rotation > 3600) || el.hidden !== undefined && typeof el.hidden !== "boolean" || el.locked !== undefined && typeof el.locked !== "boolean") throw new Error("Invalid element flags");
       if (el.color !== undefined && (typeof el.color !== "string" || !/^#[0-9a-f]{6}$/i.test(el.color))) throw new Error("Invalid color");
       if (kind === "edges") { if (!string(el.source, 200) || !string(el.target, 200)) throw new Error("Invalid connection"); continue; }
       if (kind === "drawings") {
