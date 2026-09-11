@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, Cloud, FileText, HardDrive, Pencil, Play, Plus, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
+import { BookOpen, CheckCircle2, Cloud, FileText, HardDrive, Pencil, Play, Plus, RotateCcw, Search, Sparkles, Target, Trash2, Zap, X } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
 import { fetchBoard, readCache } from "../lib/projectStore";
@@ -7,9 +7,10 @@ import { dueCards, type Flashcard, type FlashcardDeck, type FlashcardRating } fr
 import { useFlashcards } from "../hooks/useFlashcards";
 import { useLanguage } from "../lib/i18n";
 import { generateFlashcards, uploadPdf, type GeneratedFlashcard } from "../lib/api";
-import { saveDocumentToStorage } from "../lib/supabase";
+import { getDocumentSource, saveDocumentToStorage } from "../lib/supabase";
 import { MAX_FILE_BYTES } from "../lib/board";
 import Dialog from "./Dialog";
+import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
@@ -52,6 +53,11 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [cardQuery, setCardQuery] = useState("");
+  const [sourceView, setSourceView] = useState<SourceDocumentView | null>(null);
+  const progressKey = `mindcanvas:review-progress:${owner ?? "guest"}:${new Date().toISOString().slice(0, 10)}`;
+  const [dailyGoal, setDailyGoal] = useState(() => { try { return Math.max(5, Math.min(100, Number(localStorage.getItem("mindcanvas:daily-goal")) || 20)); } catch { return 20; } });
+  const [reviewedToday, setReviewedToday] = useState(() => { try { return Math.max(0, Number(localStorage.getItem(progressKey)) || 0); } catch { return 0; } });
   const [aiDialog, setAiDialog] = useState(false);
   const [aiSource, setAiSource] = useState<AiSource>("text");
   const [aiText, setAiText] = useState("");
@@ -68,6 +74,10 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
   const selectedProject = availableProjects.find(project => project.id === deckProjectId);
   const aiProject = availableProjects.find(project => project.id === aiProjectId);
   const due = flashcards.due;
+  const newCards = flashcards.cards.filter(card => card.repetitions === 0);
+  const difficultCards = flashcards.cards.filter(card => card.lapses > 0).sort((a, b) => b.lapses - a.lapses);
+  const learnedCards = flashcards.cards.filter(card => card.repetitions >= 2);
+  const filteredCards = flashcards.cards.filter(card => `${card.front} ${card.back}`.toLocaleLowerCase().includes(cardQuery.trim().toLocaleLowerCase()));
   const reviewTarget = reviewQueue[reviewIndex] ? flashcards.cards.find(card => card.id === reviewQueue[reviewIndex]) ?? null : null;
   const reviewFinished = panel === "review" && (!reviewQueue.length || reviewIndex >= reviewQueue.length || !reviewTarget);
 
@@ -156,8 +166,9 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
     } catch (err) { setFormError(err instanceof Error ? err.message : t("error")); }
   };
 
-  const startReview = () => {
-    setReviewQueue(dueCards(flashcards.cards).map(card => card.id));
+  const startReview = (mode: "due" | "new" | "difficult" = "due") => {
+    const cards = mode === "new" ? newCards : mode === "difficult" ? difficultCards : dueCards(flashcards.cards);
+    setReviewQueue(cards.map(card => card.id));
     setReviewIndex(0); setShowAnswer(false); setPanel("review");
   };
 
@@ -165,8 +176,15 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
     if (!reviewTarget) return;
     try {
       await flashcards.reviewCard(reviewTarget, rating);
+      setReviewedToday(current => { const next = current + 1; try { localStorage.setItem(progressKey, String(next)); } catch {} return next; });
       setShowAnswer(false); setReviewIndex(index => index + 1);
     } catch { /* the hook keeps the visible error and the card stays on screen */ }
+  };
+  const openCardSource = async (card: Flashcard) => {
+    if (!card.sourcePage || !flashcards.selectedDeck?.projectId) return;
+    setFormError("");
+    try { const source = await getDocumentSource({ projectId: flashcards.selectedDeck.projectId }); setSourceView({ url: source.url, name: source.name, page: card.sourcePage }); }
+    catch { setFormError(t("sourceError")); }
   };
 
   return <section className="flashcards-page">
@@ -187,10 +205,17 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
         {!flashcards.selectedDeck ? <div className="flashcards-empty"><BookOpen size={48}/><h2>{t("chooseDeck")}</h2><p>{t("chooseDeckHint")}</p><button className="primary-button" onClick={openCreateDeck}><Plus size={17}/>{t("newDeck")}</button></div> : <>
           <header className="flashcards-content-heading">
             <div><div className="flashcards-title-line"><BookOpen size={21}/><h2>{flashcards.selectedDeck.name}</h2></div><div className="flashcards-meta"><span>{t("cardCount", { count: flashcards.cards.length })}</span><span>·</span><span>{t("dueCount", { count: due.length })}</span>{flashcards.selectedDeck.projectId && <><span>·</span><span><FileText size={13}/>{availableProjects.find(project => project.id === flashcards.selectedDeck?.projectId)?.title ?? t("linkedProject")}</span></>}</div></div>
-            <div className="actions"><button className="icon-button danger" aria-label={t("deleteDeck")} title={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={17}/></button><button className="secondary-button" disabled={!owner || flashcards.busy || aiBusy} title={!owner ? t("loginRequired") : t("generateFlashcards")} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button><button className="secondary-button" disabled={!due.length || flashcards.busy || aiBusy} onClick={startReview}><Play size={16}/>{t("startReview")}</button><button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div>
+            <div className="actions"><button className="icon-button danger" aria-label={t("deleteDeck")} title={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={17}/></button><button className="secondary-button" disabled={!owner || flashcards.busy || aiBusy} title={!owner ? t("loginRequired") : t("generateFlashcards")} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button><button className="secondary-button" disabled={!due.length || flashcards.busy || aiBusy} onClick={() => startReview("due")}><Play size={16}/>{t("startReview")}</button><button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div>
           </header>
-          <div className="flashcard-tabs" role="tablist"><button role="tab" aria-selected={panel === "cards"} className={panel === "cards" ? "active" : ""} onClick={() => setPanel("cards")}>{t("allCards")}</button><button role="tab" aria-selected={panel === "review"} className={panel === "review" ? "active" : ""} onClick={startReview}><RotateCcw size={15}/>{t("review")}{due.length > 0 && <span>{due.length}</span>}</button></div>
-          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} showAnswer={showAnswer} onShowAnswer={() => setShowAnswer(true)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <div className="cards-list">{flashcards.cards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} busy={flashcards.busy} t={t}/>)}</div>}
+          <div className="study-overview">
+            <button disabled={!due.length} onClick={() => startReview("due")}><span><RotateCcw size={16}/>{t("reviewDue")}</span><strong>{due.length}</strong></button>
+            <button disabled={!newCards.length} onClick={() => startReview("new")}><span><Zap size={16}/>{t("newCards")}</span><strong>{newCards.length}</strong></button>
+            <button disabled={!difficultCards.length} onClick={() => startReview("difficult")}><span><Target size={16}/>{t("difficultCards")}</span><strong>{difficultCards.length}</strong></button>
+            <div><span><CheckCircle2 size={16}/>{t("learnedCards")}</span><strong>{learnedCards.length}</strong></div>
+          </div>
+          <div className="daily-goal"><div><span>{t("dailyGoal")}</span><strong>{reviewedToday} / {dailyGoal}</strong></div><progress value={Math.min(reviewedToday, dailyGoal)} max={dailyGoal}/><label><Target size={14}/><input aria-label={t("dailyGoal")} type="number" min="5" max="100" step="5" value={dailyGoal} onChange={event => { const value = Math.max(5, Math.min(100, Number(event.target.value) || 20)); setDailyGoal(value); try { localStorage.setItem("mindcanvas:daily-goal", String(value)); } catch {} }}/></label></div>
+          <div className="flashcard-tabs" role="tablist"><button role="tab" aria-selected={panel === "cards"} className={panel === "cards" ? "active" : ""} onClick={() => setPanel("cards")}>{t("allCards")}</button><button role="tab" aria-selected={panel === "review"} className={panel === "review" ? "active" : ""} onClick={() => startReview("due")}><RotateCcw size={15}/>{t("review")}{due.length > 0 && <span>{due.length}</span>}</button></div>
+          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} dailyCurrent={reviewedToday} dailyGoal={dailyGoal} showAnswer={showAnswer} onShowAnswer={() => setShowAnswer(true)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
         </>}
       </section>
     </div>
@@ -223,20 +248,21 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
       <footer className="actions"><button type="button" className="secondary-button" disabled={aiBusy} onClick={() => { setAiPreview(null); setAiError(""); }}>{t("backToSource")}</button><button type="button" className="primary-button" disabled={aiBusy || !aiPreview.cards.some(card => card.front.trim() && card.back.trim())} onClick={() => void applyAiPreview()}>{aiBusy ? t("saving") : t("applyToDeck")}</button></footer>
     </>}</Dialog>}
     {deleteTarget && <Dialog title={t("deleteDeck")} onClose={() => { if (!flashcards.busy) setDeleteTarget(null); }}><p>{t("deleteDeckHint", { name: deleteTarget.name })}</p><footer className="actions"><button className="secondary-button" disabled={flashcards.busy} onClick={() => setDeleteTarget(null)}>{t("cancel")}</button><button className="danger-button" disabled={flashcards.busy} onClick={() => void flashcards.removeDeck(deleteTarget).then(() => setDeleteTarget(null)).catch(() => undefined)}><Trash2 size={16}/>{t("deleteDeck")}</button></footer></Dialog>}
+    {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
   </section>;
 }
 
-function CardRow({ card, language, onEdit, onDelete, busy, t }: { card: Flashcard; language: string; onEdit: () => void; onDelete: () => void; busy: boolean; t: (key: any, values?: Record<string, string | number>) => string }) {
+function CardRow({ card, language, onEdit, onDelete, onOpenSource, busy, t }: { card: Flashcard; language: string; onEdit: () => void; onDelete: () => void; onOpenSource?: () => void; busy: boolean; t: (key: any, values?: Record<string, string | number>) => string }) {
   return <article className="flashcard-row">
     <div className="flashcard-side"><span className="flashcard-label">{t("questionSide")}</span><p>{card.front}</p></div>
     <div className="flashcard-side"><span className="flashcard-label">{t("answerSide")}</span><p>{card.back}</p></div>
-    <div className="flashcard-row-meta"><span className={new Date(card.dueAt) <= new Date() ? "due" : "scheduled"}>{new Date(card.dueAt) <= new Date() ? t("dueNow") : t("nextReview", { date: formatDate(card.dueAt, language) })}</span>{card.sourcePage && <span>{t("page")} {card.sourcePage}</span>}</div>
+    <div className="flashcard-row-meta"><span className={new Date(card.dueAt) <= new Date() ? "due" : "scheduled"}>{new Date(card.dueAt) <= new Date() ? t("dueNow") : t("nextReview", { date: formatDate(card.dueAt, language) })}</span>{card.sourcePage && (onOpenSource ? <button className="flashcard-source" title={t("openSource")} onClick={onOpenSource}><FileText size={12}/>{t("page")} {card.sourcePage}</button> : <span>{t("page")} {card.sourcePage}</span>)}</div>
     <div className="flashcard-row-actions"><button className="icon-button" aria-label={`${t("editCard")}: ${card.front}`} disabled={busy} onClick={onEdit}><Pencil size={16}/></button><button className="icon-button danger" aria-label={`${t("deleteCard")}: ${card.front}`} disabled={busy} onClick={onDelete}><Trash2 size={16}/></button></div>
   </article>;
 }
 
-function ReviewPanel({ target, finished, index, total, showAnswer, onShowAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; showAnswer: boolean; onShowAnswer: () => void; onRate: (rating: FlashcardRating) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
+function ReviewPanel({ target, finished, index, total, dailyCurrent, dailyGoal, showAnswer, onShowAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; dailyCurrent: number; dailyGoal: number; showAnswer: boolean; onShowAnswer: () => void; onRate: (rating: FlashcardRating) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
   if (finished) return <div className="review-finished"><CheckCircle2 size={46}/><h3>{t("reviewComplete")}</h3><p>{t("reviewCompleteHint", { count: total })}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
   if (!target) return <div className="review-finished"><BookOpen size={46}/><h3>{t("nothingDue")}</h3><p>{t("nothingDueHint")}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
-  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span>{t("reviewKeyboardHint")}</span></div><article className="review-card"><div className="review-face"><span className="flashcard-label">{t("questionSide")}</span><p>{target.front}</p></div>{showAnswer && <div className="review-face answer"><span className="flashcard-label">{t("answerSide")}</span><p>{target.back}</p></div>}</article>{!showAnswer ? <button className="primary-button show-answer" onClick={onShowAnswer}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-rating-buttons"><button className="rating-again" onClick={() => onRate("again")}>{t("again")}</button><button className="rating-hard" onClick={() => onRate("hard")}>{t("hard")}</button><button className="rating-good" onClick={() => onRate("good")}>{t("good")}</button><button className="rating-easy" onClick={() => onRate("easy")}>{t("easy")}</button></div></div>}</div>;
+  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span>{t("reviewKeyboardHint")}</span></div><progress className="review-session-progress" value={index} max={Math.max(1, total)} aria-label={t("sessionProgress")}/><article className="review-card"><div className="review-face"><span className="flashcard-label">{t("questionSide")}</span><p>{target.front}</p></div>{showAnswer && <div className="review-face answer"><span className="flashcard-label">{t("answerSide")}</span><p>{target.back}</p></div>}</article>{target.sourcePage && <span className="review-source">{t("page")} {target.sourcePage}</span>}{!showAnswer ? <button className="primary-button show-answer" onClick={onShowAnswer}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-rating-buttons"><button className="rating-again" onClick={() => onRate("again")}>{t("again")}</button><button className="rating-hard" onClick={() => onRate("hard")}>{t("hard")}</button><button className="rating-good" onClick={() => onRate("good")}>{t("good")}</button><button className="rating-easy" onClick={() => onRate("easy")}>{t("easy")}</button></div></div>}<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small></div>;
 }

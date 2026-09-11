@@ -4,7 +4,9 @@ import { config, hasSupabase, supabaseKey } from "./config.js";
 declare global { namespace Express { interface Request { userId?: string; } } }
 
 export async function requireUser(req: Request, res: Response, next: NextFunction) {
-  if (!hasSupabase) { req.userId = "demo-user"; return next(); }
+  // Protected PDF/AI routes must fail closed. Otherwise a production deploy
+  // missing its Supabase variables could expose the server-side provider quota.
+  if (!hasSupabase) return res.status(503).json({ error: "Supabase authentication is not configured." });
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) return res.status(401).json({ error: "Missing Supabase session." });
   try {

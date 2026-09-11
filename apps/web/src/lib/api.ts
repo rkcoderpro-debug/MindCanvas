@@ -32,6 +32,8 @@ export async function generateMindMap(text: string, documentId?: string, signal?
 
 export type GeneratedFlashcard = { front: string; back: string; sourcePage?: number };
 export type GeneratedFlashcards = { provider: string; model: string; title: string; cards: GeneratedFlashcard[]; sourceDocumentId?: string };
+export type SelectionAiAction = "summarize" | "explain" | "rewrite" | "expand";
+export type SelectionAiResult = { provider: string; model: string; action: SelectionAiAction; title: string; text: string; ideas: string[] };
 
 export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal) {
   const response = await fetch(`${apiBase}/api/ai/flashcards`, {
@@ -45,4 +47,18 @@ export async function generateFlashcards(text: string, documentId?: string, maxC
     throw new Error(typeof detail?.error === "string" ? detail.error.slice(0, 2000) : `AI HTTP ${response.status}`);
   }
   return response.json() as Promise<GeneratedFlashcards>;
+}
+
+export async function transformSelection(action: SelectionAiAction, text: string, language: "vi" | "en", signal?: AbortSignal) {
+  const response = await fetch(`${apiBase}/api/ai/selection`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ action, text, language }),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.error === "string" ? detail.error.slice(0, 2000) : `AI HTTP ${response.status}`);
+  }
+  return response.json() as Promise<SelectionAiResult>;
 }

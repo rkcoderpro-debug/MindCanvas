@@ -1,10 +1,12 @@
-import type { BoardState, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
-import { layoutMindMap } from "./mindMapLayout";
+import type { BoardState, CanvasBackground, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
+import { layoutMindMap, nodeHeight } from "./mindMapLayout";
 
 export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "edges";
 export type Selection = { kind: ElementKind; id: string };
 export type Bounds = { x: number; y: number; width: number; height: number };
+export type ContextAiResult = { action: "summarize" | "explain" | "rewrite" | "expand"; title: string; text: string; ideas: string[] };
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const CANVAS_BACKGROUNDS: CanvasBackground[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 export const pathData = (points: Vec2[]) => points.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ") + (points.length === 1 ? " l0.01,0.01" : "");
 const xml = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&apos;" }[char]!));
@@ -44,10 +46,22 @@ export function exportCanvasSvg(board: BoardState) {
     const rotation = "rotation" in item && item.rotation ? ` transform="rotate(${item.rotation} ${bound.x + bound.width / 2} ${bound.y + bound.height / 2})"` : "";
     if (selection.kind === "shapes") return item.kind === "rect" ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, "#ffffff")}" stroke="#a6b5db"${rotation}/>` : `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, "#ffffff")}" stroke="#a6b5db"${rotation}/>`;
     if (selection.kind === "drawings") return `<path d="${pathData(item.points)}" fill="none" stroke="${color(item.color, "#4562df")}" stroke-width="${item.width}" opacity="${item.opacity}" stroke-linecap="round" stroke-linejoin="round"${rotation}/>`;
-    if (selection.kind === "texts") return `<text x="${bound.x}" y="${bound.y + (item.fontSize ?? 16)}" font-size="${item.fontSize ?? 16}" fill="${color(item.color, "#18213b")}"${rotation}>${xml(item.text).split("\n").map((line, index) => `<tspan x="${bound.x}" dy="${index ? item.fontSize ?? 16 : 0}">${line}</tspan>`).join("")}</text>`;
+    if (selection.kind === "texts") {
+      const align = item.textAlign === "center" ? "middle" : item.textAlign === "right" ? "end" : "start";
+      const tx = item.textAlign === "center" ? bound.x + bound.width / 2 : item.textAlign === "right" ? bound.x + bound.width : bound.x;
+      const backdrop = item.backgroundColor ? `<rect x="${bound.x - 6}" y="${bound.y - 4}" width="${bound.width + 12}" height="${bound.height + 8}" rx="5" fill="${color(item.backgroundColor, "#ffffff")}"${rotation}/>` : "";
+      return `${backdrop}<text x="${tx}" y="${bound.y + (item.fontSize ?? 16)}" text-anchor="${align}" font-size="${item.fontSize ?? 16}" font-weight="${item.bold ? "700" : "400"}" font-style="${item.italic ? "italic" : "normal"}" text-decoration="${item.underline ? "underline" : "none"}" fill="${color(item.color, "#18213b")}"${rotation}>${xml(item.text).split("\n").map((line, index) => `<tspan x="${tx}" dy="${index ? (item.fontSize ?? 16) * 1.4 : 0}">${line || " "}</tspan>`).join("")}</text>`;
+    }
     return `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="12" fill="${color(item.color, "#ffffff")}" stroke="#bcc8e4"${rotation}/><text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + 6}" text-anchor="middle" font-size="16" fill="#18213b">${xml(item.label)}</text>`;
   }).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="#8a99b5"/></marker></defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="#ffffff"/>${body}</svg>`;
+  const background = board.background ?? "dots";
+  const pattern = background === "dots" ? `<pattern id="mindcanvas-bg" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#d1d9e8"/></pattern>`
+    : background === "grid" ? `<pattern id="mindcanvas-bg" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#dbe2ee" stroke-width="1"/></pattern>`
+    : background === "ruled" ? `<pattern id="mindcanvas-bg" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M0 31.5H32" fill="none" stroke="#cfdcf0" stroke-width="1"/></pattern>`
+    : background === "graph" ? `<pattern id="mindcanvas-bg" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M20 0V100M40 0V100M60 0V100M80 0V100M0 20H100M0 40H100M0 60H100M0 80H100" fill="none" stroke="#e4e9f2" stroke-width="1"/><path d="M100 0H0V100" fill="none" stroke="#cbd5e5" stroke-width="1.25"/></pattern>`
+    : background === "isometric" ? `<pattern id="mindcanvas-bg" width="48" height="28" patternUnits="userSpaceOnUse"><path d="M0 28L24 14 48 28M0 0L24 14 48 0M24 14V42" fill="none" stroke="#dbe2ee" stroke-width="1"/></pattern>` : "";
+  const backgroundFill = background === "plain" ? "#ffffff" : "url(#mindcanvas-bg)";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="#8a99b5"/></marker>${pattern}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="#ffffff"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${body}</svg>`;
 }
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 export function exportCanvasSvgFile(board: BoardState) { downloadBlob(new Blob([exportCanvasSvg(board)], { type: "image/svg+xml" }), `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.svg`); }
@@ -60,7 +74,7 @@ export async function exportCanvasPngFile(board: BoardState) {
   const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png")); if (!blob) throw new Error("Could not create PNG export."); downloadBlob(blob, `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.png`);
 }
 export function blankBoard(title = "Untitled canvas"): BoardState {
-  return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, nodes: [], edges: [], texts: [], shapes: [], drawings: [] };
+  return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, background: "dots", nodes: [], edges: [], texts: [], shapes: [], drawings: [] };
 }
 export function elementBounds(board: BoardState, selection: Selection): Bounds | null {
   if (selection.kind === "edges") return null;
@@ -82,6 +96,42 @@ export function moveElement(board: BoardState, s: Selection, dx: number, dy: num
   return { ...board, [s.kind]: board[s.kind].map(el => el.id !== s.id ? el : "points" in el
     ? { ...el, points: el.points.map(p => ({ x: p.x + dx, y: p.y + dy })) }
     : { ...el, x: el.x + dx, y: el.y + dy }) };
+}
+
+export function selectionToStudyText(board: BoardState, selections: Selection[]) {
+  const selected = new Set(selections.map(selection => selection.id));
+  const lines = selections.flatMap(selection => {
+    if (selection.kind === "texts") return board.texts.filter(item => item.id === selection.id).map(item => item.text);
+    if (selection.kind === "nodes") return board.nodes.filter(item => item.id === selection.id).map(item => `${item.label}${item.sourcePage ? ` [PAGE ${item.sourcePage}]` : ""}`);
+    if (selection.kind === "edges") return board.edges.filter(item => item.id === selection.id && item.label).map(item => item.label!);
+    return [];
+  });
+  // Include labelled links connecting two selected endpoints even when the edge
+  // itself was not selected, so AI keeps the relationship context.
+  board.edges.filter(edge => edge.label && selected.has(edge.source) && selected.has(edge.target)).forEach(edge => lines.push(edge.label!));
+  return [...new Set(lines.map(line => line.trim()).filter(Boolean))].join("\n\n").slice(0, 30_000);
+}
+
+export function applySelectionAi(board: BoardState, selections: Selection[], result: ContextAiResult, colors = { ink: "#18213b", fill: "#ffffff" }) {
+  if (result.action === "rewrite" && selections.length === 1) {
+    const selection = selections[0];
+    if (selection.kind === "texts") return { ...board, texts: board.texts.map(item => item.id === selection.id ? { ...item, text: result.text } : item) };
+    if (selection.kind === "nodes") return { ...board, nodes: board.nodes.map(item => item.id === selection.id ? { ...item, label: result.text, height: Math.max(item.height, nodeHeight(result.text, item.width, item.sourcePage)) } : item) };
+  }
+  const selectedBounds = selections.flatMap(selection => { const bounds = elementBounds(board, selection); return bounds ? [bounds] : []; });
+  const right = selectedBounds.length ? Math.max(...selectedBounds.map(bounds => bounds.x + bounds.width)) + 90 : 120;
+  const top = selectedBounds.length ? Math.min(...selectedBounds.map(bounds => bounds.y)) : 120;
+  if (result.action === "expand") {
+    const parent = selections.length === 1 && selections[0].kind === "nodes" ? board.nodes.find(node => node.id === selections[0].id) : undefined;
+    const root = parent ?? { id: crypto.randomUUID(), label: result.title || result.text.slice(0, 120), x: right, y: top, width: 220, height: 84, color: colors.fill };
+    const childX = root.x + root.width + 100;
+    const ideas = result.ideas.slice(0, 12).map((idea, index) => ({ id: crypto.randomUUID(), label: idea, parentId: root.id, x: childX, y: root.y + index * 112, width: 240, height: nodeHeight(idea, 240), color: colors.fill }));
+    const edges = ideas.map(node => ({ id: crypto.randomUUID(), source: root.id, target: node.id }));
+    return { ...board, nodes: [...board.nodes.map(node => node.id === root.id ? { ...node, collapsed: false } : node), ...(parent ? [] : [root]), ...ideas], edges: [...board.edges, ...edges] };
+  }
+  const id = crypto.randomUUID();
+  const text = `${result.title ? `${result.title}\n` : ""}${result.text}`.trim();
+  return { ...board, texts: [...board.texts, { id, text, x: right, y: top + 18, width: 360, height: Math.max(100, text.split("\n").length * 24), fontSize: 16, color: colors.ink, backgroundColor: colors.fill }] };
 }
 export function resizeElement(board: BoardState, s: Selection, width: number, height: number): BoardState {
   const b = elementBounds(board, s);
@@ -132,6 +182,7 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
   const x = bounds.length ? Math.max(...bounds.map(b => b.x + b.width)) + 100 : 100;
   const nodes = graph.nodes.map((n, i) => ({
     id: ids.get(n.id)!, label: n.label, parentId: n.parentId ? ids.get(n.parentId) : undefined, sourcePage: Number.isInteger(n.sourcePage) && n.sourcePage! > 0 ? n.sourcePage : undefined,
+    sourceDocumentId: n.sourceDocumentId ?? graph.sourceDocumentId,
     x: x + (i % 3) * 250, y: 100 + Math.floor(i / 3) * 130, width: 190, height: 76, color: i === 0 ? "#e1e7ff" : "#ffffff",
   }));
   const edges = graph.edges.map(e => ({ id: crypto.randomUUID(), source: ids.get(e.source)!, target: ids.get(e.target)!, label: e.label }));
@@ -140,7 +191,8 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
   for (const edge of hierarchy) if (!edges.some(e => e.source === edge.source && e.target === edge.target)) edges.push({ ...edge, label: undefined });
   const explicitChildren = new Set(hierarchy.map(e => e.target));
   const layoutEdges = [...hierarchy, ...edges.filter(e => !explicitChildren.has(e.target))];
-  return { ...board, nodes: [...board.nodes, ...layoutMindMap(nodes, layoutEdges, { x, y: 100 })], edges: [...board.edges, ...edges] };
+  const sourceDocuments = graph.sourceDocumentId ? [...(board.sourceDocuments ?? []).filter(document => document.id !== graph.sourceDocumentId), { id: graph.sourceDocumentId, name: graph.sourceDocumentName ?? "PDF" }] : board.sourceDocuments;
+  return { ...board, sourceDocuments, nodes: [...board.nodes, ...layoutMindMap(nodes, layoutEdges, { x, y: 100 })], edges: [...board.edges, ...edges] };
 }
 
 export function arrangeMindMap(board: BoardState): BoardState {
@@ -158,6 +210,15 @@ export function parseBoard(value: unknown): BoardState {
   const b = value;
   if (!string(b.id, 200) || !string(b.title, 500) || !string(b.updatedAt, 100) || !Number.isFinite(Date.parse(b.updatedAt))
     || !obj(b.viewport) || !number(b.viewport.x) || !number(b.viewport.y) || !number(b.viewport.scale) || b.viewport.scale < .1 || b.viewport.scale > 10) throw new Error("Invalid board metadata");
+  if (b.background !== undefined && !CANVAS_BACKGROUNDS.includes(b.background)) throw new Error("Invalid canvas background");
+  if (b.sourceDocuments !== undefined) {
+    if (!Array.isArray(b.sourceDocuments) || b.sourceDocuments.length > 100) throw new Error("Invalid source documents");
+    const documentIds = new Set<string>();
+    for (const document of b.sourceDocuments) {
+      if (!obj(document) || !string(document.id, 200) || !string(document.name, 500) || documentIds.has(document.id)) throw new Error("Invalid source document");
+      documentIds.add(document.id);
+    }
+  }
   const ids = new Set<string>();
   let points = 0;
   for (const kind of ["nodes", "texts", "shapes", "drawings", "edges"] as const) {
@@ -174,8 +235,11 @@ export function parseBoard(value: unknown): BoardState {
         points += el.points.length; continue;
       }
       if (!number(el.x) || !number(el.y) || !number(el.width) || el.width <= 0 || (kind !== "texts" && (!number(el.height) || el.height <= 0))) throw new Error("Invalid geometry");
-      if (kind === "texts" && (!string(el.text) || (el.fontSize !== undefined && (!number(el.fontSize) || el.fontSize < 8 || el.fontSize > 200)))) throw new Error("Invalid text");
-      if (kind === "nodes" && !string(el.label)) throw new Error("Invalid label");
+      if (kind === "texts" && (!string(el.text) || (el.fontSize !== undefined && (!number(el.fontSize) || el.fontSize < 8 || el.fontSize > 200))
+        || (el.backgroundColor !== undefined && (typeof el.backgroundColor !== "string" || !/^#[0-9a-f]{6}$/i.test(el.backgroundColor)))
+        || (el.bold !== undefined && typeof el.bold !== "boolean") || (el.italic !== undefined && typeof el.italic !== "boolean")
+        || (el.underline !== undefined && typeof el.underline !== "boolean") || (el.textAlign !== undefined && !["left", "center", "right"].includes(el.textAlign)))) throw new Error("Invalid text");
+      if (kind === "nodes" && (!string(el.label) || (el.sourceDocumentId !== undefined && !string(el.sourceDocumentId, 200)))) throw new Error("Invalid label");
       if (kind === "shapes" && !["rect", "ellipse"].includes(el.kind)) throw new Error("Invalid shape");
     }
   }

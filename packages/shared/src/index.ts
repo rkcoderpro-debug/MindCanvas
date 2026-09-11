@@ -11,6 +11,7 @@ export type MindMapNode = {
   height: number;
   color?: string;
   sourcePage?: number;
+  sourceDocumentId?: string;
   collapsed?: boolean;
   parentId?: string;
   rotation?: number;
@@ -60,12 +61,25 @@ export type CanvasText = {
   height?: number;
   fontSize?: number;
   color?: string;
+  backgroundColor?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textAlign?: CanvasTextAlign;
   rotation?: number;
   hidden?: boolean;
   locked?: boolean;
 };
 
 export type Viewport = { x: number; y: number; scale: number };
+
+export type CanvasBackground = "dots" | "grid" | "ruled" | "graph" | "isometric" | "plain";
+export type CanvasTextAlign = "left" | "center" | "right";
+
+export type CanvasSourceDocument = {
+  id: string;
+  name: string;
+};
 
 export type BoardState = {
   layerOrder?: string[];
@@ -74,6 +88,8 @@ export type BoardState = {
   title: string;
   updatedAt: string;
   viewport: Viewport;
+  background?: CanvasBackground;
+  sourceDocuments?: CanvasSourceDocument[];
   texts: CanvasText[];
   shapes: CanvasShape[];
   drawings: DrawingPath[];
@@ -83,9 +99,10 @@ export type BoardState = {
 
 export type StructuredMindMap = {
   title: string;
-  nodes: Array<Pick<MindMapNode, "id" | "label" | "sourcePage"> & { parentId?: string }>;
+  nodes: Array<Pick<MindMapNode, "id" | "label" | "sourcePage" | "sourceDocumentId"> & { parentId?: string }>;
   edges: MindMapEdge[];
   sourceDocumentId?: string;
+  sourceDocumentName?: string;
 };
 
 export type AIProviderName = "experiential-labs" | "gemini" | "demo";

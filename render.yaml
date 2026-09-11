@@ -14,7 +14,7 @@ services:
       - key: PORT
         value: "10000"
       - key: WEB_ORIGIN
-        value: https://mindcanvas-web.onrender.com
+        value: https://mindcanvas-wp23.onrender.com
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
@@ -31,5 +31,7 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      - key: GEMINI_MODELS
+        sync: false
       - key: MAX_DOCUMENT_BYTES
         value: "10485760"

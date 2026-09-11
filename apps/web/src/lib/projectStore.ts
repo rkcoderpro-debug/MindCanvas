@@ -363,6 +363,29 @@ export async function upsertFlashcard(owner: string | null, card: Flashcard): Pr
   return "local";
 }
 
+export async function upsertFlashcards(owner: string | null, cards: Flashcard[]): Promise<FlashcardStorage> {
+  if (!cards.length) return owner ? "cloud" : "local";
+  if (new Set(cards.map(card => card.deckId)).size !== 1) throw new Error("Cards must belong to one deck.");
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const rows = cards.map(card => ({ id: card.id, deck_id: card.deckId, user_id: owner, project_id: card.projectId, front: card.front, back: card.back, source_page: card.sourcePage, due_at: card.dueAt, interval_days: card.intervalDays, ease: card.ease, repetitions: card.repetitions, lapses: card.lapses, created_at: card.createdAt, updated_at: card.updatedAt }));
+      // PostgREST executes a multi-row upsert in one database transaction, so
+      // an AI preview is never partially applied to the cloud deck.
+      const { error } = await client.from("flashcards").upsert(rows).abortSignal(AbortSignal.timeout(30000));
+      if (error) throw error;
+      const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
+      writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "cloud" as const }))].slice(0, 1000));
+      return "cloud";
+    } catch {
+      // Preserve the complete batch locally for retry/import when cloud is unavailable.
+    }
+  }
+  const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
+  writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000));
+  return "local";
+}
+
 export async function deleteFlashcard(owner: string | null, card: Flashcard): Promise<FlashcardStorage> {
   if (owner) {
     try {

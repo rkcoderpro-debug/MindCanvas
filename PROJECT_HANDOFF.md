@@ -1,6 +1,67 @@
 # MindCanvas — project handoff
 
-## Update 2026-09-11 — V3.3.1 Expanded Themes & Motion (latest)
+## Update 2026-09-11 — V3.4 Smart Study Canvas (latest)
+
+### Implemented
+
+- Fixed the canvas navigation defect at the rendering boundary. The paper pattern and every canvas element now derive from the same persisted viewport (`x`, `y`, `scale`), so Hand/touch pan and zoom move the visual paper together with its content. Navigation still does not create document Undo entries.
+- Added six persisted canvas paper styles: dots, square grid, ruled notebook paper, graph paper, isometric grid and blank. Old boards default safely to dots; workspace thumbnails and SVG/PNG exports reflect the selected paper style.
+- Added direct rich-text properties for canvas text: bold, italic, underline, left/center/right alignment, bullet/checklist toggles and removable text background color. These values are part of the validated board JSON and cloud autosave.
+- Added contextual AI for selected canvas text/mind-map nodes: summarize, explain, rewrite or expand into editable child nodes. The authenticated server endpoint validates bounded input/output, uses the existing Gemini model fallback, and never exposes the API key to Vite/browser code. Results always have a preview/edit step before Apply.
+- Hardened protected backend routes to fail closed when Supabase authentication is missing. The active and legacy Gemini provider paths now share the header-based key transport and validated model-fallback runner, avoiding API keys in request URLs.
+- Added global quick search/actions with `Ctrl/⌘ + K`. It searches project titles plus cached canvas text, node labels and connector labels, and opens projects or common actions without inserting demo data.
+- Upgraded copy/paste to an OS-clipboard envelope with a safe in-session fallback. Elements can be copied, another project opened, then pasted with fresh IDs and increasing offsets; invalid or oversized clipboard data is rejected.
+- Preserved PDF provenance on generated mind-map nodes and added private signed-URL source viewing at the referenced page. Flashcards linked to a project can also open the latest private source PDF page.
+- Hardened AI flashcard Apply to one multi-row Supabase upsert instead of sequential writes, with complete-batch local fallback. Added card search, Due/New/Difficult/Learned launch modes, review-session progress and a persisted per-browser daily goal.
+- Updated the visible badge to `V3.4`; all new UI has Vietnamese/English parity and mobile-responsive styling.
+
+### Architecture and deployment
+
+- `components/CanvasBackground.tsx` is the only interactive background renderer. It draws screen-space SVG patterns whose offsets and spacing are calculated from the board viewport; `CanvasBoard` no longer relies on a fixed CSS grid.
+- `lib/board.ts` owns background/rich-text validation, export and pure contextual-AI Apply operations. Shared persisted types live in `packages/shared/src/index.ts`.
+- `components/AiSelectionPanel.tsx` and `apps/server/src/selection.ts` own the contextual-AI preview and validated Gemini request. The API route is `POST /api/ai/selection` and is protected by the existing Supabase bearer-session middleware.
+- `components/CommandPalette.tsx` owns cached-content search. `lib/canvasClipboard.ts` owns cross-project clipboard serialization and validation.
+- No new Supabase migration or environment variable was added. Existing migrations `0001` through `0005` remain required. Because V3.4 adds a server route, redeploy both `mindcanvas-api` and `mindcanvas-web`. Keep `GEMINI_API_KEY` and `GEMINI_MODELS` only on the API service.
+- Local verification: frontend/server TypeScript and production builds passed; 78 frontend tests and 16 backend tests passed (94 total). Live Supabase, Google OAuth, Gemini, Render and physical-device behavior still require production credentials/device QA. The managed browser preview could not start because its isolated frontend root could not see the workspace-level Vite install; build/component interaction checks remain green.
+
+### Changed files
+
+- `packages/shared/src/index.ts`
+- `apps/server/src/index.ts`
+- `apps/server/src/auth.ts`
+- `apps/server/src/providers.ts`
+- `apps/server/src/selection.ts`
+- `apps/server/tests/auth.test.ts`
+- `apps/server/tests/selection.test.ts`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/components/AiPanel.tsx`
+- `apps/web/src/components/AiSelectionPanel.tsx`
+- `apps/web/src/components/CanvasBackground.tsx`
+- `apps/web/src/components/CanvasBoard.tsx`
+- `apps/web/src/components/CanvasBoard.test.tsx`
+- `apps/web/src/components/CommandPalette.tsx`
+- `apps/web/src/components/FlashcardsPage.tsx`
+- `apps/web/src/components/SourceDocumentPanel.tsx`
+- `apps/web/src/components/WorkspaceHome.tsx`
+- `apps/web/src/hooks/useFlashcards.ts`
+- `apps/web/src/lib/api.ts`
+- `apps/web/src/lib/board.ts`
+- `apps/web/src/lib/board.test.ts`
+- `apps/web/src/lib/canvasClipboard.ts`
+- `apps/web/src/lib/canvasClipboard.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/projectStore.ts`
+- `apps/web/src/lib/projectStore.test.ts`
+- `apps/web/src/lib/supabase.ts`
+- `apps/web/src/styles.css`
+- `render.yaml`
+- `README.md`
+- `DEPLOY_V1_VI.md`
+- `V3_4_SMART_STUDY_CANVAS_VI.md`
+- `PROJECT_HANDOFF.md`
+
+## Update 2026-09-11 — V3.3.1 Expanded Themes & Motion
 
 ### Implemented
 
@@ -144,7 +205,7 @@
 ### Known limits
 
 - AI source text is bounded at 120,000 characters and generated output at 50 cards. The project source currently includes readable text, mind-map labels and labeled connectors; shapes without text are not meaningful AI input.
-- The first apply implementation writes generated cards one by one. If the network fails in the middle, retry only after checking the deck to avoid intentional duplicate content; a transactional batch endpoint is a later hardening slice.
+- Historical V3.2 limit: the first Apply implementation wrote cards one by one. V3.4 supersedes this with a single multi-row cloud upsert and complete-batch local fallback.
 - AI-generated cards are not automatically scheduled as reviewed; new cards remain due immediately and follow the V3.1 scheduler after review.
 
 ## Update 2026-09-11 — V3.1 Flashcards MVP
@@ -195,7 +256,7 @@ This section supersedes older statements about missing multi-selection/layers or
 
 - `editorCommands.ts` owns pure commands: legacy-compatible global layer order, normalized additions/deletions, multi-move/delete/duplicate/paste, flat groups, atomic layer movement, safe node reparenting, relative-node creation and fit viewport.
 - `BoardState.layerOrder` stores bottom-to-top element IDs across every type. Old files retain their old visual stacking; new items append above existing items. `groups` stores flat sets of element IDs. `MindMapNode.parentId` preserves hierarchy for AI imports and subsequent edits. Existing JSON remains readable; import validates layer/group references.
-- `CanvasBoard` supports marquee, Shift-click, Ctrl/Cmd+A/C/V/D/G/Shift+G, Delete, moving a multi-selection in one undo entry, front/back/step ordering in the inspector, and layer selection. Clipboard is editor-session memory (not OS clipboard or cross-project). Groups are flat; no nested groups or group resize/rotation.
+- `CanvasBoard` supports marquee, Shift-click, Ctrl/Cmd+A/C/V/D/G/Shift+G, Delete, moving a multi-selection in one undo entry, front/back/step ordering in the inspector, and layer selection. This slice originally used editor-session clipboard only; V3.4 supersedes it with OS clipboard plus cross-project session fallback. Groups remain flat; no nested groups or group resize/rotation.
 - Mind maps: Tab creates a child; Enter creates a sibling; Shift+Enter/double-click edits. New relative nodes commit with their text in one operation; Escape cancels. Alt-drag a single node onto another reparents with cycle protection; direct node +/- controls collapse branches. Existing cross-links remain.
 - `LayerStack.tsx` renders one global order; `CanvasNavigator.tsx` adds Fit canvas, Go to selection and a clickable minimap. Pan/zoom/fit retain the previous navigation-free Undo behavior.
 - Workspace cards have favorites, rename, folder move, duplicate, soft trash and restore. `projectStore.updateProject` writes metadata only with explicit user filters and existing RLS; cloud failures are visible. Local guest metadata is stored under the existing owner-scoped cache. Duplicating a project copies its canvas, not PDF storage objects.

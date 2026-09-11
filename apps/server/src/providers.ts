@@ -41,12 +41,12 @@ export class GeminiProvider implements AIProvider {
   isConfigured() { return Boolean(config.GEMINI_API_KEY && this.model); }
   async generate(input: GenerateInput) {
     if (!this.isConfigured()) throw new Error("Gemini is not configured.");
-    const endpoint = `${config.GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(this.model)}:generateContent?key=${encodeURIComponent(config.GEMINI_API_KEY!)}`;
-    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: instruction(input.text) }] }], generationConfig: { responseMimeType: "application/json" } }), signal: AbortSignal.timeout(45000) });
-    if (!response.ok) throw new Error(`Gemini returned ${response.status}.`);
-    const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const output = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
-    return parseGraph(output, this.name, this.model, input.documentId);
+    return generateGemini(input, {
+      apiKey: config.GEMINI_API_KEY ?? "",
+      baseUrl: config.GEMINI_BASE_URL,
+      models: config.GEMINI_MODELS ?? this.model,
+      timeoutMs: config.GEMINI_TIMEOUT_MS,
+    });
   }
 }
 

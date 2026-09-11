@@ -1,5 +1,23 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.4 — Smart Study Canvas
+
+V3.4 sửa pan/zoom để nền giấy đi cùng element, thêm 6 kiểu nền canvas, rich text, tìm nhanh `Ctrl/⌘+K`, clipboard liên-project, AI cho vùng chọn, liên kết trang PDF nguồn và nâng cấp Flashcards. Không có migration hoặc biến môi trường mới, nhưng có endpoint backend mới `POST /api/ai/selection`, vì vậy cần redeploy **cả `mindcanvas-api` lẫn `mindcanvas-web`**.
+
+Trước khi deploy, bảo đảm Supabase đã chạy đủ `0001` → `0005`. Ở API giữ nguyên `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `WEB_ORIGIN`, `GEMINI_API_KEY` và `GEMINI_MODELS`; không đưa Gemini key vào biến `VITE_*`. Ở frontend giữ `VITE_API_BASE_URL` trỏ đến URL thật của `mindcanvas-api`.
+
+Sau khi push commit V3.4:
+
+1. Render → `mindcanvas-api` → **Manual Deploy → Deploy latest commit**.
+2. Chờ `/api/health` trả `{"ok":true,...}` rồi kiểm tra route mới không còn `404` (gọi không có token phải trả `401`, đó là đúng).
+3. Render → `mindcanvas-web` → **Manual Deploy → Deploy latest commit**.
+4. Hard refresh trình duyệt; badge phải là `V3.4`.
+5. Mở project, chọn Hand và kéo: chấm/đường giấy phải đi cùng các element. Đổi lần lượt 6 kiểu nền, refresh và xác nhận nền được lưu.
+6. Chọn text/node → **Dùng AI cho vùng chọn** → Generate preview → Apply. Kiểm tra tab Network: browser chỉ gửi bearer session, không có Gemini key.
+7. Nếu dùng PDF nguồn/flashcard cloud, kiểm tra bucket `documents` vẫn là Private và migration `0005_flashcards.sql` đã được áp dụng.
+
+Danh sách file và checklist chi tiết nằm trong `V3_4_SMART_STUDY_CANVAS_VI.md`.
+
 ## Cập nhật V3.3.1 — Expanded Themes & Motion
 
 V3.3.1 chỉ thay đổi frontend: mở rộng thành 10 theme và thêm interaction motion có hỗ trợ Reduce motion. Không thêm migration, không đổi Supabase/OAuth/Gemini và không thêm biến môi trường. Sau khi push các file trong `V3_3_1_EXPANDED_THEMES_MOTION_VI.md`, chỉ deploy service `mindcanvas-web`.

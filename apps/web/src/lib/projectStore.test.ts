@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import { blankBoard } from "./board";
-import { acknowledge, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, sameBoardContent, SaveQueue, type CachedProject } from "./projectStore";
+import { acknowledge, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, type CachedProject } from "./projectStore";
+import { createFlashcard } from "./flashcards";
 const cached = (): CachedProject => { const board = blankBoard("Project"); return { id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: true }; };
 beforeEach(() => localStorage.clear());
 describe("Project isolation and save queue", () => {
@@ -33,5 +34,10 @@ describe("Project isolation and save queue", () => {
     const board = blankBoard("Same");
     expect(sameBoardContent(board, { ...board, viewport: { x: 400, y: -20, scale: 1.8 }, updatedAt: "2099-01-01T00:00:00.000Z" })).toBe(true);
     expect(sameBoardContent(board, { ...board, title: "Changed" })).toBe(false);
+  });
+  it("applies an AI flashcard preview as one complete local batch", async () => {
+    const cards = [createFlashcard("deck", "Question 1", "Answer 1"), createFlashcard("deck", "Question 2", "Answer 2")];
+    await expect(upsertFlashcards(null, cards)).resolves.toBe("local");
+    expect(readFlashcards(null, "deck").map(card => card.front)).toEqual(["Question 1", "Question 2"]);
   });
 });

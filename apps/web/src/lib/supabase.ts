@@ -9,7 +9,7 @@ export const supabase: SupabaseClient | null = url && anonKey ? createClient(url
 export const isSupabaseConfigured = Boolean(supabase);
 
 export async function signInWithGoogle() {
-  if (!supabase) return { error: new Error("Supabase chưa được cấu hình; đang dùng demo mode.") };
+  if (!supabase) return { error: new Error("Supabase chưa được cấu hình; ứng dụng đang ở chế độ local.") };
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin, queryParams: { prompt: "select_account" } } });
 }
 
@@ -31,7 +31,7 @@ export type FolderSummary = { id: string; name: string };
 
 const blankBoard = (id?: string, title = "Untitled canvas"): import("@mindcanvas/shared").BoardState => ({
   id: id ?? crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 },
-  texts: [], shapes: [], drawings: [], nodes: [], edges: [],
+  background: "dots", texts: [], shapes: [], drawings: [], nodes: [], edges: [],
 });
 
 export function createBlankBoard(id?: string, title?: string) { return blankBoard(id, title); }
@@ -120,4 +120,18 @@ export async function saveDocumentToStorage(file: File, documentId: string, extr
   if (upload.error) throw upload.error;
   const { error } = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
   if (error) throw error;
+}
+
+export async function getDocumentSource(options: { documentId?: string; projectId?: string }) {
+  if (!supabase) throw new Error("Supabase chưa được cấu hình.");
+  let query = supabase.from("documents").select("id,file_path,file_name,page_count,created_at");
+  if (options.documentId) query = query.eq("id", options.documentId);
+  else if (options.projectId) query = query.eq("note_id", options.projectId).order("created_at", { ascending: false }).limit(1);
+  else throw new Error("Không tìm thấy tài liệu nguồn.");
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  if (!data?.file_path) throw new Error("Không tìm thấy PDF nguồn của project này.");
+  const signed = await supabase.storage.from("documents").createSignedUrl(data.file_path as string, 15 * 60);
+  if (signed.error || !signed.data?.signedUrl) throw signed.error ?? new Error("Không mở được PDF nguồn.");
+  return { id: data.id as string, name: data.file_name as string, pageCount: Number(data.page_count) || undefined, url: signed.data.signedUrl };
 }

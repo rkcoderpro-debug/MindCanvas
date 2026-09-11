@@ -8,6 +8,7 @@ import { extractPdf } from "./pdf.js";
 import { generateWithFallback } from "./providers.js";
 import { AIError } from "./gemini.js";
 import { generateFlashcardsWithGemini } from "./flashcards.js";
+import { generateSelectionWithGemini, selectionActions } from "./selection.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
@@ -36,6 +37,20 @@ app.post("/api/ai/flashcards", requireUser, async (req, res) => {
   catch (error) {
     if (error instanceof AIError) return res.status(error.status).json({ error: error.message, code: error.code });
     return res.status(502).json({ error: "Flashcard generation failed.", code: "AI_FAILED" });
+  }
+});
+
+const selectionInput = z.object({
+  action: z.enum(selectionActions),
+  text: z.string().trim().min(1).max(30000),
+  language: z.enum(["vi", "en"]).default("vi"),
+});
+app.post("/api/ai/selection", requireUser, async (req, res) => {
+  const parsed = selectionInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid selection input." });
+  try { return res.json(await generateSelectionWithGemini(parsed.data)); }
+  catch (error) {
+    if (error instanceof AIError) return res.status(error.status).json({ error: error.message, code: error.code });
+    return res.status(502).json({ error: "Selection AI failed.", code: "AI_FAILED" });
   }
 });
 

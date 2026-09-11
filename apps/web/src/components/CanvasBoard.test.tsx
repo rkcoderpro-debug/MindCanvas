@@ -111,4 +111,23 @@ describe("Canvas interactions", () => {
     await act(async () => { pointer(svg, "pointerdown", 40, 60, { pointerType: "touch" }); pointer(svg, "pointermove", 100, 150, { pointerType: "touch" }); pointer(svg, "pointerup", 100, 150, { pointerType: "touch" }); });
     expect(current.viewport).toMatchObject({ x: 60, y: 90 }); expect(host.querySelector(".selection-box")).toBeNull();
   });
+  it("pans the paper pattern with the viewport while preserving world coordinates", async () => {
+    const b = { ...blankBoard(), nodes: [{ id: "root", label: "Fixed on paper", x: 120, y: 90, width: 190, height: 76 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const svg = host.querySelector("svg.canvas-svg")!, pattern = () => host.querySelector("#canvas-bg-dots")?.getAttribute("x");
+    const before = pattern();
+    await act(async () => { pointer(svg, "pointerdown", 20, 30, { pointerType: "touch" }); pointer(svg, "pointermove", 77, 101, { pointerType: "touch" }); pointer(svg, "pointerup", 77, 101, { pointerType: "touch" }); });
+    expect(pattern()).not.toBe(before); expect(current.viewport).toMatchObject({ x: 57, y: 71 }); expect(current.nodes).toEqual(b.nodes);
+  });
+  it("switches paper styles and formats text without an alert", async () => {
+    const b = { ...blankBoard(), texts: [{ id: "txt", text: "Editable", x: 20, y: 40, width: 200 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent === "Giấy kẻ ngang")!.click());
+    expect(current.background).toBe("ruled"); expect(host.querySelector('[data-canvas-background="ruled"]')).not.toBeNull();
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => pointer(host.querySelector('[data-element="txt"]')!, "pointerdown", 25, 40));
+    await act(async () => pointer(svg, "pointerup", 25, 40));
+    await act(async () => (host.querySelector('[aria-label="In đậm"]') as HTMLButtonElement).click());
+    expect(current.texts[0].bold).toBe(true); expect(host.querySelector(".canvas-copy")?.getAttribute("style")).toContain("font-weight: 700");
+  });
 });

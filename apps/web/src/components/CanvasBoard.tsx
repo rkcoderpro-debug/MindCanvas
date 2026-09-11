@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, Circle, Copy, Hand, Highlighter, Magnet, MousePointer2, PenLine, Plus, SlidersHorizontal, Square, Trash2, Type, ArrowUpRight, Network, X } from "lucide-react";
-import type { BoardState, ToolMode, Vec2 } from "@mindcanvas/shared";
-import { arrangeMindMap, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, type Selection } from "../lib/board";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, Bold, Circle, Copy, FileText, Hand, Highlighter, Italic, List, ListChecks, Magnet, MousePointer2, PaintBucket, PenLine, Plus, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Network, X } from "lucide-react";
+import type { BoardState, CanvasBackground as CanvasBackgroundType, ToolMode, Vec2 } from "@mindcanvas/shared";
+import { applySelectionAi, arrangeMindMap, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
@@ -9,8 +9,14 @@ import { addRelativeNode, alignSelection, distributeSelection, duplicateSelectio
 import LayerStack from "./LayerStack";
 import CanvasNavigator from "./CanvasNavigator";
 import { nodeHeight } from "../lib/mindMapLayout";
+import CanvasBackground, { BACKGROUND_OPTIONS } from "./CanvasBackground";
+import AiSelectionPanel from "./AiSelectionPanel";
+import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
+import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection } from "../lib/canvasClipboard";
+import { getDocumentSource } from "../lib/supabase";
+import type { SelectionAiResult } from "../lib/api";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
 const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
@@ -19,7 +25,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "highlighter", icon: Highlighter, key: "B" }, { id: "rect", icon: Square, key: "R" },
   { id: "ellipse", icon: Circle, key: "O" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }: Props) {
+export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null);
@@ -28,16 +34,17 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
   const setSelected = (s: Selection | null) => setSelections(s ? [s] : []);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const clipboard = useRef<{ board: BoardState; selection: Selection[]; count: number } | null>(null);
-  const [hasCopy, setHasCopy] = useState(false);
+  const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   const b = preview ?? editing?.fresh ?? board;
   const bounds = selectionBounds(b, selections);
   const selectedEl = selected && selections.length === 1 ? b[selected.kind].find(el => el.id === selected.id) : null;
+  const selectedStudyText = selectionToStudyText(b, selections);
   const hidden = hiddenNodes(b);
   const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
   const isLocked = (s: Selection) => s.kind !== "edges" && !!b[s.kind].find(e => e.id === s.id && "locked" in e && e.locked);
@@ -155,11 +162,22 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
     if (svg.current?.hasPointerCapture(g.pointer)) svg.current.releasePointerCapture(g.pointer);
   };
   const duplicate = () => { if (!selected) return; const next = duplicateSelection(board, selections); setSelections(next.selection); onChange(next.board); };
-  const copy = () => { if (!selections.length) return; clipboard.current = { board: structuredClone(board), selection: [...selections], count: 0 }; setHasCopy(true); };
-  const paste = () => { const c = clipboard.current; if (!c) return; const next = pasteSelection(board, c.board, c.selection, ++c.count * 24); setSelections(next.selection); onChange(next.board); };
+  const copy = async () => { if (!selections.length) return; await copyCanvasSelection(board, selections); setHasCopy(true); };
+  const paste = async () => { const content = await readCanvasSelection(); if (!content) return; const next = pasteSelection(board, content.board, content.selection, content.offset); setSelections(next.selection); onChange(next.board); };
   const remove = () => { if (!selected) return; onChange(removeSelection(board, selections)); setSelected(null); };
   const relative = (sibling: boolean) => { if (selected?.kind !== "nodes" || selections.length !== 1) return; const next = addRelativeNode(board, selected.id, sibling, t("newNode")); if (next) { setTool("select"); edit(next.selection, next.board); } };
   const patch = (value: Record<string, unknown>) => { if (selected) onChange({ ...board, [selected.kind]: board[selected.kind].map(el => el.id === selected.id ? { ...el, ...value } : el) }); };
+  const toggleTextPrefix = (prefix: "• " | "☐ ") => {
+    if (selected?.kind !== "texts" || !selectedEl || !("text" in selectedEl)) return;
+    const lines = selectedEl.text.split("\n"), enabled = lines.filter(Boolean).every(line => line.startsWith(prefix));
+    patch({ text: lines.map(line => !line ? line : enabled ? line.slice(prefix.length) : `${prefix}${line.replace(/^(?:• |☐ )/, "")}`).join("\n") });
+  };
+  const applyAi = (result: SelectionAiResult) => { onChange(applySelectionAi(board, selections, result, { ink: palette.ink, fill: palette.fill })); setAiOpen(false); };
+  const openSource = async (documentId: string, page: number) => {
+    setSourceError("");
+    try { const source = await getDocumentSource({ documentId }); setSourceView({ url: source.url, name: source.name, page }); }
+    catch { setSourceError(t("sourceError")); }
+  };
   const zoom = (factor: number) => onChange({ ...board, viewport: { ...board.viewport, scale: clamp(board.viewport.scale * factor, .2, 4) } });
   const addNode = () => {
     const parent = selected?.kind === "nodes" ? board.nodes.find(n => n.id === selected.id) : undefined;
@@ -178,8 +196,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? onRedo() : onUndo(); return; }
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); onRedo(); return; }
       if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); duplicate(); return; }
-      if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); copy(); return; }
-      if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); paste(); return; }
+      if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); void copy(); return; }
+      if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); void paste(); return; }
       if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setSelections(orderedElements(board).filter(s => !hidden.has(s.id))); return; }
       if (mod && e.key.toLowerCase() === "g") { e.preventDefault(); onChange(e.shiftKey ? ungroupSelection(board, selections) : groupSelection(board, selections)); return; }
       if (mod && ["[", "]"].includes(e.key)) { e.preventDefault(); onChange(reorderSelection(board, selections, e.key === "]" ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward"))); return; }
@@ -215,6 +233,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
 
   const editBounds = editing ? elementBounds(b, editing.selection) : null;
   const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", edges: "connector" };
+  const backgroundLabel: Record<CanvasBackgroundType, MessageKey> = { dots: "backgroundDots", grid: "backgroundGrid", ruled: "backgroundRuled", graph: "backgroundGraph", isometric: "backgroundIsometric", plain: "backgroundPlain" };
   const selectedColor = selectedEl && "color" in selectedEl ? selectedEl.color ?? palette.fill : palette.ink;
   return <div className="editor-layout">
     <div className="editor-frame">
@@ -222,9 +241,11 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
         <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button className={snap ? "selected" : ""} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
-        <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button></div>
+        <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
+        <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={selectedStudyText ? t("askAiSelection") : t("selectTextForAi")} disabled={!selectedStudyText || !canUseAi} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></div>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
+        <CanvasBackground board={b}/>
         <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="var(--connector)"/></marker></defs>
         <g transform={`translate(${b.viewport.x} ${b.viewport.y}) scale(${b.viewport.scale})`}>
           <LayerStack board={b} interactive={interactive && !space}>
@@ -242,12 +263,12 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
           })}
           {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; return <g key={text.id} data-element={text.id} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "texts", id: text.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}>
-            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height}><div className="canvas-copy" style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color) }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
+            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height}><div className="canvas-copy" style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color), backgroundColor: text.backgroundColor, fontWeight: text.bold ? 700 : 400, fontStyle: text.italic ? "italic" : "normal", textDecoration: text.underline ? "underline" : "none", textAlign: text.textAlign ?? "left" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
           </g>; })}
           {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => <g key={n.id} data-element={n.id} className="mind-node" transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, { kind: "nodes", id: n.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}>
             <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "var(--node-fill)"} stroke={dropTarget === n.id ? "var(--accent)" : "var(--element-stroke)"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
-            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)}><div className="node-copy" style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && <small>{t("page")} {n.sourcePage}</small>}{n.collapsed && <small>…</small>}</div></foreignObject>
+            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)}><div className="node-copy" style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
             {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
           </g>)}
           </LayerStack>
@@ -259,19 +280,21 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
               onPointerDown={e => { e.preventDefault(); e.stopPropagation(); svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "resize", start: point(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board }; }}/>} {selected.kind !== "edges" && <g className="rotation-handle" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); const p = point(e.clientX, e.clientY); const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }; svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "rotate", start: p, screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board, center, startAngle: Math.atan2(p.y - center.y, p.x - center.x) * 180 / Math.PI }; }}><line x1={bounds.x + bounds.width / 2} y1={bounds.y - 3} x2={bounds.x + bounds.width / 2} y2={bounds.y - 25} stroke="var(--accent-2)"/><circle cx={bounds.x + bounds.width / 2} cy={bounds.y - 30} r={6 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent-2)"/></g>}</g>}
           {editing && editBounds && <foreignObject x={editBounds.x} y={editBounds.y} width={Math.max(editBounds.width, 120)} height={Math.max(editBounds.height, 100)}>
             <textarea className="inline-editor" autoFocus aria-label={t("editText")} placeholder={t("newText")} maxLength={10000}
-              style={{ fontSize: selectedEl && "fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16 }}
+              style={{ fontSize: selectedEl && "fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16, fontWeight: selectedEl && "bold" in selectedEl && selectedEl.bold ? 700 : 400, fontStyle: selectedEl && "italic" in selectedEl && selectedEl.italic ? "italic" : "normal", textDecoration: selectedEl && "underline" in selectedEl && selectedEl.underline ? "underline" : "none", textAlign: selectedEl && "textAlign" in selectedEl ? selectedEl.textAlign ?? "left" : "left" }}
               value={editing.value} onChange={e => { const next = { ...editing, value: e.target.value }; editRef.current = next; setEditing(next); }}
               onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onBlur={() => finishEdit()}
               onKeyDown={e => { e.stopPropagation(); if (e.nativeEvent.isComposing) return; if (e.key === "Escape") { e.preventDefault(); finishEdit(true); } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); finishEdit(); } }}/></foreignObject>}
         </g>
       </svg>
+      {sourceError && <div className="canvas-inline-error" role="alert"><span>{sourceError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setSourceError("")}><X size={14}/></button></div>}
       <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "pen" || tool === "highlighter" ? "drawHint" : "canvasHint")}</div>
       <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
       <button className="mobile-inspector-toggle" aria-label={t("properties")} aria-expanded={inspectorOpen} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
       <div className="zoom-control"><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
     <aside className={`inspector ${inspectorOpen ? "mobile-open" : ""}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button className="icon-button inspector-close" aria-label={t("close")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
-      {hasCopy && <button className="secondary-button" onClick={paste}>{t("pasteElements")}</button>}
+      <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={(board.background ?? "dots") === option ? "active" : ""} aria-pressed={(board.background ?? "dots") === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div></section>
+      {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}
       {selections.length > 0 && <div className="selection-actions"><strong>{selections.length} {t("selectedElements")}</strong><div className="property-grid">
         <button onClick={() => onChange(reorderSelection(board, selections, "front"))}>{t("bringFront")}</button><button onClick={() => onChange(reorderSelection(board, selections, "back"))}>{t("sendBack")}</button>
         <button onClick={() => onChange(reorderSelection(board, selections, "forward"))}>{t("bringForward")}</button><button onClick={() => onChange(reorderSelection(board, selections, "backward"))}>{t("sendBackward")}</button>
@@ -279,7 +302,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
         <button title={t("alignTop")} onClick={() => onChange(alignSelection(board, selections, "top"))}><AlignStartVertical size={15}/>{t("alignTop")}</button><button title={t("alignMiddle")} onClick={() => onChange(alignSelection(board, selections, "middle"))}><AlignCenterVertical size={15}/>{t("alignMiddle")}</button><button title={t("alignBottom")} onClick={() => onChange(alignSelection(board, selections, "bottom"))}><AlignEndVertical size={15}/>{t("alignBottom")}</button>
         <button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "horizontal"))}>{t("distributeHorizontal")}</button><button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "vertical"))}>{t("distributeVertical")}</button>
         <button disabled={selections.length < 2} onClick={() => onChange(groupSelection(board, selections))}>{t("group")}</button><button disabled={!board.groups?.some(g => g.elementIds.some(id => selections.some(s => s.id === id)))} onClick={() => onChange(ungroupSelection(board, selections))}>{t("ungroup")}</button>
-        <button onClick={copy}>{t("copyElements")}</button><button onClick={duplicate}>{t("duplicate")}</button><button onClick={() => onChange(setElementFlags(board, selections, { locked: !selections.some(s => isLocked(s)) }))}>{selections.some(s => isLocked(s)) ? t("unlock") : t("lock")}</button><button onClick={() => onChange(setElementFlags(board, selections, { hidden: !selections.every(s => hiddenElements.has(s.id)) }))}>{selections.every(s => hiddenElements.has(s.id)) ? t("show") : t("hide")}</button><button onClick={remove}>{t("delete")}</button></div>
+        <button onClick={() => void copy()}>{t("copyElements")}</button><button onClick={duplicate}>{t("duplicate")}</button><button onClick={() => onChange(setElementFlags(board, selections, { locked: !selections.some(s => isLocked(s)) }))}>{selections.some(s => isLocked(s)) ? t("unlock") : t("lock")}</button><button onClick={() => onChange(setElementFlags(board, selections, { hidden: !selections.every(s => hiddenElements.has(s.id)) }))}>{selections.every(s => hiddenElements.has(s.id)) ? t("show") : t("hide")}</button><button onClick={remove}>{t("delete")}</button></div>
+        {selectedStudyText && <button className="ai-selection-button" disabled={!canUseAi} title={!canUseAi ? t("loginRequired") : t("askAiSelection")} onClick={() => setAiOpen(true)}><Sparkles size={15}/>{t("askAiSelection")}</button>}
         {selected?.kind === "nodes" && selections.length === 1 && <><button onClick={() => relative(false)}>{t("addChild")} · Tab</button><button onClick={() => relative(true)}>{t("addSibling")} · Enter</button><small>{t("reparentHint")}</small></>}
       </div>}
       {!selectedEl ? <><p>{t("selectHint")}</p><label>{t("color")}<input type="color" value={ink} onChange={e => setInk(e.target.value)}/></label><label>{t("stroke")}<input type="range" min="1" max="20" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))}/></label></> : <>
@@ -291,7 +315,19 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
         }}/></label>)}</div>}
         {selected?.kind !== "edges" && <label>{t("color")}<input type="color" value={selectedColor} onChange={e => patch({ color: e.target.value })}/></label>}
         {selected?.kind === "edges" && <label>{t("label")}<input aria-label={t("label")} maxLength={500} value={"label" in selectedEl ? selectedEl.label ?? "" : ""} onChange={e => patch({ label: e.target.value || undefined })}/></label>}
-        {selected?.kind === "texts" && <label>{t("fontSize")}<input type="number" min="8" max="200" value={"fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16} onChange={e => { if(e.target.value) patch({ fontSize: clamp(Number(e.target.value), 8, 200) }); }}/></label>}
+        {selected?.kind === "texts" && <><label>{t("fontSize")}<input type="number" min="8" max="200" value={"fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16} onChange={e => { if(e.target.value) patch({ fontSize: clamp(Number(e.target.value), 8, 200) }); }}/></label>
+          <div className="text-format-toolbar" role="toolbar" aria-label={t("editText")}>
+            <button aria-label={t("bold")} title={t("bold")} aria-pressed={"bold" in selectedEl && !!selectedEl.bold} className={"bold" in selectedEl && selectedEl.bold ? "active" : ""} onClick={() => patch({ bold: !("bold" in selectedEl && selectedEl.bold) })}><Bold size={16}/></button>
+            <button aria-label={t("italic")} title={t("italic")} aria-pressed={"italic" in selectedEl && !!selectedEl.italic} className={"italic" in selectedEl && selectedEl.italic ? "active" : ""} onClick={() => patch({ italic: !("italic" in selectedEl && selectedEl.italic) })}><Italic size={16}/></button>
+            <button aria-label={t("underline")} title={t("underline")} aria-pressed={"underline" in selectedEl && !!selectedEl.underline} className={"underline" in selectedEl && selectedEl.underline ? "active" : ""} onClick={() => patch({ underline: !("underline" in selectedEl && selectedEl.underline) })}><Underline size={16}/></button>
+            <button aria-label={t("alignLeft")} title={t("alignLeft")} className={("textAlign" in selectedEl ? selectedEl.textAlign : undefined) === "left" || !("textAlign" in selectedEl && selectedEl.textAlign) ? "active" : ""} onClick={() => patch({ textAlign: "left" })}><AlignLeft size={16}/></button>
+            <button aria-label={t("alignCenter")} title={t("alignCenter")} className={"textAlign" in selectedEl && selectedEl.textAlign === "center" ? "active" : ""} onClick={() => patch({ textAlign: "center" })}><AlignCenter size={16}/></button>
+            <button aria-label={t("alignRight")} title={t("alignRight")} className={"textAlign" in selectedEl && selectedEl.textAlign === "right" ? "active" : ""} onClick={() => patch({ textAlign: "right" })}><AlignRight size={16}/></button>
+            <button aria-label={t("bulletedList")} title={t("bulletedList")} onClick={() => toggleTextPrefix("• ")}><List size={16}/></button>
+            <button aria-label={t("checklist")} title={t("checklist")} onClick={() => toggleTextPrefix("☐ ")}><ListChecks size={16}/></button>
+          </div>
+          <label>{t("textBackground")}<span className="color-with-clear"><input type="color" value={"backgroundColor" in selectedEl ? selectedEl.backgroundColor ?? palette.fill : palette.fill} onChange={e => patch({ backgroundColor: e.target.value })}/><button className="icon-button" aria-label={t("clearBackground")} title={t("clearBackground")} onClick={() => patch({ backgroundColor: undefined })}><X size={14}/></button></span></label>
+        </>}
         {selected?.kind === "drawings" && <><label>{t("stroke")}<input type="range" min="1" max="40" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label><label>{t("opacity")}<input type="range" min=".05" max="1" step=".05" value={"opacity" in selectedEl ? selectedEl.opacity : 1} onChange={e => patch({ opacity: Number(e.target.value) })}/></label></>}
         {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
         {selected?.kind === "nodes" && <button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button>}
@@ -299,5 +335,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
       </>}
       <h3>{t("layers")}</h3><div className="layer-list">{orderedElements(b).reverse().map(({ kind, id }) => { const el = b[kind].find(e => e.id === id)!; return <button key={id} className={selections.some(s => s.id === id) ? "active" : ""} onClick={e => { setTool("select"); const next = expandGroups(b, [{ kind, id }]); setSelections(e.shiftKey ? expandGroups(b, [...selections, ...next]) : next); }}>{b.groups?.some(g => g.elementIds.includes(id)) ? "▣ " : ""}{hiddenElements.has(id) ? "… " : ""}{"locked" in el && el.locked ? "🔒 " : ""}{("label" in el ? el.label : "text" in el ? el.text : "") || t(labelKey[kind])}</button>; })}</div>
     </aside>
+    {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
+    {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
   </div>;
 }

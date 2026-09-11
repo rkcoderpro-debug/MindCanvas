@@ -15,6 +15,7 @@ import {
   fetchFlashcardDecks,
   fetchFlashcards,
   upsertFlashcard,
+  upsertFlashcards,
   upsertFlashcardDeck,
 } from "../lib/projectStore";
 
@@ -114,12 +115,8 @@ export function useFlashcards(owner: string | null) {
     const cards = inputs.map(input => makeCard(selectedDeck.id, input.front, input.back, selectedDeck.projectId, input.sourcePage ?? null));
     setBusy(true); setError("");
     try {
-      const saved: Flashcard[] = [];
-      let source: FlashcardStorage = owner ? "cloud" : "local";
-      for (const card of cards) {
-        source = await upsertFlashcard(owner, card);
-        saved.push({ ...card, source });
-      }
+      const source = await upsertFlashcards(owner, cards);
+      const saved = cards.map(card => ({ ...card, source }));
       setStorageMode(source);
       setCards(items => [...items, ...saved]);
       return saved;
