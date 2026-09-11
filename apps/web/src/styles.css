@@ -112,13 +112,37 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .project-menu { position: absolute; z-index: 15; top: 48px; right: 10px; min-width: 190px; background: white; border: 1px solid #dce2ef; border-radius: 10px; padding: 6px; box-shadow: 0 8px 28px #18213b20; display: grid; }
 .project-menu button { text-align: left; padding: 9px 12px; border-radius: 6px; font-size: 14px; }
 .project-menu button:hover { background: #eef2ff; }
-.folder-row { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.folder-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; border-radius: 8px; }
 .folder-row:hover, .folder-row.active { background: var(--soft); }
 .folder-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 11px 8px 11px 11px; background: transparent; color: var(--muted); text-align: left; font-size: 14px; }
 .folder-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-more { display: grid; place-items: center; padding: 8px; margin-right: 3px; border-radius: 6px; color: var(--muted); background: transparent; opacity: 0; }
 .folder-row:hover .folder-more, .folder-row:focus-within .folder-more, .folder-row.active .folder-more { opacity: 1; }
 .folder-more:hover { background: var(--line); color: var(--accent); }
+.folder-dropdown { flex-basis: 100%; display: grid; gap: 2px; padding: 2px 6px 8px 30px; }
+.folder-dropdown button { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px 7px; color: var(--muted); background: transparent; border-radius: 6px; text-align: left; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.folder-dropdown button:hover { background: var(--soft); color: var(--accent); }
+.manage-folders-button { display: flex; align-items: center; gap: 10px; padding: 10px; color: var(--muted); background: transparent; border-radius: 8px; text-align: left; font-size: 13px; }
+.manage-folders-button:hover { background: var(--soft); color: var(--accent); }
+.folder-manager { display: flex; flex: 1; min-height: 500px; margin: 24px 8px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 12px 35px var(--shadow); }
+.folder-manager-side { flex: 0 0 220px; padding: 18px 10px; border-right: 1px solid var(--line); background: var(--soft); }
+.manager-title, .manager-folder { display: flex; align-items: center; gap: 9px; }
+.manager-title { justify-content: space-between; padding: 0 8px 14px; }
+.manager-folder { width: 100%; padding: 10px; border-radius: 8px; background: transparent; color: var(--muted); text-align: left; }
+.manager-folder span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.manager-folder small { margin-left: auto; }
+.manager-folder:hover, .manager-folder.active { color: var(--accent); background: var(--surface); }
+.folder-manager-main { flex: 1; min-width: 0; padding: 28px; overflow: auto; }
+.manager-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; }
+.manager-toolbar h1 { margin-top: 4px; }
+.file-table { border-top: 1px solid var(--line); }
+.file-row { display: flex; align-items: center; gap: 12px; padding: 13px 10px; border-bottom: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.file-row:hover, .file-row.selected { background: var(--soft); color: var(--accent); }
+.file-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.file-row > small { margin-left: auto; }
+html[data-theme="dark"] .folder-manager-side { background: #151b2b; }
+html[data-theme="dark"] .file-row { border-color: var(--line); }
+@media (max-width: 760px) { .folder-manager { flex-direction: column; } .folder-manager-side { flex: none; border-right: 0; border-bottom: 1px solid var(--line); } .manager-toolbar { align-items: flex-start; flex-direction: column; } }
 .text-danger-button, .danger-button { margin-top: 18px; padding: 9px 12px; border-radius: 8px; }
 .text-danger-button { color: #c2415a; background: transparent; }
 .danger-button { color: #fff; background: #c2415a; }

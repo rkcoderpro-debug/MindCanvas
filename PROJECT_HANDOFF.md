@@ -169,3 +169,10 @@ Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → loca
 - Liquid Glass was removed. The supported themes are Light and Dark; accent color is now a warmer purple.
 - Dark theme coverage was expanded across workspace surfaces, cards, dialogs, controls and empty states.
 - No Gemini, OAuth, server API or Supabase migration changes were made in this update.
+
+# UPDATE — 2026-09-11: Folder manager and folder-aware projects
+
+- Creating a project while a folder is selected now stores that folder ID.
+- Sidebar folders show a compact canvas dropdown; the folder name still opens the complete folder view.
+- Added `FolderManager.tsx` with file-style selection, copy, paste, duplicate, move, rename and trash actions.
+- Dragging a project onto a folder or Workspace updates its folder assignment.

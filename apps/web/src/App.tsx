@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, Clock3, Download, Folder, FolderPlus, Globe2, LayoutGrid, LogIn, LogOut, MoreHorizontal, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, Clock3, Download, FileText, Folder, FolderPlus, FolderCog, Globe2, LayoutGrid, LogIn, LogOut, MoreHorizontal, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
 import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
+import FolderManager from "./components/FolderManager";
 import Dialog from "./components/Dialog";
 import AiPanel from "./components/AiPanel";
 import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
@@ -42,7 +43,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const askName = (kind: "project" | "folder") => { setName(kind === "project" ? t("untitled") : ""); setModal(kind); };
   const create = async (e: React.FormEvent) => {
     e.preventDefault(); if (!name.trim()) return; setWorking(true);
-    try { if (modal === "project") await ws.create(name.trim()); else await ws.newFolder(name.trim()); setModal(null); }
+    try { if (modal === "project") await ws.create(name.trim(), undefined, filter && !filter.startsWith("__") ? filter : null); else await ws.newFolder(name.trim()); setModal(null); }
     finally { setWorking(false); }
   };
   const dropProjectInto = (e: React.DragEvent, folderId: string | null) => { e.preventDefault(); const id = e.dataTransfer.getData("text/mindcanvas-project"); const project = ws.projects.find(p => p.id === id); if (project && project.folderId !== folderId) void ws.manageProject(project, { folderId }); };
@@ -75,7 +76,8 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
         <button className={!ws.board && filter === "__trash" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__trash"); setRecent(false); }}><Trash2 size={18}/>{t("trash")}</button>
       </nav>
       <div className="section-label">{t("folders")}<button className="icon-button" aria-label={t("newFolder")} onClick={() => askName("folder")}><Plus size={17}/></button></div>
-      <div className="folder-list">{ws.folders.map(f => <div className={`folder-row ${filter === f.id && !ws.board ? "active" : ""}`} key={f.id} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, f.id)}><button className="folder-open" onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button><button className="folder-more" aria-label={`${t("folderActions")}: ${f.name}`} onClick={() => { setName(f.name); setFolderAction({ folder: f, kind: "rename" }); }}><MoreHorizontal size={16}/></button></div>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
+      <div className="folder-list">{ws.folders.map(f => <div className={`folder-row ${filter === f.id && !ws.board ? "active" : ""}`} key={f.id} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, f.id)}><button className="folder-open" onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button><button className="folder-more" aria-label={`${t("folderActions")}: ${f.name}`} onClick={() => { setName(f.name); setFolderAction({ folder: f, kind: "rename" }); }}><MoreHorizontal size={16}/></button><div className="folder-dropdown">{ws.projects.filter(p=>p.folderId===f.id&&!p.deletedAt).slice(0,5).map(p=><button key={p.id} onClick={()=>void ws.open(p)}><FileText size={14}/>{p.title}</button>)}</div></div>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
+      <button className="manage-folders-button" onClick={() => { void ws.home(); setFilter("__manager"); setRecent(false); }}><FolderCog size={17}/>{t("manageFolders")}</button>
       <div className="sidebar-bottom">
         <label className="language-control"><Globe2 size={17}/><select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
         <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as "light" | "dark")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option></select></label>
@@ -96,7 +98,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
           <button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button>
           <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button></div></div>
         <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onUndo={ws.undo} onRedo={ws.redo} onSave={() => void ws.flush()}/>
-      </> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}
+      </> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>} 
     </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>

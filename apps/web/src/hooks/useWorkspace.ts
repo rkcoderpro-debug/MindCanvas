@@ -115,10 +115,10 @@ export function useWorkspace(owner: string | null) {
       if (!cached?.pending) cacheProject(owner, { ...p, board: next, pending: false });
     } catch (err) { report(err); }
   };
-  const create = async (title: string, imported?: BoardState) => {
+  const create = async (title: string, imported?: BoardState, targetFolderId: string | null = null) => {
     const ticket = ++navigation.current;
     await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return;
-    folderId.current = null; setPast([]); setFuture([]);
+    folderId.current = targetFolderId; setPast([]); setFuture([]);
     stage(imported ?? blankBoard(title));
   };
   const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); setPast([]); setFuture([]); await refresh(); };
@@ -130,14 +130,14 @@ export function useWorkspace(owner: string | null) {
     try { if (!await flush()) throw new Error("Please save your pending changes and reconnect first."); await updateProject(owner, project, patch); await refresh(); }
     catch (err) { report(err); throw err; }
   };
-  const duplicateProject = async (project: Project, title: string) => {
+  const duplicateProject = async (project: Project, title: string, targetFolderId = project.folderId) => {
     try {
       if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
       const cached = readCache(owner).find(p => p.id === project.id);
       const source = owner ? await fetchBoard(owner, project.id) : cached?.board;
       if (!source) throw new Error("Project unavailable");
       const copy = { ...structuredClone(source), id: crypto.randomUUID(), title, updatedAt: new Date().toISOString() };
-      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: project.folderId, board: copy, pending: !!owner, favorite: false, deletedAt: null });
+      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, pending: !!owner, favorite: false, deletedAt: null });
       if (!await flush()) throw new Error("Copy is kept locally; retry saving to finish cloud sync.");
       await refresh();
     } catch (err) { report(err); throw err; }
