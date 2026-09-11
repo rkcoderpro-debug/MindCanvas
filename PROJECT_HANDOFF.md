@@ -208,3 +208,11 @@ Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → loca
 - The editor Save button now flushes the current board and creates a version checkpoint, so normal manual saves are immediately available in Version History.
 - The Version History dialog remains available for loading, restoring and creating additional checkpoints.
 - The UI badge is now `V2.4`; no backend, Gemini, OAuth or new migration changes were made beyond the V2.3 `note_versions` migration.
+
+# UPDATE — 2026-09-11: V3.0 Production Core
+
+- Added SVG and PNG canvas export. Export uses the current layer order, hidden elements, rotations, connectors and connector labels; JSON export remains the portable editable backup.
+- Connector labels are now visible on canvas and editable from the inspector. Existing connector selection/delete behavior remains intact.
+- Added optimistic note revision checks when `notes.revision` exists. A stale cloud save returns a conflict error instead of overwriting a newer tab/device revision. Projects opened before the migration retain the legacy save path until revision metadata is available.
+- Added `supabase/migrations/0004_note_revision_lock.sql` for the additive `notes.revision` column.
+- No Gemini, OAuth, PDF, flashcard, RAG, tutor, analytics or realtime collaboration changes were made in this slice.

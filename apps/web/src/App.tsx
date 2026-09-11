@@ -10,7 +10,7 @@ import AiPanel from "./components/AiPanel";
 import VersionHistory from "./components/VersionHistory";
 import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
-import { applyGraph, blankBoard, exportBoard, importBoard } from "./lib/board";
+import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
 
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
@@ -68,7 +68,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V2.4</span></button>
+      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.0</span></button>
       <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user ? t("cloud") : t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
         <button className={!ws.board && !recent && !filter ? "active" : ""} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, null)} onClick={home}><LayoutGrid size={18}/>{t("workspace")}</button>
@@ -96,7 +96,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       {ws.board ? <>
         <div className="editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
           <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>
-          <button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button>
+          <button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(err instanceof Error ? err.message : t("error")))}><Download size={17}/>{t("exportPng")}</button>
           <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button></div></div>
         <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onUndo={ws.undo} onRedo={ws.redo} onSave={() => void ws.flush()}/>
       </> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>} 

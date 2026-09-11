@@ -43,7 +43,7 @@ describe("Workspace lifecycle", () => {
   });
   it("flushes before switching projects without mixing ids", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
-    const save = vi.spyOn(store, "persistProject").mockResolvedValue();
+    const save = vi.spyOn(store, "persistProject").mockResolvedValue({});
     await act(async () => root.render(<Harness owner="A"/>));
     await act(async () => api.create("One")); const first = api.board!.id;
     await act(async () => api.change({ ...api.board!, title: "One edited" }));
@@ -57,7 +57,7 @@ describe("Workspace lifecycle", () => {
     await act(async () => root.render(<Harness owner="A"/>));
     await act(async () => api.create("Draft"));
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
-    save.mockResolvedValue(); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
+    save.mockResolvedValue({}); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
   });
   it("creates a checkpoint and restores it as one undoable canvas change", async () => {
     await act(async () => root.render(<Harness/>)); await act(async () => api.create("History"));

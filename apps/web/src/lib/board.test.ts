@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGraph, blankBoard, connect, duplicateElement, elementBounds, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement } from "./board";
+import { applyGraph, blankBoard, connect, duplicateElement, elementBounds, exportCanvasSvg, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement } from "./board";
 import { en, vi } from "./i18n";
 const board = () => ({ ...blankBoard(), nodes: [{ id: "a", label: "A", x: 0, y: 0, width: 150, height: 60 }, { id: "b", label: "B", x: 250, y: 0, width: 150, height: 60 }] });
 describe("Editable canvas model", () => {
@@ -13,4 +13,8 @@ describe("Editable canvas model", () => {
   it("validates old file format and rejects corrupt geometry", () => { expect(parseBoard(board()).nodes).toHaveLength(2); expect(() => parseBoard({ ...board(), viewport: { x: 0, y: 0, scale: 0 } })).toThrow(); expect(() => parseBoard({ ...board(), nodes: [{ ...board().nodes[0], width: NaN }] })).toThrow(); expect(() => parseBoard({ ...board(), nodes: [board().nodes[0], board().nodes[0]] })).toThrow(); });
   it("collapses descendants safely even with cycles", () => { const b = connect(connect(board(), "a", "b"), "b", "a"); b.nodes[0] = { ...b.nodes[0], collapsed: true } as typeof b.nodes[0]; expect([...hiddenNodes(b)]).toEqual(["b"]); });
   it("has full parity between Vietnamese and English UI dictionaries", () => { expect(Object.keys(vi).sort()).toEqual(Object.keys(en).sort()); expect(Object.values(vi).every(Boolean)).toBe(true); });
+  it("exports an editable board as a bounded SVG with labels and escaped text", () => {
+    const b = { ...board(), texts: [{ id: "t", text: "A & B", x: 20, y: 100, width: 160 }], edges: [{ id: "e", source: "a", target: "b", label: "leads to" }] };
+    const svg = exportCanvasSvg(b); expect(svg).toContain("A &amp; B"); expect(svg).toContain("leads to"); expect(svg).toContain("mindcanvas-arrow"); expect(svg).toContain('viewBox=');
+  });
 });

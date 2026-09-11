@@ -39,7 +39,8 @@ export function useWorkspace(owner: string | null) {
       try {
         if (cacheFailed.current && current.current) {
           const b = current.current;
-          cacheProject(owner, { id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, folderId: folderId.current, pending: !!owner });
+          const existing = readCache(owner).find(item => item.id === b.id);
+          cacheProject(owner, { id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, folderId: folderId.current, pending: !!owner, revision: existing?.revision });
           cacheFailed.current = false;
         }
         const pending = readCache(owner).filter(p => p.pending);
@@ -48,8 +49,8 @@ export function useWorkspace(owner: string | null) {
         if (pending.length) setStatus("saving");
         for (const snapshot of pending) {
           if (!alive.current) return false;
-          await persistProject(owner, snapshot);
-          acknowledge(owner, snapshot);
+          const saved = await persistProject(owner, snapshot);
+          acknowledge(owner, snapshot, saved?.revision);
         }
         if (alive.current) {
           dirty.current = readCache(owner).some(p => p.pending);
@@ -76,7 +77,7 @@ export function useWorkspace(owner: string | null) {
     dirty.current = !!owner;
     current.current = next; setBoard(next);
     const existing = projects.find(p => p.id === next.id);
-    const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
+    const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
     try {
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
       setStatus(!navigator.onLine ? "offline" : owner ? "pending" : "localSaved");

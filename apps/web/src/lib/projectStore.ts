@@ -2,9 +2,10 @@ import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { parseBoard } from "./board";
 
-export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null };
+export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
+export class ProjectConflictError extends Error { code = "PROJECT_CONFLICT"; constructor() { super("Cloud project changed in another tab or device. Keep the local copy and choose a recovery action."); } }
 export type ProjectVersion = { id: string; projectId: string; version: number; createdAt: string; board: BoardState; source: "cloud" | "local"; label?: string };
 export const MAX_PROJECT_VERSIONS = 30;
 export const cacheKey = (owner: string | null) => `mindcanvas:projects:v3:${owner ?? "guest"}`;
@@ -29,10 +30,10 @@ export function cacheProject(owner: string | null, project: CachedProject) {
   const entries = readCache(owner);
   localStorage.setItem(cacheKey(owner), JSON.stringify([project, ...entries.filter(p => p.id !== project.id)]));
 }
-export function acknowledge(owner: string, snapshot: CachedProject) {
+export function acknowledge(owner: string, snapshot: CachedProject, revision = snapshot.revision) {
   const entries = readCache(owner);
   localStorage.setItem(cacheKey(owner), JSON.stringify(entries.map(p =>
-    p.id === snapshot.id && JSON.stringify(p.board) === JSON.stringify(snapshot.board) && p.folderId === snapshot.folderId ? { ...p, pending: false } : p)));
+    p.id === snapshot.id && JSON.stringify(p.board) === JSON.stringify(snapshot.board) && p.folderId === snapshot.folderId ? { ...p, pending: false, revision } : p)));
 }
 function readVersionCache(owner: string | null, projectId: string): ProjectVersion[] {
   const raw = localStorage.getItem(versionCacheKey(owner, projectId));
@@ -117,9 +118,11 @@ async function clientFor(owner: string) {
 }
 export async function fetchProjects(owner: string): Promise<Project[]> {
   const client = await clientFor(owner);
-  const { data, error } = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
-  if (error) throw error;
-  return (data ?? []).map(p => ({ id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at }));
+  let result: any = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,revision").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+  if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+  if (result.error) throw result.error;
+  const data = result.data as any[] | null;
+  return (data ?? []).map(p => ({ id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at, revision: typeof p.revision === "number" ? p.revision : undefined }));
 }
 export async function fetchBoard(owner: string, id: string): Promise<BoardState> {
   const client = await clientFor(owner);
@@ -127,11 +130,22 @@ export async function fetchBoard(owner: string, id: string): Promise<BoardState>
   if (error) throw error;
   return parseBoard({ ...(data.content?.board ?? data.content), id: data.id, title: data.title });
 }
-export async function persistProject(owner: string, project: CachedProject) {
+export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number }> {
   const client = await clientFor(owner);
-  const { error } = await client.from("notes").upsert({ id: project.id, user_id: owner, folder_id: project.folderId,
-    title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt }).abortSignal(AbortSignal.timeout(20000));
-  if (error) throw error;
+  const payload = { id: project.id, user_id: owner, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt };
+  if (project.revision === undefined) {
+    const modern = await client.from("notes").upsert({ ...payload, revision: 0 }).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    if (!modern.error) return { revision: Number(modern.data?.revision ?? 0) };
+    if (!/revision|column/i.test(modern.error.message)) throw modern.error;
+    const legacy = await client.from("notes").upsert(payload).abortSignal(AbortSignal.timeout(20000));
+    if (legacy.error) throw legacy.error;
+    return {};
+  }
+  const nextRevision = project.revision + 1;
+  const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("user_id", owner).eq("revision", project.revision).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) throw new ProjectConflictError();
+  return { revision: Number(result.data.revision ?? nextRevision) };
 }
 export async function fetchFolders(owner: string | null): Promise<ProjectFolder[]> {
   if (!owner) return JSON.parse(localStorage.getItem(cacheKey(null) + ":folders") ?? "[]");

@@ -7,6 +7,58 @@ export type Bounds = { x: number; y: number; width: number; height: number };
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 export const pathData = (points: Vec2[]) => points.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ") + (points.length === 1 ? " l0.01,0.01" : "");
+const xml = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&apos;" }[char]!));
+const color = (value: unknown, fallback: string) => typeof value === "string" && /^(#[0-9a-f]{6}|none)$/i.test(value) ? value : fallback;
+const exportOrder = (board: BoardState): Selection[] => {
+  const legacy = (["shapes", "drawings", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
+  const byId = new Map(legacy.map(item => [item.id, item]));
+  return [...new Set([...(board.layerOrder ?? []), ...legacy.map(item => item.id)])].flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
+};
+const exportBounds = (board: BoardState): Bounds => {
+  const hidden = hiddenNodes(board), bounds = exportOrder(board).flatMap(selection => {
+    if (hidden.has(selection.id) || (selection.kind !== "edges" && board[selection.kind].find(item => item.id === selection.id)?.hidden)) return [];
+    if (selection.kind === "edges") {
+      const edge = board.edges.find(item => item.id === selection.id), ends = edge ? [edge.source, edge.target] : [];
+      return ends.flatMap(id => exportOrder(board).filter(item => item.id === id).flatMap(item => { const bound = elementBounds(board, item); return bound ? [bound] : []; }));
+    }
+    const bound = elementBounds(board, selection); return bound ? [bound] : [];
+  });
+  if (!bounds.length) return { x: 0, y: 0, width: 800, height: 600 };
+  const x = Math.min(...bounds.map(bound => bound.x)), y = Math.min(...bounds.map(bound => bound.y));
+  return { x, y, width: Math.max(1, Math.max(...bounds.map(bound => bound.x + bound.width)) - x), height: Math.max(1, Math.max(...bounds.map(bound => bound.y + bound.height)) - y) };
+};
+const endpoint = (board: BoardState, id: string) => [...board.nodes, ...board.shapes].find(item => item.id === id);
+export function exportCanvasSvg(board: BoardState) {
+  const bounds = exportBounds(board), pad = 40, hidden = hiddenNodes(board), all = [...board.nodes, ...board.shapes, ...board.texts, ...board.drawings];
+  const isHidden = (id: string) => hidden.has(id) || !!all.find(item => item.id === id && item.hidden);
+  const body = exportOrder(board).map(selection => {
+    if (isHidden(selection.id)) return "";
+    if (selection.kind === "edges") {
+      const edge = board.edges.find(item => item.id === selection.id), source = edge && endpoint(board, edge.source), target = edge && endpoint(board, edge.target);
+      if (!edge || !source || !target || isHidden(source.id) || isHidden(target.id)) return "";
+      const x1 = source.x + source.width, y1 = source.y + source.height / 2, x2 = target.x, y2 = target.y + target.height / 2, curve = Math.max(40, Math.abs(x2 - x1) * .45), path = `M${x1},${y1} C${x1 + curve},${y1} ${x2 - curve},${y2} ${x2},${y2}`;
+      return `<path d="${path}" fill="none" stroke="#8a99b5" stroke-width="2" marker-end="url(#mindcanvas-arrow)"/>${edge.label ? `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 8}" text-anchor="middle" font-size="13" fill="#65718a">${xml(edge.label)}</text>` : ""}`;
+    }
+    const item = board[selection.kind].find(entry => entry.id === selection.id) as any, bound = elementBounds(board, selection);
+    if (!item || !bound) return "";
+    const rotation = "rotation" in item && item.rotation ? ` transform="rotate(${item.rotation} ${bound.x + bound.width / 2} ${bound.y + bound.height / 2})"` : "";
+    if (selection.kind === "shapes") return item.kind === "rect" ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, "#ffffff")}" stroke="#a6b5db"${rotation}/>` : `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, "#ffffff")}" stroke="#a6b5db"${rotation}/>`;
+    if (selection.kind === "drawings") return `<path d="${pathData(item.points)}" fill="none" stroke="${color(item.color, "#4562df")}" stroke-width="${item.width}" opacity="${item.opacity}" stroke-linecap="round" stroke-linejoin="round"${rotation}/>`;
+    if (selection.kind === "texts") return `<text x="${bound.x}" y="${bound.y + (item.fontSize ?? 16)}" font-size="${item.fontSize ?? 16}" fill="${color(item.color, "#18213b")}"${rotation}>${xml(item.text).split("\n").map((line, index) => `<tspan x="${bound.x}" dy="${index ? item.fontSize ?? 16 : 0}">${line}</tspan>`).join("")}</text>`;
+    return `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="12" fill="${color(item.color, "#ffffff")}" stroke="#bcc8e4"${rotation}/><text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + 6}" text-anchor="middle" font-size="16" fill="#18213b">${xml(item.label)}</text>`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="#8a99b5"/></marker></defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="#ffffff"/>${body}</svg>`;
+}
+function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+export function exportCanvasSvgFile(board: BoardState) { downloadBlob(new Blob([exportCanvasSvg(board)], { type: "image/svg+xml" }), `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.svg`); }
+export async function exportCanvasPngFile(board: BoardState) {
+  const svg = exportCanvasSvg(board), url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })), image = new Image();
+  await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Could not render canvas image.")); image.src = url; });
+  const bounds = exportBounds(board), canvas = document.createElement("canvas"); canvas.width = Math.min(4096, Math.max(1, Math.ceil(bounds.width + 80))); canvas.height = Math.min(4096, Math.max(1, Math.ceil(bounds.height + 80))); const context = canvas.getContext("2d");
+  if (!context) { URL.revokeObjectURL(url); throw new Error("Canvas export is unavailable in this browser."); }
+  context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(image, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(url);
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png")); if (!blob) throw new Error("Could not create PNG export."); downloadBlob(blob, `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.png`);
+}
 export function blankBoard(title = "Untitled canvas"): BoardState {
   return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, nodes: [], edges: [], texts: [], shapes: [], drawings: [] };
 }
