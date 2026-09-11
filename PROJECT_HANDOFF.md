@@ -184,3 +184,11 @@ Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → loca
 - Canvas rendering and layer list now respect element visibility and rotation.
 - Added editor command coverage; current frontend test suite has 53 passing tests.
 - V2.1 intentionally does not include sharing, realtime collaboration, version history, or flashcards; those remain later V2 phases.
+
+# UPDATE — 2026-09-11: V2.2 AI Document Workspace
+
+- PDF extraction now adds controlled `[PAGE n]` markers on the server for source-aware graph generation.
+- AI panel includes browser PDF preview, page range selection, selected-range regeneration, editable graph preview, and Apply-to-current/new-canvas choice.
+- Applying to the current canvas remains one undoable editor change; creating a new canvas persists a separate project.
+- Backend and frontend both require redeployment for the new PDF flow. No new Supabase migration or environment variable is required.
+- Scan-only PDFs still need OCR in a future phase; this update retains the existing text-based PDF limit.

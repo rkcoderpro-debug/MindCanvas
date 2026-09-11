@@ -194,8 +194,20 @@ html[data-theme="dark"] .canvas-svg .inline-editor { background: #1b2235; color:
 .upload-drop { background: #f5f7ff; border: 1px dashed #9cace1; border-radius: 10px; padding: 18px; color: #3d50c7; }
 .upload-drop input { background: transparent; font-size: 14px; padding: 8px 0; border: none; max-width: 100%; }
 .graph-preview { max-height: 300px; overflow: auto; padding: 14px; background: #f7f8fc; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 12px; }
+.pdf-workspace { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(150px, .65fr); gap: 12px; margin-top: 14px; }
+.pdf-preview { min-width: 0; display: grid; gap: 8px; }
+.pdf-preview iframe { width: 100%; min-height: 310px; border: 1px solid var(--line); border-radius: 9px; background: var(--canvas); }
+.pdf-controls { display: grid; align-content: start; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); }
+.pdf-controls label { gap: 5px; font-size: 12px; }
+.pdf-controls input { width: 100%; }
+.ai-preview-heading { display: grid; gap: 4px; }
+.apply-mode { display: grid; gap: 8px; margin: 14px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }
+.apply-mode label { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.apply-mode input[type=radio] { min-width: auto; }
+html[data-theme="dark"] .graph-preview, html[data-theme="dark"] .pdf-controls { background: #151b2b; }
 .form-error { color: #ad263d; }
 .auth-loading { min-height: 100dvh; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--accent); }
 @media (max-width: 1150px) { .sidebar { flex-basis: 200px; padding-inline: 10px; } .main-area { padding-inline: 16px; } .inspector { flex-basis: 175px; padding-inline: 10px; } .account-badge { max-width: 140px; } .drawing-toolbar { gap: 1px; } .drawing-toolbar button { width: 31px; } .canvas-hint { display: none; } }
 @media (max-width: 850px) { .sidebar { flex-basis: 160px; } .brand { font-size: 16px; } .beta { display: none; } .inspector { flex-basis: 150px; } .editor-heading .actions { gap: 5px; } .editor-heading .secondary-button, .editor-heading .primary-button { font-size: 12px; padding: 8px; } .breadcrumbs span, .account-badge { display: none; } .drawing-toolbar { max-width: calc(100% - 16px); flex-wrap: wrap; justify-content: center; } .home-heading { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 620px) { .app-shell { height: auto; min-height: 100dvh; overflow: visible; flex-direction: column; } .sidebar { flex: auto; padding: 10px; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); } .sidebar .profile-card, .sidebar .section-label, .sidebar .folder-list { display: none; } .nav-list { display: flex; } .nav-list button { padding: 8px; font-size: 12px; } .sidebar-bottom { margin: 0; display: flex; gap: 0; flex-wrap: wrap; } .sidebar-bottom > button { font-size: 12px; padding: 8px; } .language-control { max-width: 135px; } .main-area { padding: 0 10px 10px; overflow: visible; } .topbar { min-height: 54px; } .editor-layout { min-height: 670px; flex-direction: column; } .editor-frame { min-height: 480px; } .inspector { border-left: 0; border-top: 1px solid var(--line); flex-basis: auto; max-height: 260px; } .property-grid { grid-template-columns: repeat(4, 1fr); } .workspace-home { padding: 20px 0; } .home-controls { flex-wrap: wrap; } .search-field { width: 100%; } .save-status { max-width: 110px; white-space: normal; } .project-grid { gap: 14px; } }
+@media (max-width: 620px) { .pdf-workspace { grid-template-columns: 1fr; } }

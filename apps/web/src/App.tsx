@@ -9,7 +9,7 @@ import Dialog from "./components/Dialog";
 import AiPanel from "./components/AiPanel";
 import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
-import { applyGraph, exportBoard, importBoard } from "./lib/board";
+import { applyGraph, blankBoard, exportBoard, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
 
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
@@ -108,7 +108,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
     {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label><label>{t("theme")}<select value={theme} onChange={e => setTheme(e.target.value as "light" | "dark")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option></select></label><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></Dialog>}
-    {modal === "ai" && ws.board && <AiPanel key={ws.board.id} projectId={ws.board.id} canUse={!!user} beforeGenerate={ws.flush} onClose={() => setModal(null)} onApply={graph => { try { ws.change(applyGraph(ws.board!, graph)); setModal(null); } catch { ws.setError(t("aiError")); setModal(null); } }}/>}
+    {modal === "ai" && ws.board && <AiPanel key={ws.board.id} projectId={ws.board.id} canUse={!!user} beforeGenerate={ws.flush} onClose={() => setModal(null)} onApply={(graph, mode) => { try { if (mode === "new") { const next = applyGraph(blankBoard(graph.title), graph); void ws.create(next.title, next).then(() => setModal(null)); } else { ws.change(applyGraph(ws.board!, graph)); setModal(null); } } catch { ws.setError(t("aiError")); setModal(null); } }}/>} 
   </div>;
 }
 function TitleInput({ value, label, onCommit }: { value: string; label: string; onCommit: (value: string) => void }) {
