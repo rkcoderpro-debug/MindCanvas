@@ -5,7 +5,10 @@ import { parseBoard } from "./board";
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
+export type ProjectVersion = { id: string; projectId: string; version: number; createdAt: string; board: BoardState; source: "cloud" | "local"; label?: string };
+export const MAX_PROJECT_VERSIONS = 30;
 export const cacheKey = (owner: string | null) => `mindcanvas:projects:v3:${owner ?? "guest"}`;
+export const versionCacheKey = (owner: string | null, projectId: string) => `mindcanvas:versions:v1:${owner ?? "guest"}:${projectId}`;
 export function readCache(owner: string | null): CachedProject[] {
   const raw = localStorage.getItem(cacheKey(owner));
   if (raw) {
@@ -30,6 +33,73 @@ export function acknowledge(owner: string, snapshot: CachedProject) {
   const entries = readCache(owner);
   localStorage.setItem(cacheKey(owner), JSON.stringify(entries.map(p =>
     p.id === snapshot.id && JSON.stringify(p.board) === JSON.stringify(snapshot.board) && p.folderId === snapshot.folderId ? { ...p, pending: false } : p)));
+}
+function readVersionCache(owner: string | null, projectId: string): ProjectVersion[] {
+  const raw = localStorage.getItem(versionCacheKey(owner, projectId));
+  if (!raw) return [];
+  const data: unknown = JSON.parse(raw);
+  if (!Array.isArray(data)) throw new Error("Invalid local version history.");
+  return data.map(item => {
+    if (!item || typeof item !== "object") throw new Error("Invalid local version history.");
+    const entry = item as Partial<ProjectVersion>;
+    const version = entry.version;
+    if (typeof entry.id !== "string" || typeof entry.projectId !== "string" || entry.projectId !== projectId || typeof version !== "number" || !Number.isInteger(version) || version < 1 || typeof entry.createdAt !== "string" || !entry.board) throw new Error("Invalid local version history.");
+    return { ...entry, version, board: parseBoard(entry.board), source: entry.source === "cloud" ? "cloud" : "local" } as ProjectVersion;
+  }).sort((a, b) => b.version - a.version).slice(0, MAX_PROJECT_VERSIONS);
+}
+function cacheVersion(owner: string | null, version: ProjectVersion) {
+  const current = readVersionCache(owner, version.projectId);
+  localStorage.setItem(versionCacheKey(owner, version.projectId), JSON.stringify([version, ...current.filter(item => item.id !== version.id)].sort((a, b) => b.version - a.version).slice(0, MAX_PROJECT_VERSIONS)));
+}
+function versionFromRow(row: any, source: "cloud" | "local"): ProjectVersion | null {
+  try {
+    const projectId = String(row.note_id ?? row.project_id);
+    const content = row.content?.board ?? row.content;
+    const board = parseBoard({ ...content, id: projectId });
+    return { id: String(row.id), projectId, version: Number(row.version), createdAt: String(row.created_at), board, source, label: typeof row.label === "string" ? row.label : undefined };
+  } catch { return null; }
+}
+export function readProjectVersions(owner: string | null, projectId: string) {
+  return readVersionCache(owner, projectId);
+}
+export async function fetchProjectVersions(owner: string | null, projectId: string): Promise<ProjectVersion[]> {
+  if (!owner) return readVersionCache(null, projectId);
+  try {
+    const client = await clientFor(owner);
+    const { data, error } = await client.from("note_versions").select("id,note_id,version,label,content,created_at").eq("user_id", owner).eq("note_id", projectId).order("version", { ascending: false }).limit(MAX_PROJECT_VERSIONS).abortSignal(AbortSignal.timeout(20000));
+    if (error) throw error;
+    const remote = (data ?? []).map(row => versionFromRow(row, "cloud")).filter((row): row is ProjectVersion => !!row);
+    remote.forEach(version => cacheVersion(owner, version));
+    return remote.length ? remote : readVersionCache(owner, projectId);
+  } catch {
+    // History is a recovery aid. A missing migration or temporary network failure
+    // falls back to the owner-scoped local checkpoints without blocking the editor.
+    return readVersionCache(owner, projectId);
+  }
+}
+function createLocalVersion(owner: string | null, board: BoardState, label?: string): ProjectVersion {
+  const current = readVersionCache(owner, board.id), version = (current[0]?.version ?? 0) + 1;
+  const snapshot: ProjectVersion = { id: crypto.randomUUID(), projectId: board.id, version, createdAt: new Date().toISOString(), board: parseBoard(board), source: "local", label };
+  cacheVersion(owner, snapshot);
+  return snapshot;
+}
+export async function createProjectVersion(owner: string | null, board: BoardState, label?: string): Promise<ProjectVersion> {
+  if (!owner) return createLocalVersion(null, board, label);
+  try {
+    const client = await clientFor(owner), local = readVersionCache(owner, board.id);
+    const latest = await client.from("note_versions").select("version").eq("user_id", owner).eq("note_id", board.id).order("version", { ascending: false }).limit(1).abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    if (latest.error) throw latest.error;
+    const version = Math.max(Number(latest.data?.version ?? 0), local[0]?.version ?? 0) + 1;
+    const row = { id: crypto.randomUUID(), note_id: board.id, user_id: owner, version, label: label ?? null, content: { type: "mindcanvas-board", version: 1, board }, created_at: new Date().toISOString() };
+    const result = await client.from("note_versions").insert(row).select("id,note_id,version,label,content,created_at").abortSignal(AbortSignal.timeout(20000)).single();
+    if (result.error) throw result.error;
+    const saved = versionFromRow(result.data, "cloud");
+    if (!saved) throw new Error("Invalid version returned by Supabase.");
+    cacheVersion(owner, saved);
+    return saved;
+  } catch {
+    return createLocalVersion(owner, board, label);
+  }
 }
 export function mergeProjects(remote: Project[], cache: CachedProject[], owner: string | null): Project[] {
   if (!owner) return cache;

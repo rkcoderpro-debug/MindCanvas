@@ -3,7 +3,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
 import { normalizeEditor } from "../lib/editorCommands";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
-import { acknowledge, addFolder, cacheProject, deleteFolder, fetchBoard, fetchFolders, fetchProjects, mergeProjects, persistProject, readCache, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjects, fetchProjectVersions, mergeProjects, persistProject, readCache, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
 // Mount once per account (App keys this component by user.id).
@@ -12,6 +12,7 @@ export function useWorkspace(owner: string | null) {
   const current = useRef<BoardState | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [versions, setVersions] = useState<ProjectVersion[]>([]), [versionLoading, setVersionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
@@ -101,6 +102,33 @@ export function useWorkspace(owner: string | null) {
   };
   const undo = () => { const previous = past.at(-1), now = current.current; if (!previous || !now) return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
   const redo = () => { const next = future[0], now = current.current; if (!next || !now) return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
+  const loadVersions = async () => {
+    const projectId = current.current?.id;
+    if (!projectId) { setVersions([]); return []; }
+    setVersionLoading(true);
+    try {
+      const result = await fetchProjectVersions(owner, projectId);
+      if (alive.current && current.current?.id === projectId) setVersions(result);
+      return result;
+    } catch (err) { report(err); return []; }
+    finally { if (alive.current) setVersionLoading(false); }
+  };
+  const saveCheckpoint = async (label?: string) => {
+    const snapshot = current.current;
+    if (!snapshot) return null;
+    if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
+    const version = await createProjectVersion(owner, snapshot, label);
+    if (alive.current && current.current?.id === snapshot.id) setVersions(items => [version, ...items.filter(item => item.id !== version.id)].sort((a, b) => b.version - a.version).slice(0, 30));
+    return version;
+  };
+  const restoreVersion = async (version: ProjectVersion) => {
+    const snapshot = current.current;
+    if (!snapshot || snapshot.id !== version.projectId) throw new Error("This version belongs to another project.");
+    if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
+    await createProjectVersion(owner, snapshot, "Before restore");
+    change({ ...version.board, id: snapshot.id, updatedAt: new Date().toISOString() });
+    await loadVersions();
+  };
   const open = async (p: Project) => {
     if (p.deletedAt) return;
     const ticket = ++navigation.current;
@@ -111,17 +139,19 @@ export function useWorkspace(owner: string | null) {
       const next = cached && (!owner || cached.pending || !navigator.onLine) ? cached.board : owner ? await fetchBoard(owner, p.id) : cached?.board;
       if (!next) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
-      current.current = normalizeEditor(next); folderId.current = p.folderId; setBoard(current.current); setPast([]); setFuture([]);
+      current.current = normalizeEditor(next); folderId.current = p.folderId; setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
       if (!cached?.pending) cacheProject(owner, { ...p, board: next, pending: false });
+      const history = await fetchProjectVersions(owner, next.id);
+      if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
     } catch (err) { report(err); }
   };
   const create = async (title: string, imported?: BoardState, targetFolderId: string | null = null) => {
     const ticket = ++navigation.current;
     await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return;
-    folderId.current = targetFolderId; setPast([]); setFuture([]);
+    folderId.current = targetFolderId; setPast([]); setFuture([]); setVersions([]);
     stage(imported ?? blankBoard(title));
   };
-  const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); setPast([]); setFuture([]); await refresh(); };
+  const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); setPast([]); setFuture([]); setVersions([]); await refresh(); };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
   const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
   const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };
@@ -142,5 +172,5 @@ export function useWorkspace(owner: string | null) {
       await refresh();
     } catch (err) { report(err); throw err; }
   };
-  return { board, projects, folders, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import { blankBoard } from "./board";
-import { acknowledge, cacheProject, mergeProjects, readCache, SaveQueue, type CachedProject } from "./projectStore";
+import { acknowledge, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, SaveQueue, type CachedProject } from "./projectStore";
 const cached = (): CachedProject => { const board = blankBoard("Project"); return { id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: true }; };
 beforeEach(() => localStorage.clear());
 describe("Project isolation and save queue", () => {
@@ -21,5 +21,12 @@ describe("Project isolation and save queue", () => {
     const first = queue.run(async () => { order.push(1); await Promise.resolve(); order.push(2); throw new Error("Offline"); });
     const second = queue.run(async () => { order.push(3); return "ok"; });
     await expect(first).rejects.toThrow("Offline"); await expect(second).resolves.toBe("ok"); expect(order).toEqual([1, 2, 3]);
+  });
+  it("stores bounded local checkpoints in newest-first order", async () => {
+    const first = blankBoard("First"), second = { ...first, title: "Second", updatedAt: new Date(Date.now() + 1000).toISOString() };
+    const one = await createProjectVersion(null, first, "Initial"), two = await createProjectVersion(null, second, "Edited");
+    expect(one.version).toBe(1); expect(two.version).toBe(2);
+    const history = await fetchProjectVersions(null, first.id);
+    expect(history.map(item => item.version)).toEqual([2, 1]); expect(history[0].board.title).toBe("Second"); expect(history.every(item => item.source === "local")).toBe(true);
   });
 });

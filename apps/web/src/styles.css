@@ -46,6 +46,16 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .breadcrumbs button { background: transparent; display: flex; align-items: center; gap: 7px; color: var(--muted); white-space: nowrap; padding: 8px 0; }
 .breadcrumbs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px; }
 .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.version-toolbar { display: flex; justify-content: flex-end; margin: 14px 0; }
+.version-list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.version-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+.version-meta { display: grid; gap: 5px; min-width: 0; }
+.version-meta strong { color: var(--accent); }
+.version-meta span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.version-list .secondary-button { flex: 0 0 auto; padding: 8px 10px; font-size: 12px; }
+.version-empty { display: grid; place-items: center; gap: 8px; min-height: 120px; color: var(--muted); text-align: center; }
+.version-empty p { margin: 0; }
+.version-note { margin-bottom: 0; font-size: 12px; }
 .account-badge { color: #3d50c7; background: #edf0ff; padding: 8px 12px; border-radius: 7px; font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; line-height: 1.4; }
 .primary-button { color: white; background: var(--accent); box-shadow: 0 4px 10px #465bd615; }

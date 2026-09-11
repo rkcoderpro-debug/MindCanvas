@@ -192,3 +192,13 @@ Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → loca
 - Applying to the current canvas remains one undoable editor change; creating a new canvas persists a separate project.
 - Backend and frontend both require redeployment for the new PDF flow. No new Supabase migration or environment variable is required.
 - Scan-only PDFs still need OCR in a future phase; this update retains the existing text-based PDF limit.
+
+# UPDATE — 2026-09-11: V2.3 Version History and Recovery
+
+- Added explicit project checkpoints. Autosave continues to persist the current board, but pan/zoom and ordinary autosave cycles do not create extra history entries.
+- Added a Version History dialog from the editor top bar. Users can create a stable checkpoint and restore it without stepping through many Undo actions.
+- Restore creates a checkpoint of the current state first and then applies the selected snapshot as one undoable canvas change.
+- Added owner-scoped local checkpoint storage for guest/offline mode and a Supabase `note_versions` table migration for cloud history.
+- Apply `supabase/migrations/0003_note_versions.sql` before expecting cloud version history. If it is not applied or the network is unavailable, the UI falls back to local checkpoints and marks their source.
+- No Gemini, OAuth, PDF extraction or provider environment variable changes were made in V2.3.
+- Live Supabase/Render integration and migration execution were not tested from this workspace.

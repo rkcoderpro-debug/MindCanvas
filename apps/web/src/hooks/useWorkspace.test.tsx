@@ -59,4 +59,13 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
     save.mockResolvedValue(); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
   });
+  it("creates a checkpoint and restores it as one undoable canvas change", async () => {
+    await act(async () => root.render(<Harness/>)); await act(async () => api.create("History"));
+    await act(async () => api.change({ ...api.board!, texts: [{ id: "t", text: "before", x: 0, y: 0, width: 200 }] }));
+    await act(async () => api.saveCheckpoint("Before next edit"));
+    expect(api.versions).toHaveLength(1); expect(api.versions[0].board.texts[0].text).toBe("before");
+    await act(async () => api.change({ ...api.board!, texts: [{ id: "t", text: "after", x: 0, y: 0, width: 200 }] }));
+    await act(async () => api.restoreVersion(api.versions[0]));
+    expect(api.board!.texts[0].text).toBe("before"); expect(api.canUndo).toBe(true);
+  });
 });
