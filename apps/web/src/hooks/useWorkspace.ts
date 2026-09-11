@@ -3,9 +3,11 @@ import type { BoardState } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
 import { normalizeEditor } from "../lib/editorCommands";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
-import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjects, fetchProjectVersions, mergeProjects, persistProject, readCache, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
+export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject };
+export type ConflictResolution = "cloud" | "overwrite" | "copy";
 // Mount once per account (App keys this component by user.id).
 export function useWorkspace(owner: string | null) {
   const [board, setBoard] = useState<BoardState | null>(null);
@@ -15,10 +17,12 @@ export function useWorkspace(owner: string | null) {
   const [versions, setVersions] = useState<ProjectVersion[]>([]), [versionLoading, setVersionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
   const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
+  const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0);
   const report = useCallback((err: unknown) => { if (alive.current) setError(err instanceof Error ? err.message : String(err)); }, []);
   const refresh = useCallback(async () => {
@@ -36,6 +40,7 @@ export function useWorkspace(owner: string | null) {
     clearTimeout(timer.current);
     return queue.current.run(async () => {
       if (!alive.current) return false;
+      if (conflictRef.current) { setStatus("saveError"); return false; }
       try {
         if (cacheFailed.current && current.current) {
           const b = current.current;
@@ -49,8 +54,30 @@ export function useWorkspace(owner: string | null) {
         if (pending.length) setStatus("saving");
         for (const snapshot of pending) {
           if (!alive.current) return false;
-          const saved = await persistProject(owner, snapshot);
-          acknowledge(owner, snapshot, saved?.revision);
+          const save = async (candidate: CachedProject) => {
+            const saved = await persistProject(owner, candidate);
+            acknowledge(owner, candidate, saved?.revision);
+            const cached = readCache(owner).find(item => item.id === candidate.id);
+            if (alive.current && cached) setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
+          };
+          try {
+            await save(snapshot);
+          } catch (err) {
+            if (!(err instanceof ProjectConflictError)) throw err;
+            const remote = await fetchProjectSnapshot(owner, snapshot.id);
+            const local = readCache(owner).find(item => item.id === snapshot.id) ?? snapshot;
+            // Viewport-only saves from another device are safe to rebase. Real
+            // content/folder differences require an explicit user decision.
+            if (remote.revision !== undefined && local.folderId === remote.folderId && sameBoardContent(local.board, remote.board)) {
+              const rebased = { ...local, revision: remote.revision, pending: true };
+              cacheProject(owner, rebased);
+              await save(rebased);
+              continue;
+            }
+            const next = { projectId: snapshot.id, local, remote };
+            conflictRef.current = next; setConflict(next); setError(""); setStatus("saveError");
+            return false;
+          }
         }
         if (alive.current) {
           dirty.current = readCache(owner).some(p => p.pending);
@@ -76,12 +103,16 @@ export function useWorkspace(owner: string | null) {
     next = normalizeEditor(next, current.current ?? undefined);
     dirty.current = !!owner;
     current.current = next; setBoard(next);
-    const existing = projects.find(p => p.id === next.id);
-    const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
     try {
+      // The cache is authoritative for the latest acknowledged revision. React
+      // state can still contain the revision from the previous render.
+      const existing = readCache(owner).find(p => p.id === next.id) ?? projects.find(p => p.id === next.id);
+      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
-      setStatus(!navigator.onLine ? "offline" : owner ? "pending" : "localSaved");
-      clearTimeout(timer.current); if (owner) timer.current = setTimeout(() => void flush(), delay);
+      const activeConflict = conflictRef.current?.projectId === next.id ? { ...conflictRef.current, local: p } : null;
+      if (activeConflict) { conflictRef.current = activeConflict; setConflict(activeConflict); }
+      setStatus(activeConflict ? "saveError" : !navigator.onLine ? "offline" : owner ? "pending" : "localSaved");
+      clearTimeout(timer.current); if (owner && !activeConflict) timer.current = setTimeout(() => void flush(), delay);
     } catch (err) { cacheFailed.current = true; setStatus("saveError"); report(err); }
   };
   const change = (next: BoardState) => {
@@ -173,5 +204,49 @@ export function useWorkspace(owner: string | null) {
       await refresh();
     } catch (err) { report(err); throw err; }
   };
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
+  const resolveConflict = async (resolution: ConflictResolution, copySuffix = "copy") => queue.current.run(async () => {
+    const active = conflictRef.current;
+    if (!owner || !active) return false;
+    setStatus("saving"); setError("");
+    try {
+      const latestRemote = await fetchProjectSnapshot(owner, active.projectId);
+      const latestLocal = readCache(owner).find(item => item.id === active.projectId) ?? active.local;
+      let selected: CachedProject;
+      if (resolution === "cloud") {
+        await createProjectVersion(owner, latestLocal.board, "Local conflict backup");
+        selected = latestRemote;
+        cacheProject(owner, selected);
+      } else if (resolution === "overwrite") {
+        await createProjectVersion(owner, latestRemote.board, "Before conflict overwrite");
+        const candidate = { ...latestLocal, revision: latestRemote.revision, pending: true };
+        cacheProject(owner, candidate);
+        const saved = await persistProject(owner, candidate);
+        acknowledge(owner, candidate, saved.revision);
+        selected = readCache(owner).find(item => item.id === candidate.id) ?? { ...candidate, revision: saved.revision, pending: false };
+      } else {
+        const timestamp = new Date().toISOString();
+        const copyBoard = { ...structuredClone(latestLocal.board), id: crypto.randomUUID(), title: `${latestLocal.board.title} — ${copySuffix}`, updatedAt: timestamp };
+        const candidate: CachedProject = { ...latestLocal, id: copyBoard.id, title: copyBoard.title, updatedAt: timestamp, board: copyBoard, revision: undefined, pending: true };
+        cacheProject(owner, candidate);
+        const saved = await persistProject(owner, candidate);
+        acknowledge(owner, candidate, saved.revision);
+        cacheProject(owner, latestRemote);
+        selected = readCache(owner).find(item => item.id === candidate.id) ?? { ...candidate, revision: saved.revision, pending: false };
+      }
+      conflictRef.current = null; setConflict(null); cacheFailed.current = false;
+      dirty.current = readCache(owner).some(item => item.pending);
+      if (current.current?.id === active.projectId) {
+        current.current = normalizeEditor(selected.board); folderId.current = selected.folderId;
+        setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
+      }
+      setProjects(items => resolution === "copy"
+        ? [selected, latestRemote, ...items.filter(item => item.id !== selected.id && item.id !== latestRemote.id)]
+        : [selected, ...items.filter(item => item.id !== selected.id)]);
+      setStatus(dirty.current ? "pending" : "saved");
+      return true;
+    } catch (err) {
+      setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false;
+    }
+  });
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, conflict, resolveConflict, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
 }

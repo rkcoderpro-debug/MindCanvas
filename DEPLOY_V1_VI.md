@@ -23,9 +23,12 @@ Nếu project SpeakUp cũ còn đúng tài khoản Supabase, có thể dùng l�
 1. Vào [Supabase](https://supabase.com/) → đăng nhập → chọn project cũ hoặc **New project**.
 2. Vào **SQL Editor → New query**.
 3. Mở file `supabase/migrations/0001_mindcanvas.sql`, copy toàn bộ và bấm **Run**.
-4. Kiểm tra **Table Editor** có `profiles`, `folders`, `notes`, `documents`.
-5. Vào **Storage** và kiểm tra bucket `documents` đã tồn tại, trạng thái **Private**.
-6. Nếu query báo policy đã tồn tại, mở phần policy để kiểm tra điều kiện `auth.uid()` thay vì chạy lặp lại mù quáng.
+4. Tiếp tục chạy đúng thứ tự các file còn lại: `0002_project_management.sql`, `0003_note_versions.sql`, `0004_note_revision_lock.sql`, `0005_flashcards.sql`.
+5. Kiểm tra **Table Editor** có `profiles`, `folders`, `notes`, `documents`, `note_versions`, `flashcard_decks`, `flashcards`; bảng `notes` phải có cột `revision`.
+6. Vào **Storage** và kiểm tra bucket `documents` đã tồn tại, trạng thái **Private**.
+7. Nếu query báo policy đã tồn tại, mở phần policy để kiểm tra điều kiện `auth.uid()` thay vì chạy lặp lại mù quáng.
+
+`0004_note_revision_lock.sql` đặc biệt quan trọng cho autosave nhiều thiết bị. V3.2.1 không cần migration mới, nhưng nếu file `0004` chưa được chạy thì không thể kiểm thử cơ chế phát hiện/khôi phục xung đột revision.
 
 ### Lấy biến Supabase
 

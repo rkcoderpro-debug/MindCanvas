@@ -1,6 +1,42 @@
 # MindCanvas — project handoff
 
-## Update 2026-09-11 — V3.2 AI Flashcards (latest)
+## Update 2026-09-11 — V3.2.1 Mobile Cloud Sync Hotfix (latest)
+
+### Fixed
+
+- Fixed the false `PROJECT_CONFLICT` that appeared after consecutive cloud saves. The local cache now advances to the revision returned by Supabase after every successful save, including when a newer edit arrives while an older snapshot is in flight.
+- `stage()` reads the acknowledged revision from the owner-scoped cache instead of relying on potentially stale React summary state.
+- Viewport-only cross-device changes can rebase automatically. A real content/folder conflict pauses autosave and opens an explicit recovery dialog: use latest cloud, save the device copy as a new project, or intentionally overwrite cloud.
+- Recovery actions create checkpoints before replacing a version. The local pending copy remains intact while a conflict is unresolved.
+- Google OAuth now explicitly persists/refreshes sessions and requests the Google account chooser, making account switching on mobile easier to verify. The mobile account panel displays the signed-in email.
+- Reworked the phone layout: compact app header, horizontal navigation/actions, scrollable single-row drawing toolbar, touch-sized controls, one-finger empty-canvas pan, hidden mobile minimap and a bottom-sheet properties panel.
+- Updated the visible app badge to `V3.2.1`.
+
+### Changed files
+
+- `apps/web/src/lib/projectStore.ts`
+- `apps/web/src/hooks/useWorkspace.ts`
+- `apps/web/src/lib/supabase.ts`
+- `apps/web/src/App.tsx`
+- `apps/web/src/components/CloudConflictDialog.tsx`
+- `apps/web/src/components/Dialog.tsx`
+- `apps/web/src/components/CanvasBoard.tsx`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/styles.css`
+- `apps/web/src/lib/projectStore.test.ts`
+- `apps/web/src/hooks/useWorkspace.test.tsx`
+- `apps/web/src/components/CanvasBoard.test.tsx`
+- `DEPLOY_V1_VI.md`
+- `V3_2_1_MOBILE_CLOUD_FIX_VI.md`
+- `PROJECT_HANDOFF.md`
+
+### Deployment
+
+- This is a frontend-only runtime change. Redeploy `mindcanvas-web`; no backend environment variable changed.
+- No new migration was added. `0004_note_revision_lock.sql` must already be applied for revision-safe cloud saves, and `0005_flashcards.sql` remains required for cloud flashcards.
+- Live Supabase/Google OAuth/Render and physical-device QA still require the user's production credentials and devices.
+
+## Update 2026-09-11 — V3.2 AI Flashcards
 
 ### Implemented
 
@@ -42,7 +78,7 @@
 - The first apply implementation writes generated cards one by one. If the network fails in the middle, retry only after checking the deck to avoid intentional duplicate content; a transactional batch endpoint is a later hardening slice.
 - AI-generated cards are not automatically scheduled as reviewed; new cards remain due immediately and follow the V3.1 scheduler after review.
 
-## Update 2026-09-11 — V3.1 Flashcards MVP (latest)
+## Update 2026-09-11 — V3.1 Flashcards MVP
 
 ### Implemented
 
@@ -95,7 +131,7 @@ This section supersedes older statements about missing multi-selection/layers or
 - `LayerStack.tsx` renders one global order; `CanvasNavigator.tsx` adds Fit canvas, Go to selection and a clickable minimap. Pan/zoom/fit retain the previous navigation-free Undo behavior.
 - Workspace cards have favorites, rename, folder move, duplicate, soft trash and restore. `projectStore.updateProject` writes metadata only with explicit user filters and existing RLS; cloud failures are visible. Local guest metadata is stored under the existing owner-scoped cache. Duplicating a project copies its canvas, not PDF storage objects.
 - Migration `supabase/migrations/0002_project_management.sql` is REQUIRED before deploying this frontend: adds `is_favorite` and `deleted_at` to notes, keeps all rows and RLS policies. No key/backend/provider changes for this slice. Cloud calls are not tested live and migration has not been applied to the user's account.
-- Metadata mutations require successful flush before acting. Cloud content saves do not overwrite trash/favorite columns. Clean-cache merges accept remote metadata even when content timestamp is unchanged. Cross-device concurrent content remains last-write-wins, as before.
+- Metadata mutations require successful flush before acting. Cloud content saves do not overwrite trash/favorite columns. Clean-cache merges accept remote metadata even when content timestamp is unchanged. The older last-write-wins behavior described in this slice was superseded by V3.0 revision locking and the V3.2.1 recovery UI.
 - No permanent deletion, PDF preview, exported images/PDF, nested groups, multi-resize or persistent version history in this slice. Those were not in the approved scope.
 - Validation uses TypeScript/build and local unit/component tests with jsdom/mocked cloud calls; no real Render/Supabase account or browser QA performed.
 
@@ -145,7 +181,7 @@ This section supersedes older shell/demo UI descriptions below.
 - Single-element selection only; not full Figma parity (no multi-select, rotation, custom layer ordering, realtime collaboration).
 - Cross-device cloud cards show file icons until opened; preview only renders up to 40 elements per type.
 - LocalStorage capacity is browser-dependent. A quota/error is shown and navigation is blocked if the current board cannot be cached. Export JSON for a portable backup.
-- Concurrent editing in different tabs/devices remains last-write-wins (no optimistic-locking/version conflict protocol yet).
+- This older slice originally used last-write-wins across tabs/devices; V3.0 and V3.2.1 supersede it with revision checks, safe viewport rebasing and explicit conflict recovery.
 - Recovering old cloud demo records is not automated: do not delete existing notes based on title alone.
 - Raw service errors may remain in their original language; all application labels/forms/tooltips are bilingual.
 - PDF extraction/provider limits remain as previously documented. No new OCR, paid fallback, sharing permissions or cloud infrastructure has been introduced.

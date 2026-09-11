@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import { blankBoard } from "./board";
-import { acknowledge, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, SaveQueue, type CachedProject } from "./projectStore";
+import { acknowledge, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, sameBoardContent, SaveQueue, type CachedProject } from "./projectStore";
 const cached = (): CachedProject => { const board = blankBoard("Project"); return { id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: true }; };
 beforeEach(() => localStorage.clear());
 describe("Project isolation and save queue", () => {
@@ -13,7 +13,7 @@ describe("Project isolation and save queue", () => {
     expect(mergeProjects([], readCache("A"), "A")).toEqual([]);
     expect(localStorage.getItem("mindcanvas:board:v2:A")).not.toBeNull();
   });
-  it("does not acknowledge a newer unsaved revision", () => { const old = cached(); cacheProject("A", old); cacheProject("A", { ...old, board: { ...old.board, title: "Changed while saving" } }); acknowledge("A", old); expect(readCache("A")[0].pending).toBe(true); });
+  it("keeps a newer edit pending while advancing its saved base revision", () => { const old = { ...cached(), revision: 3 }; cacheProject("A", old); cacheProject("A", { ...old, board: { ...old.board, title: "Changed while saving" } }); acknowledge("A", old, 4); expect(readCache("A")[0].pending).toBe(true); expect(readCache("A")[0].revision).toBe(4); });
   it("acknowledges only the exact saved snapshot", () => { const p = cached(); cacheProject("A", p); acknowledge("A", p); expect(readCache("A")[0].pending).toBe(false); });
   it("keeps pending drafts when a remote list is empty", () => { const p = cached(); expect(mergeProjects([], [p], "A")).toEqual([p]); expect(mergeProjects([], [{ ...p, pending: false }], "A")).toEqual([]); });
   it("serializes requests and recovers after a failure", async () => {
@@ -28,5 +28,10 @@ describe("Project isolation and save queue", () => {
     expect(one.version).toBe(1); expect(two.version).toBe(2);
     const history = await fetchProjectVersions(null, first.id);
     expect(history.map(item => item.version)).toEqual([2, 1]); expect(history[0].board.title).toBe("Second"); expect(history.every(item => item.source === "local")).toBe(true);
+  });
+  it("treats viewport-only differences as the same document content", () => {
+    const board = blankBoard("Same");
+    expect(sameBoardContent(board, { ...board, viewport: { x: 400, y: -20, scale: 1.8 }, updatedAt: "2099-01-01T00:00:00.000Z" })).toBe(true);
+    expect(sameBoardContent(board, { ...board, title: "Changed" })).toBe(false);
   });
 });

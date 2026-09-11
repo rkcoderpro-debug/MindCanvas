@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, Circle, Copy, Hand, Highlighter, Magnet, MousePointer2, PenLine, Plus, Square, Trash2, Type, ArrowUpRight, Network } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, Circle, Copy, Hand, Highlighter, Magnet, MousePointer2, PenLine, Plus, SlidersHorizontal, Square, Trash2, Type, ArrowUpRight, Network, X } from "lucide-react";
 import type { BoardState, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { arrangeMindMap, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, type Selection } from "../lib/board";
 import { useLanguage, type MessageKey } from "../lib/i18n";
@@ -28,6 +28,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
   const clipboard = useRef<{ board: BoardState; selection: Selection[]; count: number } | null>(null);
   const [hasCopy, setHasCopy] = useState(false);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const [ink, setInk] = useState("#4562df"), [strokeWidth, setStrokeWidth] = useState(3);
   const b = preview ?? editing?.fresh ?? board;
@@ -90,7 +91,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
     e.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
     const p = point(e.clientX, e.clientY);
     const base = board;
-    if (space || tool === "hand" || e.button === 1) {
+    if (space || tool === "hand" || e.button === 1 || (e.pointerType === "touch" && tool === "select")) {
       setSelected(null); gesture.current = { mode: "pan", start: p, screen: { x: e.clientX, y: e.clientY }, base, pointer: e.pointerId, next: base };
     } else if (tool === "select") {
       const initial = e.shiftKey ? selections : [];
@@ -261,9 +262,10 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave }:
       </svg>
       <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "pen" || tool === "highlighter" ? "drawHint" : "canvasHint")}</div>
       <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
+      <button className="mobile-inspector-toggle" aria-label={t("properties")} aria-expanded={inspectorOpen} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
       <div className="zoom-control"><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
-    <aside className="inspector"><h3>{t("properties")}</h3>
+    <aside className={`inspector ${inspectorOpen ? "mobile-open" : ""}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button className="icon-button inspector-close" aria-label={t("close")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
       {hasCopy && <button className="secondary-button" onClick={paste}>{t("pasteElements")}</button>}
       {selections.length > 0 && <div className="selection-actions"><strong>{selections.length} {t("selectedElements")}</strong><div className="property-grid">
         <button onClick={() => onChange(reorderSelection(board, selections, "front"))}>{t("bringFront")}</button><button onClick={() => onChange(reorderSelection(board, selections, "back"))}>{t("sendBack")}</button>

@@ -59,6 +59,32 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
     save.mockResolvedValue({}); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
   });
+  it("uses the acknowledged revision for consecutive cloud saves", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => ({ revision: (snapshot.revision ?? -1) + 1 }));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Mobile")); await act(async () => api.flush());
+    await act(async () => api.change({ ...api.board!, title: "Mobile 2" })); await act(async () => api.flush());
+    await act(async () => api.change({ ...api.board!, title: "Mobile 3" })); await act(async () => api.flush());
+    expect(save.mock.calls.map(call => call[1].revision)).toEqual([undefined, 0, 1]);
+    expect(store.readCache("A")[0].revision).toBe(2); expect(api.status).toBe("saved");
+  });
+  it("pauses a real cross-device conflict and overwrites only after an explicit choice", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockResolvedValueOnce({ revision: 0 });
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Phone")); await act(async () => api.flush());
+    const local = { ...api.board!, title: "Phone edit", updatedAt: "2026-09-11T02:00:00.000Z" };
+    const remoteBoard = { ...api.board!, title: "Desktop edit", updatedAt: "2026-09-11T02:01:00.000Z" };
+    const remote = { id: remoteBoard.id, title: remoteBoard.title, board: remoteBoard, folderId: null, updatedAt: remoteBoard.updatedAt, pending: false, revision: 1 };
+    vi.spyOn(store, "fetchProjectSnapshot").mockResolvedValue(remote);
+    save.mockRejectedValueOnce(new store.ProjectConflictError(remote.id)).mockResolvedValueOnce({ revision: 2 });
+    vi.spyOn(store, "createProjectVersion").mockResolvedValue({ id: "backup", projectId: remote.id, version: 1, createdAt: remote.updatedAt, board: remoteBoard, source: "cloud" });
+    await act(async () => api.change(local)); await act(async () => api.flush());
+    expect(api.conflict?.remote.board.title).toBe("Desktop edit"); expect(api.status).toBe("saveError");
+    await act(async () => api.resolveConflict("overwrite", "copy"));
+    expect(save.mock.calls.at(-1)?.[1].revision).toBe(1); expect(api.conflict).toBeNull(); expect(api.status).toBe("saved"); expect(api.board?.title).toBe("Phone edit");
+  });
   it("creates a checkpoint and restores it as one undoable canvas change", async () => {
     await act(async () => root.render(<Harness/>)); await act(async () => api.create("History"));
     await act(async () => api.change({ ...api.board!, texts: [{ id: "t", text: "before", x: 0, y: 0, width: 200 }] }));

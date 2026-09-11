@@ -11,9 +11,9 @@ function Harness({ initial }: { initial: BoardState }) {
   const [board, setBoard] = useState(initial); current = board;
   return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
 }
-function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit = {}) {
+function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit & { pointerType?: string } = {}) {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
-  Object.defineProperty(e, "pointerId", { value: 1 }); target.dispatchEvent(e);
+  Object.defineProperty(e, "pointerId", { value: 1 }); Object.defineProperty(e, "pointerType", { value: modifiers.pointerType ?? "mouse" }); target.dispatchEvent(e);
 }
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -104,5 +104,11 @@ describe("Canvas interactions", () => {
     expect(host.querySelector("textarea")).not.toBeNull();
     await act(async () => host.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(current.texts).toHaveLength(0); expect(host.querySelector("textarea")).toBeNull();
+  });
+  it("pans the empty canvas with one touch instead of drawing a marquee", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => { pointer(svg, "pointerdown", 40, 60, { pointerType: "touch" }); pointer(svg, "pointermove", 100, 150, { pointerType: "touch" }); pointer(svg, "pointerup", 100, 150, { pointerType: "touch" }); });
+    expect(current.viewport).toMatchObject({ x: 60, y: 90 }); expect(host.querySelector(".selection-box")).toBeNull();
   });
 });

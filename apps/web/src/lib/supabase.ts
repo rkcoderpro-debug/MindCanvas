@@ -3,12 +3,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ?? (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
 
-export const supabase: SupabaseClient | null = url && anonKey ? createClient(url, anonKey) : null;
+export const supabase: SupabaseClient | null = url && anonKey ? createClient(url, anonKey, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+}) : null;
 export const isSupabaseConfigured = Boolean(supabase);
 
 export async function signInWithGoogle() {
   if (!supabase) return { error: new Error("Supabase chưa được cấu hình; đang dùng demo mode.") };
-  return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+  return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin, queryParams: { prompt: "select_account" } } });
 }
 
 export async function getCurrentSession() {

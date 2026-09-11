@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, BookOpen, Clock3, Download, FileText, Folder, FolderPlus, FolderCog, Globe2, History, LayoutGrid, LogIn, LogOut, MoreHorizontal, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock3, Download, FileText, Folder, FolderPlus, FolderCog, Globe2, History, LayoutGrid, LogIn, LogOut, Menu, MoreHorizontal, Plus, Redo2, RefreshCw, Save, Settings2, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
 import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
 import FolderManager from "./components/FolderManager";
@@ -9,6 +9,7 @@ import Dialog from "./components/Dialog";
 import AiPanel from "./components/AiPanel";
 import VersionHistory from "./components/VersionHistory";
 import FlashcardsPage from "./components/FlashcardsPage";
+import CloudConflictDialog from "./components/CloudConflictDialog";
 import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
@@ -38,10 +39,10 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const { t, language, setLanguage } = useLanguage(), { theme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null);
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | "versions" | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
-  const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
+  const [recent, setRecent] = useState(false), [working, setWorking] = useState(false), [mobileMenu, setMobileMenu] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
-  const home = () => { void ws.home(); setFilter(null); setRecent(false); };
+  const home = () => { void ws.home(); setFilter(null); setRecent(false); setMobileMenu(false); };
   const askName = (kind: "project" | "folder") => { setName(kind === "project" ? t("untitled") : ""); setModal(kind); };
   const create = async (e: React.FormEvent) => {
     e.preventDefault(); if (!name.trim()) return; setWorking(true);
@@ -68,19 +69,20 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
 
   return <div className="app-shell">
-    <aside className="sidebar">
-      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.1</span></button>
-      <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user ? t("cloud") : t("local")}</small></div></div>
+    <aside className={`sidebar ${mobileMenu ? "mobile-open" : ""}`}>
+      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.2.1</span></button>
+      <button className="mobile-menu-button icon-button" aria-label={t("mobileMenu")} aria-expanded={mobileMenu} onClick={() => setMobileMenu(value => !value)}><Menu size={21}/></button>
+      <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
         <button className={!ws.board && !recent && !filter ? "active" : ""} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, null)} onClick={home}><LayoutGrid size={18}/>{t("workspace")}</button>
-        <button className={!ws.board && recent ? "active" : ""} onClick={() => { void ws.home(); setFilter(null); setRecent(true); }}><Clock3 size={18}/>{t("recent")}<span>{ws.projects.filter(p => !p.deletedAt).length}</span></button>
-        <button className={!ws.board && filter === "__favorites" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__favorites"); setRecent(false); }}><Star size={18}/>{t("favorites")}</button>
-        <button className={!ws.board && filter === "__trash" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__trash"); setRecent(false); }}><Trash2 size={18}/>{t("trash")}</button>
-        <button className={!ws.board && filter === "__flashcards" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__flashcards"); setRecent(false); }}><BookOpen size={18}/>{t("flashcards")}</button>
+        <button className={!ws.board && recent ? "active" : ""} onClick={() => { void ws.home(); setFilter(null); setRecent(true); setMobileMenu(false); }}><Clock3 size={18}/>{t("recent")}<span>{ws.projects.filter(p => !p.deletedAt).length}</span></button>
+        <button className={!ws.board && filter === "__favorites" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__favorites"); setRecent(false); setMobileMenu(false); }}><Star size={18}/>{t("favorites")}</button>
+        <button className={!ws.board && filter === "__trash" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__trash"); setRecent(false); setMobileMenu(false); }}><Trash2 size={18}/>{t("trash")}</button>
+        <button className={!ws.board && filter === "__flashcards" ? "active" : ""} onClick={() => { void ws.home(); setFilter("__flashcards"); setRecent(false); setMobileMenu(false); }}><BookOpen size={18}/>{t("flashcards")}</button>
       </nav>
       <div className="section-label">{t("folders")}<button className="icon-button" aria-label={t("newFolder")} onClick={() => askName("folder")}><Plus size={17}/></button></div>
-      <div className="folder-list">{ws.folders.map(f => <div className={`folder-row ${filter === f.id && !ws.board ? "active" : ""}`} key={f.id} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, f.id)}><button className="folder-open" onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); }}><Folder size={17}/><span>{f.name}</span></button><button className="folder-more" aria-label={`${t("folderActions")}: ${f.name}`} onClick={() => { setName(f.name); setFolderAction({ folder: f, kind: "rename" }); }}><MoreHorizontal size={16}/></button><div className="folder-dropdown">{ws.projects.filter(p=>p.folderId===f.id&&!p.deletedAt).slice(0,5).map(p=><button key={p.id} onClick={()=>void ws.open(p)}><FileText size={14}/>{p.title}</button>)}</div></div>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
-      <button className="manage-folders-button" onClick={() => { void ws.home(); setFilter("__manager"); setRecent(false); }}><FolderCog size={17}/>{t("manageFolders")}</button>
+      <div className="folder-list">{ws.folders.map(f => <div className={`folder-row ${filter === f.id && !ws.board ? "active" : ""}`} key={f.id} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, f.id)}><button className="folder-open" onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); setMobileMenu(false); }}><Folder size={17}/><span>{f.name}</span></button><button className="folder-more" aria-label={`${t("folderActions")}: ${f.name}`} onClick={() => { setName(f.name); setFolderAction({ folder: f, kind: "rename" }); }}><MoreHorizontal size={16}/></button><div className="folder-dropdown">{ws.projects.filter(p=>p.folderId===f.id&&!p.deletedAt).slice(0,5).map(p=><button key={p.id} onClick={()=>{ setMobileMenu(false); void ws.open(p); }}><FileText size={14}/>{p.title}</button>)}</div></div>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
+      <button className="manage-folders-button" onClick={() => { void ws.home(); setFilter("__manager"); setRecent(false); setMobileMenu(false); }}><FolderCog size={17}/>{t("manageFolders")}</button>
       <div className="sidebar-bottom">
         <label className="language-control"><Globe2 size={17}/><select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
         <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as "light" | "dark")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option></select></label>
@@ -94,7 +96,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
         <span className="account-badge">{user ? accountName : t("local")}</span></div>
       </header>
-      {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); void ws.flush(); void ws.refresh(); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => ws.setError("")}><X size={16}/></button></div>}
+      {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => ws.setError("")}><X size={16}/></button></div>}
       {ws.board ? <>
         <div className="editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
           <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>
@@ -113,6 +115,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label><label>{t("theme")}<select value={theme} onChange={e => setTheme(e.target.value as "light" | "dark")}><option value="light">{t("themeLight")}</option><option value="dark">{t("themeDark")}</option></select></label><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></Dialog>}
     {modal === "versions" && ws.board && <VersionHistory versions={ws.versions} loading={ws.versionLoading} working={working} onClose={() => { if (!working) setModal(null); }} onCheckpoint={async () => { setWorking(true); try { await ws.saveCheckpoint(t("saveCheckpoint")); } catch (err) { ws.setError(err instanceof Error ? err.message : t("error")); } finally { setWorking(false); } }} onRestore={async version => { setWorking(true); try { await ws.restoreVersion(version); setModal(null); } catch (err) { ws.setError(err instanceof Error ? err.message : t("error")); } finally { setWorking(false); } }}/>} 
     {modal === "ai" && ws.board && <AiPanel key={ws.board.id} projectId={ws.board.id} canUse={!!user} beforeGenerate={ws.flush} onClose={() => setModal(null)} onApply={(graph, mode) => { try { if (mode === "new") { const next = applyGraph(blankBoard(graph.title), graph); void ws.create(next.title, next).then(() => setModal(null)); } else { ws.change(applyGraph(ws.board!, graph)); setModal(null); } } catch { ws.setError(t("aiError")); setModal(null); } }}/>} 
+    {ws.conflict && <CloudConflictDialog conflict={ws.conflict} working={working} onResolve={async resolution => { setWorking(true); try { await ws.resolveConflict(resolution, t("copySuffix")); } finally { setWorking(false); } }}/>} 
   </div>;
 }
 function TitleInput({ value, label, onCommit }: { value: string; label: string; onCommit: (value: string) => void }) {
