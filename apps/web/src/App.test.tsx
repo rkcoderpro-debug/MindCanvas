@@ -58,17 +58,19 @@ describe("Workspace UI", () => {
     expect(document.documentElement.lang).toBe("en"); expect(localStorage.getItem("mindcanvas:language")).toBe("en");
     expect(host.textContent).toContain("Recent files"); expect(host.textContent).toContain("Ghi chú của tôi");
   });
-  it("offers five visual themes and applies the selected palette immediately", async () => {
+  it("offers ten grouped visual themes and applies a cool dark palette immediately", async () => {
     await act(async () => root.render(<App/>));
     const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
     await act(async () => settings.click());
     const options = [...host.querySelectorAll<HTMLButtonElement>(".theme-option")];
-    expect(options).toHaveLength(5);
-    const forest = options.find(button => button.textContent?.includes("Rừng Emerald"))!;
-    await act(async () => forest.click());
-    expect(forest.getAttribute("aria-pressed")).toBe("true");
-    expect(document.documentElement.dataset.theme).toBe("forest");
-    expect(localStorage.getItem("mindcanvas:theme")).toBe("forest");
+    expect(options).toHaveLength(10);
+    expect(host.textContent).toContain("Theme sáng");
+    expect(host.textContent).toContain("Theme tối");
+    const cobalt = options.find(button => button.textContent?.includes("Đêm Cobalt"))!;
+    await act(async () => cobalt.click());
+    expect(cobalt.getAttribute("aria-pressed")).toBe("true");
+    expect(document.documentElement.dataset.theme).toBe("cobalt");
+    expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
   });
   it("opens the flashcards workspace without injecting demo decks or cards", async () => {
     await act(async () => root.render(<App/>));

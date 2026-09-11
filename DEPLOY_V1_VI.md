@@ -1,5 +1,9 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.3.1 — Expanded Themes & Motion
+
+V3.3.1 chỉ thay đổi frontend: mở rộng thành 10 theme và thêm interaction motion có hỗ trợ Reduce motion. Không thêm migration, không đổi Supabase/OAuth/Gemini và không thêm biến môi trường. Sau khi push các file trong `V3_3_1_EXPANDED_THEMES_MOTION_VI.md`, chỉ deploy service `mindcanvas-web`.
+
 ## Cập nhật V3.3 — Vibrant Themes
 
 V3.3 chỉ thay đổi frontend. Không thêm migration, không đổi Supabase/OAuth/Gemini và không thêm biến môi trường. Sau khi push các file trong `V3_3_VIBRANT_THEMES_VI.md`, chỉ cần deploy latest commit cho service `mindcanvas-web`; `mindcanvas-api` có thể giữ nguyên.

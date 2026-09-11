@@ -1,6 +1,37 @@
 # MindCanvas — project handoff
 
-## Update 2026-09-11 — V3.3 Vibrant Themes (latest)
+## Update 2026-09-11 — V3.3.1 Expanded Themes & Motion (latest)
+
+### Implemented
+
+- Expanded the persisted theme catalog from 5 to 10, balanced into five light and five dark themes. Existing IDs remain compatible.
+- Added cool-color choices: Ocean Breeze and Mint Frost for light mode; Cobalt Night, Cyber Teal and Nordic Slate for dark mode. Aurora, Sunset, Berry, Midnight and Emerald remain available.
+- Grouped the visual Settings picker and compact sidebar selector into Light themes / Dark themes. Every new theme has complete app, surface, canvas, status, editor and new-element palette tokens.
+- Added restrained interaction motion: button press/hover feedback, active navigation icon, staggered project cards, page/content entrance, dialog/backdrop, project menu, theme selection check, error notice, saving status, flashcard answer, mobile navigation and inspector sheet.
+- Motion does not animate the background continuously and does not change canvas data. `prefers-reduced-motion: reduce` disables animation/transition durations globally.
+- Updated the visible badge to `V3.3.1` and the pre-React theme bootstrap list in `index.html`.
+
+### Verification and deployment
+
+- Core text/background and primary-button contrast for all 10 themes exceeds 5:1; required semantic token coverage was checked for every theme.
+- V3.3.1 is frontend-only: no Supabase migration, backend change, environment variable or credential change. Redeploy only `mindcanvas-web`.
+- Local TypeScript, frontend/server production builds, 69 frontend tests and 13 backend regression tests pass. Live Render, OAuth/Supabase/Gemini and physical-device visual QA still require the production environment.
+
+### Changed files
+
+- `apps/web/index.html`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/components/ThemePicker.tsx`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/theme.ts`
+- `apps/web/src/lib/theme.test.ts`
+- `apps/web/src/styles.css`
+- `DEPLOY_V1_VI.md`
+- `V3_3_1_EXPANDED_THEMES_MOTION_VI.md`
+- `PROJECT_HANDOFF.md`
+
+## Update 2026-09-11 — V3.3 Vibrant Themes
 
 ### Implemented
 

@@ -72,7 +72,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileMenu ? "mobile-open" : ""}`}>
-      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.3</span></button>
+      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.3.1</span></button>
       <button className="mobile-menu-button icon-button" aria-label={t("mobileMenu")} aria-expanded={mobileMenu} onClick={() => setMobileMenu(value => !value)}><Menu size={21}/></button>
       <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
@@ -87,7 +87,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <button className="manage-folders-button" onClick={() => { void ws.home(); setFilter("__manager"); setRecent(false); setMobileMenu(false); }}><FolderCog size={17}/>{t("manageFolders")}</button>
       <div className="sidebar-bottom">
         <label className="language-control"><Globe2 size={17}/><select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
-        <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as Theme)}>{THEME_OPTIONS.map(option => <option key={option.id} value={option.id}>{t(option.labelKey)}</option>)}</select></label>
+        <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as Theme)}>{(["light", "dark"] as const).map(tone => <optgroup key={tone} label={t(tone === "light" ? "themeLightCollection" : "themeDarkCollection")}>{THEME_OPTIONS.filter(option => option.tone === tone).map(option => <option key={option.id} value={option.id}>{t(option.labelKey)}</option>)}</optgroup>)}</select></label>
         <button onClick={() => setModal("settings")}><Settings2 size={17}/>{t("settings")}</button>
         <button disabled={working || (!user && !isSupabaseConfigured)} onClick={() => void auth()}>{user ? <LogOut size={17}/> : <LogIn size={17}/>} {user ? t("logout") : t("login")}</button>
       </div>
