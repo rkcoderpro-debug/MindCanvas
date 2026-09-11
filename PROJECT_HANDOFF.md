@@ -202,3 +202,9 @@ Chạy `DEPLOY_V1_VI.md` theo thứ tự: Supabase SQL → Google OAuth → loca
 - Apply `supabase/migrations/0003_note_versions.sql` before expecting cloud version history. If it is not applied or the network is unavailable, the UI falls back to local checkpoints and marks their source.
 - No Gemini, OAuth, PDF extraction or provider environment variable changes were made in V2.3.
 - Live Supabase/Render integration and migration execution were not tested from this workspace.
+
+# UPDATE — 2026-09-11: V2.4 Save Checkpoint Shortcut
+
+- The editor Save button now flushes the current board and creates a version checkpoint, so normal manual saves are immediately available in Version History.
+- The Version History dialog remains available for loading, restoring and creating additional checkpoints.
+- The UI badge is now `V2.4`; no backend, Gemini, OAuth or new migration changes were made beyond the V2.3 `note_versions` migration.
