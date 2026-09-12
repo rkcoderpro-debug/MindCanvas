@@ -1,7 +1,7 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { generateGemini, clearGeminiCooldowns, modelOrder, permissionHint } from "../src/gemini.js";
-const options = { apiKey: "test-key", baseUrl: "https://example.test", models: "gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash", timeoutMs: 1000 };
+import { AIError, generateGemini, clearGeminiCooldowns, modelOrder, permissionHint } from "../src/gemini.js";
+const options = { apiKey: "test-key", baseUrl: "https://example.test", models: "gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash", timeoutMs: 1000, retriesPerModel: 0 };
 const input = { text: "Document", documentId: "doc" };
 const graph = { title: "Map", nodes: [{ id: "root", label: "Topic", parentId: null }], edges: [] };
 const ok = (value = graph) => Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(value) }] } }] });
@@ -35,6 +35,16 @@ test("missing key returns config error, never demo", async () => {
 test("timeout falls back", async () => {
   let calls = 0; const result = await generateGemini(input, options, async () => { if (++calls === 1) throw new DOMException("timeout", "TimeoutError"); return ok(); }); assert.equal(result.model, "gemini-3.7-flash");
 });
+test("503 retries the same model with backoff before falling back", async () => {
+  let calls = 0, sleeps = 0;
+  const result = await generateGemini(input, { ...options, retriesPerModel: 1 }, async () => ++calls === 1 ? new Response(null, { status: 503 }) : ok(), async () => { sleeps++; }, () => 0.5);
+  assert.equal(result.model, "gemini-3.8-flash"); assert.equal(calls, 2); assert.equal(sleeps, 1);
+});
+test("long Retry-After skips waiting and moves to the next model", async () => {
+  let calls = 0, sleeps = 0;
+  const result = await generateGemini(input, { ...options, retriesPerModel: 1 }, async () => ++calls === 1 ? new Response(null, { status: 429, headers: { "Retry-After": "60" } }) : ok(), async () => { sleeps++; }, () => 0.5);
+  assert.equal(result.model, "gemini-3.7-flash"); assert.equal(calls, 2); assert.equal(sleeps, 0);
+});
 test("broken graph references fall back", async () => {
   let calls = 0; const result = await generateGemini(input, options, async () => ++calls === 1 ? ok({ ...graph, nodes: [{ id: "root", label: "Topic", parentId: "missing" as any }] }) : ok()); assert.equal(result.model, "gemini-3.7-flash");
 });
@@ -42,7 +52,16 @@ test("safety block stops without model fallback", async () => {
   let calls = 0; await assert.rejects(generateGemini(input, options, async () => { calls++; return Response.json({ promptFeedback: { blockReason: "SAFETY" } }); }), /chặn/); assert.equal(calls, 1);
 });
 test("all failed reports controlled errors, never demo or secret", async () => {
-  await assert.rejects(generateGemini(input, options, async () => { throw new Error("test-key private document"); }), error => { const message = (error as Error).message; return message.includes("AI") === false && message.includes("NETWORK") && !message.includes("test-key") && !message.includes("private document"); });
+  await assert.rejects(generateGemini(input, options, async () => { throw new Error("test-key private document"); }), error => {
+    const typed = error as AIError;
+    return typed.code === "AI_UNAVAILABLE" && typed.retryAfterSeconds === 30 && !typed.message.includes("NETWORK") && !typed.message.includes("test-key") && !typed.message.includes("private document");
+  });
+});
+test("one 503 does not put a model on global cooldown for the next user", async () => {
+  const single = { ...options, models: "gemini-3.8-flash" };
+  await assert.rejects(generateGemini(input, single, async () => new Response(null, { status: 503 })), /Gemini đang bận/);
+  let calls = 0; const result = await generateGemini(input, single, async () => { calls++; return ok(); });
+  assert.equal(result.model, "gemini-3.8-flash"); assert.equal(calls, 1);
 });
 test("Retry-After cooldown skips unavailable model on next request", async () => {
   const short = { ...options, models: "gemini-3.8-flash,gemini-2.5-flash" };

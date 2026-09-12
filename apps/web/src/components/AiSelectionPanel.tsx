@@ -3,6 +3,7 @@ import { BrainCircuit, FilePenLine, ListTree, Sparkles, WandSparkles, X } from "
 import { transformSelection, type SelectionAiAction, type SelectionAiResult } from "../lib/api";
 import { useLanguage } from "../lib/i18n";
 import Dialog from "./Dialog";
+import { aiErrorMessage } from "../lib/aiErrors";
 
 const actions: Array<{ id: SelectionAiAction; icon: typeof Sparkles; label: "aiSummarize" | "aiExplain" | "aiRewrite" | "aiExpand" }> = [
   { id: "summarize", icon: Sparkles, label: "aiSummarize" },
@@ -31,7 +32,7 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
     const request = new AbortController(); controller.current = request;
     setBusy(true); setError(""); setResult(null);
     try { setResult(await transformSelection(action, sourceText, language, request.signal)); }
-    catch (err) { if (!request.signal.aborted) setError(err instanceof Error ? err.message : t("aiSelectionError")); }
+    catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "aiSelectionError")); }
     finally { if (!request.signal.aborted) setBusy(false); }
   };
 

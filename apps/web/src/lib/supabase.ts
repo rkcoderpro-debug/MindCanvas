@@ -31,7 +31,7 @@ export type FolderSummary = { id: string; name: string };
 
 const blankBoard = (id?: string, title = "Untitled canvas"): import("@mindcanvas/shared").BoardState => ({
   id: id ?? crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 },
-  background: "dots", texts: [], shapes: [], drawings: [], nodes: [], edges: [],
+  background: "dots", texts: [], shapes: [], drawings: [], media: [], embeds: [], nodes: [], edges: [],
 });
 
 export function createBlankBoard(id?: string, title?: string) { return blankBoard(id, title); }

@@ -38,7 +38,12 @@ function promptFor(action: SelectionAction, text: string, language: "vi" | "en")
 
 export async function generateSelectionWithGemini(input: { action: SelectionAction; text: string; language: "vi" | "en" }) {
   const result = await generateGeminiJson(
-    { apiKey: config.GEMINI_API_KEY ?? "", baseUrl: config.GEMINI_BASE_URL, models: config.GEMINI_MODELS ?? config.GEMINI_MODEL, timeoutMs: config.GEMINI_TIMEOUT_MS },
+    {
+      apiKey: config.GEMINI_API_KEY ?? "", baseUrl: config.GEMINI_BASE_URL,
+      models: config.GEMINI_MODELS ?? config.GEMINI_MODEL, timeoutMs: config.GEMINI_TIMEOUT_MS,
+      retriesPerModel: config.GEMINI_RETRIES_PER_MODEL, totalTimeoutMs: config.GEMINI_TOTAL_TIMEOUT_MS,
+      retryBaseMs: config.GEMINI_RETRY_BASE_MS,
+    },
     promptFor(input.action, input.text, input.language),
     parseSelectionResult,
   );

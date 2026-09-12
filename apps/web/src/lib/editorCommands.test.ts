@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { blankBoard, parseBoard } from "./board";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection } from "./editorCommands";
+import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection } from "./editorCommands";
 const fixture = () => normalizeEditor({ ...blankBoard(), nodes: [{ id:"n",label:"Root",x:0,y:0,width:190,height:76 }], texts:[{ id:"t",text:"Text",x:300,y:30,width:200 }], shapes:[{ id:"s",kind:"rect" as const,x:0,y:0,width:400,height:200,color:"#ffffff" }] });
 describe("Editor commands", () => {
   it("pastes an independent group with new IDs and a new offset each time", () => {
@@ -71,6 +71,14 @@ describe("Editor commands", () => {
     expect(snapMoveSelection(b, [{kind:"shapes",id:"a"}], 7, 9).shapes[0]).toMatchObject({x:16,y:16});
     expect(parseBoard(flagged)).toBeTruthy();
   });
+  it("resizes from each Figma-style edge without moving the opposite edge", () => {
+    const b = { ...blankBoard(), shapes: [{ id:"shape", kind:"rect" as const, x:100, y:80, width:160, height:100, color:"#ffffff" }] };
+    const selection = [{ kind:"shapes" as const, id:"shape" }];
+    expect(resizeSelectionFromHandle(b, selection, "w", -20, 0).shapes[0]).toMatchObject({ x:80, y:80, width:180, height:100 });
+    const fromTop = resizeSelectionFromHandle(b, selection, "n", 0, -15).shapes[0];
+    expect(fromTop).toMatchObject({ x:100, y:65, width:160 }); expect(fromTop.height).toBeCloseTo(115);
+    expect(resizeSelectionFromHandle(b, selection, "e", -30, 0).shapes[0]).toMatchObject({ x:100, y:80, width:130, height:100 });
+  });
   it("shows smart guides and aligns a moving element to a nearby edge", () => {
     const b = { ...blankBoard(), shapes: [
       { id:"moving", kind:"rect" as const, x:10, y:10, width:40, height:40, color:"#ffffff" },
@@ -79,5 +87,21 @@ describe("Editor commands", () => {
     const result = smartSnapMoveSelection(b, [{kind:"shapes",id:"moving"}], 48, 69, 8, 8);
     expect(result.board.shapes[0]).toMatchObject({ x:60, y:80 });
     expect(result.guides.some(guide => guide.axis === "y" && guide.value === 80)).toBe(true);
+  });
+  it("keeps media in layers and duplicates it with a fresh ID", () => {
+    const b = { ...blankBoard(), media: [{ id: "image", kind: "image" as const, src: "data:image/png;base64,AA==", name: "image.png", x: 20, y: 30, width: 200, height: 120 }] };
+    expect(orderedElements(b)).toEqual([{ kind: "media", id: "image" }]);
+    const result = duplicateSelection(b, [{ kind: "media", id: "image" }]);
+    expect(result.board.media).toHaveLength(2); expect(result.board.media[1].id).not.toBe("image"); expect(result.board.media[1].x).toBe(44);
+    expect(parseBoard(result.board)).toBeTruthy();
+  });
+  it("keeps web embeds in the layer model and rotates them", () => {
+    const b = { ...blankBoard(), embeds: [{ id: "web", kind: "web" as const, url: "https://example.com", title: "Example", x: 20, y: 30, width: 480, height: 340 }] };
+    expect(orderedElements(b)).toEqual([{ kind: "embeds", id: "web" }]);
+    const rotated = rotateSelection(b, [{ kind: "embeds", id: "web" }], 37);
+    expect(rotated.embeds[0].rotation).toBe(37);
+    const result = duplicateSelection(rotated, [{ kind: "embeds", id: "web" }]);
+    expect(result.board.embeds).toHaveLength(2); expect(result.board.embeds[1].id).not.toBe("web");
+    expect(parseBoard(result.board)).toBeTruthy();
   });
 });

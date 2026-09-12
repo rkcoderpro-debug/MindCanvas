@@ -6,7 +6,7 @@ import Dialog from "./Dialog";
 
 function searchableProject(project: Project) {
   const board = project.board;
-  return [project.title, ...(board?.texts.map(item => item.text) ?? []), ...(board?.nodes.map(item => item.label) ?? []), ...(board?.edges.map(item => item.label ?? "") ?? [])].join(" ").toLocaleLowerCase();
+  return [project.title, ...(board?.texts.map(item => item.text) ?? []), ...(board?.nodes.map(item => item.label) ?? []), ...(board?.media.map(item => item.name) ?? []), ...(board?.embeds.map(item => `${item.title ?? ""} ${item.url}`) ?? []), ...(board?.edges.map(item => item.label ?? "") ?? [])].join(" ").toLocaleLowerCase();
 }
 
 export default function CommandPalette({ projects, onClose, onOpenProject, onCreateProject, onOpenFlashcards, onOpenSettings, onImport }: {

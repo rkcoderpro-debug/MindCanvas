@@ -15,6 +15,7 @@ export type MindMapNode = {
   collapsed?: boolean;
   parentId?: string;
   rotation?: number;
+  opacity?: number;
   hidden?: boolean;
   locked?: boolean;
 };
@@ -24,6 +25,7 @@ export type MindMapEdge = {
   source: string;
   target: string;
   label?: string;
+  opacity?: number;
   hidden?: boolean;
   locked?: boolean;
 };
@@ -48,6 +50,7 @@ export type CanvasShape = {
   height: number;
   color: string;
   rotation?: number;
+  opacity?: number;
   hidden?: boolean;
   locked?: boolean;
 };
@@ -67,6 +70,56 @@ export type CanvasText = {
   underline?: boolean;
   textAlign?: CanvasTextAlign;
   rotation?: number;
+  opacity?: number;
+  hidden?: boolean;
+  locked?: boolean;
+};
+
+export type CanvasMediaKind = "image" | "video" | "audio";
+
+export type CanvasCrop = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+export type CanvasMedia = {
+  id: string;
+  kind: CanvasMediaKind;
+  /** Embedded data URL so exported .mindcanvas files remain self-contained. */
+  src: string;
+  name: string;
+  mimeType?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  /** Crop percentages for visual media. Values are measured from each edge. */
+  crop?: CanvasCrop;
+  /** Playback range in seconds for audio/video media. */
+  trimStart?: number;
+  trimEnd?: number;
+  opacity?: number;
+  hidden?: boolean;
+  locked?: boolean;
+};
+
+export type CanvasEmbedKind = "web" | "youtube" | "video";
+
+export type CanvasEmbed = {
+  id: string;
+  kind: CanvasEmbedKind;
+  /** A validated http(s) URL, normalized to a YouTube embed URL when applicable. */
+  url: string;
+  title?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  opacity?: number;
   hidden?: boolean;
   locked?: boolean;
 };
@@ -93,6 +146,8 @@ export type BoardState = {
   texts: CanvasText[];
   shapes: CanvasShape[];
   drawings: DrawingPath[];
+  media: CanvasMedia[];
+  embeds: CanvasEmbed[];
   nodes: MindMapNode[];
   edges: MindMapEdge[];
 };

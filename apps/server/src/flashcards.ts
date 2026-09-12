@@ -42,10 +42,14 @@ function promptFor(text: string, maxCards: number) {
 
 export async function generateFlashcardsWithGemini(input: { text: string; documentId?: string; maxCards: number }) {
   const result = await generateGeminiJson(
-    { apiKey: config.GEMINI_API_KEY ?? "", baseUrl: config.GEMINI_BASE_URL, models: config.GEMINI_MODELS ?? config.GEMINI_MODEL, timeoutMs: config.GEMINI_TIMEOUT_MS },
+    {
+      apiKey: config.GEMINI_API_KEY ?? "", baseUrl: config.GEMINI_BASE_URL,
+      models: config.GEMINI_MODELS ?? config.GEMINI_MODEL, timeoutMs: config.GEMINI_TIMEOUT_MS,
+      retriesPerModel: config.GEMINI_RETRIES_PER_MODEL, totalTimeoutMs: config.GEMINI_TOTAL_TIMEOUT_MS,
+      retryBaseMs: config.GEMINI_RETRY_BASE_MS,
+    },
     promptFor(input.text, input.maxCards),
     output => parseFlashcardPreview(output, input.maxCards),
   );
   return { provider: "gemini" as const, model: result.model, ...result.value, sourceDocumentId: input.documentId };
 }
-

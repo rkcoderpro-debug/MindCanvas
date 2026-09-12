@@ -1,6 +1,6 @@
-# MindCanvas V3.5
+# MindCanvas V3.7.1
 
-MindCanvas is a visual study workspace for turning notes and private PDFs into editable canvases, mind maps and flashcards. V3.5 adds an installable offline-capable PWA, durable IndexedDB project drafts with a visible sync queue, matching SVG/PNG export typography and wrapping, a scalable Elements panel, smart alignment guides and two-finger mobile zoom. This repository contains a React/Vite frontend, an Express server boundary for private AI/PDF operations, shared graph types, and Supabase migration scaffolding.
+MindCanvas is a visual study workspace for turning notes and private PDFs into editable canvases, mind maps and flashcards. V3.7 adds self-contained image/video/audio media, clipboard screenshots, microphone recording, web/YouTube/video embeds, crop/trim controls, persisted rotation and opacity, Figma-style eight-handle resizing, and media-aware layers/previews/exports. V3.7.1 keeps the V3.5.1 shared Gemini reliability hotfix: bounded concurrency, per-account queue fairness, transient-error retries with exponential backoff, safer fallback cooldowns and concise localized errors. This repository contains a React/Vite frontend, an Express server boundary for private AI/PDF operations, shared graph types, and Supabase migration scaffolding.
 
 ## Run locally
 

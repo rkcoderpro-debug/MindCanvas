@@ -46,6 +46,9 @@ export class GeminiProvider implements AIProvider {
       baseUrl: config.GEMINI_BASE_URL,
       models: config.GEMINI_MODELS ?? this.model,
       timeoutMs: config.GEMINI_TIMEOUT_MS,
+      retriesPerModel: config.GEMINI_RETRIES_PER_MODEL,
+      totalTimeoutMs: config.GEMINI_TOTAL_TIMEOUT_MS,
+      retryBaseMs: config.GEMINI_RETRY_BASE_MS,
     });
   }
 }
@@ -63,5 +66,8 @@ export async function generateWithFallback(input: GenerateInput) {
     baseUrl: config.GEMINI_BASE_URL,
     models: config.GEMINI_MODELS ?? config.GEMINI_MODEL,
     timeoutMs: config.GEMINI_TIMEOUT_MS,
+    retriesPerModel: config.GEMINI_RETRIES_PER_MODEL,
+    totalTimeoutMs: config.GEMINI_TOTAL_TIMEOUT_MS,
+    retryBaseMs: config.GEMINI_RETRY_BASE_MS,
   });
 }

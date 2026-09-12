@@ -30,8 +30,24 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-3.6-flash
+        value: gemini-3.8-flash
       - key: GEMINI_MODELS
         sync: false
+      - key: GEMINI_TIMEOUT_MS
+        value: "25000"
+      - key: GEMINI_RETRIES_PER_MODEL
+        value: "1"
+      - key: GEMINI_TOTAL_TIMEOUT_MS
+        value: "120000"
+      - key: GEMINI_RETRY_BASE_MS
+        value: "1000"
+      - key: AI_MAX_CONCURRENT
+        value: "2"
+      - key: AI_MAX_QUEUE
+        value: "20"
+      - key: AI_MAX_QUEUE_PER_USER
+        value: "2"
+      - key: AI_QUEUE_TIMEOUT_MS
+        value: "30000"
       - key: MAX_DOCUMENT_BYTES
         value: "10485760"

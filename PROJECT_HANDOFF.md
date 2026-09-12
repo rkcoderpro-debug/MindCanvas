@@ -1,6 +1,105 @@
 # MindCanvas — project handoff
 
-## Update 2026-09-12 — V3.5 Offline PWA & Export/Layers (latest)
+## Update 2026-09-12 — V3.7.1 Media, Figma Resize & Shared AI Reliability (latest)
+
+### Implemented
+
+- Merged the supplied V3.7 change set into the maintained V3.5.1 codebase. Canvas elements now include self-contained image/video/audio media and validated web/YouTube/video embeds.
+- Added file picker, drag-and-drop media, clipboard screenshot paste and browser microphone recording. Media is persisted in the board JSON as data URLs so project export/import remains self-contained.
+- Added media crop, audio/video trim, rotation and persisted opacity. The inspector exposes these properties and the same values are rendered in the editor and SVG/PNG export.
+- Replaced the single resize handle with eight Figma-style handles. Corner and side resizing work for individual and multi-element selections; opposite edges remain fixed for side handles.
+- Extended layer ordering, group/ungroup, duplicate, copy/paste, hide/lock, thumbnails, search and selection to include media and embeds. Existing boards missing the new arrays are normalized to empty arrays.
+- Retained the V3.5.1 Gemini scheduler/retry/fallback hotfix and PWA cache update. Media is frontend-only; no new Supabase migration or secret is required.
+
+### Architecture and deployment
+
+- `packages/shared/src/index.ts` is the persisted schema boundary; `apps/web/src/lib/board.ts` validates geometry/data URLs and owns portable SVG/PNG serialization.
+- `apps/web/src/components/CanvasBoard.tsx` owns media/embed creation and playback UI. `apps/web/src/lib/editorCommands.ts` owns pure resize/layer/duplicate commands. `LayerStack` continues to render all element kinds in persisted order.
+- Media files are intentionally bounded at 12 MB and embedded in board JSON. This keeps `.mindcanvas.json` portable but can make large projects heavy; cloud storage references can be introduced in a later slice without changing the editor element contract.
+- No Supabase migration is required for V3.7.1. Deploy the API first if taking the combined package, then deploy the web service and update an installed PWA. The API health endpoint remains release `3.5.1`; the visible web badge is `V3.7.1` because the media release is frontend/shared-model work.
+- Local verification passed TypeScript and production builds, 94 frontend tests and 22 backend tests (116 total). Live Gemini quota, Render, Supabase sessions/storage and physical-device media permission behavior still require production QA.
+
+### Changed files in V3.7.1 integration
+
+- `CHANGES_FROM_ORIGINAL.md`
+- `V3_7_MEDIA_ROTATION_ALPHA_VI.md`
+- `README.md`
+- `DEPLOY_V1_VI.md`
+- `packages/shared/src/index.ts`
+- `apps/web/src/components/CanvasBoard.tsx`
+- `apps/web/src/components/CanvasBoard.test.tsx`
+- `apps/web/src/components/CommandPalette.tsx`
+- `apps/web/src/components/ElementsPanel.tsx`
+- `apps/web/src/components/WorkspaceHome.tsx`
+- `apps/web/src/lib/board.ts`
+- `apps/web/src/lib/board.test.ts`
+- `apps/web/src/lib/canvasClipboard.ts`
+- `apps/web/src/lib/editorCommands.ts`
+- `apps/web/src/lib/editorCommands.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/supabase.ts`
+- `apps/web/src/styles.css`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/public/sw.js`
+
+The server files and AI tests from the V3.5.1 section below remain part of the combined release package.
+
+## Update 2026-09-12 — V3.5.1 Shared AI Reliability
+
+### Implemented
+
+- Fixed the cross-account AI failure mode shown on mobile. The request had already passed Supabase auth and reached Gemini; the failure sequence was upstream `503`, timeout and a final unavailable-model `404`, not a Google OAuth or browser CORS failure.
+- Added bounded transient retries with exponential backoff and jitter for `408`, `429`, `5xx`, network failures and timeouts. A model is retried before fallback, while `403`/other client errors and safety blocks still stop immediately.
+- Changed provider cooldown semantics: `404` is cached for five minutes, `429` honors shared-project `Retry-After`, and one `503` no longer disables the model for the next user's request.
+- Added `AiScheduler`, a process-local FIFO capacity gate. The API runs at most two AI tasks concurrently, at most one active task per account, at most two queued tasks per account and 20 queued tasks globally. A full/expired queue returns retryable `429 AI_BUSY` instead of hanging.
+- Added a 120-second bounded fallback deadline and reserves time for later models so early slow models cannot consume the entire chain. Production values are configurable without code changes.
+- Replaced long model-by-model browser errors with typed API errors and concise Vietnamese/English guidance for shared capacity, queue saturation, invalid model configuration and expired sessions.
+- Extended `/api/health` with safe release/config diagnostics (`release`, `aiConfigured`, `aiModelCount`, `aiCapacity`) and changed the visible web badge to `V3.5.1`. No credential, document text or provider body is exposed.
+- Bumped the PWA shell cache to V3.5.1 and disabled HTTP-cache reuse for service-worker update checks so installed clients receive the hotfix instead of remaining on the V3.5 bundle.
+- Added the officially listed `gemini-2.5-flash-lite` as an explicit final fallback in examples. No paid provider, alternate key, demo output or automatic billing path was added.
+
+### Architecture and deployment
+
+- `apps/server/src/gemini.ts` owns provider retry/fallback/cooldown behavior; `apps/server/src/aiScheduler.ts` owns cross-user process capacity and queue fairness. All three AI routes pass through the scheduler.
+- `apps/web/src/lib/api.ts` preserves safe error metadata; `apps/web/src/lib/aiErrors.ts` maps it to localized UI copy without dumping diagnostic chains on small screens.
+- New server configuration: `GEMINI_RETRIES_PER_MODEL`, `GEMINI_TOTAL_TIMEOUT_MS`, `GEMINI_RETRY_BASE_MS`, `AI_MAX_CONCURRENT`, `AI_MAX_QUEUE`, `AI_MAX_QUEUE_PER_USER`, and `AI_QUEUE_TIMEOUT_MS`. Defaults are production-safe and mirrored in `.env.example`/`render.yaml`.
+- No Supabase migration is required. Redeploy `mindcanvas-api` first, verify `/api/health` reports release `3.5.1` and `aiConfigured=true`, then redeploy `mindcanvas-web` and accept the PWA update.
+- Local verification passed frontend/server TypeScript and production builds, 86 frontend tests and 22 backend tests (108 total). Tests cover retry/backoff, fallback, cooldown isolation, queue fairness/capacity and localized error mapping. Live Gemini quota, Render concurrency, Supabase sessions and two physical accounts still require post-deploy QA with production credentials.
+- The hotfix improves transient reliability but cannot make one free Gemini project quota unlimited. Sustained `AI_UNAVAILABLE` across users still requires checking project quota/capacity rather than adding browser-side keys.
+
+### Changed files
+
+- `.env.example`
+- `render.yaml`
+- `apps/server/src/aiScheduler.ts`
+- `apps/server/src/config.ts`
+- `apps/server/src/gemini.ts`
+- `apps/server/src/providers.ts`
+- `apps/server/src/flashcards.ts`
+- `apps/server/src/selection.ts`
+- `apps/server/src/index.ts`
+- `apps/server/tests/aiScheduler.test.ts`
+- `apps/server/tests/gemini.test.ts`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/public/sw.js`
+- `apps/web/src/components/AiPanel.tsx`
+- `apps/web/src/components/AiSelectionPanel.tsx`
+- `apps/web/src/components/FlashcardsPage.tsx`
+- `apps/web/src/lib/api.ts`
+- `apps/web/src/lib/aiErrors.ts`
+- `apps/web/src/lib/aiErrors.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/pwa.ts`
+- `apps/web/src/styles.css`
+- `README.md`
+- `DEPLOY_V1_VI.md`
+- `V3_5_PWA_EXPORT_LAYERS_VI.md`
+- `V3_5_1_SHARED_AI_RELIABILITY_VI.md`
+- `PROJECT_HANDOFF.md`
+
+## Update 2026-09-12 — V3.5 Offline PWA & Export/Layers
 
 ### Implemented
 

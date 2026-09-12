@@ -17,7 +17,7 @@ export function registerMindCanvasServiceWorker() {
     window.location.reload();
   });
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/sw.js").then(registration => {
+    void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(registration => {
       const announce = () => window.dispatchEvent(new CustomEvent("mindcanvas:pwa-update", { detail: registration }));
       if (registration.waiting && navigator.serviceWorker.controller) announce();
       registration.addEventListener("updatefound", () => {

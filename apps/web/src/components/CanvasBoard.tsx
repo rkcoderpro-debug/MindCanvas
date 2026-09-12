@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, Bold, Circle, Copy, FileText, Hand, Highlighter, Italic, List, ListChecks, Magnet, MousePointer2, PaintBucket, PenLine, Plus, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Network, X } from "lucide-react";
-import type { BoardState, CanvasBackground as CanvasBackgroundType, ToolMode, Vec2 } from "@mindcanvas/shared";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Network, X } from "lucide-react";
+import type { BoardState, CanvasBackground as CanvasBackgroundType, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applySelectionAi, arrangeMindMap, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveLayer, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, selectionBounds, setElementFlags, smartSnapMoveSelection, ungroupSelection, type SnapGuide } from "../lib/editorCommands";
+import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveLayer, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateSelection, selectionBounds, setElementFlags, smartSnapMoveSelection, ungroupSelection, type ResizeHandle, type SnapGuide } from "../lib/editorCommands";
 import LayerStack from "./LayerStack";
 import ElementsPanel from "./ElementsPanel";
 import CanvasNavigator from "./CanvasNavigator";
@@ -13,14 +13,110 @@ import { nodeHeight } from "../lib/mindMapLayout";
 import CanvasBackground, { BACKGROUND_OPTIONS } from "./CanvasBackground";
 import AiSelectionPanel from "./AiSelectionPanel";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
-import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection } from "../lib/canvasClipboard";
+import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipboardImage } from "../lib/canvasClipboard";
 import { getDocumentSource } from "../lib/supabase";
 import type { SelectionAiResult } from "../lib/api";
+import Dialog from "./Dialog";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean };
-type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number };
+type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
+const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+const DEFAULT_CROP: CanvasCrop = { top: 0, right: 0, bottom: 0, left: 0 };
+const RESIZE_HANDLES: Array<{ id: ResizeHandle; x: "left" | "center" | "right"; y: "top" | "center" | "bottom" }> = [
+  { id: "nw", x: "left", y: "top" }, { id: "n", x: "center", y: "top" }, { id: "ne", x: "right", y: "top" },
+  { id: "e", x: "right", y: "center" }, { id: "se", x: "right", y: "bottom" }, { id: "s", x: "center", y: "bottom" },
+  { id: "sw", x: "left", y: "bottom" }, { id: "w", x: "left", y: "center" },
+];
+
+function mediaKindFor(type: string, name: string): CanvasMediaKind | null {
+  if (type.startsWith("image/")) return "image";
+  if (type.startsWith("video/")) return "video";
+  if (type.startsWith("audio/")) return "audio";
+  const extension = name.toLocaleLowerCase().split(".").at(-1) ?? "";
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes(extension)) return "image";
+  if (["mp4", "webm", "mov", "m4v", "ogv", "avi"].includes(extension)) return "video";
+  if (["mp3", "wav", "ogg", "oga", "m4a", "aac", "webm"].includes(extension)) return "audio";
+  return null;
+}
+
+function readBlobAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not read media file."));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read media file."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function intrinsicMediaSize(kind: CanvasMediaKind, src: string): Promise<{ width: number; height: number }> {
+  const fallback = kind === "audio" ? { width: 360, height: 86 } : { width: 16, height: 9 };
+  if (kind === "audio") return Promise.resolve(fallback);
+  return new Promise(resolve => {
+    if (kind === "image") {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth || fallback.width, height: image.naturalHeight || fallback.height });
+      image.onerror = () => resolve(fallback);
+      image.src = src;
+      return;
+    }
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => resolve({ width: video.videoWidth || fallback.width, height: video.videoHeight || fallback.height });
+    video.onerror = () => resolve(fallback);
+    video.src = src;
+    video.load();
+  });
+}
+
+function mediaFrameSize(kind: CanvasMediaKind, intrinsic: { width: number; height: number }) {
+  if (kind === "audio") return { width: 360, height: 112 };
+  const aspect = intrinsic.width > 0 && intrinsic.height > 0 ? intrinsic.width / intrinsic.height : 16 / 9;
+  const maxWidth = 400, maxHeight = 270;
+  let width = Math.min(maxWidth, Math.max(180, intrinsic.width || maxWidth));
+  let height = width / aspect;
+  if (height > maxHeight) { height = maxHeight; width = height * aspect; }
+  return { width: Math.max(160, Math.round(width)), height: Math.max(100, Math.round(height + 30)) };
+}
+
+function normalizeEmbedUrl(raw: string): { kind: CanvasEmbedKind; url: string } | null {
+  const candidate = raw.trim();
+  if (!candidate) return null;
+  let parsed: URL;
+  try { parsed = new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`); }
+  catch { return null; }
+  if (!/^https?:$/.test(parsed.protocol)) return null;
+  const host = parsed.hostname.toLocaleLowerCase().replace(/^www\./, "");
+  const isYouTube = host === "youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com";
+  if (isYouTube) {
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const id = host === "youtu.be" ? parts[0] : parsed.searchParams.get("v") ?? (parts[0] && ["embed", "shorts", "live", "v"].includes(parts[0]) ? parts[1] : undefined);
+    if (id && /^[A-Za-z0-9_-]{6,20}$/.test(id)) return { kind: "youtube", url: `https://www.youtube.com/embed/${id}?rel=0` };
+  }
+  if (/\.(?:mp4|webm|ogg|ogv|m4v|mov)(?:$|[?#])/i.test(parsed.pathname + parsed.search)) return { kind: "video", url: parsed.toString() };
+  return { kind: "web", url: parsed.toString() };
+}
+
+function embedFrameSize(kind: CanvasEmbedKind) { return kind === "video" ? { width: 480, height: 310 } : { width: 480, height: 340 }; }
+
+function cropStyle(crop?: CanvasCrop) {
+  const value = { ...DEFAULT_CROP, ...crop }, width = Math.max(1, 100 - value.left - value.right), height = Math.max(1, 100 - value.top - value.bottom);
+  return { width: `${10000 / width}%`, height: `${10000 / height}%`, maxWidth: "none", maxHeight: "none", objectFit: "fill" as const, transform: `translate(-${value.left}%, -${value.top}%)` };
+}
+
+function mediaTrimStart(media: CanvasMedia) { return Number.isFinite(media.trimStart) && (media.trimStart ?? 0) > 0 ? media.trimStart! : 0; }
+function applyTrimStart(element: HTMLMediaElement, media: CanvasMedia) {
+  const start = mediaTrimStart(media);
+  if (start > 0 && Number.isFinite(element.duration) && element.duration >= start) element.currentTime = start;
+}
+function enforceTrimEnd(element: HTMLMediaElement, media: CanvasMedia) {
+  const end = media.trimEnd;
+  if (Number.isFinite(end) && end !== undefined && end > mediaTrimStart(media) && element.currentTime >= end) {
+    element.pause(); element.currentTime = mediaTrimStart(media);
+  }
+}
+
 const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "select", icon: MousePointer2, key: "V" }, { id: "hand", icon: Hand, key: "H" },
   { id: "text", icon: Type, key: "T" }, { id: "pen", icon: PenLine, key: "P" },
@@ -31,6 +127,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
+  const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>());
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
   const selected = selections.at(-1) ?? null;
@@ -42,6 +139,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
+  const [mediaError, setMediaError] = useState(""), [isRecording, setIsRecording] = useState(false), [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
@@ -50,14 +149,82 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const selectedEl = selected && selections.length === 1 ? b[selected.kind].find(el => el.id === selected.id) : null;
   const selectedStudyText = selectionToStudyText(b, selections);
   const hidden = hiddenNodes(b);
-  const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
+  const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.media.filter(e => e.hidden).map(e => e.id), ...b.embeds.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
   const isLocked = (s: Selection) => s.kind !== "edges" && !!b[s.kind].find(e => e.id === s.id && "locked" in e && e.locked);
   useEffect(() => { setInk(current => current === previousThemeInk.current ? palette.ink : current); previousThemeInk.current = palette.ink; }, [palette.ink]);
   useEffect(() => { const ids = new Set(orderedElements(board).map(s => s.id)); if (!editing && selections.some(s => !ids.has(s.id))) setSelections(selections.filter(s => ids.has(s.id))); }, [board, editing, selections]);
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = window.setInterval(() => setRecordingSeconds(seconds => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [isRecording]);
+  useEffect(() => () => {
+    recorder.current?.stop();
+    recorderStream.current?.getTracks().forEach(track => track.stop());
+  }, []);
   const interactive = tool === "select" || tool === "connector";
   const point = (clientX: number, clientY: number, base = board): Vec2 => {
     const rect = svg.current!.getBoundingClientRect();
     return { x: (clientX - rect.left - base.viewport.x) / base.viewport.scale, y: (clientY - rect.top - base.viewport.y) / base.viewport.scale };
+  };
+  const addMediaBlobs = async (items: Array<{ blob: Blob; name: string; kind?: CanvasMediaKind }>) => {
+    const additions: CanvasMedia[] = [];
+    const rect = svg.current?.getBoundingClientRect();
+    const center = rect ? point(rect.left + rect.width / 2, rect.top + rect.height / 2) : { x: 240, y: 180 };
+    for (const [index, item] of items.entries()) {
+      if (item.blob.size > MAX_MEDIA_BYTES) { setMediaError(t("mediaFileTooLarge")); continue; }
+      const kind = item.kind ?? mediaKindFor(item.blob.type, item.name);
+      if (!kind) continue;
+      const fallbackMime = kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/webm";
+      const sourceBlob = item.blob.type ? item.blob : new Blob([item.blob], { type: fallbackMime });
+      try {
+        const src = await readBlobAsDataUrl(sourceBlob), intrinsic = await intrinsicMediaSize(kind, src), size = mediaFrameSize(kind, intrinsic);
+        additions.push({ id: crypto.randomUUID(), kind, src, name: item.name || t(kind), mimeType: sourceBlob.type || fallbackMime,
+          x: center.x - size.width / 2 + index * 28, y: center.y - size.height / 2 + index * 28, width: size.width, height: size.height });
+      } catch { setMediaError(t("error")); }
+    }
+    if (!additions.length) return;
+    onChange({ ...board, media: [...board.media, ...additions] });
+    setTool("select"); setSelections(additions.map(media => ({ kind: "media" as const, id: media.id })));
+  };
+  const addMediaFiles = (files: File[]) => { void addMediaBlobs(files.map(file => ({ blob: file, name: file.name }))); };
+  const addClipboardImage = async () => {
+    const blob = await readClipboardImage();
+    if (!blob) { setMediaError(t("clipboardImageUnavailable")); return; }
+    void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]);
+  };
+  const insertEmbed = () => {
+    const normalized = normalizeEmbedUrl(embedUrl);
+    if (!normalized) { setMediaError(t("error")); return; }
+    const rect = svg.current?.getBoundingClientRect();
+    const center = rect ? point(rect.left + rect.width / 2, rect.top + rect.height / 2) : { x: 240, y: 180 };
+    const size = embedFrameSize(normalized.kind);
+    const embed: CanvasEmbed = { id: crypto.randomUUID(), ...normalized, title: embedTitle.trim() || undefined,
+      x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height };
+    onChange({ ...board, embeds: [...board.embeds, embed] });
+    setEmbedOpen(false); setEmbedUrl(""); setEmbedTitle(""); setMediaError(""); setTool("select"); setSelected({ kind: "embeds", id: embed.id });
+  };
+  const stopRecording = () => { recorder.current?.stop(); setIsRecording(false); setRecordingSeconds(0); };
+  const startRecording = async () => {
+    setMediaError("");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { setMediaError(t("recordingUnsupported")); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const formats = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg", "audio/mp4"];
+      const mimeType = formats.find(format => typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(format));
+      const nextRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined), chunks: Blob[] = [];
+      recorder.current = nextRecorder; recorderStream.current = stream; recordingChunks.current = chunks;
+      nextRecorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      nextRecorder.onerror = () => { setMediaError(t("error")); setIsRecording(false); };
+      nextRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: nextRecorder.mimeType || mimeType || "audio/webm" });
+        stream.getTracks().forEach(track => track.stop()); recorder.current = null; recorderStream.current = null;
+        if (blob.size) void addMediaBlobs([{ blob, name: `${t("audio")}-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`, kind: "audio" }]);
+      };
+      nextRecorder.start(); setRecordingSeconds(0); setIsRecording(true);
+    } catch (error) {
+      setMediaError(error instanceof DOMException && error.name === "NotAllowedError" ? t("recordingPermissionDenied") : t("recordingUnsupported"));
+    }
   };
   const edit = (s: Selection, fresh?: BoardState) => {
     if (s.kind !== "texts" && s.kind !== "nodes") return;
@@ -149,7 +316,11 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       setSelections(expandGroups(g.base, [...(g.selections ?? []), ...found]));
       return;
     }
-    if (g.mode === "resize") { const r = selectionBounds(g.base, g.selections ?? [g.selection!])!; next = resizeSelection(g.base, g.selections ?? [g.selection!], r.width + dx, r.height + dy); }
+    if (g.mode === "resize") {
+      const selections = g.selections ?? [g.selection!];
+      if (g.resizeHandle) next = resizeSelectionFromHandle(g.base, selections, g.resizeHandle, dx, dy);
+      else { const r = selectionBounds(g.base, selections)!; next = resizeSelection(g.base, selections, r.width + dx, r.height + dy); }
+    }
     if (g.mode === "rotate" && g.center !== undefined && g.startAngle !== undefined) { const angle = Math.atan2(p.y - g.center.y, p.x - g.center.x) * 180 / Math.PI; next = rotateSelection(g.base, g.selections ?? [g.selection!], angle - g.startAngle); }
     if (g.mode === "pan") next = { ...g.base, viewport: { ...g.base.viewport, x: g.base.viewport.x + e.clientX - g.screen.x, y: g.base.viewport.y + e.clientY - g.screen.y } };
     if (g.mode === "draw") {
@@ -207,7 +378,12 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   };
   const duplicate = () => { if (!selected) return; const next = duplicateSelection(board, selections); setSelections(next.selection); onChange(next.board); };
   const copy = async () => { if (!selections.length) return; await copyCanvasSelection(board, selections); setHasCopy(true); };
-  const paste = async () => { const content = await readCanvasSelection(); if (!content) return; const next = pasteSelection(board, content.board, content.selection, content.offset); setSelections(next.selection); onChange(next.board); };
+  const paste = async () => {
+    const content = await readCanvasSelection();
+    if (content) { const next = pasteSelection(board, content.board, content.selection, content.offset); setSelections(next.selection); onChange(next.board); return; }
+    const image = await readClipboardImage();
+    if (image) void addMediaBlobs([{ blob: image, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]);
+  };
   const remove = () => { if (!selected) return; onChange(removeSelection(board, selections)); setSelected(null); };
   const relative = (sibling: boolean) => { if (selected?.kind !== "nodes" || selections.length !== 1) return; const next = addRelativeNode(board, selected.id, sibling, t("newNode")); if (next) { setTool("select"); edit(next.selection, next.board); } };
   const patch = (value: Record<string, unknown>) => { if (selected) onChange({ ...board, [selected.kind]: board[selected.kind].map(el => el.id === selected.id ? { ...el, ...value } : el) }); };
@@ -241,7 +417,6 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); onRedo(); return; }
       if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); duplicate(); return; }
       if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); void copy(); return; }
-      if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); void paste(); return; }
       if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setSelections(orderedElements(board).filter(s => !hidden.has(s.id))); return; }
       if (mod && e.key.toLowerCase() === "g") { e.preventDefault(); onChange(e.shiftKey ? ungroupSelection(board, selections) : groupSelection(board, selections)); return; }
       if (mod && ["[", "]"].includes(e.key)) { e.preventDefault(); onChange(reorderSelection(board, selections, e.key === "]" ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward"))); return; }
@@ -276,17 +451,47 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   }, [board, onChange]);
 
   const editBounds = editing ? elementBounds(b, editing.selection) : null;
-  const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", edges: "connector" };
+  const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", media: "media", embeds: "embed", edges: "connector" };
   const backgroundLabel: Record<CanvasBackgroundType, MessageKey> = { dots: "backgroundDots", grid: "backgroundGrid", ruled: "backgroundRuled", graph: "backgroundGraph", isometric: "backgroundIsometric", plain: "backgroundPlain" };
   const selectedColor = selectedEl && "color" in selectedEl ? selectedEl.color ?? palette.fill : palette.ink;
+  const selectedMedia = selected?.kind === "media" && selectedEl && "name" in selectedEl ? selectedEl : null;
+  const selectedRotation = selectedEl && "rotation" in selectedEl ? selectedEl.rotation ?? 0 : 0;
+  const selectedOpacity = selectedEl && "opacity" in selectedEl && typeof selectedEl.opacity === "number" ? clamp(selectedEl.opacity, 0, 1) : 1;
+  const updateCrop = (edge: keyof CanvasCrop, raw: number) => {
+    if (!selectedMedia || !Number.isFinite(raw)) return;
+    const crop = { ...DEFAULT_CROP, ...selectedMedia.crop, [edge]: clamp(raw, 0, 90) };
+    if (crop.left + crop.right >= 100) crop[edge === "left" || edge === "right" ? edge : "left"] = Math.min(crop[edge === "left" || edge === "right" ? edge : "left"], 99 - (edge === "left" || edge === "right" ? (edge === "left" ? crop.right : crop.left) : crop.left));
+    if (crop.top + crop.bottom >= 100) crop[edge === "top" || edge === "bottom" ? edge : "top"] = Math.min(crop[edge === "top" || edge === "bottom" ? edge : "top"], 99 - (edge === "top" || edge === "bottom" ? (edge === "top" ? crop.bottom : crop.top) : crop.top));
+    patch({ crop });
+  };
+  const updateTrim = (key: "trimStart" | "trimEnd", raw: number | undefined) => {
+    if (!selectedMedia || (raw !== undefined && (!Number.isFinite(raw) || raw < 0))) return;
+    let value = raw;
+    if (value !== undefined && key === "trimStart" && selectedMedia.trimEnd !== undefined && value >= selectedMedia.trimEnd) value = Math.max(0, selectedMedia.trimEnd - .1);
+    if (value !== undefined && key === "trimEnd" && selectedMedia.trimStart !== undefined && value <= selectedMedia.trimStart) value = selectedMedia.trimStart + .1;
+    patch({ [key]: value });
+  };
   return <div className="editor-layout">
-    <div className="editor-frame">
+    <div className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
+      const target = event.target as HTMLElement;
+      if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
+      const item = [...event.clipboardData.items].find(entry => entry.type.startsWith("image/"));
+      const blob = item?.getAsFile();
+      if (blob) { event.preventDefault(); void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]); }
+      else void paste();
+    }}>
       <div className="drawing-toolbar" role="toolbar" aria-label={t("properties")}>{tools.map(({ id, icon: Icon, key }) =>
         <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
+        <button aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={() => { finishEdit(); mediaInput.current?.click(); }}><ImagePlus size={19}/></button>
+        <button aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
+        <button aria-label={t("pasteImage")} title={t("pasteImageHint")} onClick={() => void addClipboardImage()}><ClipboardPaste size={18}/></button>
+        <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} aria-label={t(isRecording ? "stopRecording" : "recordAudio")} title={t(isRecording ? "stopRecording" : "recordAudio")} onClick={() => isRecording ? stopRecording() : void startRecording()}>{isRecording ? <Square size={17}/> : <Mic size={19}/>}</button>
+        {isRecording && <span className="recording-time" role="status">{t("recording", { seconds: recordingSeconds })}</span>}
         <button className={snap ? "selected" : ""} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
         <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
         <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={selectedStudyText ? t("askAiSelection") : t("selectTextForAi")} disabled={!selectedStudyText || !canUseAi} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></div>
+      <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => touchEndCapture(e)} onPointerCancelCapture={e => touchEndCapture(e, true)}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
@@ -294,7 +499,43 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="var(--connector)"/></marker></defs>
         <g transform={`translate(${b.viewport.x} ${b.viewport.y}) scale(${b.viewport.scale})`}>
           <LayerStack board={b} interactive={interactive && !space}>
-          {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
+          {b.embeds.filter(embed => !hiddenElements.has(embed.id)).map(embed => {
+            const embedSelection = { kind: "embeds" as const, id: embed.id };
+            const selectEmbed = (event: ReactPointerEvent) => {
+              if (event.target instanceof HTMLIFrameElement || event.target instanceof HTMLMediaElement) { event.stopPropagation(); return; }
+              selectElement(event, embedSelection);
+            };
+            return <g key={embed.id} data-element={embed.id} opacity={embed.opacity ?? 1} transform={`rotate(${embed.rotation ?? 0} ${embed.x + embed.width / 2} ${embed.y + embed.height / 2})`} onPointerDown={selectEmbed}>
+              <foreignObject x={embed.x} y={embed.y} width={embed.width} height={embed.height} pointerEvents={interactive && !space ? "auto" : "none"} onPointerDown={selectEmbed}>
+                <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-embed ${embed.kind}`} aria-label={`${t("embed")}: ${embed.title || embed.url}`}>
+                  <div className="canvas-embed-header" onPointerDown={selectEmbed}><Globe2 size={14}/><span title={embed.url}>{embed.title || (embed.kind === "youtube" ? t("youtube") : embed.kind === "video" ? t("video") : t("webPage"))}</span></div>
+                  <div className="canvas-embed-body" onPointerDown={event => event.stopPropagation()}>
+                    {embed.kind === "video" ? <video src={embed.url} controls playsInline preload="metadata" aria-label={embed.title || embed.url}/> : <iframe src={embed.url} title={embed.title || embed.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
+                  </div>
+                </div>
+              </foreignObject>
+            </g>;
+          })}
+          {b.media.filter(media => !hiddenElements.has(media.id)).map(media => {
+            const mediaSelection = { kind: "media" as const, id: media.id };
+            const selectMedia = (event: ReactPointerEvent) => {
+              if (event.target instanceof HTMLMediaElement) { event.stopPropagation(); return; }
+              selectElement(event, mediaSelection);
+            };
+            return <g key={media.id} data-element={media.id} opacity={media.opacity ?? 1} transform={`rotate(${media.rotation ?? 0} ${media.x + media.width / 2} ${media.y + media.height / 2})`} onPointerDown={selectMedia}>
+              <foreignObject x={media.x} y={media.y} width={media.width} height={media.height} pointerEvents={interactive && !space ? "auto" : "none"} onPointerDown={selectMedia}>
+                <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-media ${media.kind}`} aria-label={`${t(media.kind)}: ${media.name}`}>
+                  <div className="canvas-media-frame">
+                    {media.kind === "image" && <div className="canvas-media-visual"><img src={media.src} alt={media.name} draggable={false} style={cropStyle(media.crop)}/></div>} 
+                    {media.kind === "video" && <div className="canvas-media-visual"><video src={media.src} controls preload="metadata" playsInline onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name} style={cropStyle(media.crop)}/></div>} 
+                    {media.kind === "audio" && <><AudioLines size={26} aria-hidden="true"/><audio src={media.src} controls preload="metadata" onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name}/></>}
+                  </div>
+                  <div className="canvas-media-name" title={media.name}>{media.name}</div>
+                </div>
+              </foreignObject>
+            </g>;
+          })}
+          {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} opacity={s.opacity ?? 1} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
             {s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="var(--element-stroke)"/> : <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="var(--element-stroke)"/>}</g>)}
           {b.drawings.filter(p => !hiddenElements.has(p.id)).map(p => { const r = elementBounds(b, { kind: "drawings", id: p.id })!; return <g key={p.id} data-element={p.id} transform={`rotate(${p.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "drawings", id: p.id })}>
             <path d={pathData(p.points)} fill="none" stroke={p.color} strokeWidth={p.width} opacity={p.opacity} strokeLinecap="round" strokeLinejoin="round"/>
@@ -304,13 +545,13 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
             const s = [...b.nodes, ...b.shapes].find(n => n.id === e.source), d = [...b.nodes, ...b.shapes].find(n => n.id === e.target); if (!s || !d) return null;
             const x1 = s.x + s.width, y1 = s.y + s.height / 2, x2 = d.x, y2 = d.y + d.height / 2, c = Math.max(40, Math.abs(x2 - x1) * .45);
             const path = `M${x1},${y1} C${x1+c},${y1} ${x2-c},${y2} ${x2},${y2}`;
-            return <g key={e.id} data-element={e.id} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
+            return <g key={e.id} data-element={e.id} opacity={e.opacity ?? 1} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
           })}
-          {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; return <g key={text.id} data-element={text.id} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "texts", id: text.id })}
+          {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; return <g key={text.id} data-element={text.id} opacity={text.opacity ?? 1} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "texts", id: text.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}>
             <foreignObject x={r.x} y={r.y} width={r.width} height={r.height}><div className="canvas-copy" style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color), backgroundColor: text.backgroundColor, fontWeight: text.bold ? 700 : 400, fontStyle: text.italic ? "italic" : "normal", textDecoration: text.underline ? "underline" : "none", textAlign: text.textAlign ?? "left" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
           </g>; })}
-          {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => <g key={n.id} data-element={n.id} className="mind-node" transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, { kind: "nodes", id: n.id })}
+          {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => <g key={n.id} data-element={n.id} className="mind-node" opacity={n.opacity ?? 1} transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, { kind: "nodes", id: n.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}>
             <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "var(--node-fill)"} stroke={dropTarget === n.id ? "var(--accent)" : "var(--element-stroke)"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
             <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)}><div className="node-copy" style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
@@ -324,8 +565,14 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
           {selections.length > 1 && selections.map(s => { const r = elementBounds(b, s); return r && <rect key={s.id} {...r} fill="none" stroke="var(--accent)" strokeDasharray="4 3" pointerEvents="none"/>; })}
           {bounds && selected && !editing && tool === "select" && <g className="selection-box">
             <rect x={bounds.x - 3} y={bounds.y - 3} width={bounds.width + 6} height={bounds.height + 6} fill="none" stroke="var(--accent)" strokeWidth={1.5 / b.viewport.scale} pointerEvents="none"/>
-            {selected.kind !== "edges" && <rect className="resize-handle" x={bounds.x + bounds.width - 4 / b.viewport.scale} y={bounds.y + bounds.height - 4 / b.viewport.scale} width={8 / b.viewport.scale} height={8 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent)" strokeWidth={1 / b.viewport.scale}
-              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "resize", start: point(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board }; }}/>} {selected.kind !== "edges" && <g className="rotation-handle" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); const p = point(e.clientX, e.clientY); const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }; svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "rotate", start: p, screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board, center, startAngle: Math.atan2(p.y - center.y, p.x - center.x) * 180 / Math.PI }; }}><line x1={bounds.x + bounds.width / 2} y1={bounds.y - 3} x2={bounds.x + bounds.width / 2} y2={bounds.y - 25} stroke="var(--accent-2)"/><circle cx={bounds.x + bounds.width / 2} cy={bounds.y - 30} r={6 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent-2)"/></g>}</g>}
+            {selected.kind !== "edges" && RESIZE_HANDLES.map(handle => {
+              const x = handle.x === "left" ? bounds.x : handle.x === "right" ? bounds.x + bounds.width : bounds.x + bounds.width / 2;
+              const y = handle.y === "top" ? bounds.y : handle.y === "bottom" ? bounds.y + bounds.height : bounds.y + bounds.height / 2;
+              return <rect key={handle.id} data-resize-handle={handle.id} className={`resize-handle resize-${handle.id}`} x={x - 4 / b.viewport.scale} y={y - 4 / b.viewport.scale} width={8 / b.viewport.scale} height={8 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent)" strokeWidth={1 / b.viewport.scale}
+                onPointerDown={e => { e.preventDefault(); e.stopPropagation(); svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "resize", start: point(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board, resizeHandle: handle.id }; }}/>;
+            })}
+            {selected.kind !== "edges" && <g className="rotation-handle" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); const p = point(e.clientX, e.clientY); const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }; svg.current?.setPointerCapture(e.pointerId); gesture.current = { mode: "rotate", start: p, screen: { x: e.clientX, y: e.clientY }, base: board, selection: selected, selections, pointer: e.pointerId, next: board, center, startAngle: Math.atan2(p.y - center.y, p.x - center.x) * 180 / Math.PI }; }}><line x1={bounds.x + bounds.width / 2} y1={bounds.y - 3} x2={bounds.x + bounds.width / 2} y2={bounds.y - 25} stroke="var(--accent-2)"/><circle cx={bounds.x + bounds.width / 2} cy={bounds.y - 30} r={6 / b.viewport.scale} fill="var(--surface-raised)" stroke="var(--accent-2)"/></g>}
+          </g>}
           {editing && editBounds && <foreignObject x={editBounds.x} y={editBounds.y} width={Math.max(editBounds.width, 120)} height={Math.max(editBounds.height, 100)}>
             <textarea className="inline-editor" autoFocus aria-label={t("editText")} placeholder={t("newText")} maxLength={10000}
               style={{ fontSize: selectedEl && "fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16, fontWeight: selectedEl && "bold" in selectedEl && selectedEl.bold ? 700 : 400, fontStyle: selectedEl && "italic" in selectedEl && selectedEl.italic ? "italic" : "normal", textDecoration: selectedEl && "underline" in selectedEl && selectedEl.underline ? "underline" : "none", textAlign: selectedEl && "textAlign" in selectedEl ? selectedEl.textAlign ?? "left" : "left" }}
@@ -335,6 +582,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         </g>
       </svg>
       {sourceError && <div className="canvas-inline-error" role="alert"><span>{sourceError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setSourceError("")}><X size={14}/></button></div>}
+      {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
       <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "pen" || tool === "highlighter" ? "drawHint" : "canvasHint")}</div>
       <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
       <button className="mobile-inspector-toggle" aria-label={t("properties")} aria-expanded={inspectorOpen} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
@@ -361,8 +609,13 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
           const v = clamp(e.target.valueAsNumber, -100000, 100000);
           onChange(k === "x" || k === "y" ? moveElement(board, selected!, k === "x" ? v - bounds.x : 0, k === "y" ? v - bounds.y : 0) : resizeElement(board, selected!, k === "width" ? v : bounds.width, k === "height" ? v : bounds.height));
         }}/></label>)}</div>}
-        {selected?.kind !== "edges" && <label>{t("color")}<input type="color" value={selectedColor} onChange={e => patch({ color: e.target.value })}/></label>}
+        {selected?.kind !== "edges" && <div className="rotation-control"><label>{t("rotation")}<input aria-label={t("rotation")} type="number" min="-3600" max="3600" step="1" value={Math.round(selectedRotation)} onChange={e => { if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) patch({ rotation: clamp(e.target.valueAsNumber, -3600, 3600) }); }}/></label><button type="button" className="secondary-button" onClick={() => patch({ rotation: 0 })}><RotateCcw size={14}/>{t("resetRotation")}</button></div>}
+        {selected?.kind !== "edges" && selected?.kind !== "media" && selected?.kind !== "embeds" && <label>{t("color")}<input type="color" value={selectedColor} onChange={e => patch({ color: e.target.value })}/></label>}
+        <div className="alpha-control"><label>{t("alpha")}<output>{Math.round(selectedOpacity * 100)}%</output><input aria-label={t("alpha")} type="range" min="0" max="1" step=".01" value={selectedOpacity} onChange={e => patch({ opacity: Number(e.target.value) })}/></label><button type="button" className="secondary-button" onClick={() => patch({ opacity: 1 })}><RotateCcw size={14}/>{t("resetAlpha")}</button></div>
         {selected?.kind === "edges" && <label>{t("label")}<input aria-label={t("label")} maxLength={500} value={"label" in selectedEl ? selectedEl.label ?? "" : ""} onChange={e => patch({ label: e.target.value || undefined })}/></label>}
+        {selectedMedia && <div className="media-inspector-card"><strong>{selectedMedia.name}</strong><small>{t(selectedMedia.kind)} · {selectedMedia.mimeType ?? "media"}</small></div>}
+        {selectedMedia && (selectedMedia.kind === "image" || selectedMedia.kind === "video") && <fieldset className="media-editor-fieldset"><legend>{t("crop")}</legend><div className="property-grid">{(["top", "right", "bottom", "left"] as const).map(edge => <label key={edge}>{t(`crop${edge[0].toUpperCase()}${edge.slice(1)}` as MessageKey)}<input type="number" min="0" max="90" step="1" value={Math.round((selectedMedia.crop?.[edge] ?? 0) * 10) / 10} onChange={e => { if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) updateCrop(edge, e.target.valueAsNumber); }}/></label>)}</div><button type="button" className="secondary-button" onClick={() => patch({ crop: undefined })}><RotateCcw size={14}/>{t("resetCrop")}</button></fieldset>}
+        {selectedMedia && (selectedMedia.kind === "audio" || selectedMedia.kind === "video") && <fieldset className="media-editor-fieldset"><legend>{t("trimStart")} / {t("trimEnd")}</legend><div className="property-grid"><label>{t("trimStart")}<input type="number" min="0" step="0.1" value={selectedMedia.trimStart ?? ""} onChange={e => updateTrim("trimStart", e.target.value === "" ? undefined : e.target.valueAsNumber)}/></label><label>{t("trimEnd")}<input type="number" min="0" step="0.1" value={selectedMedia.trimEnd ?? ""} onChange={e => updateTrim("trimEnd", e.target.value === "" ? undefined : e.target.valueAsNumber)}/></label></div><small>{t("trimHint")}</small><button type="button" className="secondary-button" onClick={() => patch({ trimStart: undefined, trimEnd: undefined })}><RotateCcw size={14}/>{t("resetTrim")}</button></fieldset>}
         {selected?.kind === "texts" && <><label>{t("fontSize")}<input type="number" min="8" max="200" value={"fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16} onChange={e => { if(e.target.value) patch({ fontSize: clamp(Number(e.target.value), 8, 200) }); }}/></label>
           <div className="text-format-toolbar" role="toolbar" aria-label={t("editText")}>
             <button aria-label={t("bold")} title={t("bold")} aria-pressed={"bold" in selectedEl && !!selectedEl.bold} className={"bold" in selectedEl && selectedEl.bold ? "active" : ""} onClick={() => patch({ bold: !("bold" in selectedEl && selectedEl.bold) })}><Bold size={16}/></button>
@@ -376,7 +629,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
           </div>
           <label>{t("textBackground")}<span className="color-with-clear"><input type="color" value={"backgroundColor" in selectedEl ? selectedEl.backgroundColor ?? palette.fill : palette.fill} onChange={e => patch({ backgroundColor: e.target.value })}/><button className="icon-button" aria-label={t("clearBackground")} title={t("clearBackground")} onClick={() => patch({ backgroundColor: undefined })}><X size={14}/></button></span></label>
         </>}
-        {selected?.kind === "drawings" && <><label>{t("stroke")}<input type="range" min="1" max="40" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label><label>{t("opacity")}<input type="range" min=".05" max="1" step=".05" value={"opacity" in selectedEl ? selectedEl.opacity : 1} onChange={e => patch({ opacity: Number(e.target.value) })}/></label></>}
+        {selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="40" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
         {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
         {selected?.kind === "nodes" && <button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button>}
         <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>
@@ -389,5 +642,11 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     </aside>
     {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
     {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
+    {embedOpen && <Dialog title={t("embedWeb")} onClose={() => setEmbedOpen(false)}><form onSubmit={event => { event.preventDefault(); insertEmbed(); }}>
+      <label>{t("embedUrl")}<input autoFocus required type="url" placeholder={t("embedPlaceholder")} value={embedUrl} onChange={event => setEmbedUrl(event.target.value)}/></label>
+      <label>{t("embedTitle")}<input maxLength={500} value={embedTitle} onChange={event => setEmbedTitle(event.target.value)}/></label>
+      <p className="dialog-hint">{t("embedHint")}</p>
+      <footer className="actions"><button type="button" onClick={() => setEmbedOpen(false)}>{t("cancel")}</button><button className="primary-button">{t("insertEmbed")}</button></footer>
+    </form></Dialog>}
   </div>;
 }

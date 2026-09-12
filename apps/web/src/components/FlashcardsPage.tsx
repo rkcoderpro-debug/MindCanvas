@@ -4,6 +4,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
 import { fetchBoard, readCache } from "../lib/projectStore";
 import { dueCards, type Flashcard, type FlashcardDeck, type FlashcardRating } from "../lib/flashcards";
+import { aiErrorMessage } from "../lib/aiErrors";
 import { useFlashcards } from "../hooks/useFlashcards";
 import { useLanguage } from "../lib/i18n";
 import { generateFlashcards, uploadPdf, type GeneratedFlashcard } from "../lib/api";
@@ -124,7 +125,7 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
       if (request.signal.aborted) return;
       if (result.provider === "demo" || !result.cards?.length || result.cards.length > 50) throw new Error(t("aiDemo"));
       setAiPreview({ title: result.title, provider: result.provider, model: result.model, sourceDocumentId: result.sourceDocumentId, cards: result.cards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) });
-    } catch (err) { if (!request.signal.aborted) setAiError(`${t("aiFlashcardError")} ${err instanceof Error ? err.message : ""}`.trim()); }
+    } catch (err) { if (!request.signal.aborted) setAiError(aiErrorMessage(err, t, "aiFlashcardError")); }
     finally { if (!request.signal.aborted) setAiBusy(false); }
   };
   const updateAiCard = (id: string, patch: Partial<AiPreviewCard>) => setAiPreview(current => current ? { ...current, cards: current.cards.map(card => card.id === id ? { ...card, ...patch } : card) } : current);

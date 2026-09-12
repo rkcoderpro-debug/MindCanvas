@@ -17,9 +17,33 @@ describe("Editable canvas model", () => {
   it("bounds legacy text and supports multiline", () => { const b = { ...board(), texts: [{ id: "t", x: 20, y: 40, width: 200, text: "one\ntwo" }] }; expect(elementBounds(b, { kind: "texts", id: "t" })?.height).toBeGreaterThan(40); });
   it("validates old file format and rejects corrupt geometry", () => { expect(parseBoard(board()).nodes).toHaveLength(2); expect(() => parseBoard({ ...board(), viewport: { x: 0, y: 0, scale: 0 } })).toThrow(); expect(() => parseBoard({ ...board(), nodes: [{ ...board().nodes[0], width: NaN }] })).toThrow(); expect(() => parseBoard({ ...board(), nodes: [board().nodes[0], board().nodes[0]] })).toThrow(); });
   it("validates backgrounds and rich-text properties without breaking legacy boards", () => {
-    const rich = { ...board(), background: "ruled" as const, texts: [{ id: "text", text: "Study", x: 10, y: 30, width: 200, bold: true, italic: true, underline: true, textAlign: "center" as const, backgroundColor: "#fff2cc" }] };
+    const rich = { ...board(), background: "ruled" as const, texts: [{ id: "text", text: "Study", x: 10, y: 30, width: 200, bold: true, italic: true, underline: true, textAlign: "center" as const, backgroundColor: "#fff2cc", opacity: .42 }] };
     expect(parseBoard(rich)).toMatchObject({ background: "ruled", texts: [{ bold: true, textAlign: "center" }] });
+    expect(parseBoard(rich).texts[0].opacity).toBe(.42);
     expect(() => parseBoard({ ...board(), background: "wallpaper" })).toThrow("Invalid canvas background");
+    expect(() => parseBoard({ ...board(), shapes: [{ id: "shape", kind: "rect", x: 0, y: 0, width: 40, height: 40, color: "#ffffff", opacity: 1.1 }] })).toThrow("Invalid opacity");
+  });
+  it("persists, moves, resizes and exports embedded media", () => {
+    const media = { id: "image", kind: "image" as const, src: "data:image/png;base64,iVBORw0KGgo=", name: "diagram.png", mimeType: "image/png", x: 20, y: 30, width: 240, height: 160, crop: { top: 5, right: 10, bottom: 15, left: 20 } };
+    const audio = { id: "audio", kind: "audio" as const, src: "data:audio/webm;base64,AA==", name: "voice.webm", x: 20, y: 220, width: 240, height: 100, trimStart: 2, trimEnd: 8 };
+    const embed = { id: "embed", kind: "youtube" as const, url: "https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0", title: "Study video", x: 300, y: 30, width: 480, height: 340 };
+    const b = { ...blankBoard(), media: [media, audio], embeds: [embed] };
+    expect(parseBoard(b).media).toEqual([media, audio]);
+    expect(parseBoard(b).embeds).toEqual([embed]);
+    expect(elementBounds(b, { kind: "media", id: "image" })).toMatchObject({ x: 20, y: 30, width: 240, height: 160 });
+    expect(moveElement(b, { kind: "media", id: "image" }, 10, 15).media[0]).toMatchObject({ x: 30, y: 45 });
+    expect(resizeElement(b, { kind: "media", id: "image" }, 320, 200).media[0]).toMatchObject({ width: 320, height: 200 });
+    expect(exportCanvasSvg(b)).toContain("data:image/png;base64");
+    expect(exportCanvasSvg(b)).toContain("media-crop-image");
+    expect(exportCanvasSvg(b)).toContain("Study video");
+    const legacy = { ...blankBoard() } as Record<string, unknown>;
+    delete legacy.media;
+    delete legacy.embeds;
+    expect(parseBoard(legacy).media).toEqual([]);
+    expect(parseBoard(legacy).embeds).toEqual([]);
+    expect(() => parseBoard({ ...b, media: [{ ...media, crop: { top: 80, right: 30, bottom: 30, left: 0 } }] })).toThrow("Invalid media crop");
+    expect(() => parseBoard({ ...b, media: [{ ...audio, trimStart: 9, trimEnd: 8 }] })).toThrow("Invalid media trim");
+    expect(() => parseBoard({ ...b, embeds: [{ ...embed, url: "javascript:alert(1)" }] })).toThrow("Invalid embed");
   });
   it("collapses descendants safely even with cycles", () => { const b = connect(connect(board(), "a", "b"), "b", "a"); b.nodes[0] = { ...b.nodes[0], collapsed: true } as typeof b.nodes[0]; expect([...hiddenNodes(b)]).toEqual(["b"]); });
   it("has full parity between Vietnamese and English UI dictionaries", () => { expect(Object.keys(vi).sort()).toEqual(Object.keys(en).sort()); expect(Object.values(vi).every(Boolean)).toBe(true); });
@@ -28,8 +52,9 @@ describe("Editable canvas model", () => {
     const svg = exportCanvasSvg(b); expect(svg).toContain("A &amp; B"); expect(svg).toContain("leads to"); expect(svg).toContain("mindcanvas-arrow"); expect(svg).toContain('viewBox=');
   });
   it("exports the selected paper style and rich text formatting", () => {
-    const svg = exportCanvasSvg({ ...blankBoard(), background: "graph", texts: [{ id: "t", text: "Key fact", x: 10, y: 40, width: 200, bold: true, textAlign: "right", backgroundColor: "#fff2cc" }] });
+    const svg = exportCanvasSvg({ ...blankBoard(), background: "graph", texts: [{ id: "t", text: "Key fact", x: 10, y: 40, width: 200, bold: true, textAlign: "right", backgroundColor: "#fff2cc", opacity: .35 }] });
     expect(svg).toContain('id="mindcanvas-bg"'); expect(svg).toContain('font-weight="700"'); expect(svg).toContain('text-anchor="end"'); expect(svg).toContain("#fff2cc");
+    expect(svg).toContain('opacity="0.35"');
   });
   it("exports wrapped node labels with a portable font and readable dark-node text", () => {
     const svg = exportCanvasSvg({ ...blankBoard(), nodes: [{ id: "long", label: "A long editable mind map label that must stay inside its node", x: 10, y: 20, width: 150, height: 90, color: "#172554", sourcePage: 8 }] });

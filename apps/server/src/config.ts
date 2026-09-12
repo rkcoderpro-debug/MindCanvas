@@ -12,9 +12,16 @@ const envSchema = z.object({
   EXPERIENTIAL_LABS_MODEL: z.string().default(""),
   GEMINI_BASE_URL: z.string().url().default("https://generativelanguage.googleapis.com"),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-3.6-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.8-flash"),
   GEMINI_MODELS: z.string().optional(),
   GEMINI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(25000),
+  GEMINI_RETRIES_PER_MODEL: z.coerce.number().int().min(0).max(3).default(1),
+  GEMINI_TOTAL_TIMEOUT_MS: z.coerce.number().int().min(10000).max(180000).default(120000),
+  GEMINI_RETRY_BASE_MS: z.coerce.number().int().min(100).max(10000).default(1000),
+  AI_MAX_CONCURRENT: z.coerce.number().int().min(1).max(8).default(2),
+  AI_MAX_QUEUE: z.coerce.number().int().min(1).max(100).default(20),
+  AI_MAX_QUEUE_PER_USER: z.coerce.number().int().min(1).max(10).default(2),
+  AI_QUEUE_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
   MAX_DOCUMENT_BYTES: z.coerce.number().default(10 * 1024 * 1024),
 });
 

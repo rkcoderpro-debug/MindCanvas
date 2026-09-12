@@ -81,7 +81,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileMenu ? "mobile-open" : ""}`}>
-      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.5</span></button>
+      <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span>MindCanvas<span className="beta">V3.7.1</span></button>
       <button className="mobile-menu-button icon-button" aria-label={t("mobileMenu")} aria-expanded={mobileMenu} onClick={() => setMobileMenu(value => !value)}><Menu size={21}/></button>
       <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">

@@ -8,7 +8,7 @@ let pasteCount = 0;
 
 function validSelection(board: BoardState, value: unknown): Selection[] {
   if (!Array.isArray(value) || value.length > 5000) return [];
-  const kinds = new Set(["nodes", "texts", "shapes", "drawings", "edges"]);
+  const kinds = new Set(["nodes", "texts", "shapes", "drawings", "media", "embeds", "edges"]);
   return value.flatMap(item => {
     if (!item || typeof item !== "object") return [];
     const candidate = item as Selection;
@@ -43,6 +43,20 @@ export async function readCanvasSelection() {
   if (!memory) return null;
   pasteCount += 1;
   return { board: structuredClone(memory.board), selection: structuredClone(memory.selection), offset: pasteCount * 24 };
+}
+
+/** Read the first raster image from the operating-system clipboard. Browsers
+ * only expose this after a user gesture and may deny it on insecure origins. */
+export async function readClipboardImage(): Promise<Blob | null> {
+  try {
+    if (!navigator.clipboard?.read) return null;
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find(value => value.startsWith("image/"));
+      if (type) return await item.getType(type);
+    }
+  } catch { /* Clipboard permission is optional. */ }
+  return null;
 }
 
 export function hasCanvasClipboard() { return !!memory; }

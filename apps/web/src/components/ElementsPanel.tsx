@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Circle, Eye, EyeOff, GripVertical, Lock, Network, PenLine, Search, Square, Type, Unlock } from "lucide-react";
+import { ArrowUpRight, AudioLines, Circle, Eye, EyeOff, Film, Globe2, GripVertical, Image, Lock, Network, PenLine, Search, Square, Type, Unlock } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import { orderedElements } from "../lib/editorCommands";
 import type { Selection } from "../lib/board";
 import { useLanguage, type MessageKey } from "../lib/i18n";
 
-const iconByKind = { nodes: Network, texts: Type, shapes: Square, drawings: PenLine, edges: ArrowUpRight } as const;
-const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", edges: "connector" };
+const iconByKind = { nodes: Network, texts: Type, shapes: Square, drawings: PenLine, media: Image, embeds: Globe2, edges: ArrowUpRight } as const;
+const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", media: "media", embeds: "embed", edges: "connector" };
 
 export default function ElementsPanel({ board, selections, hiddenElements, onSelect, onMove, onToggleHidden, onToggleLocked }: {
   board: BoardState;
@@ -25,7 +25,7 @@ export default function ElementsPanel({ board, selections, hiddenElements, onSel
   const entries = useMemo(() => orderedElements(board).reverse().flatMap(selection => {
     const element = board[selection.kind].find(item => item.id === selection.id);
     if (!element) return [];
-    const raw = ("label" in element ? element.label : "text" in element ? element.text : "") || t(labelKey[selection.kind]);
+    const raw = ("label" in element ? element.label : "text" in element ? element.text : selection.kind === "media" ? (element as { name?: string }).name : selection.kind === "embeds" ? (element as { title?: string; url?: string }).title || (element as { url?: string }).url : "") || t(labelKey[selection.kind]);
     const name = raw.replace(/\s+/g, " ").trim();
     return !normalized || `${name} ${t(labelKey[selection.kind])}`.toLocaleLowerCase().includes(normalized) ? [{ selection, element, name }] : [];
   }), [board, normalized, t]);
@@ -40,7 +40,7 @@ export default function ElementsPanel({ board, selections, hiddenElements, onSel
     <label className="element-search"><Search size={14}/><input aria-label={t("searchElements")} placeholder={t("searchElements")} value={query} onChange={event => setQuery(event.target.value)}/></label>
     <div className="layer-list" ref={list} role="listbox" aria-label={t("layers")}>
       {!entries.length ? <div className="element-list-empty">{normalized ? t("noElementsFound") : t("noElements")}</div> : entries.map(({ selection, element, name }) => {
-        const Icon = selection.kind === "shapes" && "kind" in element && element.kind === "ellipse" ? Circle : iconByKind[selection.kind];
+        const Icon = selection.kind === "shapes" && "kind" in element && element.kind === "ellipse" ? Circle : selection.kind === "media" && "kind" in element && element.kind === "video" ? Film : selection.kind === "media" && "kind" in element && element.kind === "audio" ? AudioLines : selection.kind === "embeds" && "kind" in element && element.kind === "video" ? Film : iconByKind[selection.kind];
         const selected = selections.some(item => item.id === selection.id);
         const hidden = hiddenElements.has(selection.id), directlyHidden = "hidden" in element && !!element.hidden;
         const locked = "locked" in element && !!element.locked;

@@ -1,11 +1,13 @@
 import type { BoardState, CanvasBackground, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
 import { layoutMindMap, nodeHeight } from "./mindMapLayout";
 
-export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "edges";
+export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "media" | "embeds" | "edges";
 export type Selection = { kind: ElementKind; id: string };
 export type Bounds = { x: number; y: number; width: number; height: number };
 export type ContextAiResult = { action: "summarize" | "explain" | "rewrite" | "expand"; title: string; text: string; ideas: string[] };
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_IMPORT_FILE_BYTES = 40 * 1024 * 1024;
+export const MAX_MEDIA_DATA_URL_LENGTH = 20 * 1024 * 1024;
 export const CANVAS_BACKGROUNDS: CanvasBackground[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 export const pathData = (points: Vec2[]) => points.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ") + (points.length === 1 ? " l0.01,0.01" : "");
@@ -107,7 +109,7 @@ const svgText = ({ lines, x, y, fontSize, lineHeight, anchor = "start", fill, we
   lines: string[]; x: number; y: number; fontSize: number; lineHeight: number; anchor?: "start" | "middle" | "end"; fill: string; weight?: number; style?: string; decoration?: string;
 }) => `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Inter,Arial,Helvetica,sans-serif" font-size="${fontSize}" font-weight="${weight}" font-style="${style}" text-decoration="${decoration}" fill="${fill}">${lines.map((line, index) => `<tspan x="${x}" dy="${index ? lineHeight : 0}">${xml(line || " ")}</tspan>`).join("")}</text>`;
 const exportOrder = (board: BoardState): Selection[] => {
-  const legacy = (["shapes", "drawings", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
+  const legacy = (["shapes", "drawings", "media", "embeds", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
   const byId = new Map(legacy.map(item => [item.id, item]));
   return [...new Set([...(board.layerOrder ?? []), ...legacy.map(item => item.id)])].flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
 };
@@ -126,7 +128,14 @@ const exportBounds = (board: BoardState): Bounds => {
 };
 const endpoint = (board: BoardState, id: string) => [...board.nodes, ...board.shapes].find(item => item.id === id);
 export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette = DEFAULT_EXPORT_PALETTE) {
-  const bounds = exportBounds(board), pad = 48, hidden = hiddenNodes(board), all = [...board.nodes, ...board.shapes, ...board.texts, ...board.drawings];
+  const bounds = exportBounds(board), pad = 48, hidden = hiddenNodes(board), all = [...board.nodes, ...board.shapes, ...board.texts, ...board.drawings, ...board.media, ...board.embeds];
+  const cropId = (id: string) => `media-crop-${id.replace(/[^a-z0-9_-]/gi, "_")}`;
+  const cropDefs = board.media.flatMap(media => {
+    const crop = media.crop;
+    if (!crop || !crop.top && !crop.right && !crop.bottom && !crop.left) return [];
+    const bound = elementBounds(board, { kind: "media", id: media.id });
+    return bound ? [`<clipPath id="${cropId(media.id)}"><rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}"/></clipPath>`] : [];
+  }).join("");
   const isHidden = (id: string) => hidden.has(id) || !!all.find(item => item.id === id && item.hidden);
   const body = exportOrder(board).map(selection => {
     if (isHidden(selection.id)) return "";
@@ -139,27 +148,44 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
       const labelWidth = labelLines.length ? Math.min(196, Math.max(...labelLines.map(line => textWidth(line, 13))) + 16) : 0;
       const labelHeight = labelLines.length * 18 + 6;
       const label = labelLines.length ? `<g class="connector-label"><rect x="${labelX - labelWidth / 2}" y="${labelY - 15}" width="${labelWidth}" height="${labelHeight}" rx="7" fill="${palette.canvas}" fill-opacity=".94"/>${svgText({ lines: labelLines, x: labelX, y: labelY, fontSize: 13, lineHeight: 18, anchor: "middle", fill: palette.muted })}</g>` : "";
-      return `<path d="${path}" fill="none" stroke="${palette.connector}" stroke-width="2" marker-end="url(#mindcanvas-arrow)"/>${label}`;
+      const opacity = edge.opacity === undefined ? "" : ` opacity="${clamp(edge.opacity, 0, 1)}"`;
+      return `<g${opacity}><path d="${path}" fill="none" stroke="${palette.connector}" stroke-width="2" marker-end="url(#mindcanvas-arrow)"/>${label}</g>`;
     }
     const item = board[selection.kind].find(entry => entry.id === selection.id) as any, bound = elementBounds(board, selection);
     if (!item || !bound) return "";
     const rotation = "rotation" in item && item.rotation ? ` transform="rotate(${item.rotation} ${bound.x + bound.width / 2} ${bound.y + bound.height / 2})"` : "";
-    if (selection.kind === "shapes") return item.kind === "rect" ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${rotation}/>` : `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${rotation}/>`;
+    const opacity = item.opacity === undefined ? "" : ` opacity="${clamp(item.opacity, 0, 1)}"`;
+    if (selection.kind === "media") {
+      if (item.kind === "image") {
+        const crop = item.crop, cropWidth = crop ? Math.max(1, 100 - crop.left - crop.right) : 100, cropHeight = crop ? Math.max(1, 100 - crop.top - crop.bottom) : 100;
+        const image = crop && (crop.top || crop.right || crop.bottom || crop.left)
+          ? `<image href="${xml(item.src)}" x="${bound.x - bound.width * crop.left / cropWidth}" y="${bound.y - bound.height * crop.top / cropHeight}" width="${bound.width * 100 / cropWidth}" height="${bound.height * 100 / cropHeight}" preserveAspectRatio="none" clip-path="url(#${cropId(item.id)})"/>`
+          : `<image href="${xml(item.src)}" x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" preserveAspectRatio="xMidYMid meet"/>`;
+        return `<g${rotation}${opacity}>${image}<rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" fill="none" stroke="${palette.elementStroke}" rx="10"/></g>`;
+      }
+      const title = item.kind === "video" ? "Video" : "Audio";
+      return `<g${rotation}${opacity}><rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" rx="10" fill="${palette.surface}" stroke="${palette.elementStroke}"/><text x="${bound.x + bound.width / 2}" y="${bound.y + bound.height / 2 - 4}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" fill="${palette.text}">${xml(title)}</text><text x="${bound.x + bound.width / 2}" y="${bound.y + bound.height / 2 + 22}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="12" fill="${palette.muted}">${xml(item.name || title)}</text></g>`;
+    }
+    if (selection.kind === "embeds") {
+      const title = item.title || (item.kind === "youtube" ? "YouTube" : item.kind === "video" ? "Video" : "Web page");
+      return `<g${rotation}${opacity}><rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" rx="10" fill="${palette.surface}" stroke="${palette.elementStroke}"/><text x="${bound.x + bound.width / 2}" y="${bound.y + bound.height / 2 - 4}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" fill="${palette.text}">${xml(title)}</text><text x="${bound.x + bound.width / 2}" y="${bound.y + bound.height / 2 + 22}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="12" fill="${palette.muted}">${xml(item.url)}</text></g>`;
+    }
+    if (selection.kind === "shapes") return item.kind === "rect" ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>` : `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>`;
     if (selection.kind === "drawings") return `<path d="${pathData(item.points)}" fill="none" stroke="${color(item.color, "#4562df")}" stroke-width="${item.width}" opacity="${item.opacity}" stroke-linecap="round" stroke-linejoin="round"${rotation}/>`;
     if (selection.kind === "texts") {
       const align = item.textAlign === "center" ? "middle" : item.textAlign === "right" ? "end" : "start";
       const fontSize = item.fontSize ?? 16, paddingX = 6, paddingTop = 4;
       const tx = item.textAlign === "center" ? bound.x + bound.width / 2 : item.textAlign === "right" ? bound.x + bound.width - paddingX : bound.x + paddingX;
       const lines = wrapCanvasText(item.text, Math.max(8, bound.width - paddingX * 2), fontSize);
-      const backdrop = item.backgroundColor ? `<rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" rx="6" fill="${color(item.backgroundColor, palette.surface)}"${rotation}/>` : "";
-      return `${backdrop}<g${rotation}>${svgText({ lines, x: tx, y: bound.y + paddingTop + fontSize, anchor: align, fontSize, lineHeight: fontSize * 1.4, fill: color(item.color, palette.text), weight: item.bold ? 700 : 400, style: item.italic ? "italic" : "normal", decoration: item.underline ? "underline" : "none" })}</g>`;
+      const backdrop = item.backgroundColor ? `<rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" rx="6" fill="${color(item.backgroundColor, palette.surface)}"/>` : "";
+      return `<g${rotation}${opacity}>${backdrop}${svgText({ lines, x: tx, y: bound.y + paddingTop + fontSize, anchor: align, fontSize, lineHeight: fontSize * 1.4, fill: color(item.color, palette.text), weight: item.bold ? 700 : 400, style: item.italic ? "italic" : "normal", decoration: item.underline ? "underline" : "none" })}</g>`;
     }
     const nodeFill = color(item.color, palette.nodeFill), pageHeight = item.sourcePage ? 22 : 0, lineHeight = 22.4;
     const maxLines = Math.max(1, Math.floor((item.height - 20 - pageHeight) / lineHeight));
     const lines = clippedLines(wrapCanvasText(item.label, Math.max(12, item.width - 24), 16), maxLines);
     const textColor = contrastText(nodeFill, palette.text), labelY = item.y + 10 + 16;
     const source = item.sourcePage ? svgText({ lines: [`Page ${item.sourcePage}`], x: item.x + 12, y: item.y + item.height - 10, fontSize: 12, lineHeight: 16, fill: textColor, weight: 500 }) : "";
-    return `<g${rotation}><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="12" fill="${nodeFill}" stroke="${palette.elementStroke}"/>${svgText({ lines, x: item.x + 12, y: labelY, fontSize: 16, lineHeight, fill: textColor, weight: 500 })}${source}</g>`;
+    return `<g${rotation}${opacity}><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="12" fill="${nodeFill}" stroke="${palette.elementStroke}"/>${svgText({ lines, x: item.x + 12, y: labelY, fontSize: 16, lineHeight, fill: textColor, weight: 500 })}${source}</g>`;
   }).join("");
   const background = board.background ?? "dots";
   const pattern = background === "dots" ? `<pattern id="mindcanvas-bg" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${palette.dot}"/></pattern>`
@@ -168,7 +194,7 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
     : background === "graph" ? `<pattern id="mindcanvas-bg" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M20 0V100M40 0V100M60 0V100M80 0V100M0 20H100M0 40H100M0 60H100M0 80H100" fill="none" stroke="${palette.gridMinor}" stroke-width="1"/><path d="M100 0H0V100" fill="none" stroke="${palette.gridMajor}" stroke-width="1.25"/></pattern>`
     : background === "isometric" ? `<pattern id="mindcanvas-bg" width="48" height="28" patternUnits="userSpaceOnUse"><path d="M0 28L24 14 48 28M0 0L24 14 48 0M24 14V42" fill="none" stroke="${palette.grid}" stroke-width="1"/></pattern>` : "";
   const backgroundFill = background === "plain" ? palette.canvas : "url(#mindcanvas-bg)";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}" role="img" aria-label="${xml(board.title)}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="${palette.connector}"/></marker>${pattern}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.canvas}"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}" role="img" aria-label="${xml(board.title)}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="${palette.connector}"/></marker>${pattern}${cropDefs}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.canvas}"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${body}</svg>`;
 }
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 export function exportCanvasSvgFile(board: BoardState, palette = readCanvasExportPalette()) { downloadBlob(new Blob([exportCanvasSvg(board, palette)], { type: "image/svg+xml;charset=utf-8" }), `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.svg`); }
@@ -183,7 +209,7 @@ export async function exportCanvasPngFile(board: BoardState, palette = readCanva
   const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png")); if (!blob) throw new Error("Could not create PNG export."); downloadBlob(blob, `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.png`);
 }
 export function blankBoard(title = "Untitled canvas"): BoardState {
-  return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, background: "dots", nodes: [], edges: [], texts: [], shapes: [], drawings: [] };
+  return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, background: "dots", nodes: [], edges: [], texts: [], shapes: [], drawings: [], media: [], embeds: [] };
 }
 export function elementBounds(board: BoardState, selection: Selection): Bounds | null {
   if (selection.kind === "edges") return null;
@@ -287,7 +313,7 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
     ids.set(n.id, crypto.randomUUID());
   });
   if (graph.edges.length > 400 || graph.edges.some(e => !ids.has(e.source) || !ids.has(e.target))) throw new Error("Invalid AI edge");
-  const bounds = (["nodes", "shapes", "texts", "drawings"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
+  const bounds = (["nodes", "shapes", "texts", "drawings", "media", "embeds"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
   const x = bounds.length ? Math.max(...bounds.map(b => b.x + b.width)) + 100 : 100;
   const nodes = graph.nodes.map((n, i) => ({
     id: ids.get(n.id)!, label: n.label, parentId: n.parentId ? ids.get(n.parentId) : undefined, sourcePage: Number.isInteger(n.sourcePage) && n.sourcePage! > 0 ? n.sourcePage : undefined,
@@ -306,7 +332,7 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
 
 export function arrangeMindMap(board: BoardState): BoardState {
   if (!board.nodes.length) return board;
-  const other = (["shapes", "texts", "drawings"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
+  const other = (["shapes", "texts", "drawings", "media", "embeds"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
   const x = other.length ? Math.max(...other.map(b => b.x + b.width)) + 100 : Math.min(...board.nodes.map(n => n.x));
   return { ...board, nodes: layoutMindMap(board.nodes, board.edges, { x, y: Math.min(...board.nodes.map(n => n.y)) }) };
 }
@@ -316,7 +342,9 @@ const number = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Ma
 const string = (v: unknown, max = 10000) => typeof v === "string" && v.length <= max;
 export function parseBoard(value: unknown): BoardState {
   if (!obj(value)) throw new Error("Invalid board");
-  const b = value;
+  // Media was added after the original board format. Treat a missing field as
+  // an empty collection so older projects remain importable.
+  const b = Object.assign({}, value, { media: value.media === undefined ? [] : value.media, embeds: value.embeds === undefined ? [] : value.embeds }) as Record<string, any>;
   if (!string(b.id, 200) || !string(b.title, 500) || !string(b.updatedAt, 100) || !Number.isFinite(Date.parse(b.updatedAt))
     || !obj(b.viewport) || !number(b.viewport.x) || !number(b.viewport.y) || !number(b.viewport.scale) || b.viewport.scale < .1 || b.viewport.scale > 10) throw new Error("Invalid board metadata");
   if (b.background !== undefined && !CANVAS_BACKGROUNDS.includes(b.background)) throw new Error("Invalid canvas background");
@@ -330,18 +358,39 @@ export function parseBoard(value: unknown): BoardState {
   }
   const ids = new Set<string>();
   let points = 0;
-  for (const kind of ["nodes", "texts", "shapes", "drawings", "edges"] as const) {
+  for (const kind of ["nodes", "texts", "shapes", "drawings", "media", "embeds", "edges"] as const) {
     if (!Array.isArray(b[kind]) || b[kind].length > 5000) throw new Error("Invalid elements");
     for (const el of b[kind]) {
       if (!obj(el) || !string(el.id, 200) || ids.has(el.id)) throw new Error("Invalid element id");
       ids.add(el.id);
       if (el.rotation !== undefined && (!number(el.rotation) || el.rotation < -3600 || el.rotation > 3600) || el.hidden !== undefined && typeof el.hidden !== "boolean" || el.locked !== undefined && typeof el.locked !== "boolean") throw new Error("Invalid element flags");
+      if (el.opacity !== undefined && (!number(el.opacity) || el.opacity < 0 || el.opacity > 1)) throw new Error("Invalid opacity");
       if (el.color !== undefined && (typeof el.color !== "string" || !/^#[0-9a-f]{6}$/i.test(el.color))) throw new Error("Invalid color");
       if (kind === "edges") { if (!string(el.source, 200) || !string(el.target, 200)) throw new Error("Invalid connection"); continue; }
       if (kind === "drawings") {
         if (!Array.isArray(el.points) || !el.points.length || el.points.length > 20000 || !el.points.every(p => obj(p) && number(p.x) && number(p.y))
           || !number(el.opacity) || el.opacity < 0 || el.opacity > 1 || !number(el.width) || el.width <= 0) throw new Error("Invalid stroke");
         points += el.points.length; continue;
+      }
+      if (kind === "media") {
+        const mediaType = el.kind;
+        const sourceType = typeof el.src === "string" ? /^data:(image|video|audio)\/[a-z0-9.+-]+(?:;[^,]*)?,/i.exec(el.src)?.[1]?.toLowerCase() : undefined;
+        if (![
+          "image", "video", "audio",
+        ].includes(mediaType) || !string(el.src, MAX_MEDIA_DATA_URL_LENGTH) || !sourceType || sourceType !== mediaType
+          || !string(el.name, 500) || (el.mimeType !== undefined && (!string(el.mimeType, 120) || !el.mimeType.toLowerCase().startsWith(`${mediaType}/`)))) throw new Error("Invalid media");
+        if (el.crop !== undefined && (!obj(el.crop) || !["top", "right", "bottom", "left"].every(edge => number(el.crop[edge]))
+          || ["top", "right", "bottom", "left"].some(edge => el.crop[edge] < 0 || el.crop[edge] > 90)
+          || el.crop.top + el.crop.bottom >= 100 || el.crop.left + el.crop.right >= 100)) throw new Error("Invalid media crop");
+        if ((el.trimStart !== undefined && (!number(el.trimStart) || el.trimStart < 0))
+          || (el.trimEnd !== undefined && (!number(el.trimEnd) || el.trimEnd < 0))
+          || (el.trimStart !== undefined && el.trimEnd !== undefined && el.trimEnd <= el.trimStart)) throw new Error("Invalid media trim");
+      }
+      if (kind === "embeds") {
+        let validUrl = false;
+        try { const parsed = new URL(el.url); validUrl = parsed.protocol === "http:" || parsed.protocol === "https:"; } catch { /* invalid URL */ }
+        if (!["web", "youtube", "video"].includes(el.kind) || !string(el.url, 4000) || !validUrl
+          || (el.title !== undefined && !string(el.title, 500))) throw new Error("Invalid embed");
       }
       if (!number(el.x) || !number(el.y) || !number(el.width) || el.width <= 0 || (kind !== "texts" && (!number(el.height) || el.height <= 0))) throw new Error("Invalid geometry");
       if (kind === "texts" && (!string(el.text) || (el.fontSize !== undefined && (!number(el.fontSize) || el.fontSize < 8 || el.fontSize > 200))
@@ -373,7 +422,7 @@ export function exportBoard(board: BoardState) {
   a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export async function importBoard(file: File): Promise<BoardState> {
-  if (file.size > MAX_FILE_BYTES) throw new Error("File too large");
+  if (file.size > MAX_IMPORT_FILE_BYTES) throw new Error("File too large");
   const data = JSON.parse(await file.text());
   if (data.format !== "mindcanvas" || data.version !== 1) throw new Error("Invalid format");
   return { ...parseBoard(data.board), id: crypto.randomUUID(), updatedAt: new Date().toISOString() };

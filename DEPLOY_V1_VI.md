@@ -1,5 +1,55 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.7.1 — Media, resize Figma và AI reliability
+
+V3.7.1 hợp nhất bản nâng cấp bạn gửi từ gói V1: chèn hình/video/audio vào canvas, dán ảnh chụp màn hình, ghi âm bằng micro, nhúng trang web/YouTube/video, crop/trim, xoay, opacity, 8 tay nắm resize kiểu Figma, layer/preview/export nhận đúng các phần tử mới. Vẫn giữ hotfix AI V3.5.1 cho nhiều tài khoản và dữ liệu board cũ tự mở được.
+
+Không có migration Supabase mới và không có biến môi trường mới cho media. Vì phần media được lưu trong board JSON dưới dạng data URL, file export/import vẫn tự chứa nội dung; giới hạn một file media là 12 MB và file project import là 40 MB. Sau khi push code, deploy **cả `mindcanvas-api` và `mindcanvas-web`** để đồng bộ badge/service worker và hotfix AI.
+
+Checklist sau deploy:
+
+1. Deploy `mindcanvas-api`, mở `/api/health`; phải có `"release":"3.5.1"` nếu chỉ kiểm tra API hotfix, còn badge web hiển thị `V3.7.1`. API không cần thay đổi cho media.
+2. Deploy `mindcanvas-web`, hard refresh hoặc bấm **Cập nhật ngay** khi PWA báo phiên bản mới.
+3. Tạo project trắng, thử chèn ảnh/video/audio, kéo, resize từng cạnh, xoay, chỉnh opacity rồi refresh. Kiểm tra **Elements** vẫn tìm thấy, ẩn/khóa, duplicate và đổi layer.
+4. Thử dán screenshot bằng nút clipboard hoặc `Ctrl/⌘+V`; ghi âm chỉ hoạt động khi trình duyệt cấp quyền micro và trang chạy trên HTTPS/localhost.
+5. Nhúng URL HTTPS/YouTube. Một số website chặn iframe là giới hạn của website nguồn, không phải lỗi MindCanvas.
+6. Xuất SVG và PNG; media hình ảnh phải xuất thành hình, video/audio/embed xuất thành thẻ đại diện có tên/URL. File `.mindcanvas.json` có thể nhập lại trên board cũ.
+
+V3.7.1 không đưa `GEMINI_API_KEY` lên frontend. Nếu AI vẫn báo `AI_UNAVAILABLE`, đó là quota/capacity dùng chung của Google project; retry/fallback không thể làm quota miễn phí vô hạn.
+
+## Hotfix V3.5.1 — AI dùng ổn định hơn cho nhiều tài khoản
+
+V3.5.1 sửa trường hợp AI chạy trên máy chủ dự án nhưng người dùng khác gặp chuỗi `HTTP_503`, `TIMEOUT` và `HTTP_404`. Tất cả người dùng web dùng chung `GEMINI_API_KEY` phía server, vì vậy quota/capacity là tài nguyên chung. Backend mới giới hạn hai tác vụ AI đồng thời, mỗi tài khoản chỉ có một tác vụ đang chạy, xếp hàng có giới hạn, retry lỗi tạm thời bằng exponential backoff rồi mới chuyển model. Một lỗi `503` đơn lẻ không còn khóa model đối với request kế tiếp.
+
+Không có migration Supabase mới. Cần redeploy **cả `mindcanvas-api` và `mindcanvas-web`**.
+
+Trong Render → `mindcanvas-api` → **Environment**, giữ `GEMINI_API_KEY` hiện tại và đặt:
+
+```env
+GEMINI_MODELS=gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-2.5-flash,gemini-2.5-flash-lite
+GEMINI_TIMEOUT_MS=25000
+GEMINI_RETRIES_PER_MODEL=1
+GEMINI_TOTAL_TIMEOUT_MS=120000
+GEMINI_RETRY_BASE_MS=1000
+AI_MAX_CONCURRENT=2
+AI_MAX_QUEUE=20
+AI_MAX_QUEUE_PER_USER=2
+AI_QUEUE_TIMEOUT_MS=30000
+```
+
+Các biến mới đều có giá trị mặc định trong code, nhưng nên khai báo rõ trên Render để dễ kiểm tra. Không đưa bất kỳ biến nào ở trên hoặc `GEMINI_API_KEY` vào service frontend/biến `VITE_*`.
+
+Sau khi push V3.5.1:
+
+1. Render → `mindcanvas-api` → **Manual Deploy → Deploy latest commit**.
+2. Mở `https://URL-API-CUA-BAN/api/health`. Kết quả phải có `"release":"3.5.1"`, `"aiConfigured":true`, `"aiModelCount":6`, `"aiCapacity":2`.
+3. Render → `mindcanvas-web` → deploy latest commit.
+4. Mở web khi online và hard refresh. Nếu service worker báo bản mới, bấm **Cập nhật ngay**; badge phải là `V3.5.1`.
+5. Dùng hai tài khoản Google trên hai trình duyệt/thiết bị, mỗi tài khoản thử PDF nhỏ 1–4 trang. Render Logs có thể hiện `[AI] retry` hoặc `[AI] fallback`; kết quả thành công sẽ có `[AI] success`.
+6. Nếu vẫn nhận `AI_UNAVAILABLE` sau nhiều lần cách nhau ít nhất 30 giây, kiểm tra quota/rate limit của Google project. Retry và fallback không thể biến quota miễn phí dùng chung thành năng lực không giới hạn.
+
+Chi tiết kỹ thuật và danh sách file nằm trong `V3_5_1_SHARED_AI_RELIABILITY_VI.md`.
+
 ## Cập nhật V3.5 — PWA, offline và export/layers
 
 V3.5 là bản cập nhật frontend. Bản này thêm PWA có thể cài lên điện thoại/máy tính, cache giao diện để mở lại khi offline, IndexedDB cho project draft lớn, Trung tâm đồng bộ, pinch-to-zoom hai ngón, smart guides, renderer SVG/PNG khớp giao diện editor và bảng Elements mới không chồng chữ.

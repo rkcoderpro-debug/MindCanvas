@@ -5,6 +5,7 @@ import { generateMindMap, uploadPdf } from "../lib/api";
 import { saveDocumentToStorage } from "../lib/supabase";
 import { useLanguage } from "../lib/i18n";
 import { MAX_FILE_BYTES } from "../lib/board";
+import { aiErrorMessage } from "../lib/aiErrors";
 
 function pageText(text: string, from: number, to: number) {
   const markers = [...text.matchAll(/\[PAGE\s+(\d+)\]/g)];
@@ -36,7 +37,7 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
       if (result.provider === "demo") throw new Error(t("aiDemo"));
       if (!result.graph?.nodes?.length || result.graph.nodes.length > 200 || !Array.isArray(result.graph.edges)) throw new Error(t("aiError"));
       setProvider(result.provider); setGraph({ ...result.graph, sourceDocumentId: doc.id, sourceDocumentName: file.name });
-    } catch (err) { if (!request.signal.aborted) setError(t("aiError") + " " + (err instanceof Error ? err.message : "")); }
+    } catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "aiError")); }
     finally { if (!request.signal.aborted) setBusy(false); }
   };
   const regenerateRange = async () => {
@@ -45,7 +46,7 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
     if (!selected) { setError(t("noTextPages")); return; }
     const request = new AbortController(); controller.current = request; setBusy(true); setError(""); setGraph(null);
     try { const result = await generateMindMap(selected, documentId || undefined, request.signal); if (result.provider === "demo") throw new Error(t("aiDemo")); setProvider(result.provider); setGraph({ ...result.graph, sourceDocumentId: documentId || undefined, sourceDocumentName: file.name }); }
-    catch (err) { if (!request.signal.aborted) setError(t("aiError") + " " + (err instanceof Error ? err.message : "")); }
+    catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "aiError")); }
     finally { if (!request.signal.aborted) setBusy(false); }
   };
   const hasPages = pageCount > 0;

@@ -1,5 +1,7 @@
 # MindCanvas V3.5 — PWA, offline và export/layers
 
+> Bản đóng gói mới nhất là V3.5.1. Sau các bước PWA bên dưới, tiếp tục áp dụng hotfix backend trong `V3_5_1_SHARED_AI_RELIABILITY_VI.md` và deploy cả API lẫn web.
+
 ## Kết quả cập nhật
 
 ### 1. PWA cài được và mở offline

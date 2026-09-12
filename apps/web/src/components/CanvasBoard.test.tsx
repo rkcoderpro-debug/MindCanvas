@@ -44,6 +44,50 @@ describe("Canvas interactions", () => {
     await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Đưa lên trên cùng")!.click());
     expect(order()).toEqual(["text","shape"]);
   });
+  it("renders image, video and audio media as selectable canvas elements", async () => {
+    const b = { ...blankBoard(), media: [
+      { id: "image", kind: "image" as const, src: "data:image/png;base64,AA==", name: "image.png", x: 0, y: 0, width: 180, height: 120 },
+      { id: "video", kind: "video" as const, src: "data:video/mp4;base64,AA==", name: "video.mp4", x: 220, y: 0, width: 180, height: 120 },
+      { id: "audio", kind: "audio" as const, src: "data:audio/webm;base64,AA==", name: "voice.webm", x: 440, y: 0, width: 180, height: 120 },
+    ] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    expect(host.querySelectorAll(".canvas-media")).toHaveLength(3);
+    await act(async () => pointer(host.querySelector('[data-element="image"]')!, "pointerdown", 20, 20));
+    await act(async () => pointer(host.querySelector("svg.canvas-svg")!, "pointerup", 20, 20));
+    expect(host.querySelector(".selection-box")).not.toBeNull();
+    expect(host.textContent).toContain("image.png");
+  });
+  it("renders a playable YouTube/web embed and exposes rotation reset", async () => {
+    const b = { ...blankBoard(), embeds: [{ id: "yt", kind: "youtube" as const, url: "https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0", title: "Lesson", x: 0, y: 0, width: 480, height: 340, rotation: 24 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const frame = host.querySelector('[data-element="yt"]')!;
+    expect(frame.querySelector("iframe")?.getAttribute("src")).toContain("youtube.com/embed/dQw4w9WgXcQ");
+    await act(async () => pointer(frame.querySelector(".canvas-embed-header")!, "pointerdown", 20, 20));
+    await act(async () => pointer(host.querySelector("svg.canvas-svg")!, "pointerup", 20, 20));
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="Góc xoay (độ)"]')?.value).toBe("24");
+    await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent === "Đặt về 0°")?.click());
+    expect(current.embeds[0].rotation).toBe(0);
+  });
+  it("shows Figma-style handles on every edge and resizes from the dragged edge", async () => {
+    const b = { ...blankBoard(), shapes: [{ id: "shape", kind: "rect" as const, x: 40, y: 40, width: 120, height: 80, color: "#ffffff" }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const element = host.querySelector('[data-element="shape"]')!, svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => { pointer(element, "pointerdown", 50, 50); pointer(svg, "pointerup", 50, 50); });
+    expect(host.querySelectorAll("[data-resize-handle]")).toHaveLength(8);
+    expect(host.querySelector('[data-resize-handle="n"]')).not.toBeNull();
+    await act(async () => pointer(host.querySelector('[data-resize-handle="w"]')!, "pointerdown", 40, 80));
+    await act(async () => { pointer(svg, "pointermove", 20, 80); pointer(svg, "pointerup", 20, 80); });
+    expect(current.shapes[0]).toMatchObject({ x: 20, width: 140 });
+  });
+  it("renders and edits alpha for canvas elements", async () => {
+    const b = { ...blankBoard(), shapes: [{ id: "shape", kind: "ellipse" as const, x: 40, y: 40, width: 120, height: 80, color: "#ffffff", opacity: .4 }], texts: [{ id: "text", text: "Alpha", x: 240, y: 40, width: 120, opacity: .7 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    expect(host.querySelector('[data-element="shape"]')?.getAttribute("opacity")).toBe("0.4");
+    await act(async () => { pointer(host.querySelector('[data-element="shape"]')!, "pointerdown", 50, 50); pointer(host.querySelector("svg.canvas-svg")!, "pointerup", 50, 50); });
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="Độ trong suốt"]')?.value).toBe("0.4");
+    await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent === "Đặt lại độ trong suốt")?.click());
+    expect(current.shapes[0].opacity).toBe(1);
+  });
   it("Tab creates an editable child and Escape cancels it", async()=>{
     const b={...blankBoard(),nodes:[{id:"root",label:"Root",x:0,y:0,width:190,height:76}]};
     await act(async()=>root.render(<Harness initial={b}/>)); const svg=host.querySelector("svg.canvas-svg")!;

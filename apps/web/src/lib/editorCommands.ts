@@ -2,7 +2,7 @@ import type { BoardState, Viewport } from "@mindcanvas/shared";
 import { elementBounds, moveElement, type Selection, type Bounds } from "./board";
 
 export function orderedElements(board: BoardState): Selection[] {
-  const legacy = (["shapes", "drawings", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
+  const legacy = (["shapes", "drawings", "media", "embeds", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
   const map = new Map(legacy.map(s => [s.id, s]));
   const order = [...new Set([...(board.layerOrder ?? []), ...legacy.map(s => s.id)])];
   return order.flatMap(id => map.has(id) ? [map.get(id)!] : []);
@@ -37,7 +37,7 @@ export function moveSelection(board: BoardState, selection: Selection[], dx: num
 export function removeSelection(board: BoardState, selections: Selection[]): BoardState {
   const ids = new Set(selections.map(s => s.id));
   return normalizeEditor({ ...board, nodes: board.nodes.filter(n => !ids.has(n.id)).map(n => ids.has(n.parentId ?? "") ? { ...n, parentId: undefined } : n),
-    texts: board.texts.filter(e => !ids.has(e.id)), shapes: board.shapes.filter(e => !ids.has(e.id)), drawings: board.drawings.filter(e => !ids.has(e.id)),
+    texts: board.texts.filter(e => !ids.has(e.id)), shapes: board.shapes.filter(e => !ids.has(e.id)), drawings: board.drawings.filter(e => !ids.has(e.id)), media: board.media.filter(e => !ids.has(e.id)), embeds: board.embeds.filter(e => !ids.has(e.id)),
     edges: board.edges.filter(e => !ids.has(e.id) && !ids.has(e.source) && !ids.has(e.target)) });
 }
 export function duplicateSelection(board: BoardState, selections: Selection[]) {
@@ -45,7 +45,7 @@ export function duplicateSelection(board: BoardState, selections: Selection[]) {
   const edges = board.edges.filter(e => selected.has(e.id) || (selected.has(e.source) && selected.has(e.target)));
   const ids = new Map<string, string>([...selected, ...edges.map(e => e.id)].map(id => [id, crypto.randomUUID()]));
   let next = structuredClone(board);
-  for (const kind of ["nodes", "texts", "shapes", "drawings"] as const) {
+  for (const kind of ["nodes", "texts", "shapes", "drawings", "media", "embeds"] as const) {
     for (const el of board[kind].filter(e => selected.has(e.id))) {
       const copy = { ...structuredClone(el), id: ids.get(el.id)! };
       if ("parentId" in copy) copy.parentId = ids.get(copy.parentId ?? "");
@@ -71,7 +71,7 @@ export function pasteSelection(target: BoardState, source: BoardState, selection
   const additions = moveSelection(copy.board, copy.selection, offset - 24, offset - 24);
   const next = { ...target, nodes: [...target.nodes, ...additions.nodes.filter(n => ids.has(n.id))],
     texts: [...target.texts, ...additions.texts.filter(n => ids.has(n.id))], shapes: [...target.shapes, ...additions.shapes.filter(n => ids.has(n.id))],
-    drawings: [...target.drawings, ...additions.drawings.filter(n => ids.has(n.id))], edges: [...target.edges, ...additions.edges.filter(n => ids.has(n.id))],
+    drawings: [...target.drawings, ...additions.drawings.filter(n => ids.has(n.id))], media: [...target.media, ...additions.media.filter(n => ids.has(n.id))], embeds: [...target.embeds, ...additions.embeds.filter(n => ids.has(n.id))], edges: [...target.edges, ...additions.edges.filter(n => ids.has(n.id))],
     groups: [...(target.groups ?? []), ...(additions.groups ?? []).filter(g => g.elementIds.every(id => ids.has(id)))],
     layerOrder: [...orderedElements(target).map(s => s.id), ...orderedElements(additions).filter(s => ids.has(s.id)).map(s => s.id)] };
   // A copied loose connection is retained only when both endpoints exist here.
@@ -120,19 +120,49 @@ export function moveLayer(board: BoardState, sourceId: string, targetId: string)
 const editable = (board: BoardState, selections: Selection[]) => expandGroups(board, selections).filter(s => s.kind !== "edges");
 export function setElementFlags(board: BoardState, selections: Selection[], flags: { hidden?: boolean; locked?: boolean }): BoardState {
   const ids = new Set(expandGroups(board, selections).map(s => s.id));
-  return { ...board, nodes: board.nodes.map(e => ids.has(e.id) ? { ...e, ...flags } : e), texts: board.texts.map(e => ids.has(e.id) ? { ...e, ...flags } : e), shapes: board.shapes.map(e => ids.has(e.id) ? { ...e, ...flags } : e), drawings: board.drawings.map(e => ids.has(e.id) ? { ...e, ...flags } : e), edges: board.edges.map(e => ids.has(e.id) ? { ...e, ...flags } : e) };
+  return { ...board, nodes: board.nodes.map(e => ids.has(e.id) ? { ...e, ...flags } : e), texts: board.texts.map(e => ids.has(e.id) ? { ...e, ...flags } : e), shapes: board.shapes.map(e => ids.has(e.id) ? { ...e, ...flags } : e), drawings: board.drawings.map(e => ids.has(e.id) ? { ...e, ...flags } : e), media: board.media.map(e => ids.has(e.id) ? { ...e, ...flags } : e), embeds: board.embeds.map(e => ids.has(e.id) ? { ...e, ...flags } : e), edges: board.edges.map(e => ids.has(e.id) ? { ...e, ...flags } : e) };
 }
 export function rotateSelection(board: BoardState, selections: Selection[], degrees: number): BoardState {
   const ids = new Set(editable(board, selections).map(s => s.id));
   const rotate = <T extends { id: string; rotation?: number }>(items: T[]) => items.map(e => ids.has(e.id) ? { ...e, rotation: ((e.rotation ?? 0) + degrees) % 360 } : e);
-  return { ...board, nodes: rotate(board.nodes), texts: rotate(board.texts), shapes: rotate(board.shapes), drawings: rotate(board.drawings) };
+  return { ...board, nodes: rotate(board.nodes), texts: rotate(board.texts), shapes: rotate(board.shapes), drawings: rotate(board.drawings), media: rotate(board.media), embeds: rotate(board.embeds) };
 }
+
+export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+const resizeHandleAxes: Record<ResizeHandle, { x: -1 | 0 | 1; y: -1 | 0 | 1 }> = {
+  nw: { x: -1, y: -1 }, n: { x: 0, y: -1 }, ne: { x: 1, y: -1 }, e: { x: 1, y: 0 },
+  se: { x: 1, y: 1 }, s: { x: 0, y: 1 }, sw: { x: -1, y: 1 }, w: { x: -1, y: 0 },
+};
+const resizeToBox = (board: BoardState, active: Selection[], source: Bounds, target: Bounds): BoardState => {
+  const sx = Math.max(.05, target.width / Math.max(1, source.width)), sy = Math.max(.05, target.height / Math.max(1, source.height));
+  const ids = new Set(active.map(s => s.id));
+  const resize = <T extends { id: string; x: number; y: number; width: number; height?: number }>(items: T[]) => items.map(e => ids.has(e.id) ? {
+    ...e, x: target.x + (e.x - source.x) * sx, y: target.y + (e.y - source.y) * sy,
+    width: Math.max(24, e.width * sx), height: Math.max(24, (e.height ?? 32) * sy),
+  } : e);
+  const drawings = board.drawings.map(e => !ids.has(e.id) ? e : {
+    ...e, points: e.points.map(p => ({ x: target.x + (p.x - source.x) * sx, y: target.y + (p.y - source.y) * sy })),
+    width: Math.max(1, e.width * Math.min(sx, sy)),
+  });
+  return { ...board, nodes: resize(board.nodes), texts: resize(board.texts), shapes: resize(board.shapes), drawings, media: resize(board.media), embeds: resize(board.embeds) };
+};
 export function resizeSelection(board: BoardState, selections: Selection[], width: number, height: number): BoardState {
   const active = editable(board, selections), box = selectionBounds(board, active); if (!box || !active.length) return board;
-  const sx = Math.max(.05, width / Math.max(1, box.width)), sy = Math.max(.05, height / Math.max(1, box.height)), ids = new Set(active.map(s => s.id));
-  const resize = <T extends { id: string; x: number; y: number; width: number; height?: number }>(items: T[]) => items.map(e => ids.has(e.id) ? { ...e, x: box.x + (e.x - box.x) * sx, y: box.y + (e.y - box.y) * sy, width: Math.max(24, e.width * sx), height: Math.max(24, (e.height ?? 32) * sy) } : e);
-  const drawings = board.drawings.map(e => { if (!ids.has(e.id)) return e; return { ...e, points: e.points.map(p => ({ x: box.x + (p.x - box.x) * sx, y: box.y + (p.y - box.y) * sy })), width: Math.max(1, e.width * Math.min(sx, sy)) }; });
-  return { ...board, nodes: resize(board.nodes), texts: resize(board.texts), shapes: resize(board.shapes), drawings };
+  return resizeToBox(board, active, box, { x: box.x, y: box.y, width: Math.max(24, width), height: Math.max(24, height) });
+}
+/** Resize a single item or a group from the selected Figma-style handle. */
+export function resizeSelectionFromHandle(board: BoardState, selections: Selection[], handle: ResizeHandle, dx: number, dy: number): BoardState {
+  const active = editable(board, selections), source = selectionBounds(board, active); if (!source || !active.length) return board;
+  const axis = resizeHandleAxes[handle];
+  let left = source.x, right = source.x + source.width, top = source.y, bottom = source.y + source.height;
+  if (axis.x < 0) left += dx;
+  if (axis.x > 0) right += dx;
+  if (axis.y < 0) top += dy;
+  if (axis.y > 0) bottom += dy;
+  const minWidth = 24, minHeight = 24;
+  if (right - left < minWidth) { if (axis.x < 0) left = right - minWidth; else if (axis.x > 0) right = left + minWidth; }
+  if (bottom - top < minHeight) { if (axis.y < 0) top = bottom - minHeight; else if (axis.y > 0) bottom = top + minHeight; }
+  return resizeToBox(board, active, source, { x: left, y: top, width: right - left, height: bottom - top });
 }
 export function alignSelection(board: BoardState, selections: Selection[], axis: "left" | "center" | "right" | "top" | "middle" | "bottom"): BoardState {
   const active = editable(board, selections), box = selectionBounds(board, active); if (!box) return board;
