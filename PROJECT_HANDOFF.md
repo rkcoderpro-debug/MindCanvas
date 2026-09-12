@@ -1,6 +1,60 @@
 # MindCanvas — project handoff
 
-## Update 2026-09-11 — V3.4 Smart Study Canvas (latest)
+## Update 2026-09-12 — V3.5 Offline PWA & Export/Layers (latest)
+
+### Implemented
+
+- Added an installable PWA manifest, adaptive app icons and a production service worker. The worker caches the deployed Vite shell, discovers fingerprinted JS/CSS assets, provides an offline navigation fallback and exposes an in-app update prompt.
+- Added an owner-scoped IndexedDB project cache alongside localStorage. Writes remain immediately available in memory, large drafts survive localStorage quota failures, cached projects hydrate before remote fetch, and pending edits retry when connectivity returns.
+- Added a bilingual Sync Center showing connection state, device/cloud mode and every pending project. The topbar save status now opens this truthful queue instead of being a passive label.
+- Rebuilt SVG/PNG export around one self-contained renderer: active theme colors, canvas paper style, explicit portable sans-serif font stack, wrapped/clipped node and connector labels, rich-text formatting, source pages, dark-fill contrast and the persisted global layer order. PNG is rasterized from the same SVG at a bounded high resolution, so the two formats no longer diverge.
+- Replaced the overflowing inspector layer list with a fixed-row Elements panel. It has independent scrolling, stable truncation, search, count, type/group metadata, selected/hidden states, direct lock/visibility controls and drag-to-reorder without splitting groups.
+- Added optional smart alignment guides while dragging. Grid and nearby left/center/right/top/middle/bottom anchors are resolved by a pure tested command and rendered as non-scaling guide lines.
+- Added two-finger pinch zoom around the gesture midpoint on touch devices. The gesture commits once and remains a viewport-only change, so it does not pollute document Undo history.
+- Updated the visible version badge and tests to `V3.5`. No sample project, demo flashcard or browser-side provider secret was added.
+
+### Architecture and deployment
+
+- `apps/web/public/sw.js` and `manifest.webmanifest` own PWA/offline shell behavior; `lib/pwa.ts` owns install/update browser events.
+- `lib/offlineProjectCache.ts` is the IndexedDB adapter. `lib/projectStore.ts` keeps cache normalization and pending flags authoritative; `useWorkspace.ts` hydrates the device cache before cloud reconciliation.
+- `lib/board.ts` owns both SVG and PNG rendering. Export files never depend on editor-only `foreignObject` layout or unresolved CSS variables.
+- `components/ElementsPanel.tsx` and `components/SyncCenter.tsx` isolate the new inspector and persistence UI. `lib/editorCommands.ts` keeps layer movement and smart snapping pure/testable.
+- V3.5 is frontend-only: no Supabase migration, backend route or environment variable was added. Redeploy `mindcanvas-web`. Existing migrations `0001` through `0005` remain required for all prior cloud features.
+- Local verification passed frontend/server TypeScript and production builds, 84 frontend tests and 16 backend tests (100 total). The production bundle contains the manifest, service worker, all three app icons and both fingerprinted JS/CSS assets discovered by the offline shell. The SVG renderer was also parsed as XML and visually rasterized with wrapped Vietnamese labels. Live Render, Supabase, Google OAuth, Gemini, service-worker installation and physical-device offline behavior still require production credentials/device QA.
+
+### Changed files
+
+- `apps/web/index.html`
+- `apps/web/public/favicon.svg`
+- `apps/web/public/manifest.webmanifest`
+- `apps/web/public/sw.js`
+- `apps/web/public/icons/mindcanvas-192.png`
+- `apps/web/public/icons/mindcanvas-512.png`
+- `apps/web/public/icons/mindcanvas-maskable-512.png`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/components/CanvasBoard.tsx`
+- `apps/web/src/components/CanvasBoard.test.tsx`
+- `apps/web/src/components/ElementsPanel.test.tsx`
+- `apps/web/src/components/ElementsPanel.tsx`
+- `apps/web/src/components/SyncCenter.tsx`
+- `apps/web/src/hooks/useWorkspace.ts`
+- `apps/web/src/lib/board.ts`
+- `apps/web/src/lib/board.test.ts`
+- `apps/web/src/lib/editorCommands.ts`
+- `apps/web/src/lib/editorCommands.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/offlineProjectCache.ts`
+- `apps/web/src/lib/projectStore.ts`
+- `apps/web/src/lib/pwa.ts`
+- `apps/web/src/main.tsx`
+- `apps/web/src/styles.css`
+- `README.md`
+- `DEPLOY_V1_VI.md`
+- `V3_5_PWA_EXPORT_LAYERS_VI.md`
+- `PROJECT_HANDOFF.md`
+
+## Update 2026-09-11 — V3.4 Smart Study Canvas
 
 ### Implemented
 

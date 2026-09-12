@@ -3,7 +3,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
 import { normalizeEditor } from "../lib/editorCommands";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
-import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
 export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject };
@@ -16,6 +16,7 @@ export function useWorkspace(owner: string | null) {
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [versions, setVersions] = useState<ProjectVersion[]>([]), [versionLoading, setVersionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
@@ -27,11 +28,19 @@ export function useWorkspace(owner: string | null) {
   const report = useCallback((err: unknown) => { if (alive.current) setError(err instanceof Error ? err.message : String(err)); }, []);
   const refresh = useCallback(async () => {
     try {
+      await hydrateProjectCache(owner);
       const cache = readCache(owner);
       dirty.current = cache.some(p => p.pending);
       if (alive.current) { setProjects(cache); if (dirty.current) setStatus(navigator.onLine ? "pending" : "offline"); }
-      const [remote, fs] = await Promise.all([owner ? fetchProjects(owner) : Promise.resolve([]), fetchFolders(owner)]);
-      if (alive.current) { setProjects(mergeProjects(remote, readCache(owner), owner)); setFolders(fs); }
+      try {
+        const [remote, fs] = await Promise.all([owner ? fetchProjects(owner) : Promise.resolve([]), fetchFolders(owner)]);
+        if (alive.current) { setProjects(mergeProjects(remote, readCache(owner), owner)); setFolders(fs); }
+      } catch (err) {
+        // Opening a cached workspace must remain possible without a network.
+        // Online failures are still reported so credentials/RLS issues remain visible.
+        if (alive.current && !navigator.onLine) setStatus("offline");
+        else throw err;
+      }
     } catch (err) { report(err); } finally { if (alive.current) setLoading(false); }
   }, [owner, report]);
   const upsertSummary = (p: Project) => { if (alive.current) setProjects(items => [p, ...items.filter(i => i.id !== p.id)]); };
@@ -90,13 +99,13 @@ export function useWorkspace(owner: string | null) {
 
   useEffect(() => {
     alive.current = true; void refresh();
-    const online = () => { void flush(); };
-    const offline = () => setStatus(cacheFailed.current ? "saveError" : "offline");
+    const cameOnline = () => { setOnline(true); void flush(); };
+    const wentOffline = () => { setOnline(false); setStatus(cacheFailed.current ? "saveError" : "offline"); };
     const beforeUnload = (e: BeforeUnloadEvent) => { if ((owner && dirty.current) || cacheFailed.current) { e.preventDefault(); e.returnValue = ""; } };
     const hidden = () => { if (document.visibilityState === "hidden") void flush(); };
-    window.addEventListener("online", online); window.addEventListener("offline", offline);
+    window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("visibilitychange", hidden);
-    return () => { alive.current = false; clearTimeout(timer.current); window.removeEventListener("online", online); window.removeEventListener("offline", offline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
+    return () => { alive.current = false; clearTimeout(timer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner]);
 
   const stage = (next: BoardState, delay = 750) => {
@@ -248,5 +257,5 @@ export function useWorkspace(owner: string | null) {
       setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false;
     }
   });
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, conflict, resolveConflict, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
 }

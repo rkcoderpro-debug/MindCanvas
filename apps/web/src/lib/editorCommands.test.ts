@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { blankBoard, parseBoard } from "./board";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, setElementFlags, snapMoveSelection, ungroupSelection } from "./editorCommands";
+import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection } from "./editorCommands";
 const fixture = () => normalizeEditor({ ...blankBoard(), nodes: [{ id:"n",label:"Root",x:0,y:0,width:190,height:76 }], texts:[{ id:"t",text:"Text",x:300,y:30,width:200 }], shapes:[{ id:"s",kind:"rect" as const,x:0,y:0,width:400,height:200,color:"#ffffff" }] });
 describe("Editor commands", () => {
   it("pastes an independent group with new IDs and a new offset each time", () => {
@@ -21,6 +21,11 @@ describe("Editor commands", () => {
     const next=reorderSelection(b,[{kind:"texts",id:"t"}],"back"); expect(next.layerOrder).toEqual(["t","n","s"]);
     expect(reorderSelection(next,[{kind:"shapes",id:"s"}],"backward").layerOrder).toEqual(["s","t","n"]);
     expect(ungroupSelection(next,[{kind:"nodes",id:"n"}]).groups).toEqual([]);
+  });
+  it("drags a layer row without splitting its group", () => {
+    const grouped=groupSelection(fixture(),[{kind:"texts",id:"t"},{kind:"nodes",id:"n"}]);
+    expect(moveLayer(grouped,"t","s").layerOrder).toEqual(["s","t","n"]);
+    expect(moveLayer(grouped,"n","t")).toBe(grouped);
   });
   it("moves group members once and removes groups/connectors with deleted endpoints", () => {
     const b=groupSelection(fixture(),[{kind:"texts",id:"t"},{kind:"nodes",id:"n"}]);
@@ -65,5 +70,14 @@ describe("Editor commands", () => {
     expect(flagged.shapes[0]).toMatchObject({locked:true,hidden:true});
     expect(snapMoveSelection(b, [{kind:"shapes",id:"a"}], 7, 9).shapes[0]).toMatchObject({x:16,y:16});
     expect(parseBoard(flagged)).toBeTruthy();
+  });
+  it("shows smart guides and aligns a moving element to a nearby edge", () => {
+    const b = { ...blankBoard(), shapes: [
+      { id:"moving", kind:"rect" as const, x:10, y:10, width:40, height:40, color:"#ffffff" },
+      { id:"target", kind:"rect" as const, x:100, y:80, width:60, height:40, color:"#ffffff" },
+    ] };
+    const result = smartSnapMoveSelection(b, [{kind:"shapes",id:"moving"}], 48, 69, 8, 8);
+    expect(result.board.shapes[0]).toMatchObject({ x:60, y:80 });
+    expect(result.guides.some(guide => guide.axis === "y" && guide.value === 80)).toBe(true);
   });
 });

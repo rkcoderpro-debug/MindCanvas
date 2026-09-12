@@ -1,5 +1,24 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.5 — PWA, offline và export/layers
+
+V3.5 là bản cập nhật frontend. Bản này thêm PWA có thể cài lên điện thoại/máy tính, cache giao diện để mở lại khi offline, IndexedDB cho project draft lớn, Trung tâm đồng bộ, pinch-to-zoom hai ngón, smart guides, renderer SVG/PNG khớp giao diện editor và bảng Elements mới không chồng chữ.
+
+Không có migration Supabase mới, không thêm biến môi trường và không thay đổi API Gemini. Chỉ cần deploy `mindcanvas-web`; `mindcanvas-api` có thể giữ nguyên.
+
+Sau khi push commit V3.5:
+
+1. Render → service Static Site `mindcanvas-web` → **Manual Deploy → Deploy latest commit**.
+2. Chờ build xong, mở URL web và kiểm tra badge là `V3.5`.
+3. Reload một lần khi đang có mạng để service worker cache đầy đủ file giao diện. Nếu xuất hiện thông báo có bản mới, bấm **Cập nhật ngay**.
+4. Mở một project, sửa nội dung, bấm trạng thái lưu trên topbar để mở **Trung tâm đồng bộ**. Khi online và đăng nhập, hàng đợi phải về 0 sau khi đồng bộ.
+5. Chọn menu **Cài ứng dụng**. Android/desktop Chromium hoặc Brave có thể hiện nút cài; iPhone/iPad dùng Safari → Chia sẻ → Thêm vào Màn hình chính.
+6. Mở project đã truy cập ít nhất một lần, tắt mạng rồi mở lại app: editor và bản cache phải vẫn mở được. AI, Google Login, PDF cloud và đồng bộ chỉ chạy lại khi có mạng.
+7. Kiểm tra SVG/PNG với node dài và node màu tối: chữ phải dùng sans-serif, xuống dòng trong node, có màu tương phản và nền/connector theo theme đang dùng.
+8. Tạo nhiều element, mở bảng **Phần tử**: danh sách phải cuộn riêng, không chồng chữ; thử tìm kiếm, ẩn/khóa và kéo hàng để đổi layer.
+
+Danh sách file và checklist chi tiết nằm trong `V3_5_PWA_EXPORT_LAYERS_VI.md`.
+
 ## Cập nhật V3.4 — Smart Study Canvas
 
 V3.4 sửa pan/zoom để nền giấy đi cùng element, thêm 6 kiểu nền canvas, rich text, tìm nhanh `Ctrl/⌘+K`, clipboard liên-project, AI cho vùng chọn, liên kết trang PDF nguồn và nâng cấp Flashcards. Không có migration hoặc biến môi trường mới, nhưng có endpoint backend mới `POST /api/ai/selection`, vì vậy cần redeploy **cả `mindcanvas-api` lẫn `mindcanvas-web`**.

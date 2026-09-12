@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "MindCanvas",
+  "short_name": "MindCanvas",
+  "description": "Không gian học tập trực quan với canvas, mind map và flashcard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f4ff",
+  "theme_color": "#7c3aed",
+  "lang": "vi",
+  "orientation": "any",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icons/mindcanvas-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/mindcanvas-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/mindcanvas-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

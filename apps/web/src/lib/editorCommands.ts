@@ -83,16 +83,21 @@ export function ungroupSelection(board: BoardState, selections: Selection[]): Bo
   const ids = new Set(selections.map(s => s.id));
   return { ...board, groups: (board.groups ?? []).filter(g => !g.elementIds.some(id => ids.has(id))) };
 }
-export function reorderSelection(board: BoardState, selections: Selection[], direction: "front" | "back" | "forward" | "backward"): BoardState {
-  const ids = new Set(expandGroups(board, selections).map(s => s.id));
-  // Treat groups as atomic blocks so moving a neighbouring layer cannot split one.
+function layerBlocks(board: BoardState) {
   const order = orderedElements(board).map(s => s.id), used = new Set<string>(), blocks: string[][] = [];
   for (const id of order) {
     if (used.has(id)) continue;
-    const group = board.groups?.find(g => g.elementIds.includes(id));
-    const block = group ? order.filter(id => group.elementIds.includes(id)) : [id];
-    block.forEach(id => used.add(id)); blocks.push(block);
+    const group = board.groups?.find(item => item.elementIds.includes(id));
+    const block = group ? order.filter(elementId => group.elementIds.includes(elementId)) : [id];
+    block.forEach(elementId => used.add(elementId));
+    blocks.push(block);
   }
+  return blocks;
+}
+export function reorderSelection(board: BoardState, selections: Selection[], direction: "front" | "back" | "forward" | "backward"): BoardState {
+  const ids = new Set(expandGroups(board, selections).map(s => s.id));
+  // Treat groups as atomic blocks so moving a neighbouring layer cannot split one.
+  const blocks = layerBlocks(board);
   const chosen = (block: string[]) => block.some(id => ids.has(id));
   if (direction === "front" || direction === "back") {
     const yes = blocks.filter(chosen), no = blocks.filter(b => !chosen(b));
@@ -100,6 +105,16 @@ export function reorderSelection(board: BoardState, selections: Selection[], dir
   }
   if (direction === "forward") { for (let i = blocks.length - 2; i >= 0; i--) if (chosen(blocks[i]) && !chosen(blocks[i + 1])) [blocks[i], blocks[i + 1]] = [blocks[i + 1], blocks[i]]; }
   else { for (let i = 1; i < blocks.length; i++) if (chosen(blocks[i]) && !chosen(blocks[i - 1])) [blocks[i], blocks[i - 1]] = [blocks[i - 1], blocks[i]]; }
+  return { ...board, layerOrder: blocks.flat() };
+}
+/** Move one layer/group directly above another layer in the visible stack. */
+export function moveLayer(board: BoardState, sourceId: string, targetId: string): BoardState {
+  if (sourceId === targetId) return board;
+  const blocks = layerBlocks(board), sourceIndex = blocks.findIndex(block => block.includes(sourceId)), targetIndex = blocks.findIndex(block => block.includes(targetId));
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return board;
+  const [source] = blocks.splice(sourceIndex, 1);
+  const adjustedTarget = blocks.findIndex(block => block.includes(targetId));
+  blocks.splice(adjustedTarget + 1, 0, source);
   return { ...board, layerOrder: blocks.flat() };
 }
 const editable = (board: BoardState, selections: Selection[]) => expandGroups(board, selections).filter(s => s.kind !== "edges");
@@ -129,9 +144,57 @@ export function distributeSelection(board: BoardState, selections: Selection[], 
   const first = active[0].r, last = active.at(-1)!.r, span = axis === "horizontal" ? last.x + last.width - first.x : last.y + last.height - first.y, total = active.reduce((n,v) => n + (axis === "horizontal" ? v.r.width : v.r.height), 0), gap = (span - total) / (active.length - 1); let cursor = axis === "horizontal" ? first.x : first.y;
   return active.reduce((next, v) => { const pos = axis === "horizontal" ? v.r.x : v.r.y, delta = cursor - pos; cursor += (axis === "horizontal" ? v.r.width : v.r.height) + gap; return moveElement(next, v.s, axis === "horizontal" ? delta : 0, axis === "vertical" ? delta : 0); }, board);
 }
+export type SnapGuide = { axis: "x" | "y"; value: number; from: number; to: number };
+export function smartSnapMoveSelection(board: BoardState, selections: Selection[], dx: number, dy: number, grid = 8, threshold = 7): { board: BoardState; guides: SnapGuide[] } {
+  const active = editable(board, selections), box = selectionBounds(board, active);
+  if (!box) return { board: moveSelection(board, selections, dx, dy), guides: [] };
+  const ids = new Set(active.map(selection => selection.id));
+  const candidates = orderedElements(board).flatMap(selection => {
+    if (selection.kind === "edges" || ids.has(selection.id)) return [];
+    const element = board[selection.kind].find(item => item.id === selection.id);
+    if (element && "hidden" in element && element.hidden) return [];
+    const bounds = elementBounds(board, selection);
+    return bounds ? [bounds] : [];
+  });
+  const snap = (value: number) => Math.round(value / grid) * grid;
+  let snappedDx = snap(box.x + dx) - box.x, snappedDy = snap(box.y + dy) - box.y;
+  const moved = () => ({ x: box.x + snappedDx, y: box.y + snappedDy, width: box.width, height: box.height });
+  const guides: SnapGuide[] = [];
+
+  let bestX: { distance: number; delta: number; value: number; target: Bounds } | null = null;
+  let bestY: { distance: number; delta: number; value: number; target: Bounds } | null = null;
+  for (const target of candidates) {
+    const current = moved();
+    const movingX = [current.x, current.x + current.width / 2, current.x + current.width];
+    const targetX = [target.x, target.x + target.width / 2, target.x + target.width];
+    for (const source of movingX) for (const value of targetX) {
+      const delta = value - source, distance = Math.abs(delta);
+      if (distance <= threshold && (!bestX || distance < bestX.distance)) bestX = { distance, delta, value, target };
+    }
+    const movingY = [current.y, current.y + current.height / 2, current.y + current.height];
+    const targetY = [target.y, target.y + target.height / 2, target.y + target.height];
+    for (const source of movingY) for (const value of targetY) {
+      const delta = value - source, distance = Math.abs(delta);
+      if (distance <= threshold && (!bestY || distance < bestY.distance)) bestY = { distance, delta, value, target };
+    }
+  }
+  if (bestX) {
+    snappedDx += bestX.delta;
+    const current = moved();
+    guides.push({ axis: "x", value: bestX.value, from: Math.min(current.y, bestX.target.y) - 24, to: Math.max(current.y + current.height, bestX.target.y + bestX.target.height) + 24 });
+  }
+  if (bestY) {
+    snappedDy += bestY.delta;
+    const current = moved();
+    guides.push({ axis: "y", value: bestY.value, from: Math.min(current.x, bestY.target.x) - 24, to: Math.max(current.x + current.width, bestY.target.x + bestY.target.width) + 24 });
+  }
+  return { board: moveSelection(board, selections, snappedDx, snappedDy), guides };
+}
 export function snapMoveSelection(board: BoardState, selections: Selection[], dx: number, dy: number, grid = 8): BoardState {
-  const box = selectionBounds(board, editable(board, selections)); if (!box) return moveSelection(board, selections, dx, dy);
-  const snap = (v: number) => Math.round(v / grid) * grid; return moveSelection(board, selections, snap(box.x + dx) - box.x, snap(box.y + dy) - box.y);
+  const box = selectionBounds(board, editable(board, selections));
+  if (!box) return moveSelection(board, selections, dx, dy);
+  const snap = (value: number) => Math.round(value / grid) * grid;
+  return moveSelection(board, selections, snap(box.x + dx) - box.x, snap(box.y + dy) - box.y);
 }
 export function parentOf(board: BoardState, id: string) {
   return board.nodes.find(n => n.id === id)?.parentId ?? board.edges.find(e => e.target === id && board.nodes.some(n => n.id === e.source))?.source;

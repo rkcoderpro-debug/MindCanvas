@@ -11,9 +11,9 @@ function Harness({ initial }: { initial: BoardState }) {
   const [board, setBoard] = useState(initial); current = board;
   return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
 }
-function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit & { pointerType?: string } = {}) {
+function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit & { pointerType?: string; pointerId?: number } = {}) {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
-  Object.defineProperty(e, "pointerId", { value: 1 }); Object.defineProperty(e, "pointerType", { value: modifiers.pointerType ?? "mouse" }); target.dispatchEvent(e);
+  Object.defineProperty(e, "pointerId", { value: modifiers.pointerId ?? 1 }); Object.defineProperty(e, "pointerType", { value: modifiers.pointerType ?? "mouse" }); target.dispatchEvent(e);
 }
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -118,6 +118,18 @@ describe("Canvas interactions", () => {
     const before = pattern();
     await act(async () => { pointer(svg, "pointerdown", 20, 30, { pointerType: "touch" }); pointer(svg, "pointermove", 77, 101, { pointerType: "touch" }); pointer(svg, "pointerup", 77, 101, { pointerType: "touch" }); });
     expect(pattern()).not.toBe(before); expect(current.viewport).toMatchObject({ x: 57, y: 71 }); expect(current.nodes).toEqual(b.nodes);
+  });
+  it("pinch-zooms around the two-finger center in one viewport commit", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 40, 50, { pointerType: "touch", pointerId: 1 });
+      pointer(svg, "pointerdown", 140, 50, { pointerType: "touch", pointerId: 2 });
+      pointer(svg, "pointermove", 240, 50, { pointerType: "touch", pointerId: 2 });
+      pointer(svg, "pointerup", 240, 50, { pointerType: "touch", pointerId: 2 });
+      pointer(svg, "pointerup", 40, 50, { pointerType: "touch", pointerId: 1 });
+    });
+    expect(commit).toHaveBeenCalledTimes(1); expect(current.viewport).toMatchObject({ x: -40, y: -50, scale: 2 });
   });
   it("switches paper styles and formats text without an alert", async () => {
     const b = { ...blankBoard(), texts: [{ id: "txt", text: "Editable", x: 20, y: 40, width: 200 }] };

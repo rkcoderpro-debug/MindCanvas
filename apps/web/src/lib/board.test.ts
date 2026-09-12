@@ -31,6 +31,18 @@ describe("Editable canvas model", () => {
     const svg = exportCanvasSvg({ ...blankBoard(), background: "graph", texts: [{ id: "t", text: "Key fact", x: 10, y: 40, width: 200, bold: true, textAlign: "right", backgroundColor: "#fff2cc" }] });
     expect(svg).toContain('id="mindcanvas-bg"'); expect(svg).toContain('font-weight="700"'); expect(svg).toContain('text-anchor="end"'); expect(svg).toContain("#fff2cc");
   });
+  it("exports wrapped node labels with a portable font and readable dark-node text", () => {
+    const svg = exportCanvasSvg({ ...blankBoard(), nodes: [{ id: "long", label: "A long editable mind map label that must stay inside its node", x: 10, y: 20, width: 150, height: 90, color: "#172554", sourcePage: 8 }] });
+    expect((svg.match(/<tspan/g) ?? []).length).toBeGreaterThan(2);
+    expect(svg).toContain('font-family="Inter,Arial,Helvetica,sans-serif"');
+    expect(svg).toContain('fill="#ffffff"');
+    expect(svg).toContain("Page 8");
+  });
+  it("uses the active export palette for both paper and connectors", () => {
+    const palette = { canvas: "#111111", dot: "#222222", grid: "#333333", gridMinor: "#444444", gridMajor: "#555555", rule: "#666666", margin: "#777777", text: "#eeeeee", nodeFill: "#888888", elementStroke: "#999999", connector: "#abcdef", muted: "#bbbbbb", surface: "#121212" };
+    const svg = exportCanvasSvg({ ...board(), edges: [{ id: "edge", source: "a", target: "b" }] }, palette);
+    expect(svg).toContain('fill="#111111"'); expect(svg).toContain('stroke="#abcdef"');
+  });
   it("uses only selected study content and applies contextual AI as editable elements", () => {
     const b = { ...blankBoard(), texts: [{ id: "t", text: "Mitosis", x: 20, y: 40, width: 200 }], nodes: [{ id: "n", label: "Cell cycle", x: 300, y: 20, width: 190, height: 76 }] };
     expect(selectionToStudyText(b, [{ kind: "texts", id: "t" }])).toBe("Mitosis");

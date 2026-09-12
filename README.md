@@ -1,6 +1,6 @@
-# MindCanvas V3.4
+# MindCanvas V3.5
 
-MindCanvas is a visual study workspace for turning notes and private PDFs into editable canvases, mind maps and flashcards. V3.4 adds viewport-synchronized paper backgrounds, rich canvas text, contextual selection AI, quick project/content search, cross-project clipboard support and stronger study flows. This repository contains a React/Vite frontend, an Express server boundary for private AI/PDF operations, shared graph types, and Supabase migration scaffolding.
+MindCanvas is a visual study workspace for turning notes and private PDFs into editable canvases, mind maps and flashcards. V3.5 adds an installable offline-capable PWA, durable IndexedDB project drafts with a visible sync queue, matching SVG/PNG export typography and wrapping, a scalable Elements panel, smart alignment guides and two-finger mobile zoom. This repository contains a React/Vite frontend, an Express server boundary for private AI/PDF operations, shared graph types, and Supabase migration scaffolding.
 
 ## Run locally
 

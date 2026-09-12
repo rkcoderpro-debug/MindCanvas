@@ -2,6 +2,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { parseBoard } from "./board";
 import type { Flashcard, FlashcardDeck, FlashcardStorage } from "./flashcards";
+import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
 
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number };
 export type ProjectFolder = { id: string; name: string };
@@ -18,36 +19,89 @@ export const cacheKey = (owner: string | null) => `mindcanvas:projects:v3:${owne
 export const versionCacheKey = (owner: string | null, projectId: string) => `mindcanvas:versions:v1:${owner ?? "guest"}:${projectId}`;
 export const flashcardDeckCacheKey = (owner: string | null) => `mindcanvas:flashcards:v1:${owner ?? "guest"}:decks`;
 export const flashcardCacheKey = (owner: string | null, deckId: string) => `mindcanvas:flashcards:v1:${owner ?? "guest"}:cards:${deckId}`;
-export function readCache(owner: string | null): CachedProject[] {
-  const raw = localStorage.getItem(cacheKey(owner));
-  if (raw) {
-    const data: unknown = JSON.parse(raw);
-    if (!Array.isArray(data)) throw new Error("Invalid local cache; export your browser data before clearing it.");
-    return data.map(p => ({ ...p, board: parseBoard(p.board) }));
+const memoryCaches = new Map<string, CachedProject[]>();
+const memoryOnlyCaches = new Set<string>();
+const hydratedCaches = new Set<string>();
+const ownerCacheId = (owner: string | null) => owner ?? "guest";
+function parseProjectCache(value: unknown): CachedProject[] {
+  if (!Array.isArray(value)) throw new Error("Invalid local cache; export your browser data before clearing it.");
+  return value.map(item => {
+    if (!item || typeof item !== "object") throw new Error("Invalid local project cache.");
+    const project = item as Partial<CachedProject>;
+    if (typeof project.id !== "string" || typeof project.title !== "string" || typeof project.updatedAt !== "string" || !project.board) throw new Error("Invalid local project cache.");
+    return { ...project, folderId: typeof project.folderId === "string" ? project.folderId : null, pending: !!project.pending, board: parseBoard(project.board) } as CachedProject;
+  });
+}
+function writeProjectCache(owner: string | null, projects: CachedProject[]) {
+  const key = cacheKey(owner), normalized = projects.map(project => ({ ...project, board: parseBoard(project.board) }));
+  memoryCaches.set(key, normalized);
+  try {
+    localStorage.setItem(key, JSON.stringify(normalized));
+    memoryOnlyCaches.delete(key);
+  } catch {
+    // Keep the current session usable when a large canvas exceeds the
+    // localStorage quota. IndexedDB remains the durable fallback.
+    memoryOnlyCaches.add(key);
   }
+  void writeOfflineProjectCache(ownerCacheId(owner), normalized).catch(() => undefined);
+}
+export function readCache(owner: string | null): CachedProject[] {
+  const key = cacheKey(owner);
+  const raw = localStorage.getItem(key);
+  if (raw) {
+    const parsed = parseProjectCache(JSON.parse(raw));
+    memoryCaches.set(key, parsed);
+    return parsed;
+  }
+  // A memory-only copy is intentional only after localStorage rejected a
+  // write. Otherwise an empty localStorage (for example after sign-out or a
+  // test reset) must not resurrect stale data from module memory.
+  const memory = memoryCaches.get(key);
+  if (memoryOnlyCaches.has(key) && memory) return memory;
+  memoryCaches.delete(key);
   // Recover only the explicit v2 user cache; never import the old shared demo key.
   const legacy = localStorage.getItem(`mindcanvas:board:v2:${owner ?? "guest"}`);
-  if (!legacy) return [];
+  if (!legacy) { memoryCaches.set(key, []); return []; }
   const board = parseBoard(JSON.parse(legacy));
   // The v2 board.id sometimes differed from notes.id. Keep the old copy, but
   // never replay it automatically as a new cloud row (possibly "demo-board").
   // Only drafts created by the v3 repository have a reliable cloud identity.
-  return [{ id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: false }];
+  const projects = [{ id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: false }];
+  memoryCaches.set(key, projects);
+  return projects;
+}
+export async function hydrateProjectCache(owner: string | null) {
+  const id = ownerCacheId(owner), key = cacheKey(owner);
+  if (hydratedCaches.has(key)) return readCache(owner);
+  const local = readCache(owner);
+  try {
+    const stored = await readOfflineProjectCache(id);
+    if (stored) {
+      const indexed = parseProjectCache(stored), merged = new Map(indexed.map(project => [project.id, project]));
+      for (const project of local) {
+        const previous = merged.get(project.id);
+        if (!previous || project.pending || project.updatedAt >= previous.updatedAt) merged.set(project.id, project);
+      }
+      writeProjectCache(owner, [...merged.values()]);
+    } else writeProjectCache(owner, local);
+  } catch { memoryCaches.set(key, local); }
+  hydratedCaches.add(key);
+  return readCache(owner);
 }
 export function cacheProject(owner: string | null, project: CachedProject) {
   const entries = readCache(owner);
-  localStorage.setItem(cacheKey(owner), JSON.stringify([project, ...entries.filter(p => p.id !== project.id)]));
+  writeProjectCache(owner, [project, ...entries.filter(p => p.id !== project.id)]);
 }
 export function acknowledge(owner: string, snapshot: CachedProject, revision = snapshot.revision) {
   const entries = readCache(owner);
-  localStorage.setItem(cacheKey(owner), JSON.stringify(entries.map(p => {
+  writeProjectCache(owner, entries.map(p => {
     if (p.id !== snapshot.id) return p;
     const exactSnapshot = JSON.stringify(p.board) === JSON.stringify(snapshot.board) && p.folderId === snapshot.folderId;
     if (exactSnapshot) return { ...p, pending: false, revision };
     // An edit may arrive while this snapshot is in flight. It is still based on
     // the revision that just saved, so advance its base without marking it clean.
     return p.revision === snapshot.revision ? { ...p, revision } : p;
-  })));
+  }));
 }
 
 export function sameBoardContent(left: BoardState, right: BoardState) {
@@ -228,7 +282,7 @@ export async function deleteFolder(owner: string | null, folder: ProjectFolder) 
   const folders = (await fetchFolders(owner)).filter(f => f.id !== folder.id);
   localStorage.setItem(cacheKey(owner) + ":folders", JSON.stringify(folders));
   const entries = readCache(owner).map(p => p.folderId === folder.id ? { ...p, folderId: null } : p);
-  localStorage.setItem(cacheKey(owner), JSON.stringify(entries));
+  writeProjectCache(owner, entries);
 }
 
 export type FlashcardRepositoryResult<T> = { items: T[]; source: FlashcardStorage };

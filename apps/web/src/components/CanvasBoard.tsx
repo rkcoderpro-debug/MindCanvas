@@ -5,8 +5,9 @@ import { applySelectionAi, arrangeMindMap, clamp, connect, elementBounds, hidden
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, selectionBounds, setElementFlags, snapMoveSelection, ungroupSelection } from "../lib/editorCommands";
+import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveLayer, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, rotateSelection, selectionBounds, setElementFlags, smartSnapMoveSelection, ungroupSelection, type SnapGuide } from "../lib/editorCommands";
 import LayerStack from "./LayerStack";
+import ElementsPanel from "./ElementsPanel";
 import CanvasNavigator from "./CanvasNavigator";
 import { nodeHeight } from "../lib/mindMapLayout";
 import CanvasBackground, { BACKGROUND_OPTIONS } from "./CanvasBackground";
@@ -18,6 +19,7 @@ import type { SelectionAiResult } from "../lib/api";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number };
+type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
 const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "select", icon: MousePointer2, key: "V" }, { id: "hand", icon: Hand, key: "H" },
@@ -28,11 +30,13 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
 export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
-  const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null);
+  const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
+  const touchPoints = useRef(new Map<number, Vec2>());
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
   const selected = selections.at(-1) ?? null;
   const setSelected = (s: Selection | null) => setSelections(s ? [s] : []);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [guides, setGuides] = useState<SnapGuide[]>([]);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
@@ -127,7 +131,10 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     e.preventDefault(); const p = point(e.clientX, e.clientY, g.base), dx = p.x - g.start.x, dy = p.y - g.start.y;
     let next = g.next;
     if (g.mode === "move") {
-      next = snap ? snapMoveSelection(g.base, g.selections ?? [g.selection!], dx, dy) : moveSelection(g.base, g.selections ?? [g.selection!], dx, dy);
+      if (snap) {
+        const result = smartSnapMoveSelection(g.base, g.selections ?? [g.selection!], dx, dy, 8, 7 / g.base.viewport.scale);
+        next = result.board; setGuides(result.guides);
+      } else { next = moveSelection(g.base, g.selections ?? [g.selection!], dx, dy); setGuides([]); }
       if (g.reparent) {
         g.target = [...orderedElements(g.base)].reverse().filter(s => s.kind === "nodes" && s.id !== g.selection!.id && !hidden.has(s.id)).find(s => {
           const n = g.base.nodes.find(n => n.id === s.id)!;
@@ -155,11 +162,48 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   };
   const finish = (cancel = false) => {
     const g = gesture.current; if (!g) return;
-    gesture.current = null; setPreview(null); setMarquee(null); setDropTarget(null);
+    gesture.current = null; setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]);
     if (g.mode === "marquee") { if (cancel) setSelections(g.selections ?? []); }
     if (!cancel && g.reparent && g.target) g.next = reparentNode(g.next, g.selection!.id, g.target);
     if (!cancel && JSON.stringify(g.base) !== JSON.stringify(g.next)) onChange(g.next);
     if (svg.current?.hasPointerCapture(g.pointer)) svg.current.releasePointerCapture(g.pointer);
+  };
+  const touchDownCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType !== "touch") return;
+    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPoints.current.size !== 2) return;
+    if (gesture.current) finish(true);
+    const entries = [...touchPoints.current.entries()] as [[number, Vec2], [number, Vec2]];
+    const [, first] = entries[0], [, second] = entries[1], rect = svg.current!.getBoundingClientRect();
+    const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
+    const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+    pinch.current = { pointerIds: [entries[0][0], entries[1][0]], base: board, startDistance: distance,
+      worldCenter: { x: (center.x - board.viewport.x) / board.viewport.scale, y: (center.y - board.viewport.y) / board.viewport.scale }, next: board };
+    for (const [pointerId] of entries) if (!svg.current?.hasPointerCapture(pointerId)) svg.current?.setPointerCapture(pointerId);
+    e.preventDefault(); e.stopPropagation();
+  };
+  const touchMoveCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType !== "touch") return;
+    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const active = pinch.current;
+    if (!active) return;
+    const first = touchPoints.current.get(active.pointerIds[0]), second = touchPoints.current.get(active.pointerIds[1]);
+    if (!first || !second) return;
+    const rect = svg.current!.getBoundingClientRect(), distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+    const scale = clamp(active.base.viewport.scale * distance / active.startDistance, .2, 4);
+    const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
+    active.next = { ...active.base, viewport: { scale, x: center.x - active.worldCenter.x * scale, y: center.y - active.worldCenter.y * scale } };
+    setPreview(active.next); e.preventDefault(); e.stopPropagation();
+  };
+  const touchEndCapture = (e: ReactPointerEvent<SVGSVGElement>, cancel = false) => {
+    if (e.pointerType !== "touch") return;
+    touchPoints.current.delete(e.pointerId);
+    const active = pinch.current;
+    if (!active) return;
+    pinch.current = null; setPreview(null);
+    if (!cancel && JSON.stringify(active.base.viewport) !== JSON.stringify(active.next.viewport)) onChange(active.next);
+    for (const pointerId of active.pointerIds) if (svg.current?.hasPointerCapture(pointerId)) svg.current.releasePointerCapture(pointerId);
+    e.preventDefault(); e.stopPropagation();
   };
   const duplicate = () => { if (!selected) return; const next = duplicateSelection(board, selections); setSelections(next.selection); onChange(next.board); };
   const copy = async () => { if (!selections.length) return; await copyCanvasSelection(board, selections); setHasCopy(true); };
@@ -244,6 +288,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
         <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={selectedStudyText ? t("askAiSelection") : t("selectTextForAi")} disabled={!selectedStudyText || !canUseAi} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></div>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
+        onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => touchEndCapture(e)} onPointerCancelCapture={e => touchEndCapture(e, true)}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
         <CanvasBackground board={b}/>
         <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="var(--connector)"/></marker></defs>
@@ -272,6 +317,9 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
             {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
           </g>)}
           </LayerStack>
+          {guides.map((guide, index) => guide.axis === "x"
+            ? <line key={`x-${index}`} className="smart-guide" x1={guide.value} y1={guide.from} x2={guide.value} y2={guide.to} strokeWidth={1 / b.viewport.scale}/>
+            : <line key={`y-${index}`} className="smart-guide" x1={guide.from} y1={guide.value} x2={guide.to} y2={guide.value} strokeWidth={1 / b.viewport.scale}/>)}
           {marquee && <rect {...marquee} fill="color-mix(in srgb, var(--accent) 12%, transparent)" stroke="var(--accent)" strokeWidth={1 / b.viewport.scale} pointerEvents="none"/>}
           {selections.length > 1 && selections.map(s => { const r = elementBounds(b, s); return r && <rect key={s.id} {...r} fill="none" stroke="var(--accent)" strokeDasharray="4 3" pointerEvents="none"/>; })}
           {bounds && selected && !editing && tool === "select" && <g className="selection-box">
@@ -333,7 +381,11 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         {selected?.kind === "nodes" && <button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button>}
         <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>
       </>}
-      <h3>{t("layers")}</h3><div className="layer-list">{orderedElements(b).reverse().map(({ kind, id }) => { const el = b[kind].find(e => e.id === id)!; return <button key={id} className={selections.some(s => s.id === id) ? "active" : ""} onClick={e => { setTool("select"); const next = expandGroups(b, [{ kind, id }]); setSelections(e.shiftKey ? expandGroups(b, [...selections, ...next]) : next); }}>{b.groups?.some(g => g.elementIds.includes(id)) ? "▣ " : ""}{hiddenElements.has(id) ? "… " : ""}{"locked" in el && el.locked ? "🔒 " : ""}{("label" in el ? el.label : "text" in el ? el.text : "") || t(labelKey[kind])}</button>; })}</div>
+      <ElementsPanel board={b} selections={selections} hiddenElements={hiddenElements}
+        onSelect={(selection, additive) => { setTool("select"); const next = expandGroups(b, [selection]); setSelections(additive ? expandGroups(b, [...selections, ...next]) : next); }}
+        onMove={(sourceId, targetId) => onChange(moveLayer(board, sourceId, targetId))}
+        onToggleHidden={(selection, value) => onChange(setElementFlags(board, [selection], { hidden: value }))}
+        onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>
     </aside>
     {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
     {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
