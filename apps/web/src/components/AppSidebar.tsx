@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCo
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
+import { sidebarDensityFor } from "../lib/sidebarLayout";
 import SidebarAppearanceControls from "./SidebarAppearanceControls";
 
 export type SidebarView = "recent" | "__favorites" | "__trash" | "__flashcards";
@@ -44,6 +45,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   const openFolder = (folderId: string) => { closeMobile(); onOpenFolder(folderId); };
   const handleDrop = (event: DragEvent, folderId: string | null) => { closeMobile(); onDropProject(event, folderId); };
   const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : sidebarWidth}px` } as CSSProperties;
+  const density = sidebarDensityFor(sidebarWidth, sidebarCollapsed);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -76,7 +78,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   const toggleLabel = isMobile ? (mobileOpen ? t("close") : t("mobileMenu")) : t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse");
 
   return <>
-    <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={style}>
+    <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
         <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-name">MindCanvas</span><span className="beta">V3.8.1</span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={`${toggleLabel}${isMobile ? "" : " · Ctrl/⌘+Shift+B"}`} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>

@@ -12,8 +12,9 @@
 - Moved profile/avatar/email and sign-out to a single topbar account menu; moved PWA install into Settings and highlighted Flashcards as a separate study feature.
 - Added a compact inner folder scroll frame, canvas fullscreen mode, and persisted top/bottom/left/right drawing-toolbar placement settings.
 - Bumped the service-worker cache to `mindcanvas-shell-v3.8.1-ux` so installed clients receive this UX patch.
+- Added progressive sidebar density states: folder space fills the available middle region, folder names remain on one line while narrow, the version badge hides first, the MindCanvas name hides next, and dragging to the final threshold automatically opens the icon rail.
 
-Files added: `apps/web/src/components/AppSidebar.tsx`, `apps/web/src/components/SidebarAppearanceControls.tsx`, `apps/web/src/components/TopbarProfile.tsx`, `apps/web/src/lib/canvasViewport.ts`, `apps/web/src/lib/canvasViewport.test.ts`, `apps/web/src/lib/editorPreferences.ts`, `apps/web/src/lib/editorPreferences.test.ts`, `V3_8_1_NAVIGATION_UX_VI.md`.
+Files added: `apps/web/src/components/AppSidebar.tsx`, `apps/web/src/components/SidebarAppearanceControls.tsx`, `apps/web/src/components/TopbarProfile.tsx`, `apps/web/src/lib/canvasViewport.ts`, `apps/web/src/lib/canvasViewport.test.ts`, `apps/web/src/lib/editorPreferences.ts`, `apps/web/src/lib/editorPreferences.test.ts`, `apps/web/src/lib/sidebarLayout.ts`, `apps/web/src/lib/sidebarLayout.test.ts`, `V3_8_1_NAVIGATION_UX_VI.md`.
 
 ## V3.8.0 follow-up — Theme picker preview
 

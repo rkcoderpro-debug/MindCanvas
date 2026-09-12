@@ -21,10 +21,7 @@ import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasS
 import { useWorkspace } from "./hooks/useWorkspace";
 import { usePwaInstall } from "./lib/pwa";
 import { isToolbarPosition, TOOLBAR_POSITIONS, type ToolbarPosition } from "./lib/editorPreferences";
-
-const SIDEBAR_DEFAULT_WIDTH = 280;
-const SIDEBAR_MIN_WIDTH = 220;
-const SIDEBAR_MAX_WIDTH = 380;
+import { SIDEBAR_AUTO_COLLAPSE_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, clampSidebarWidth } from "./lib/sidebarLayout";
 const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
@@ -53,7 +50,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
-  const [sidebarWidth, setSidebarWidth] = useState(() => { try { const saved = Number(localStorage.getItem("mindcanvas:sidebar-width")); return Number.isFinite(saved) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, saved)) : SIDEBAR_DEFAULT_WIDTH; } catch { return SIDEBAR_DEFAULT_WIDTH; } });
+  const [sidebarWidth, setSidebarWidth] = useState(() => { try { const saved = Number(localStorage.getItem("mindcanvas:sidebar-width")); return Number.isFinite(saved) ? clampSidebarWidth(saved) : SIDEBAR_DEFAULT_WIDTH; } catch { return SIDEBAR_DEFAULT_WIDTH; } });
   const [commandOpen, setCommandOpen] = useState(false);
   const [canvasFullscreen, setCanvasFullscreen] = useState(false);
   const [toolbarPosition, setToolbarPosition] = useState<ToolbarPosition>(() => {
@@ -103,8 +100,17 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     if (sidebarCollapsed) return;
     event.preventDefault();
     const startX = event.clientX, startWidth = sidebarWidth;
-    const move = (nextEvent: PointerEvent) => setSidebarWidth(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + nextEvent.clientX - startX)));
     const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); };
+    const move = (nextEvent: PointerEvent) => {
+      const nextWidth = startWidth + nextEvent.clientX - startX;
+      if (nextWidth <= SIDEBAR_AUTO_COLLAPSE_WIDTH) {
+        setSidebarWidth(SIDEBAR_MIN_WIDTH);
+        setSidebarCollapsed(true);
+        stop();
+        return;
+      }
+      setSidebarWidth(clampSidebarWidth(nextWidth));
+    };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
   };
   const openView = (view: SidebarView) => { void ws.home(); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };

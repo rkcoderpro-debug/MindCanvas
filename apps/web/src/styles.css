@@ -919,3 +919,65 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
   .toolbar-right .drawing-toolbar { left: auto; right: 9px; }
   .toolbar-position-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* V3.8.1 sidebar density: let folders own the available middle space and
+   progressively remove decoration before the rail takes over. */
+.sidebar:not(.sidebar-collapsed) .folder-list,
+.sidebar-collapsed .folder-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  align-content: start;
+}
+.sidebar:not(.sidebar-collapsed) .sidebar-bottom { margin-top: 0; }
+.folder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; flex-wrap: nowrap; min-width: 0; }
+.folder-open { min-width: 0; overflow: hidden; }
+.folder-open .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-dropdown { grid-column: 1 / -1; min-width: 0; width: 100%; }
+
+/* First density step: keep the folder accordion usable but remove the
+   secondary actions so names have room to stay on one line. */
+.sidebar[data-sidebar-density="compact"] .folder-more { display: none; }
+.sidebar[data-sidebar-density="compact"] .folder-dropdown { flex-basis: 100%; }
+.sidebar[data-sidebar-density="compact"] .beta { display: none; }
+
+/* Second density step: the chevron is taken out of flex flow. This keeps the
+   row single-line while the arrow remains a real, clickable accordion affordance. */
+.sidebar[data-sidebar-density="narrow"] .brand-name,
+.sidebar[data-sidebar-density="narrow"] .beta { display: none; }
+.sidebar[data-sidebar-density="narrow"] .folder-more { display: none; }
+.sidebar[data-sidebar-density="narrow"] .folder-row { grid-template-columns: minmax(0, 1fr); }
+.sidebar[data-sidebar-density="narrow"] .folder-expand-toggle {
+  position: absolute;
+  z-index: 1;
+  top: 3px;
+  right: 3px;
+  width: 26px;
+  height: 30px;
+  padding: 5px 2px;
+}
+.sidebar[data-sidebar-density="narrow"] .folder-open { padding-right: 30px; }
+.sidebar[data-sidebar-density="narrow"] .folder-dropdown { padding-left: 22px; padding-right: 2px; }
+
+/* Icon rail is intentionally the final step; the existing rail rules hide
+   text and the accordion controls, while this keeps its folder area scrollable. */
+.sidebar[data-sidebar-density="rail"] .folder-list { flex: 1 1 auto; min-height: 0; max-height: none; }
+
+@media (max-width: 620px) {
+  /* Mobile is a full-width drawer, so desktop density thresholds must not
+     hide the drawer's brand or its folder accordion. */
+  .sidebar:not(.sidebar-collapsed) .folder-list,
+  .sidebar-collapsed .folder-list {
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: 170px;
+  }
+  .sidebar.mobile-open .folder-list { max-height: min(44dvh, 360px); }
+  .sidebar.mobile-open .brand-name { display: inline; }
+  .sidebar.mobile-open .beta { display: inline-flex; }
+  .sidebar[data-sidebar-density="narrow"] .folder-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .sidebar[data-sidebar-density="narrow"] .folder-expand-toggle,
+  .sidebar[data-sidebar-density="narrow"] .folder-more { position: static; display: grid; }
+  .sidebar[data-sidebar-density="narrow"] .folder-open { padding-right: 8px; }
+  .sidebar[data-sidebar-density="narrow"] .folder-dropdown { padding-left: 30px; padding-right: 6px; }
+}

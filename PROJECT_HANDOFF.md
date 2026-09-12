@@ -6,8 +6,8 @@
 
 - Extracted the application navigation into `AppSidebar.tsx` and `SidebarAppearanceControls.tsx`; `App.tsx` now owns workspace state while the sidebar owns navigation-only UI state.
 - Replaced the overlapping collapse controls with a hamburger toggle. Desktop keeps an icon rail, mobile uses a drawer with a backdrop and Escape/click-outside close behavior.
-- Added a persisted desktop width preference (`220–380px`, default `280px`) with a keyboard-safe pointer drag handle and double-click reset. Mobile ignores the desktop width and uses the full top drawer width.
-- Folder rows now use an explicit expand/collapse control. Folder children are real user-scoped projects from `ws.projects`; folder filtering, project drag/drop and folder actions remain connected to the existing workspace store.
+- Added a persisted desktop width preference (`154–380px`, default `280px`) with a keyboard-safe pointer drag handle and double-click reset. Width density is progressive: the version badge hides at `≤220px`, the product name hides at `≤180px`, and dragging to `≤160px` automatically switches to the icon rail. Mobile ignores the desktop width and uses the full top drawer width.
+- Folder rows now use an explicit expand/collapse control. The folder region flexes into the available middle space instead of leaving a blank gap; rows stay single-line, with the narrow-state chevron removed from text flow. Folder children are real user-scoped projects from `ws.projects`; folder filtering, project drag/drop and folder actions remain connected to the existing workspace store.
 - Replaced hidden sidebar `<select>` controls with functional language/theme popovers. Theme choices preview the full UI while hovered/focused and persist only after click; the ten existing themes and the no-Liquid-Glass decision are unchanged.
 - Wheel/touchpad pan and pinch/trackpad zoom now normalize line/page deltas, render through `requestAnimationFrame`, and commit one viewport update after the wheel gesture becomes idle. This avoids one `onChange`/autosave stage per high-frequency touchpad event while preserving `BoardState.viewport` as separate state from elements.
 
@@ -17,6 +17,7 @@
 - `apps/web/src/components/SidebarAppearanceControls.tsx` — clickable language/theme popovers and temporary theme preview.
 - `apps/web/src/components/TopbarProfile.tsx` — single topbar profile menu with account details and sign-out/sign-in action.
 - `apps/web/src/components/CanvasBoard.tsx` — batched wheel navigation and interaction handoff from a pending viewport gesture.
+- `apps/web/src/lib/sidebarLayout.ts`, `apps/web/src/lib/sidebarLayout.test.ts` — shared sidebar width bounds and the comfortable/compact/narrow/rail density thresholds.
 - `apps/web/src/lib/canvasViewport.ts` — pure wheel normalization, pan and cursor-anchored zoom helpers.
 - `apps/web/src/lib/canvasViewport.test.ts` — deterministic viewport helper coverage.
 - `apps/web/src/lib/editorPreferences.ts`, `apps/web/src/lib/editorPreferences.test.ts` — validated and tested toolbar-position preference.
@@ -39,7 +40,7 @@
 
 ### Known limits
 
-- The sidebar width preference is local to each browser; it is not project data and is intentionally not synced through Supabase.
+- The sidebar width preference is local to each browser; it is not project data and is intentionally not synced through Supabase. On desktop it is clamped to `154–380px`; the auto-collapse threshold is `160px`.
 - Physical touchpad feel, mobile drawer breakpoints and PWA update behavior still need a short QA pass on the deployed Render URL in Chrome/Brave and a real phone.
 
 ## Update 2026-09-12 — V3.8.0 AI Sources, Clipboard & Collapsible Navigation (latest)
