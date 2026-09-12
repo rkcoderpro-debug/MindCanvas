@@ -21,7 +21,7 @@ import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasS
 import { useWorkspace } from "./hooks/useWorkspace";
 import { usePwaInstall } from "./lib/pwa";
 import { isToolbarPosition, TOOLBAR_POSITIONS, type ToolbarPosition } from "./lib/editorPreferences";
-import { SIDEBAR_AUTO_COLLAPSE_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, clampSidebarWidth } from "./lib/sidebarLayout";
+import { SIDEBAR_DEFAULT_WIDTH, clampSidebarWidth } from "./lib/sidebarLayout";
 const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
@@ -102,14 +102,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     const startX = event.clientX, startWidth = sidebarWidth;
     const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); };
     const move = (nextEvent: PointerEvent) => {
-      const nextWidth = startWidth + nextEvent.clientX - startX;
-      if (nextWidth <= SIDEBAR_AUTO_COLLAPSE_WIDTH) {
-        setSidebarWidth(SIDEBAR_MIN_WIDTH);
-        setSidebarCollapsed(true);
-        stop();
-        return;
-      }
-      setSidebarWidth(clampSidebarWidth(nextWidth));
+      setSidebarWidth(clampSidebarWidth(startWidth + nextEvent.clientX - startX));
     };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
   };

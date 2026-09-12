@@ -3,7 +3,6 @@ export const SIDEBAR_MIN_WIDTH = 154;
 export const SIDEBAR_MAX_WIDTH = 380;
 export const SIDEBAR_COMPACT_WIDTH = 220;
 export const SIDEBAR_NARROW_WIDTH = 180;
-export const SIDEBAR_AUTO_COLLAPSE_WIDTH = 160;
 
 export type SidebarDensity = "comfortable" | "compact" | "narrow" | "rail";
 

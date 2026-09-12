@@ -6,7 +6,7 @@
 
 - Extracted the application navigation into `AppSidebar.tsx` and `SidebarAppearanceControls.tsx`; `App.tsx` now owns workspace state while the sidebar owns navigation-only UI state.
 - Replaced the overlapping collapse controls with a hamburger toggle. Desktop keeps an icon rail, mobile uses a drawer with a backdrop and Escape/click-outside close behavior.
-- Added a persisted desktop width preference (`154–380px`, default `280px`) with a keyboard-safe pointer drag handle and double-click reset. Width density is progressive: the version badge hides at `≤220px`, the product name hides at `≤180px`, and dragging to `≤160px` automatically switches to the icon rail. Mobile ignores the desktop width and uses the full top drawer width.
+- Added a persisted desktop width preference (`154–380px`, default `280px`) with a keyboard-safe pointer drag handle and double-click reset. Width density is progressive: the version badge hides at `≤220px`, then the product name hides at `≤180px`; resizing never changes the collapsed state. The icon rail is only activated by the hamburger/keyboard shortcut. Mobile ignores the desktop width and uses the full top drawer width.
 - Folder rows now use an explicit expand/collapse control. The folder region flexes into the available middle space instead of leaving a blank gap; rows stay single-line, with the narrow-state chevron removed from text flow. Folder children are real user-scoped projects from `ws.projects`; folder filtering, project drag/drop and folder actions remain connected to the existing workspace store.
 - Replaced hidden sidebar `<select>` controls with functional language/theme popovers. Theme choices preview the full UI while hovered/focused and persist only after click; the ten existing themes and the no-Liquid-Glass decision are unchanged.
 - Wheel/touchpad pan and pinch/trackpad zoom now normalize line/page deltas, render through `requestAnimationFrame`, and commit one viewport update after the wheel gesture becomes idle. This avoids one `onChange`/autosave stage per high-frequency touchpad event while preserving `BoardState.viewport` as separate state from elements.
@@ -36,11 +36,11 @@
 - V3.8.1 is a frontend/shared interaction release. No Supabase migration, Gemini key, Render API environment variable or backend route change is required.
 - Redeploy `mindcanvas-web` from the new commit. `mindcanvas-api` from V3.8 remains compatible; redeploy it only when deploying the whole repository together.
 - The service-worker cache is `mindcanvas-shell-v3.8.1-ux`; after deployment, reload online once and accept **Update now** if the PWA presents the update banner.
-- Local verification for this release: 106 frontend tests pass after the navigation/profile/settings regression additions; 28 backend tests pass. Run the workspace typecheck and production builds before pushing.
+- Local verification for this release: 109 frontend tests pass after the navigation/profile/settings regression additions, sidebar density checks and the no-auto-collapse regression; 28 backend tests pass. Run the workspace typecheck and production builds before pushing.
 
 ### Known limits
 
-- The sidebar width preference is local to each browser; it is not project data and is intentionally not synced through Supabase. On desktop it is clamped to `154–380px`; the auto-collapse threshold is `160px`.
+- The sidebar width preference is local to each browser; it is not project data and is intentionally not synced through Supabase. On desktop it is clamped to `154–380px`; resizing does not modify the manual collapsed/expanded preference.
 - Physical touchpad feel, mobile drawer breakpoints and PWA update behavior still need a short QA pass on the deployed Render URL in Chrome/Brave and a real phone.
 
 ## Update 2026-09-12 — V3.8.0 AI Sources, Clipboard & Collapsible Navigation (latest)

@@ -121,6 +121,16 @@ describe("Workspace UI", () => {
     expect(localStorage.getItem("mindcanvas:sidebar-collapsed")).toBe("true");
     expect(host.querySelector('[aria-label="Mở rộng thanh điều hướng"]')).not.toBeNull();
   });
+  it("keeps the sidebar expanded when dragged to its narrowest width", async () => {
+    await act(async () => root.render(<App/>));
+    const handle = host.querySelector(".sidebar-resize-handle") as HTMLDivElement;
+    await act(async () => handle.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 280 })));
+    await act(async () => window.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 0 })));
+    expect(host.querySelector(".sidebar")?.classList.contains("sidebar-collapsed")).toBe(false);
+    expect(host.querySelector(".sidebar")?.getAttribute("data-sidebar-density")).toBe("narrow");
+    expect(localStorage.getItem("mindcanvas:sidebar-width")).toBe("154");
+    await act(async () => window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 0 })));
+  });
   it("keeps one navigation toggle and exposes account actions in the topbar", async () => {
     await act(async () => root.render(<App/>));
     expect(host.querySelectorAll(".sidebar-toggle-button")).toHaveLength(1);

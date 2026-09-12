@@ -8,7 +8,7 @@ V3.8.1 hoàn thiện các vấn đề UX còn lại sau V3.8: sidebar không cò
 
 - Sidebar được tách thành `AppSidebar.tsx` và `SidebarAppearanceControls.tsx`.
 - Desktop có nút hamburger để chuyển giữa sidebar đầy đủ và icon rail. Phím `Ctrl/⌘+Shift+B` vẫn hoạt động.
-- Mép phải sidebar kéo được trong khoảng `154–380px`; bấm đúp để về `280px`. Độ rộng lưu riêng trên trình duyệt. Khi kéo hẹp, sidebar lần lượt ẩn badge phiên bản ở `≤220px`, ẩn tên MindCanvas ở `≤180px`, rồi tự chuyển thành icon rail khi chạm `≤160px`.
+- Mép phải sidebar kéo được trong khoảng `154–380px`; bấm đúp để về `280px`. Độ rộng lưu riêng trên trình duyệt. Khi kéo hẹp, sidebar lần lượt ẩn badge phiên bản ở `≤220px` rồi ẩn tên MindCanvas ở `≤180px`; sidebar không tự chuyển trạng thái, icon rail chỉ bật bằng nút hamburger hoặc phím tắt.
 - Mobile dùng drawer: bấm hamburger để mở, lớp nền hoặc Escape để đóng; drawer không dùng lại độ rộng desktop.
 - Folder có mũi tên accordion. Vùng folder tự giãn để lấp phần giữa sidebar; mỗi folder giữ một hàng, còn ở độ rộng hẹp mũi tên nằm ngoài luồng chữ để tên không bị ép xuống dòng. Khi mở sẽ hiển thị tối đa 8 project thật trong folder, không tạo dữ liệu demo.
 - Theme và ngôn ngữ dùng popover button. Theme hover/focus preview tạm, rời hover hoàn nguyên, click mới lưu.
@@ -33,7 +33,7 @@ npm test
 npm run build
 ```
 
-Frontend hiện có 108 test pass sau khi thêm regression cho toggle/profile/settings, toolbar preferences và các ngưỡng độ rộng sidebar. Backend hiện có 28 test pass; chạy cùng workspace để kiểm tra đầy đủ:
+Frontend hiện có 109 test pass sau khi thêm regression cho toggle/profile/settings, toolbar preferences, các ngưỡng độ rộng sidebar và việc kéo hẹp không tự thu sidebar. Backend hiện có 28 test pass; chạy cùng workspace để kiểm tra đầy đủ:
 
 ```bash
 npm run typecheck
@@ -47,4 +47,4 @@ Không thể coi Gemini, Supabase, OAuth, Render hay touchpad vật lý là đã
 
 Không có migration hoặc env mới. Push commit lên `main`, sau đó Render deploy `mindcanvas-web`. Nếu deploy cả monorepo, `mindcanvas-api` vẫn tương thích với frontend V3.8.1.
 
-Sau deploy hãy hard refresh và chấp nhận cập nhật PWA. Kiểm tra lần lượt: một hamburger duy nhất trên mobile, profile/sign out trên topbar, kéo sidebar qua các mức ẩn badge/ẩn tên/tự thành icon rail, vùng folder tự đầy và mỗi folder không xuống dòng, mở folder và scrollbar, Settings → Cài ứng dụng/vị trí toolbar, fullscreen canvas, popover theme/ngôn ngữ, hover preview theme, touchpad pan và Ctrl/Cmd + wheel zoom.
+Sau deploy hãy hard refresh và chấp nhận cập nhật PWA. Kiểm tra lần lượt: một hamburger duy nhất trên mobile, profile/sign out trên topbar, kéo sidebar qua các mức ẩn badge/ẩn tên nhưng không tự thu sidebar, vùng folder tự đầy và mỗi folder không xuống dòng, mở folder và scrollbar, Settings → Cài ứng dụng/vị trí toolbar, fullscreen canvas, popover theme/ngôn ngữ, hover preview theme, touchpad pan và Ctrl/Cmd + wheel zoom.
