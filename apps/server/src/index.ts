@@ -4,7 +4,7 @@ import multer from "multer";
 import { z } from "zod";
 import { config } from "./config.js";
 import { requireUser } from "./auth.js";
-import { extractPdf } from "./pdf.js";
+import { extractDocument, UnsupportedDocumentError } from "./document.js";
 import { generateWithFallback } from "./providers.js";
 import { AIError } from "./gemini.js";
 import { generateFlashcardsWithGemini } from "./flashcards.js";
@@ -17,7 +17,7 @@ app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
   mode: "server",
-  release: "3.5.1",
+  release: "3.8.0",
   ai: "gemini",
   aiConfigured: Boolean(config.GEMINI_API_KEY),
   aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,
@@ -38,8 +38,14 @@ function sendAiError(res: express.Response, error: unknown, fallbackMessage: str
 }
 
 app.post("/api/documents/upload", requireUser, upload.single("file"), async (req, res) => {
-  if (!req.file || req.file.mimetype !== "application/pdf") return res.status(400).json({ error: "Only PDF files are supported." });
-  try { const extracted = await extractPdf(req.file.buffer); return res.json({ id: crypto.randomUUID(), fileName: req.file.originalname, ...extracted }); } catch { return res.status(422).json({ error: "PDF text extraction failed." }); }
+  if (!req.file) return res.status(400).json({ error: "A source file is required." });
+  try {
+    const extracted = await extractDocument(req.file.buffer, req.file.originalname, req.file.mimetype);
+    return res.json({ id: crypto.randomUUID(), ...extracted });
+  } catch (error) {
+    if (error instanceof UnsupportedDocumentError) return res.status(415).json({ error: error.message, code: error.code });
+    return res.status(422).json({ error: "Document text extraction failed." });
+  }
 });
 
 const aiInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional() });
@@ -47,6 +53,24 @@ app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   const parsed = aiInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid document input." });
   try { const result = await aiScheduler.run(req.userId!, () => generateWithFallback(parsed.data)); return res.json(result); }
   catch (error) { return sendAiError(res, error, "AI processing failed."); }
+});
+
+const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards"]), maxCards: z.coerce.number().int().min(3).max(50).default(20) });
+app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) => {
+  const parsed = aiFileInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid file AI request." });
+  if (!req.file) return res.status(400).json({ error: "A source file is required." });
+  try {
+    const source = await extractDocument(req.file.buffer, req.file.originalname, req.file.mimetype);
+    const documentId = crypto.randomUUID();
+    const result = parsed.data.task === "mind-map"
+      ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image }))
+      : await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image }));
+    return res.json({ ...result, source: { id: documentId, kind: source.kind, fileName: source.fileName, mimeType: source.mimeType, text: source.text, pageCount: source.pageCount } });
+  } catch (error) {
+    if (error instanceof UnsupportedDocumentError) return res.status(415).json({ error: error.message, code: error.code });
+    return sendAiError(res, error, parsed.data.task === "mind-map" ? "File AI processing failed." : "Flashcard generation failed.");
+  }
 });
 
 const flashcardInput = aiInput.extend({ maxCards: z.coerce.number().int().min(3).max(50).default(20) });

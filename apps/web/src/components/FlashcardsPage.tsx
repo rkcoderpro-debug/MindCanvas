@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, Cloud, FileText, HardDrive, Pencil, Play, Plus, RotateCcw, Search, Sparkles, Target, Trash2, Zap, X } from "lucide-react";
+import { BookOpen, CheckCircle2, ClipboardPaste, Cloud, FileText, HardDrive, Pencil, Play, Plus, RotateCcw, Search, Sparkles, Target, Trash2, Upload, Zap, X } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
 import { fetchBoard, readCache } from "../lib/projectStore";
@@ -7,15 +7,16 @@ import { dueCards, type Flashcard, type FlashcardDeck, type FlashcardRating } fr
 import { aiErrorMessage } from "../lib/aiErrors";
 import { useFlashcards } from "../hooks/useFlashcards";
 import { useLanguage } from "../lib/i18n";
-import { generateFlashcards, uploadPdf, type GeneratedFlashcard } from "../lib/api";
+import { generateFlashcards, generateFlashcardsFromFile, type GeneratedFlashcard, type GeneratedFlashcardsFromFile } from "../lib/api";
 import { getDocumentSource, saveDocumentToStorage } from "../lib/supabase";
+import { AI_FILE_ACCEPT, readClipboardSource } from "../lib/aiSource";
 import { MAX_FILE_BYTES } from "../lib/board";
 import Dialog from "./Dialog";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
-type AiSource = "text" | "project" | "pdf";
+type AiSource = "text" | "project" | "file";
 type AiPreviewCard = Omit<GeneratedFlashcard, "sourcePage"> & { id: string; sourcePage: number | null };
 type AiPreview = { title: string; provider: string; model: string; cards: AiPreviewCard[]; sourceDocumentId?: string };
 
@@ -63,7 +64,7 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
   const [aiSource, setAiSource] = useState<AiSource>("text");
   const [aiText, setAiText] = useState("");
   const [aiProjectId, setAiProjectId] = useState("");
-  const [aiPdf, setAiPdf] = useState<File | null>(null);
+  const [aiFile, setAiFile] = useState<File | null>(null);
   const [aiMaxCards, setAiMaxCards] = useState("20");
   const [aiPreview, setAiPreview] = useState<AiPreview | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -89,14 +90,14 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
   const openAiGenerator = () => {
     if (!owner) { setAiError(t("loginRequired")); return; }
     const linkedProject = flashcards.selectedDeck?.projectId ?? "";
-    setAiSource(linkedProject ? "project" : "text"); setAiProjectId(linkedProject); setAiText(""); setAiPdf(null); setAiMaxCards("20"); setAiPreview(null); setAiError(""); setAiDialog(true);
+    setAiSource(linkedProject ? "project" : "text"); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards("20"); setAiPreview(null); setAiError(""); setAiDialog(true);
   };
   const closeAiGenerator = () => { if (aiBusy) return; aiController.current?.abort(); setAiDialog(false); setAiPreview(null); setAiError(""); };
   const sourceForAi = async (signal: AbortSignal) => {
     if (aiSource === "text") {
       const text = aiText.trim();
       if (!text) throw new Error(t("aiTextRequired"));
-      return { text, documentId: undefined as string | undefined };
+      return { text, documentId: undefined as string | undefined, file: undefined as File | undefined };
     }
     if (aiSource === "project") {
       if (!aiProjectId) throw new Error(t("aiProjectRequired"));
@@ -104,13 +105,11 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
       const board = cachedEntry && (cachedEntry.pending || !navigator.onLine) ? cachedEntry.board : await fetchBoard(owner!, aiProjectId);
       const text = boardToStudyText(board);
       if (!text.trim() || text.trim() === `Title: ${board.title}`) throw new Error(t("aiProjectEmpty"));
-      return { text, documentId: undefined as string | undefined };
+      return { text, documentId: undefined as string | undefined, file: undefined as File | undefined };
     }
-    if (!aiPdf) throw new Error(t("aiPdfRequired"));
-    if (aiPdf.size > MAX_FILE_BYTES) throw new Error(t("fileTooLarge"));
-    const doc = await uploadPdf(aiPdf, signal);
-    await saveDocumentToStorage(aiPdf, doc.id, doc.text, doc.pageCount, flashcards.selectedDeck?.projectId ?? undefined);
-    return { text: doc.text, documentId: doc.id };
+    if (!aiFile) throw new Error(t("aiFileRequired"));
+    if (aiFile.size > MAX_FILE_BYTES) throw new Error(t("fileTooLarge"));
+    return { text: "", documentId: undefined as string | undefined, file: aiFile };
   };
   const generateAiPreview = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -121,9 +120,12 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
     try {
       const source = await sourceForAi(request.signal);
       if (request.signal.aborted) return;
-      const result = await generateFlashcards(source.text, source.documentId, maxCards, request.signal);
+      const result = source.file
+        ? await generateFlashcardsFromFile(source.file, maxCards, request.signal)
+        : await generateFlashcards(source.text, source.documentId, maxCards, request.signal);
       if (request.signal.aborted) return;
       if (result.provider === "demo" || !result.cards?.length || result.cards.length > 50) throw new Error(t("aiDemo"));
+      if (source.file) { const fileResult = result as GeneratedFlashcardsFromFile; await saveDocumentToStorage(source.file, fileResult.source.id, fileResult.source.text, fileResult.source.pageCount, flashcards.selectedDeck?.projectId ?? undefined); }
       setAiPreview({ title: result.title, provider: result.provider, model: result.model, sourceDocumentId: result.sourceDocumentId, cards: result.cards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) });
     } catch (err) { if (!request.signal.aborted) setAiError(aiErrorMessage(err, t, "aiFlashcardError")); }
     finally { if (!request.signal.aborted) setAiBusy(false); }
@@ -232,11 +234,11 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
       <footer className="actions"><button type="button" className="secondary-button" disabled={flashcards.busy} onClick={() => setCardDialog(null)}>{t("cancel")}</button><button className="primary-button" disabled={flashcards.busy || !cardFront.trim() || !cardBack.trim()}>{flashcards.busy ? t("saving") : t("save")}</button></footer>
     </form></Dialog>}
     {aiDialog && <Dialog title={t("generateFlashcards")} onClose={closeAiGenerator}>{!aiPreview ? <form onSubmit={event => void generateAiPreview(event)}>
-      <p>{t("aiFlashcardHint")}</p>
-      <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { setAiSource(event.target.value as AiSource); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="pdf">{t("aiSourcePdf")}</option></select></label>
-      {aiSource === "text" && <label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => setAiText(event.target.value)} placeholder={t("sourceTextPlaceholder")}/></label>}
+      <p>{t("aiFlashcardHint")}</p><small className="field-hint">{t("aiFileHint")}</small>
+      <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { setAiSource(event.target.value as AiSource); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
+      {aiSource === "text" && <div className="ai-text-source"><label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => setAiText(event.target.value)} placeholder={t("sourceTextPlaceholder")}/></label><button type="button" className="secondary-button clipboard-button" disabled={aiBusy} onClick={() => void (async () => { try { const pasted = await readClipboardSource(); if (pasted.kind === "image") { setAiSource("file"); setAiFile(pasted.file); } else setAiText(pasted.text); setAiError(""); } catch (err) { setAiError(err instanceof Error && err.message === "CLIPBOARD_EMPTY" ? t("clipboardEmpty") : t("clipboardReadError")); } })()}><ClipboardPaste size={16}/>{t("pasteFromClipboard")}</button><small className="field-hint">{t("clipboardSourceHint")}</small></div>}
       {aiSource === "project" && <label>{t("sourceProject")}<select required value={aiProjectId} disabled={aiBusy || !availableProjects.length} onChange={event => setAiProjectId(event.target.value)}><option value="">{t("chooseProject")}</option>{availableProjects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select><small>{t("sourceProjectHint")}</small></label>}
-      {aiSource === "pdf" && <label className="upload-drop">{t("choosePdf")}<input type="file" accept=".pdf,application/pdf" disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiPdf(file); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("pdfHint")}</small>{aiPdf && <small>{aiPdf.name}</small>}</label>}
+      {aiSource === "file" && <label className="upload-drop ai-file-drop" onDragOver={event => { event.preventDefault(); event.currentTarget.classList.add("dragging"); }} onDragLeave={event => event.currentTarget.classList.remove("dragging")} onDrop={event => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); const file = event.dataTransfer.files?.[0] ?? null; setAiFile(file); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}><span><Upload size={20}/>{t("chooseAiFile")}</span><input type="file" accept={AI_FILE_ACCEPT} disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("aiFileHint")}</small>{aiFile && <small>{aiFile.name}</small>}</label>}
       <label>{t("maxGeneratedCards")}<input type="number" min="3" max="50" step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => setAiMaxCards(event.target.value)}/></label>
       {aiError && <p className="form-error" role="alert">{aiError}</p>}{aiBusy && <p role="status">{t("generatingFlashcards")}</p>}
       <footer className="actions"><button type="button" className="secondary-button" disabled={aiBusy} onClick={closeAiGenerator}>{t("cancel")}</button><button className="primary-button" disabled={aiBusy || !owner}>{aiBusy ? t("generating") : t("generatePreview")}</button></footer>

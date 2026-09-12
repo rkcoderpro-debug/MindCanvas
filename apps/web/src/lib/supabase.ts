@@ -114,9 +114,11 @@ export async function saveBoardNote(board: import("@mindcanvas/shared").BoardSta
 export async function saveDocumentToStorage(file: File, documentId: string, extractedText: string, pageCount?: number, noteId?: string) {
   if (!supabase) return;
   const user = await getCurrentUser();
-  if (!user) throw new Error("Bạn cần đăng nhập để lưu PDF.");
-  const path = `${user.id}/${documentId}.pdf`;
-  const upload = await supabase.storage.from("documents").upload(path, file, { contentType: "application/pdf", upsert: false });
+  if (!user) throw new Error("Bạn cần đăng nhập để lưu tài liệu.");
+  const extension = (file.name.toLowerCase().match(/\.([a-z0-9]{1,8})$/)?.[1] ?? "bin").replace(/[^a-z0-9]/g, "");
+  const contentType = file.type || "application/octet-stream";
+  const path = `${user.id}/${documentId}.${extension}`;
+  const upload = await supabase.storage.from("documents").upload(path, file, { contentType, upsert: false });
   if (upload.error) throw upload.error;
   const { error } = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
   if (error) throw error;
@@ -130,7 +132,7 @@ export async function getDocumentSource(options: { documentId?: string; projectI
   else throw new Error("Không tìm thấy tài liệu nguồn.");
   const { data, error } = await query.maybeSingle();
   if (error) throw error;
-  if (!data?.file_path) throw new Error("Không tìm thấy PDF nguồn của project này.");
+  if (!data?.file_path) throw new Error("Không tìm thấy tài liệu nguồn của project này.");
   const signed = await supabase.storage.from("documents").createSignedUrl(data.file_path as string, 15 * 60);
   if (signed.error || !signed.data?.signedUrl) throw signed.error ?? new Error("Không mở được PDF nguồn.");
   return { id: data.id as string, name: data.file_name as string, pageCount: Number(data.page_count) || undefined, url: signed.data.signedUrl };

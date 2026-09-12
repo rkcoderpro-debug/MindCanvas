@@ -1,5 +1,55 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-12 — V3.8.0 AI Sources, Clipboard & Collapsible Navigation (latest)
+
+### Implemented
+
+- Added a single authenticated `POST /api/ai/file` route for mind-map and flashcard generation from text documents, Office Open XML documents and images.
+- Supported inputs: PDF, DOCX, PPTX, TXT, Markdown, CSV, TSV, JSON, JPEG, PNG, WebP and GIF. DOCX/PPTX are parsed server-side from their XML entries; PDF keeps controlled `[PAGE n]` markers; images are passed to Gemini as inline multimodal input.
+- Added clipboard source handling in both AI panels. Text is pasted into the source field; copied screenshots become an image source. File picker and drag-and-drop share the same accepted-format/size guard.
+- Kept the editable-preview contract for both generated graph and flashcards: AI output is not applied until the user reviews and applies it. Uploaded source files are saved through the existing private Supabase Storage flow after a successful preview.
+- Added a persisted desktop sidebar collapse state with `Ctrl/⌘+Shift+B`; the collapsed rail keeps icon actions available and mobile menu behavior remains separate.
+- Bumped the API release and PWA shell cache to `3.8.0` so installed clients can receive the new source pipeline.
+
+### Architecture and deployment
+
+- `apps/server/src/document.ts` is the format adapter boundary. It deliberately rejects legacy `.doc`/`.ppt`; Google Docs/Slides should be downloaded as `.docx`/`.pptx` before upload. The Office parser is dependency-free and bounded to avoid adding a runtime ZIP package for this slice.
+- `apps/server/src/index.ts` owns multipart validation/auth and routes both AI tasks through the existing scheduler/provider abstraction. No Gemini secret is read by the browser.
+- `apps/web/src/lib/aiSource.ts` owns clipboard/file-source normalization; `apps/web/src/lib/api.ts` owns the authenticated file request; `AiPanel.tsx` and `FlashcardsPage.tsx` own preview UX.
+- No Supabase migration or new environment variable is required. Redeploy both Render services because the API route and web UI changed. `/api/health` reports release `3.8.0`.
+- Local verification for this release covers the document adapters, Gemini inline-image request, clipboard normalization, sidebar persistence and the existing V3.7.1/V3.5.1 regression suites. Production Gemini quota, Google OAuth, Supabase Storage and physical-device clipboard permissions still require post-deploy QA.
+
+### Known limits and next slice
+
+- Office extraction currently preserves readable text and slide/page markers, not tables, images, speaker notes or exact layout. PDF scan/OCR and richer DOCX/PPTX structure remain future work.
+- `navigator.clipboard.read()` may require a user gesture and browser permission; the UI keeps a text-area fallback.
+- Large binary sources are bounded by the existing 10 MB upload limit. A later storage-first upload path can raise this without exposing provider keys.
+
+### Changed files in V3.8.0
+
+- `apps/server/src/document.ts`
+- `apps/server/src/gemini.ts`
+- `apps/server/src/providers.ts`
+- `apps/server/src/flashcards.ts`
+- `apps/server/src/index.ts`
+- `apps/server/tests/document.test.ts`
+- `apps/server/tests/gemini.test.ts`
+- `apps/web/src/lib/api.ts`
+- `apps/web/src/lib/aiSource.ts`
+- `apps/web/src/lib/aiSource.test.ts`
+- `apps/web/src/lib/i18n.tsx`
+- `apps/web/src/lib/supabase.ts`
+- `apps/web/src/components/AiPanel.tsx`
+- `apps/web/src/components/FlashcardsPage.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/styles.css`
+- `apps/web/public/sw.js`
+- `README.md`
+- `DEPLOY_V1_VI.md`
+- `CHANGES_FROM_ORIGINAL.md`
+- `V3_8_AI_SOURCES_NAV_VI.md`
+
 ## Update 2026-09-12 — V3.7.1 Media, Figma Resize & Shared AI Reliability (latest)
 
 ### Implemented

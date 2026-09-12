@@ -1,6 +1,6 @@
-# MindCanvas V3.7.1
+# MindCanvas V3.8.0
 
-MindCanvas is a visual study workspace for turning notes and private PDFs into editable canvases, mind maps and flashcards. V3.7 adds self-contained image/video/audio media, clipboard screenshots, microphone recording, web/YouTube/video embeds, crop/trim controls, persisted rotation and opacity, Figma-style eight-handle resizing, and media-aware layers/previews/exports. V3.7.1 keeps the V3.5.1 shared Gemini reliability hotfix: bounded concurrency, per-account queue fairness, transient-error retries with exponential backoff, safer fallback cooldowns and concise localized errors. This repository contains a React/Vite frontend, an Express server boundary for private AI/PDF operations, shared graph types, and Supabase migration scaffolding.
+MindCanvas is a visual study workspace for turning notes and private documents into editable canvases, mind maps and flashcards. V3.8 adds one server-side AI file pipeline for pasted text, clipboard screenshots, PDF, DOCX, PPTX, Markdown/CSV/JSON and common image files, with editable previews before Apply. It also adds a collapsible desktop navigation rail and a cleaner mobile-friendly source picker. V3.7.1 media/resize work and the V3.5.1 shared Gemini reliability hotfix remain included. This repository contains a React/Vite frontend, an Express server boundary for private AI/document operations, shared graph types, and Supabase migration scaffolding.
 
 ## Run locally
 
@@ -10,7 +10,7 @@ cp .env.example .env
 npm run dev
 ```
 
-The frontend runs on Vite's default port and the API runs on `http://localhost:8787`. Without Supabase credentials, the app intentionally uses a blank local canvas. With Supabase configured, projects, folders, notes and PDFs are scoped to the signed-in user through RLS.
+The frontend runs on Vite's default port and the API runs on `http://localhost:8787`. Without Supabase credentials, the app intentionally uses a blank local canvas. With Supabase configured, projects, folders, notes and source documents are scoped to the signed-in user through RLS. `.doc`/`.ppt` legacy files are intentionally rejected; export them as `.docx`/`.pptx` first.
 
 See [PROJECT_HANDOFF.md](./PROJECT_HANDOFF.md) for architecture, setup, credentials, current limits, and the next implementation slices.
 

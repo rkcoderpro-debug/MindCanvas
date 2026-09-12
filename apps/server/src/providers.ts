@@ -1,10 +1,10 @@
 import { config } from "./config.js";
-import { generateGemini } from "./gemini.js";
+import { generateGemini, type GeminiImageInput } from "./gemini.js";
 
 type AIProviderName = "experiential-labs" | "gemini" | "demo";
 type StructuredMindMap = { title: string; nodes: Array<{ id: string; label: string; parentId?: string; sourcePage?: number }>; edges: Array<{ id: string; source: string; target: string; label?: string }>; sourceDocumentId?: string };
 
-export type GenerateInput = { text: string; documentId?: string };
+export type GenerateInput = { text: string; documentId?: string; image?: GeminiImageInput };
 export type ProviderResult = { provider: AIProviderName; model: string; graph: StructuredMindMap };
 
 export interface AIProvider {

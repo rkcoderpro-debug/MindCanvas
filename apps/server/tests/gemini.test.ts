@@ -12,6 +12,16 @@ test("403 leaked-key reason is actionable without reflecting secrets", async () 
     return message.includes("bị lộ") && message.includes("gemini-3.8-flash") && !message.includes("test-key");
   });
 });
+test("sends an image as inline_data without exposing it to the client", async () => {
+  let requestBody: any;
+  const result = await generateGemini({ text: "Build a map from this diagram.", image: { mimeType: "image/png", data: "cG5n" } }, options, async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return ok();
+  });
+  assert.equal(result.model, "gemini-3.8-flash");
+  assert.deepEqual(requestBody.contents[0].parts[1].inline_data, { mime_type: "image/png", data: "cG5n" });
+  assert.equal(requestBody.contents[0].parts[0].text.includes("Build a map"), true);
+});
 test("recognizes API, referrer and IP restrictions; does not echo unknown content", () => {
   for (const [reason, expected] of [["SERVICE_DISABLED", "chưa được bật"], ["API_KEY_HTTP_REFERRER_BLOCKED", "referrer"], ["API_KEY_IP_ADDRESS_BLOCKED", "IP"], ["API_KEY_SERVICE_BLOCKED", "API restrictions"]]) {
     assert.ok(permissionHint({ error: { details: [{ reason }] } }).includes(expected));

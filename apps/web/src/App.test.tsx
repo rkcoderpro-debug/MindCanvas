@@ -80,15 +80,23 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V3.7.1 quick search and finds text stored inside a canvas", async () => {
+  it("opens V3.8.0 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V3.7.1");
+    expect(host.querySelector(".beta")?.textContent).toBe("V3.8.0");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
     expect(input).not.toBeNull();
     await act(async () => { input.value = "mitochondria"; input.dispatchEvent(new Event("input", { bubbles: true })); });
     expect(host.querySelector("dialog[open]")?.textContent).toContain("Biology");
+  });
+  it("collapses the desktop navigation to an icon rail and persists the preference", async () => {
+    await act(async () => root.render(<App/>));
+    const toggle = host.querySelector('[aria-label="Thu gọn thanh điều hướng"]') as HTMLButtonElement;
+    await act(async () => toggle.click());
+    expect(host.querySelector(".sidebar")?.classList.contains("sidebar-collapsed")).toBe(true);
+    expect(localStorage.getItem("mindcanvas:sidebar-collapsed")).toBe("true");
+    expect(host.querySelector('[aria-label="Mở rộng thanh điều hướng"]')).not.toBeNull();
   });
 });

@@ -1,5 +1,21 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.8.0 — AI đa nguồn và điều hướng thu gọn
+
+V3.8 hợp nhất một pipeline AI phía server cho mind map và flashcard. Người dùng có thể dán văn bản, dán ảnh từ clipboard hoặc chọn/thả PDF, DOCX, PPTX, TXT, Markdown, CSV, TSV, JSON, JPG, PNG, WebP/GIF. Kết quả vẫn đi qua bước preview có thể sửa trước khi Apply. Thanh điều hướng desktop có thể thu gọn thành icon rail bằng nút ở đầu sidebar hoặc `Ctrl/⌘+Shift+B`; trạng thái được lưu trên trình duyệt. Flashcard cũng có nút dán clipboard riêng.
+
+Không có migration Supabase mới và không thêm secret/env bắt buộc. API mới là `POST /api/ai/file`, vẫn yêu cầu session Supabase ở server. Ảnh được gửi cho Gemini dưới dạng dữ liệu inline ở backend; key không xuất hiện trong browser. Google Docs/Slides nên tải xuống dạng `.docx`/`.pptx` rồi chọn file; `.doc` và `.ppt` cũ chưa được hỗ trợ.
+
+Sau khi push V3.8:
+
+1. Deploy `mindcanvas-api` trước. Mở `https://URL-API-CUA-BAN/api/health`; phải có `"release":"3.8.0"` và `"aiConfigured":true` nếu đã đặt Gemini key.
+2. Deploy `mindcanvas-web`, hard refresh, sau đó chấp nhận cập nhật PWA nếu trình duyệt báo bản mới.
+3. Đăng nhập Google, mở AI mind map hoặc Flashcards → Generate with AI. Thử lần lượt văn bản, ảnh PNG nhỏ, PDF/DOCX/PPTX. Kết quả phải hiện preview trước khi Apply.
+4. Thử nút thu gọn sidebar và phím `Ctrl/⌘+Shift+B`. Tải lại trang để kiểm tra trạng thái thu gọn vẫn được giữ.
+5. Nếu dùng Google Docs/Slides: **File → Download → Microsoft Word (.docx)** hoặc **Microsoft PowerPoint (.pptx)**, sau đó upload file đã tải xuống.
+
+Giới hạn hiện tại: file upload chịu `MAX_DOCUMENT_BYTES` (mặc định 10 MB), text đưa vào AI bị giới hạn 120.000 ký tự, parser Office chỉ đọc nội dung chữ cơ bản. Bảng, hình, layout phức tạp và PDF scan cần một slice OCR/layout riêng. Live Gemini, Supabase Storage/Auth và Render vẫn cần QA bằng credential thật sau deploy.
+
 ## Cập nhật V3.7.1 — Media, resize Figma và AI reliability
 
 V3.7.1 hợp nhất bản nâng cấp bạn gửi từ gói V1: chèn hình/video/audio vào canvas, dán ảnh chụp màn hình, ghi âm bằng micro, nhúng trang web/YouTube/video, crop/trim, xoay, opacity, 8 tay nắm resize kiểu Figma, layer/preview/export nhận đúng các phần tử mới. Vẫn giữ hotfix AI V3.5.1 cho nhiều tài khoản và dữ liệu board cũ tự mở được.
