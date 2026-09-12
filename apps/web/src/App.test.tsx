@@ -53,8 +53,10 @@ describe("Workspace UI", () => {
   it("switches the complete UI to English and persists preference without changing content", async () => {
     const board = blankBoard("Ghi chú của tôi"); cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    const select = host.querySelector('select[aria-label="Ngôn ngữ"]') as HTMLSelectElement;
-    await act(async () => { select.value = "en"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    const languageButton = host.querySelector('button[aria-label="Ngôn ngữ"]') as HTMLButtonElement;
+    await act(async () => languageButton.click());
+    const english = [...host.querySelectorAll<HTMLButtonElement>(".language-popover button")].find(button => button.textContent === "English")!;
+    await act(async () => english.click());
     expect(document.documentElement.lang).toBe("en"); expect(localStorage.getItem("mindcanvas:language")).toBe("en");
     expect(host.textContent).toContain("Recent files"); expect(host.textContent).toContain("Ghi chú của tôi");
   });
@@ -72,6 +74,26 @@ describe("Workspace UI", () => {
     expect(document.documentElement.dataset.theme).toBe("cobalt");
     expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
   });
+  it("previews a theme on hover or focus without persisting until it is selected", async () => {
+    await act(async () => root.render(<App/>));
+    const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
+    await act(async () => settings.click());
+    const cobalt = [...host.querySelectorAll<HTMLButtonElement>(".theme-option")].find(button => button.textContent?.includes("Đêm Cobalt"))!;
+    expect(document.documentElement.dataset.theme).toBe("light");
+    await act(async () => cobalt.dispatchEvent(new Event("pointerover", { bubbles: true })));
+    expect(document.documentElement.dataset.theme).toBe("cobalt");
+    await act(async () => cobalt.dispatchEvent(new Event("pointerout", { bubbles: true })));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    await act(async () => cobalt.focus());
+    expect(document.documentElement.dataset.theme).toBe("cobalt");
+    expect(localStorage.getItem("mindcanvas:theme")).toBe("light");
+    await act(async () => cobalt.blur());
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(localStorage.getItem("mindcanvas:theme")).toBe("light");
+    await act(async () => cobalt.click());
+    expect(document.documentElement.dataset.theme).toBe("cobalt");
+    expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
+  });
   it("opens the flashcards workspace without injecting demo decks or cards", async () => {
     await act(async () => root.render(<App/>));
     const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Flashcard") as HTMLButtonElement;
@@ -80,11 +102,11 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V3.8.0 quick search and finds text stored inside a canvas", async () => {
+  it("opens V3.8.1 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V3.8.0");
+    expect(host.querySelector(".beta")?.textContent).toBe("V3.8.1");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
     expect(input).not.toBeNull();

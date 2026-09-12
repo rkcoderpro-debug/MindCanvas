@@ -17,6 +17,7 @@ import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipb
 import { getDocumentSource } from "../lib/supabase";
 import type { SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
+import { normalizeWheelDelta, panViewport, zoomViewportAtPoint } from "../lib/canvasViewport";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
@@ -129,6 +130,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>());
+  const boardRef = useRef(board), onChangeRef = useRef(onChange);
+  const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
   const selected = selections.at(-1) ?? null;
   const setSelected = (s: Selection | null) => setSelections(s ? [s] : []);
@@ -144,6 +147,30 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
+  useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChange]);
+  const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
+  const commitWheelViewport = () => {
+    if (wheelIdle.current !== null) { window.clearTimeout(wheelIdle.current); wheelIdle.current = null; }
+    cancelWheelFrame();
+    const pending = wheelPending.current;
+    wheelPending.current = null;
+    if (pending) { setPreview(current => current === pending ? null : current); onChangeRef.current(pending); }
+  };
+  const scheduleWheelPreview = () => {
+    if (wheelFrameCancel.current) return;
+    const render = () => { wheelFrameCancel.current = null; if (wheelPending.current) setPreview(wheelPending.current); };
+    if (typeof window.requestAnimationFrame === "function") {
+      const id = window.requestAnimationFrame(render);
+      wheelFrameCancel.current = () => window.cancelAnimationFrame(id);
+    } else {
+      const id = window.setTimeout(render, 16);
+      wheelFrameCancel.current = () => window.clearTimeout(id);
+    }
+  };
+  const scheduleWheelCommit = () => {
+    if (wheelIdle.current !== null) window.clearTimeout(wheelIdle.current);
+    wheelIdle.current = window.setTimeout(commitWheelViewport, 120);
+  };
   const b = preview ?? editing?.fresh ?? board;
   const bounds = selectionBounds(b, selections);
   const selectedEl = selected && selections.length === 1 ? b[selected.kind].find(el => el.id === selected.id) : null;
@@ -243,17 +270,19 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     }
   };
   const selectElement = (e: ReactPointerEvent, s: Selection) => {
+    const interactionBoard = wheelPending.current ?? board;
+    commitWheelViewport();
     if (gesture.current || (e.button !== 0 && e.button !== 1)) return;
     if (!interactive || space || e.button === 1) return;
     e.stopPropagation(); e.preventDefault();
     svg.current?.focus();
     if (tool === "connector") {
       if (s.kind !== "nodes" && s.kind !== "shapes") return;
-      if (selected && ["nodes", "shapes"].includes(selected.kind)) onChange(connect(board, selected.id, s.id));
+      if (selected && ["nodes", "shapes"].includes(selected.kind)) onChange(connect(interactionBoard, selected.id, s.id));
       setSelected(s);
       return;
     }
-    const expanded = expandGroups(board, [s]);
+    const expanded = expandGroups(interactionBoard, [s]);
     if (e.shiftKey) {
       const ids = new Set(expanded.map(s => s.id));
       setSelections(selections.some(item => item.id === s.id) ? selections.filter(item => !ids.has(item.id)) : [...selections, ...expanded.filter(item => !selections.some(s => s.id === item.id))]);
@@ -264,16 +293,18 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     if (isLocked(s)) return;
     if (s.kind === "edges") return;
     svg.current?.focus(); svg.current?.setPointerCapture(e.pointerId);
-    const p = point(e.clientX, e.clientY);
-    gesture.current = { mode: "move", start: p, screen: { x: e.clientX, y: e.clientY }, base: board, selection: s, selections: targets, reparent: e.altKey && targets.length === 1 && s.kind === "nodes", pointer: e.pointerId, next: board };
+    const p = point(e.clientX, e.clientY, interactionBoard);
+    gesture.current = { mode: "move", start: p, screen: { x: e.clientX, y: e.clientY }, base: interactionBoard, selection: s, selections: targets, reparent: e.altKey && targets.length === 1 && s.kind === "nodes", pointer: e.pointerId, next: interactionBoard };
   };
   const down = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const interactionBoard = wheelPending.current ?? board;
+    commitWheelViewport();
     if (gesture.current) return;
     if (e.button !== 0 && e.button !== 1) return;
     if (editRef.current) { finishEdit(); return; }
     e.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
-    const p = point(e.clientX, e.clientY);
-    const base = board;
+    const p = point(e.clientX, e.clientY, interactionBoard);
+    const base = interactionBoard;
     if (space || tool === "hand" || e.button === 1 || (e.pointerType === "touch" && tool === "select")) {
       setSelected(null); gesture.current = { mode: "pan", start: p, screen: { x: e.clientX, y: e.clientY }, base, pointer: e.pointerId, next: base };
     } else if (tool === "select") {
@@ -341,6 +372,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   };
   const touchDownCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.pointerType !== "touch") return;
+    const interactionBoard = wheelPending.current ?? board;
+    commitWheelViewport();
     touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (touchPoints.current.size !== 2) return;
     if (gesture.current) finish(true);
@@ -348,8 +381,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     const [, first] = entries[0], [, second] = entries[1], rect = svg.current!.getBoundingClientRect();
     const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
     const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
-    pinch.current = { pointerIds: [entries[0][0], entries[1][0]], base: board, startDistance: distance,
-      worldCenter: { x: (center.x - board.viewport.x) / board.viewport.scale, y: (center.y - board.viewport.y) / board.viewport.scale }, next: board };
+    pinch.current = { pointerIds: [entries[0][0], entries[1][0]], base: interactionBoard, startDistance: distance,
+      worldCenter: { x: (center.x - interactionBoard.viewport.x) / interactionBoard.viewport.scale, y: (center.y - interactionBoard.viewport.y) / interactionBoard.viewport.scale }, next: interactionBoard };
     for (const [pointerId] of entries) if (!svg.current?.hasPointerCapture(pointerId)) svg.current?.setPointerCapture(pointerId);
     e.preventDefault(); e.stopPropagation();
   };
@@ -398,7 +431,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     try { const source = await getDocumentSource({ documentId }); setSourceView({ url: source.url, name: source.name, page }); }
     catch { setSourceError(t("sourceError")); }
   };
-  const zoom = (factor: number) => onChange({ ...board, viewport: { ...board.viewport, scale: clamp(board.viewport.scale * factor, .2, 4) } });
+  const zoom = (factor: number) => { commitWheelViewport(); onChange({ ...board, viewport: { ...board.viewport, scale: clamp(board.viewport.scale * factor, .2, 4) } }); };
   const addNode = () => {
     const parent = selected?.kind === "nodes" ? board.nodes.find(n => n.id === selected.id) : undefined;
     const id = crypto.randomUUID(), p = parent ? { x: parent.x + parent.width + 90, y: parent.y + 20 } : point((svg.current?.getBoundingClientRect().left ?? 0) + 250, (svg.current?.getBoundingClientRect().top ?? 0) + 180);
@@ -441,14 +474,21 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     const wheel = (e: WheelEvent) => {
       if (editRef.current || gesture.current) return;
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        const p = point(e.clientX, e.clientY), r = el.getBoundingClientRect();
-        const scale = clamp(board.viewport.scale * Math.exp(-e.deltaY * .003), .2, 4);
-        onChange({ ...board, viewport: { scale, x: e.clientX - r.left - p.x * scale, y: e.clientY - r.top - p.y * scale } });
-      } else onChange({ ...board, viewport: { ...board.viewport, x: board.viewport.x - e.deltaX, y: board.viewport.y - e.deltaY } });
+      const delta = normalizeWheelDelta(e.deltaX, e.deltaY, e.deltaMode);
+      const source = boardRef.current;
+      const currentViewport = wheelPending.current?.viewport ?? source.viewport;
+      const rect = el.getBoundingClientRect();
+      const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const viewport = e.ctrlKey || e.metaKey
+        ? zoomViewportAtPoint(currentViewport, delta.y, anchor)
+        : panViewport(currentViewport, -delta.x, -delta.y);
+      wheelPending.current = { ...source, viewport };
+      scheduleWheelPreview();
+      scheduleWheelCommit();
     };
-    el.addEventListener("wheel", wheel, { passive: false }); return () => el.removeEventListener("wheel", wheel);
-  }, [board, onChange]);
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => { el.removeEventListener("wheel", wheel); commitWheelViewport(); };
+  }, []);
 
   const editBounds = editing ? elementBounds(b, editing.selection) : null;
   const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", media: "media", embeds: "embed", edges: "connector" };

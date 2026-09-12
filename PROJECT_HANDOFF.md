@@ -1,6 +1,45 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-12 — V3.8.1 Navigation UX, Theme Preview & Smooth Viewport (latest)
+
+### Implemented
+
+- Extracted the application navigation into `AppSidebar.tsx` and `SidebarAppearanceControls.tsx`; `App.tsx` now owns workspace state while the sidebar owns navigation-only UI state.
+- Replaced the overlapping collapse controls with a hamburger toggle. Desktop keeps an icon rail, mobile uses a drawer with a backdrop and Escape/click-outside close behavior.
+- Added a persisted desktop width preference (`220–380px`, default `280px`) with a keyboard-safe pointer drag handle and double-click reset. Mobile ignores the desktop width and uses the full top drawer width.
+- Folder rows now use an explicit expand/collapse control. Folder children are real user-scoped projects from `ws.projects`; folder filtering, project drag/drop and folder actions remain connected to the existing workspace store.
+- Replaced hidden sidebar `<select>` controls with functional language/theme popovers. Theme choices preview the full UI while hovered/focused and persist only after click; the ten existing themes and the no-Liquid-Glass decision are unchanged.
+- Wheel/touchpad pan and pinch/trackpad zoom now normalize line/page deltas, render through `requestAnimationFrame`, and commit one viewport update after the wheel gesture becomes idle. This avoids one `onChange`/autosave stage per high-frequency touchpad event while preserving `BoardState.viewport` as separate state from elements.
+
+### Files and architecture
+
+- `apps/web/src/components/AppSidebar.tsx` — responsive navigation, folder accordion, mobile drawer and resize handle.
+- `apps/web/src/components/SidebarAppearanceControls.tsx` — clickable language/theme popovers and temporary theme preview.
+- `apps/web/src/components/CanvasBoard.tsx` — batched wheel navigation and interaction handoff from a pending viewport gesture.
+- `apps/web/src/lib/canvasViewport.ts` — pure wheel normalization, pan and cursor-anchored zoom helpers.
+- `apps/web/src/lib/canvasViewport.test.ts` — deterministic viewport helper coverage.
+- `apps/web/src/App.tsx`, `apps/web/src/App.test.tsx`, `apps/web/src/lib/i18n.tsx`, `apps/web/src/styles.css`, `apps/web/public/sw.js` — integration, translations, responsive styles, release cache and regression updates.
+
+### Deployment and verification
+
+- V3.8.1 is a frontend/shared interaction release. No Supabase migration, Gemini key, Render API environment variable or backend route change is required.
+- Redeploy `mindcanvas-web` from the new commit. `mindcanvas-api` from V3.8 remains compatible; redeploy it only when deploying the whole repository together.
+- The service-worker cache is `mindcanvas-shell-v3.8.1-navigation-touchpad`; after deployment, reload online once and accept **Update now** if the PWA presents the update banner.
+- Local verification for this release: 102 frontend tests pass after the viewport helper and wheel-batching regression additions; 28 backend tests pass. Run the workspace typecheck and production builds before pushing.
+
+### Known limits
+
+- The sidebar width preference is local to each browser; it is not project data and is intentionally not synced through Supabase.
+- Physical touchpad feel, mobile drawer breakpoints and PWA update behavior still need a short QA pass on the deployed Render URL in Chrome/Brave and a real phone.
+
 ## Update 2026-09-12 — V3.8.0 AI Sources, Clipboard & Collapsible Navigation (latest)
+
+### Theme preview follow-up
+
+- `ThemePicker` now previews the complete application theme on pointer hover or keyboard focus. Leaving the option restores the persisted choice; clicking commits the new choice and writes `mindcanvas:theme`.
+- The theme context separates the effective preview theme from `selectedTheme`, so temporary previews update CSS, browser theme color and canvas palette without affecting localStorage or project/autosave data.
+- Preview cleanup runs when the picker unmounts, and the short hover/selection motion is disabled under `prefers-reduced-motion`. The PWA shell cache was bumped to force installed clients to receive the updated picker.
+- Added regression coverage for hover, focus, revert and click/persist behavior in `apps/web/src/App.test.tsx`.
 
 ### Implemented
 

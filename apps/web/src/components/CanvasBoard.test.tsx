@@ -163,6 +163,22 @@ describe("Canvas interactions", () => {
     await act(async () => { pointer(svg, "pointerdown", 20, 30, { pointerType: "touch" }); pointer(svg, "pointermove", 77, 101, { pointerType: "touch" }); pointer(svg, "pointerup", 77, 101, { pointerType: "touch" }); });
     expect(pattern()).not.toBe(before); expect(current.viewport).toMatchObject({ x: 57, y: 71 }); expect(current.nodes).toEqual(b.nodes);
   });
+  it("batches a high-frequency touchpad wheel gesture into one viewport commit", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => root.render(<Harness initial={blankBoard()}/>));
+      const svg = host.querySelector("svg.canvas-svg")!;
+      await act(async () => {
+        svg.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 4, deltaY: 6, deltaMode: 0 }));
+        svg.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 5, deltaY: 7, deltaMode: 0 }));
+        svg.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 3, deltaY: 2, deltaMode: 0 }));
+      });
+      expect(commit).not.toHaveBeenCalled();
+      await act(async () => { vi.advanceTimersByTime(140); });
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(current.viewport).toMatchObject({ x: -12, y: -15 });
+    } finally { vi.useRealTimers(); }
+  });
   it("pinch-zooms around the two-finger center in one viewport commit", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const svg = host.querySelector("svg.canvas-svg")!;

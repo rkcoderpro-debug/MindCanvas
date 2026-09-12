@@ -1,5 +1,22 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V3.8.1 — điều hướng, theme preview và touchpad
+
+V3.8.1 là bản nâng cấp frontend/shared, không cần migration Supabase hay biến môi trường mới. Sidebar đã được tách lại: nút hamburger mở/thu trên desktop, mobile dùng drawer có lớp nền đóng, desktop kéo được độ rộng `220–380px`, folder có nút mở rộng để xem canvas thật trong thư mục, và theme/ngôn ngữ dùng popover nên không còn select bị đè hoặc bị ẩn khi thu gọn. Theme vẫn preview tạm khi hover/focus; chỉ click mới lưu lựa chọn.
+
+Pan bằng Space, công cụ **Di chuyển canvas**, nút chuột giữa và pinch touch vẫn giữ nguyên. Wheel touchpad được gom theo frame và chỉ ghi một thay đổi viewport sau khi gesture dừng, nên không tạo hàng loạt lần autosave/Undo. `BoardState.viewport` vẫn độc lập với vị trí element.
+
+Sau khi push V3.8.1:
+
+1. Render → service Static Site `mindcanvas-web` → **Manual Deploy → Deploy latest commit** (hoặc chờ Auto-Deploy từ branch `main`).
+2. Mở web, hard refresh. Nếu PWA hiện **Cập nhật ngay**, bấm nút đó để nhận cache `mindcanvas-shell-v3.8.1-navigation-touchpad`.
+3. Trên desktop, bấm hamburger để thu/mở sidebar; kéo mép phải để đổi rộng; bấm đúp mép kéo để đặt lại `280px`.
+4. Tạo một folder có project, bấm mũi tên cạnh folder để mở danh sách canvas, kéo một project vào folder và kiểm tra lại.
+5. Bấm **Ngôn ngữ** hoặc **Giao diện** trong sidebar; chọn theme bằng click. Hover theme trong popover/cài đặt để xem trước, rời chuột phải hoàn nguyên nếu chưa click.
+6. Mở một canvas, dùng touchpad cuộn hai ngón và thử Ctrl/Cmd + cuộn để zoom. Nền, element và minimap phải đi cùng viewport; kéo element vẫn chỉ đổi vị trí element.
+
+API `mindcanvas-api` không bắt buộc deploy lại cho riêng V3.8.1. Nếu Render đang build cùng repository cho cả hai service, để cả hai deploy theo commit cũng được; không cần đổi `GEMINI_API_KEY`, `GEMINI_MODELS` hoặc `WEB_ORIGIN`.
+
 ## Cập nhật V3.8.0 — AI đa nguồn và điều hướng thu gọn
 
 V3.8 hợp nhất một pipeline AI phía server cho mind map và flashcard. Người dùng có thể dán văn bản, dán ảnh từ clipboard hoặc chọn/thả PDF, DOCX, PPTX, TXT, Markdown, CSV, TSV, JSON, JPG, PNG, WebP/GIF. Kết quả vẫn đi qua bước preview có thể sửa trước khi Apply. Thanh điều hướng desktop có thể thu gọn thành icon rail bằng nút ở đầu sidebar hoặc `Ctrl/⌘+Shift+B`; trạng thái được lưu trên trình duyệt. Flashcard cũng có nút dán clipboard riêng.

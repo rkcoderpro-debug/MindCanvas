@@ -1,5 +1,23 @@
 # MindCanvas — Changes Compared with the Original Handoff
 
+## V3.8.1 — Navigation UX, theme preview and smooth touchpad viewport
+
+- Extracted the sidebar into maintainable React components instead of keeping navigation markup inside the workspace screen.
+- Added a hamburger collapse/expand control, a mobile drawer with backdrop/Escape close, a persisted desktop resize handle and double-click width reset.
+- Added folder accordion controls backed by real user projects, while preserving folder filtering, drag/drop and folder actions.
+- Replaced the fragile hidden language/theme selects with clickable popovers. Theme hover/focus temporarily previews the complete theme; click persists it.
+- Normalized wheel units and batched touchpad pan/zoom through `requestAnimationFrame`; a wheel burst commits one viewport update after idle, keeping pan/zoom out of element edits and history noise.
+- Bumped the PWA shell cache to `mindcanvas-shell-v3.8.1-navigation-touchpad`.
+
+Files added: `apps/web/src/components/AppSidebar.tsx`, `apps/web/src/components/SidebarAppearanceControls.tsx`, `apps/web/src/lib/canvasViewport.ts`, `apps/web/src/lib/canvasViewport.test.ts`, `V3_8_1_NAVIGATION_UX_VI.md`.
+
+## V3.8.0 follow-up — Theme picker preview
+
+- Theme cards temporarily switch the full UI to the hovered/focused theme.
+- Pointer leave, focus leave or picker unmount restores the previously selected theme.
+- Click is the only action that persists a new theme to browser storage.
+- Added preview motion with a `prefers-reduced-motion` fallback and bumped the PWA shell cache.
+
 ## Integrated release 2026-09-12 — V3.8.0
 
 V3.8.0 adds the next maintained slice on top of the V3.7.1 media/resize release and the V3.5.1 shared Gemini reliability hotfix. It keeps the blank local canvas behavior and does not add demo projects or broad V2 features.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, BookOpen, Clock3, Download, FileText, Folder, FolderPlus, FolderCog, Globe2, History, LayoutGrid, LogIn, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Redo2, RefreshCw, Save, Search, Settings2, Smartphone, Sparkles, Undo2, Upload, X, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, FolderPlus, History, LayoutGrid, Redo2, RefreshCw, Save, Search, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
 import FolderManager from "./components/FolderManager";
@@ -13,12 +13,16 @@ import CloudConflictDialog from "./components/CloudConflictDialog";
 import ThemePicker from "./components/ThemePicker";
 import CommandPalette from "./components/CommandPalette";
 import SyncCenter from "./components/SyncCenter";
+import AppSidebar, { type SidebarView } from "./components/AppSidebar";
 import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
-import { THEME_OPTIONS, type Theme } from "./lib/theme";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { usePwaInstall } from "./lib/pwa";
+
+const SIDEBAR_DEFAULT_WIDTH = 280;
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 380;
 
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
 function AuthenticatedApp() {
@@ -41,15 +45,16 @@ function AuthenticatedApp() {
   return <Workspace key={user?.id ?? "guest"} user={user} authError={error}/>;
 }
 function Workspace({ user, authError }: { user: User | null; authError: string }) {
-  const { t, language, setLanguage } = useLanguage(), { theme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
+  const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | "versions" | "sync" | "install" | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
-  const [recent, setRecent] = useState(false), [working, setWorking] = useState(false), [mobileMenu, setMobileMenu] = useState(false);
+  const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
+  const [sidebarWidth, setSidebarWidth] = useState(() => { try { const saved = Number(localStorage.getItem("mindcanvas:sidebar-width")); return Number.isFinite(saved) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, saved)) : SIDEBAR_DEFAULT_WIDTH; } catch { return SIDEBAR_DEFAULT_WIDTH; } });
   const [commandOpen, setCommandOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
-  const home = () => { void ws.home(); setFilter(null); setRecent(false); setMobileMenu(false); };
+  const home = () => { void ws.home(); setFilter(null); setRecent(false); };
   const askName = (kind: "project" | "folder") => { setName(kind === "project" ? t("untitled") : ""); setModal(kind); };
   const create = async (e: React.FormEvent) => {
     e.preventDefault(); if (!name.trim()) return; setWorking(true);
@@ -82,34 +87,21 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     window.addEventListener("keydown", shortcut); return () => window.removeEventListener("keydown", shortcut);
   }, []);
   useEffect(() => { try { localStorage.setItem("mindcanvas:sidebar-collapsed", String(sidebarCollapsed)); } catch {} }, [sidebarCollapsed]);
-  const openFlashcards = () => { void ws.home(); setFilter("__flashcards"); setRecent(false); setMobileMenu(false); };
+  useEffect(() => { try { localStorage.setItem("mindcanvas:sidebar-width", String(sidebarWidth)); } catch {} }, [sidebarWidth]);
+  const resizeSidebar = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (sidebarCollapsed) return;
+    event.preventDefault();
+    const startX = event.clientX, startWidth = sidebarWidth;
+    const move = (nextEvent: PointerEvent) => setSidebarWidth(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + nextEvent.clientX - startX)));
+    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
+  };
+  const openView = (view: SidebarView) => { void ws.home(); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
+  const openFolder = (folderId: string) => { void ws.home(); setFilter(folderId); setRecent(false); };
+  const openFlashcards = () => openView("__flashcards");
 
   return <div className="app-shell">
-    <aside className={`sidebar ${mobileMenu ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <div className="sidebar-header">
-        <button className="brand" onClick={home}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-name">MindCanvas</span><span className="beta">V3.8.0</span></button>
-        <button className="sidebar-collapse-toggle icon-button" aria-label={t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse")} title={`${t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse")} · Ctrl/⌘+Shift+B`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>{sidebarCollapsed ? <PanelLeftOpen size={19}/> : <PanelLeftClose size={19}/>}</button>
-        <button className="mobile-menu-button icon-button" aria-label={t("mobileMenu")} aria-expanded={mobileMenu} onClick={() => setMobileMenu(value => !value)}><Menu size={21}/></button>
-      </div>
-      <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div></div>
-      <nav aria-label={t("workspace")} className="nav-list">
-        <button className={!ws.board && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, null)} onClick={home}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button>
-        <button className={!ws.board && recent ? "active" : ""} title={t("recent")} onClick={() => { void ws.home(); setFilter(null); setRecent(true); setMobileMenu(false); }}><Clock3 size={18}/><span className="nav-label">{t("recent")}</span><span>{ws.projects.filter(p => !p.deletedAt).length}</span></button>
-        <button className={!ws.board && filter === "__favorites" ? "active" : ""} title={t("favorites")} onClick={() => { void ws.home(); setFilter("__favorites"); setRecent(false); setMobileMenu(false); }}><Star size={18}/><span className="nav-label">{t("favorites")}</span></button>
-        <button className={!ws.board && filter === "__trash" ? "active" : ""} title={t("trash")} onClick={() => { void ws.home(); setFilter("__trash"); setRecent(false); setMobileMenu(false); }}><Trash2 size={18}/><span className="nav-label">{t("trash")}</span></button>
-        <button className={!ws.board && filter === "__flashcards" ? "active" : ""} title={t("flashcards")} onClick={openFlashcards}><BookOpen size={18}/><span className="nav-label">{t("flashcards")}</span></button>
-      </nav>
-      <div className="section-label">{t("folders")}<button className="icon-button" aria-label={t("newFolder")} onClick={() => askName("folder")}><Plus size={17}/></button></div>
-      <div className="folder-list">{ws.folders.map(f => <div className={`folder-row ${filter === f.id && !ws.board ? "active" : ""}`} key={f.id} onDragOver={e => e.preventDefault()} onDrop={e => dropProjectInto(e, f.id)}><button className="folder-open" title={f.name} onClick={() => { void ws.home(); setFilter(f.id); setRecent(false); setMobileMenu(false); }}><Folder size={17}/><span className="nav-label">{f.name}</span></button><button className="folder-more" aria-label={`${t("folderActions")}: ${f.name}`} onClick={() => { setName(f.name); setFolderAction({ folder: f, kind: "rename" }); }}><MoreHorizontal size={16}/></button><div className="folder-dropdown">{ws.projects.filter(p=>p.folderId===f.id&&!p.deletedAt).slice(0,5).map(p=><button key={p.id} onClick={()=>{ setMobileMenu(false); void ws.open(p); }}><FileText size={14}/>{p.title}</button>)}</div></div>)}{!ws.folders.length && <small>{t("noFolders")}</small>}</div>
-      <button className="manage-folders-button" title={t("manageFolders")} onClick={() => { void ws.home(); setFilter("__manager"); setRecent(false); setMobileMenu(false); }}><FolderCog size={17}/><span className="nav-label">{t("manageFolders")}</span></button>
-      <div className="sidebar-bottom">
-        <label className="language-control"><Globe2 size={17}/><select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
-        <label className="language-control"><Sparkles size={17}/><select aria-label={t("theme")} value={theme} onChange={e => setTheme(e.target.value as Theme)}>{(["light", "dark"] as const).map(tone => <optgroup key={tone} label={t(tone === "light" ? "themeLightCollection" : "themeDarkCollection")}>{THEME_OPTIONS.filter(option => option.tone === tone).map(option => <option key={option.id} value={option.id}>{t(option.labelKey)}</option>)}</optgroup>)}</select></label>
-        <button title={t(pwa.installed ? "appInstalled" : "installApp")} onClick={() => setModal("install")}><Smartphone size={17}/><span className="nav-label">{t(pwa.installed ? "appInstalled" : "installApp")}</span></button>
-        <button title={t("settings")} onClick={() => setModal("settings")}><Settings2 size={17}/><span className="nav-label">{t("settings")}</span></button>
-        <button title={user ? t("logout") : t("login")} disabled={working || (!user && !isSupabaseConfigured)} onClick={() => void auth()}>{user ? <LogOut size={17}/> : <LogIn size={17}/>} <span className="nav-label">{user ? t("logout") : t("login")}</span></button>
-      </div>
-    </aside>
+    <AppSidebar user={user} accountName={accountName} projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} working={working} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} pwaInstalled={pwa.installed} canSignIn={!!user || isSupabaseConfigured} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} onInstall={() => setModal("install")} onSettings={() => setModal("settings")} onAuth={() => void auth()} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
     <main className="main-area">
       <header className="topbar"><div className="breadcrumbs"><button onClick={home}>{ws.board ? <ArrowLeft size={17}/> : <LayoutGrid size={17}/>} {t("workspace")}</button>{ws.board && <span>/ {ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button>{ws.board && <><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(err instanceof Error ? err.message : t("error")))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}
@@ -133,7 +125,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => setFolderAction(null)); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
     {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
-    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><div className="settings-layout"><section className="settings-section"><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("theme")}</strong><small>{t("themeChoose")}</small></div><ThemePicker theme={theme} onChange={setTheme}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("installApp")}</strong><small>{t("pwaOfflineHint")}</small></div><button className="secondary-button" onClick={() => setModal("install")}><Smartphone size={17}/>{t(pwa.installed ? "appInstalled" : "installApp")}</button></section><section className="settings-section settings-help"><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></section></div></Dialog>}
+    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><div className="settings-layout"><section className="settings-section"><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("theme")}</strong><small>{t("themeChoose")}</small></div><ThemePicker theme={selectedTheme} onChange={setTheme}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("installApp")}</strong><small>{t("pwaOfflineHint")}</small></div><button className="secondary-button" onClick={() => setModal("install")}><Smartphone size={17}/>{t(pwa.installed ? "appInstalled" : "installApp")}</button></section><section className="settings-section settings-help"><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></section></div></Dialog>}
     {modal === "install" && <Dialog title={t("installAppTitle")} onClose={() => setModal(null)}><div className="install-app-dialog"><Smartphone size={38}/><p>{t(pwa.installed ? "appInstalledHint" : "installAppHint")}</p>{pwa.ios && <p className="install-instruction">{t("iosInstallHint")}</p>}{!pwa.installed && !pwa.canInstall && !pwa.ios && <p className="install-instruction">{t("browserInstallHint")}</p>}<small>{t("pwaOfflineHint")}</small></div><footer className="actions"><button className="secondary-button" onClick={() => setModal(null)}>{t("close")}</button>{pwa.canInstall && <button className="primary-button" disabled={working} onClick={() => { setWorking(true); void pwa.install().then(installed => { if (installed) setModal(null); }).finally(() => setWorking(false)); }}><Download size={17}/>{t("installNow")}</button>}</footer></Dialog>}
     {modal === "sync" && <SyncCenter owner={user?.id ?? null} online={ws.online} status={ws.status} projects={ws.projects} working={working} onClose={() => setModal(null)} onRetry={async () => { setWorking(true); try { const saved = await ws.flush(); if (saved) await ws.refresh(); } finally { setWorking(false); } }}/>} 
     {modal === "versions" && ws.board && <VersionHistory versions={ws.versions} loading={ws.versionLoading} working={working} onClose={() => { if (!working) setModal(null); }} onCheckpoint={async () => { setWorking(true); try { await ws.saveCheckpoint(t("saveCheckpoint")); } catch (err) { ws.setError(err instanceof Error ? err.message : t("error")); } finally { setWorking(false); } }} onRestore={async version => { setWorking(true); try { await ws.restoreVersion(version); setModal(null); } catch (err) { ws.setError(err instanceof Error ? err.message : t("error")); } finally { setWorking(false); } }}/>} 
