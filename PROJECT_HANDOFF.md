@@ -15,17 +15,27 @@
 
 - `apps/web/src/components/AppSidebar.tsx` — responsive navigation, folder accordion, mobile drawer and resize handle.
 - `apps/web/src/components/SidebarAppearanceControls.tsx` — clickable language/theme popovers and temporary theme preview.
+- `apps/web/src/components/TopbarProfile.tsx` — single topbar profile menu with account details and sign-out/sign-in action.
 - `apps/web/src/components/CanvasBoard.tsx` — batched wheel navigation and interaction handoff from a pending viewport gesture.
 - `apps/web/src/lib/canvasViewport.ts` — pure wheel normalization, pan and cursor-anchored zoom helpers.
 - `apps/web/src/lib/canvasViewport.test.ts` — deterministic viewport helper coverage.
+- `apps/web/src/lib/editorPreferences.ts`, `apps/web/src/lib/editorPreferences.test.ts` — validated and tested toolbar-position preference.
 - `apps/web/src/App.tsx`, `apps/web/src/App.test.tsx`, `apps/web/src/lib/i18n.tsx`, `apps/web/src/styles.css`, `apps/web/public/sw.js` — integration, translations, responsive styles, release cache and regression updates.
+
+### UX patch in the same V3.8.1 release
+
+- The desktop/mobile navigation now renders one hamburger button. Its behavior follows the responsive breakpoint: collapse/expand on desktop and open/close the drawer on mobile.
+- The sidebar no longer renders a profile card, sign-out action or install-app action. The topbar has one profile/avatar/email control with sign-in/sign-out; PWA installation remains available from Settings.
+- Flashcards has a distinct accent treatment in navigation, and the folder list has a framed inner scroll area with a thin themed scrollbar.
+- A canvas fullscreen toggle hides the shell, heading, inspector, navigator and zoom controls, leaving the canvas, exit button and drawing toolbar. `Escape` exits fullscreen.
+- Settings stores `mindcanvas:toolbar-position` and offers top/bottom horizontal or left/right vertical toolbar layouts.
 
 ### Deployment and verification
 
 - V3.8.1 is a frontend/shared interaction release. No Supabase migration, Gemini key, Render API environment variable or backend route change is required.
 - Redeploy `mindcanvas-web` from the new commit. `mindcanvas-api` from V3.8 remains compatible; redeploy it only when deploying the whole repository together.
-- The service-worker cache is `mindcanvas-shell-v3.8.1-navigation-touchpad`; after deployment, reload online once and accept **Update now** if the PWA presents the update banner.
-- Local verification for this release: 102 frontend tests pass after the viewport helper and wheel-batching regression additions; 28 backend tests pass. Run the workspace typecheck and production builds before pushing.
+- The service-worker cache is `mindcanvas-shell-v3.8.1-ux`; after deployment, reload online once and accept **Update now** if the PWA presents the update banner.
+- Local verification for this release: 106 frontend tests pass after the navigation/profile/settings regression additions; 28 backend tests pass. Run the workspace typecheck and production builds before pushing.
 
 ### Known limits
 

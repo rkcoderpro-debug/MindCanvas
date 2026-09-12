@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Network, X } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Maximize2, Network, X } from "lucide-react";
 import type { BoardState, CanvasBackground as CanvasBackgroundType, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applySelectionAi, arrangeMindMap, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
@@ -18,8 +18,9 @@ import { getDocumentSource } from "../lib/supabase";
 import type { SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
 import { normalizeWheelDelta, panViewport, zoomViewportAtPoint } from "../lib/canvasViewport";
+import type { ToolbarPosition } from "../lib/editorPreferences";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -124,7 +125,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "highlighter", icon: Highlighter, key: "B" }, { id: "rect", icon: Square, key: "R" },
   { id: "ellipse", icon: Circle, key: "O" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false }: Props) {
+export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top" }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
@@ -444,7 +445,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       if ((e.target as HTMLElement)?.closest("input, textarea, select, [contenteditable=true], dialog")) return;
       const mod = e.ctrlKey || e.metaKey;
       if (e.code === "Space") { e.preventDefault(); setSpace(true); }
-      if (e.key === "Escape") { finish(true); setSelected(null); }
+      if (e.key === "Escape") { finish(true); setSelected(null); if (isFullscreen) onToggleFullscreen?.(); }
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); onSave(); return; }
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? onRedo() : onUndo(); return; }
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); onRedo(); return; }
@@ -511,7 +512,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     if (value !== undefined && key === "trimEnd" && selectedMedia.trimStart !== undefined && value <= selectedMedia.trimStart) value = selectedMedia.trimStart + .1;
     patch({ [key]: value });
   };
-  return <div className="editor-layout">
+  return <div className={`editor-layout toolbar-${toolbarPosition}`}>
     <div className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -520,6 +521,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       if (blob) { event.preventDefault(); void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]); }
       else void paste();
     }}>
+      {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
       <div className="drawing-toolbar" role="toolbar" aria-label={t("properties")}>{tools.map(({ id, icon: Icon, key }) =>
         <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>

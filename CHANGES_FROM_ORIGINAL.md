@@ -8,8 +8,12 @@
 - Replaced the fragile hidden language/theme selects with clickable popovers. Theme hover/focus temporarily previews the complete theme; click persists it.
 - Normalized wheel units and batched touchpad pan/zoom through `requestAnimationFrame`; a wheel burst commits one viewport update after idle, keeping pan/zoom out of element edits and history noise.
 - Bumped the PWA shell cache to `mindcanvas-shell-v3.8.1-navigation-touchpad`.
+- Removed the duplicate desktop/mobile hamburger markup and let one responsive button switch between desktop collapse and mobile drawer behavior.
+- Moved profile/avatar/email and sign-out to a single topbar account menu; moved PWA install into Settings and highlighted Flashcards as a separate study feature.
+- Added a compact inner folder scroll frame, canvas fullscreen mode, and persisted top/bottom/left/right drawing-toolbar placement settings.
+- Bumped the service-worker cache to `mindcanvas-shell-v3.8.1-ux` so installed clients receive this UX patch.
 
-Files added: `apps/web/src/components/AppSidebar.tsx`, `apps/web/src/components/SidebarAppearanceControls.tsx`, `apps/web/src/lib/canvasViewport.ts`, `apps/web/src/lib/canvasViewport.test.ts`, `V3_8_1_NAVIGATION_UX_VI.md`.
+Files added: `apps/web/src/components/AppSidebar.tsx`, `apps/web/src/components/SidebarAppearanceControls.tsx`, `apps/web/src/components/TopbarProfile.tsx`, `apps/web/src/lib/canvasViewport.ts`, `apps/web/src/lib/canvasViewport.test.ts`, `apps/web/src/lib/editorPreferences.ts`, `apps/web/src/lib/editorPreferences.test.ts`, `V3_8_1_NAVIGATION_UX_VI.md`.
 
 ## V3.8.0 follow-up — Theme picker preview
 

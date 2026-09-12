@@ -121,4 +121,22 @@ describe("Workspace UI", () => {
     expect(localStorage.getItem("mindcanvas:sidebar-collapsed")).toBe("true");
     expect(host.querySelector('[aria-label="Mở rộng thanh điều hướng"]')).not.toBeNull();
   });
+  it("keeps one navigation toggle and exposes account actions in the topbar", async () => {
+    await act(async () => root.render(<App/>));
+    expect(host.querySelectorAll(".sidebar-toggle-button")).toHaveLength(1);
+    expect(host.querySelector(".sidebar .profile-card")).toBeNull();
+    const profile = host.querySelector(".topbar-profile-button") as HTMLButtonElement;
+    expect(profile).not.toBeNull();
+    await act(async () => profile.click());
+    expect(host.querySelector(".topbar-profile-menu")?.textContent).toContain("Đăng nhập Google");
+  });
+  it("shows toolbar position controls in settings and persists the choice", async () => {
+    await act(async () => root.render(<App/>));
+    const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
+    await act(async () => settings.click());
+    expect(host.querySelectorAll(".toolbar-position-options button")).toHaveLength(4);
+    const left = [...host.querySelectorAll<HTMLButtonElement>(".toolbar-position-options button")].find(button => button.textContent === "Trái")!;
+    await act(async () => left.click());
+    expect(localStorage.getItem("mindcanvas:toolbar-position")).toBe("left");
+  });
 });

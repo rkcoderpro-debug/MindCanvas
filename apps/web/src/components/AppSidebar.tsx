@@ -1,6 +1,5 @@
 import { useEffect, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, LogIn, LogOut, Menu, MoreHorizontal, Plus, Settings2, Smartphone, Sparkles, Star, Trash2, X } from "lucide-react";
-import type { User } from "@supabase/supabase-js";
+import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, X } from "lucide-react";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
@@ -9,20 +8,15 @@ import SidebarAppearanceControls from "./SidebarAppearanceControls";
 export type SidebarView = "recent" | "__favorites" | "__trash" | "__flashcards";
 
 type Props = {
-  user: User | null;
-  accountName: string;
   projects: Project[];
   folders: ProjectFolder[];
   boardOpen: boolean;
   recent: boolean;
   filter: string | null;
-  working: boolean;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   language: "vi" | "en";
   selectedTheme: Theme;
-  pwaInstalled: boolean;
-  canSignIn: boolean;
   onHome: () => void;
   onOpenView: (view: SidebarView) => void;
   onOpenFolder: (folderId: string) => void;
@@ -33,24 +27,32 @@ type Props = {
   onManageFolders: () => void;
   onLanguageChange: (language: "vi" | "en") => void;
   onThemeChange: (theme: Theme) => void;
-  onInstall: () => void;
   onSettings: () => void;
-  onAuth: () => void;
   onToggleCollapsed: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onResetWidth: () => void;
 };
 
-export default function AppSidebar({ user, accountName, projects, folders, boardOpen, recent, filter, working, sidebarCollapsed, sidebarWidth, language, selectedTheme, pwaInstalled, canSignIn, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, onInstall, onSettings, onAuth, onToggleCollapsed, onResizeStart, onResetWidth }: Props) {
+export default function AppSidebar({ projects, folders, boardOpen, recent, filter, sidebarCollapsed, sidebarWidth, language, selectedTheme, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, onSettings, onToggleCollapsed, onResizeStart, onResetWidth }: Props) {
   const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 620px)").matches);
   const closeMobile = () => setMobileOpen(false);
   const goHome = () => { closeMobile(); onHome(); };
   const goView = (view: SidebarView) => { closeMobile(); onOpenView(view); };
   const openFolder = (folderId: string) => { closeMobile(); onOpenFolder(folderId); };
   const handleDrop = (event: DragEvent, folderId: string | null) => { closeMobile(); onDropProject(event, folderId); };
   const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : sidebarWidth}px` } as CSSProperties;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(max-width: 620px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -60,23 +62,31 @@ export default function AppSidebar({ user, accountName, projects, folders, board
   }, [mobileOpen]);
 
   useEffect(() => {
+    if (!isMobile && mobileOpen) setMobileOpen(false);
+  }, [isMobile, mobileOpen]);
+
+  useEffect(() => {
     if (expandedFolderId && !folders.some(folder => folder.id === expandedFolderId)) setExpandedFolderId(null);
   }, [expandedFolderId, folders]);
+
+  const toggleNavigation = () => {
+    if (isMobile) setMobileOpen(value => !value);
+    else onToggleCollapsed();
+  };
+  const toggleLabel = isMobile ? (mobileOpen ? t("close") : t("mobileMenu")) : t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse");
 
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={style}>
       <div className="sidebar-header">
         <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-name">MindCanvas</span><span className="beta">V3.8.1</span></button>
-        <button className="sidebar-collapse-toggle icon-button" aria-label={t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse")} title={`${t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse")} · Ctrl/⌘+Shift+B`} aria-expanded={!sidebarCollapsed} onClick={onToggleCollapsed}><Menu size={19}/></button>
-        <button className="mobile-menu-button icon-button" aria-label={t("mobileMenu")} aria-expanded={mobileOpen} onClick={() => setMobileOpen(value => !value)}>{mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
+        <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={`${toggleLabel}${isMobile ? "" : " · Ctrl/⌘+Shift+B"}`} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
-      <div className="profile-card"><div className="avatar">{user?.user_metadata.avatar_url ? <img src={user.user_metadata.avatar_url} alt=""/> : String(accountName)[0]}</div><div><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div></div>
       <nav aria-label={t("workspace")} className="nav-list">
         <button className={!boardOpen && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, null)} onClick={goHome}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button>
         <button className={!boardOpen && recent ? "active" : ""} title={t("recent")} onClick={() => goView("recent")}><Clock3 size={18}/><span className="nav-label">{t("recent")}</span><span className="nav-count">{projects.filter(project => !project.deletedAt).length}</span></button>
         <button className={!boardOpen && filter === "__favorites" ? "active" : ""} title={t("favorites")} onClick={() => goView("__favorites")}><Star size={18}/><span className="nav-label">{t("favorites")}</span></button>
         <button className={!boardOpen && filter === "__trash" ? "active" : ""} title={t("trash")} onClick={() => goView("__trash")}><Trash2 size={18}/><span className="nav-label">{t("trash")}</span></button>
-        <button className={!boardOpen && filter === "__flashcards" ? "active" : ""} title={t("flashcards")} onClick={() => goView("__flashcards")}><BookOpen size={18}/><span className="nav-label">{t("flashcards")}</span></button>
+        <button className={`nav-flashcards ${!boardOpen && filter === "__flashcards" ? "active" : ""}`} title={t("flashcards")} onClick={() => goView("__flashcards")}><BookOpen size={18}/><span className="nav-label">{t("flashcards")}</span></button>
       </nav>
       <div className="section-label"><span>{t("folders")}</span><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>
       <div className="folder-list">
@@ -99,9 +109,7 @@ export default function AppSidebar({ user, accountName, projects, folders, board
       <button className="manage-folders-button" title={t("manageFolders")} onClick={() => { closeMobile(); onManageFolders(); }}><FolderCog size={17}/><span className="nav-label">{t("manageFolders")}</span></button>
       <div className="sidebar-bottom">
         <SidebarAppearanceControls collapsed={sidebarCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange}/>
-        <button title={t(pwaInstalled ? "appInstalled" : "installApp")} onClick={() => { closeMobile(); onInstall(); }}><Smartphone size={17}/><span className="nav-label">{t(pwaInstalled ? "appInstalled" : "installApp")}</span></button>
         <button title={t("settings")} onClick={() => { closeMobile(); onSettings(); }}><Settings2 size={17}/><span className="nav-label">{t("settings")}</span></button>
-        <button title={user ? t("logout") : t("login")} disabled={working || !canSignIn} onClick={() => { closeMobile(); onAuth(); }}>{user ? <LogOut size={17}/> : <LogIn size={17}/>}<span className="nav-label">{user ? t("logout") : t("login")}</span></button>
       </div>
       <div className="sidebar-resize-handle" role="separator" aria-orientation="vertical" aria-label={t("resizeSidebar")} title={`${t("resizeSidebar")} · ${t("resetSidebarWidth")}`} onPointerDown={onResizeStart} onDoubleClick={onResetWidth}/>
     </aside>

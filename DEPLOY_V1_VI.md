@@ -1,19 +1,23 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
-## Cập nhật V3.8.1 — điều hướng, theme preview và touchpad
+## Cập nhật V3.8.1 — điều hướng, fullscreen canvas và UX
 
-V3.8.1 là bản nâng cấp frontend/shared, không cần migration Supabase hay biến môi trường mới. Sidebar đã được tách lại: nút hamburger mở/thu trên desktop, mobile dùng drawer có lớp nền đóng, desktop kéo được độ rộng `220–380px`, folder có nút mở rộng để xem canvas thật trong thư mục, và theme/ngôn ngữ dùng popover nên không còn select bị đè hoặc bị ẩn khi thu gọn. Theme vẫn preview tạm khi hover/focus; chỉ click mới lưu lựa chọn.
+V3.8.1 là bản nâng cấp frontend/shared, không cần migration Supabase hay biến môi trường mới. Sidebar giờ chỉ render một nút hamburger: desktop dùng để thu/mở, mobile dùng để mở/đóng drawer. Profile/avatar/email và đăng xuất nằm ở topbar; **Cài ứng dụng** nằm trong Settings; Flashcards được làm nổi bật như một tính năng học riêng. Folder có accordion và khung cuộn mảnh, theme/ngôn ngữ dùng popover, theme vẫn preview tạm khi hover/focus và chỉ click mới lưu lựa chọn.
 
 Pan bằng Space, công cụ **Di chuyển canvas**, nút chuột giữa và pinch touch vẫn giữ nguyên. Wheel touchpad được gom theo frame và chỉ ghi một thay đổi viewport sau khi gesture dừng, nên không tạo hàng loạt lần autosave/Undo. `BoardState.viewport` vẫn độc lập với vị trí element.
+
+Trong canvas có nút **Phóng to canvas** ở góc trái trên. Fullscreen ẩn sidebar, topbar, tiêu đề, inspector, navigator và zoom control; chỉ giữ canvas, nút thoát và drawing toolbar. Vào **Cài đặt → Vị trí thanh công cụ** để chọn Trên/Dưới (ngang) hoặc Trái/Phải (dọc); lựa chọn lưu riêng trên trình duyệt.
 
 Sau khi push V3.8.1:
 
 1. Render → service Static Site `mindcanvas-web` → **Manual Deploy → Deploy latest commit** (hoặc chờ Auto-Deploy từ branch `main`).
-2. Mở web, hard refresh. Nếu PWA hiện **Cập nhật ngay**, bấm nút đó để nhận cache `mindcanvas-shell-v3.8.1-navigation-touchpad`.
-3. Trên desktop, bấm hamburger để thu/mở sidebar; kéo mép phải để đổi rộng; bấm đúp mép kéo để đặt lại `280px`.
-4. Tạo một folder có project, bấm mũi tên cạnh folder để mở danh sách canvas, kéo một project vào folder và kiểm tra lại.
-5. Bấm **Ngôn ngữ** hoặc **Giao diện** trong sidebar; chọn theme bằng click. Hover theme trong popover/cài đặt để xem trước, rời chuột phải hoàn nguyên nếu chưa click.
-6. Mở một canvas, dùng touchpad cuộn hai ngón và thử Ctrl/Cmd + cuộn để zoom. Nền, element và minimap phải đi cùng viewport; kéo element vẫn chỉ đổi vị trí element.
+2. Mở web, hard refresh. Nếu PWA hiện **Cập nhật ngay**, bấm nút đó để nhận cache `mindcanvas-shell-v3.8.1-ux`. Nếu vẫn thấy giao diện cũ, đóng tab/app đã cài rồi mở lại sau khi online.
+3. Trên desktop, xác nhận chỉ có một hamburger; bấm để thu/mở sidebar, kéo mép phải để đổi rộng, bấm đúp mép kéo để đặt lại `280px`. Trên điện thoại, bấm cùng nút để mở/đóng drawer; không có icon thứ hai.
+4. Đăng nhập hoặc mở local guest, kiểm tra topbar chỉ có một profile/avatar; mở menu và kiểm tra Đăng nhập/Đăng xuất. Sidebar không còn profile, install app hoặc sign out.
+5. Tạo một folder có project, bấm mũi tên cạnh folder để mở danh sách canvas; kiểm tra khung cuộn folder khi có nhiều folder/project và kéo project vào folder.
+6. Mở **Settings**: thử **Cài ứng dụng**, đổi bốn vị trí toolbar rồi mở canvas để kiểm tra hướng xếp. Bấm nút fullscreen góc trái; kiểm tra shell/inspector/navigator/zoom ẩn và `Escape` thoát.
+7. Bấm **Ngôn ngữ** hoặc **Giao diện** trong sidebar; chọn theme bằng click. Hover theme trong popover/cài đặt để xem trước, rời chuột phải hoàn nguyên nếu chưa click.
+8. Mở một canvas, dùng touchpad cuộn hai ngón và thử Ctrl/Cmd + cuộn để zoom. Nền, element và minimap phải đi cùng viewport; kéo element vẫn chỉ đổi vị trí element.
 
 API `mindcanvas-api` không bắt buộc deploy lại cho riêng V3.8.1. Nếu Render đang build cùng repository cho cả hai service, để cả hai deploy theo commit cũng được; không cần đổi `GEMINI_API_KEY`, `GEMINI_MODELS` hoặc `WEB_ORIGIN`.
 
