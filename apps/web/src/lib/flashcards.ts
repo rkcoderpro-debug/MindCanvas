@@ -1,5 +1,7 @@
 export type FlashcardRating = "again" | "hard" | "good" | "easy";
 export type FlashcardStorage = "cloud" | "local";
+export type StudyPlanSourceType = "decks" | "document" | "mixed";
+export type StudyPlanStatus = "active" | "paused";
 
 export type FlashcardDeck = {
   id: string;
@@ -26,6 +28,64 @@ export type Flashcard = {
   createdAt: string;
   updatedAt: string;
   source?: FlashcardStorage;
+};
+
+export type StudyPlan = {
+  id: string;
+  name: string;
+  sourceType: StudyPlanSourceType;
+  deckIds: string[];
+  sourceDocumentId: string | null;
+  dailyTarget: number;
+  dailyMinutes: number;
+  timezone: "Asia/Ho_Chi_Minh" | string;
+  startDate: string;
+  status: StudyPlanStatus;
+  createdAt: string;
+  updatedAt: string;
+  source?: FlashcardStorage;
+};
+
+export type StudyDayProgress = {
+  studyDate: string;
+  contextKey: string;
+  planId: string | null;
+  targetCount: number;
+  reviewedCount: number;
+  retryCount: number;
+  assignedCardIds: string[];
+  reviewedCardIds: string[];
+  forgottenCardIds: string[];
+  completed: boolean;
+  firstReviewAt: string | null;
+  lastReviewAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  source?: FlashcardStorage;
+};
+
+export type StudyEvent = {
+  eventId: string;
+  studyDate: string;
+  contextKey: string;
+  planId: string | null;
+  cardId: string | null;
+  rating: FlashcardRating;
+  /** A plan counts a card once; retry ratings use 0. Manual study uses 1. */
+  goalUnit: 0 | 1;
+  targetCount: number;
+  createdAt?: string;
+};
+
+export type StreakStats = {
+  current: number;
+  best: number;
+  lastStudyDate: string | null;
+  today: string;
+  todayCompleted: boolean;
+  todayTarget: number;
+  todayProgress: number;
+  todayRetryCount: number;
 };
 
 function createId() {
@@ -56,6 +116,126 @@ export function isDue(card: Flashcard, now = new Date()) {
 
 export function dueCards(cards: Flashcard[], now = new Date()) {
   return cards.filter(card => isDue(card, now)).sort((a, b) => a.dueAt.localeCompare(b.dueAt) || a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Returns the calendar day in which a learner studies, independent of UTC. */
+export function vietnamStudyDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function studyContextKey(planId: string | null | undefined) {
+  return planId ? `plan:${planId}` : "manual";
+}
+
+/**
+ * Suggest a realistic daily target from the source size, due pressure and the
+ * learner's available time. The result is deliberately bounded so a plan
+ * never creates an intimidating first session.
+ */
+export function recommendDailyTarget(cards: Flashcard[], dailyMinutes = 20, now = new Date()) {
+  if (!cards.length) return 0;
+  const minutes = Math.max(5, Math.min(180, Math.round(dailyMinutes) || 20));
+  const due = cards.filter(card => isDue(card, now)).length;
+  const newCount = cards.filter(card => card.repetitions === 0).length;
+  const difficult = cards.filter(card => card.lapses > 0).length;
+  const pressure = Math.max(1, Math.round(due * 1.2 + newCount * 0.8 + difficult * 0.5));
+  const timeBudget = Math.max(1, Math.round(minutes * 1.25));
+  return Math.min(cards.length, Math.max(1, Math.min(50, Math.max(pressure, timeBudget))));
+}
+
+function dateOrdinal(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Date.UTC(year, (month || 1) - 1, day || 1) / 86_400_000;
+}
+
+function previousDate(value: string) {
+  const date = new Date(dateOrdinal(value) * 86_400_000);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function qualifiedDay(days: StudyDayProgress[], date: string, activePlanId?: string | null) {
+  const onDate = days.filter(day => day.studyDate === date);
+  if (activePlanId) {
+    // An active AI plan is the source of truth for that day. Missing plan
+    // progress is incomplete; a manual review must not silently satisfy it.
+    return onDate.find(day => day.planId === activePlanId)?.completed === true;
+  }
+  // When no plan is active, only the explicit manual context qualifies.
+  return onDate.some(day => !day.planId && day.completed);
+}
+
+function dayForStats(days: StudyDayProgress[], date: string, activePlanId?: string | null) {
+  const onDate = days.filter(day => day.studyDate === date);
+  return activePlanId
+    ? onDate.find(day => day.planId === activePlanId) ?? null
+    : onDate.find(day => !day.planId) ?? null;
+}
+
+export function computeStreak(days: StudyDayProgress[], now = new Date(), activePlanId?: string | null): StreakStats {
+  const today = vietnamStudyDate(now);
+  const validDays = days.filter(day => /^\d{4}-\d{2}-\d{2}$/.test(day.studyDate));
+  const qualifyingDates = [...new Set(validDays.filter(day => qualifiedDay(validDays, day.studyDate, activePlanId)).map(day => day.studyDate))].sort();
+  let best = 0;
+  let run = 0;
+  let previous: string | null = null;
+  for (const date of qualifyingDates) {
+    run = previous && dateOrdinal(date) === dateOrdinal(previous) + 1 ? run + 1 : 1;
+    best = Math.max(best, run);
+    previous = date;
+  }
+  let current = 0;
+  let cursor = qualifiedDay(validDays, today, activePlanId) ? today : previousDate(today);
+  while (qualifiedDay(validDays, cursor, activePlanId)) {
+    current += 1;
+    cursor = previousDate(cursor);
+  }
+  const todayDay = dayForStats(validDays, today, activePlanId);
+  return {
+    current,
+    best,
+    lastStudyDate: qualifyingDates[qualifyingDates.length - 1] ?? null,
+    today,
+    todayCompleted: qualifiedDay(validDays, today, activePlanId),
+    todayTarget: todayDay?.targetCount ?? 1,
+    todayProgress: todayDay?.reviewedCount ?? 0,
+    todayRetryCount: todayDay?.retryCount ?? 0,
+  };
+}
+
+export function createStudyPlan(input: {
+  name: string;
+  sourceType: StudyPlanSourceType;
+  deckIds: string[];
+  sourceDocumentId?: string | null;
+  dailyTarget: number;
+  dailyMinutes: number;
+  startDate?: string;
+  now?: Date;
+}): StudyPlan {
+  const now = input.now ?? new Date();
+  const timestamp = now.toISOString();
+  return {
+    id: crypto.randomUUID(),
+    name: input.name.trim() || "AI study plan",
+    sourceType: input.sourceType,
+    deckIds: [...new Set(input.deckIds)],
+    sourceDocumentId: input.sourceDocumentId ?? null,
+    dailyTarget: Math.max(1, Math.min(500, Math.round(input.dailyTarget))),
+    dailyMinutes: Math.max(5, Math.min(180, Math.round(input.dailyMinutes))),
+    timezone: "Asia/Ho_Chi_Minh",
+    startDate: input.startDate ?? vietnamStudyDate(now),
+    status: "active",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
 }
 
 /**
@@ -89,4 +269,3 @@ export function scheduleReview(card: Flashcard, rating: FlashcardRating, now = n
 
   return { ...card, dueAt, intervalDays, ease: Number(ease.toFixed(2)), repetitions, lapses, updatedAt: now.toISOString() };
 }
-

@@ -1,25 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, ClipboardPaste, Cloud, FileText, HardDrive, Pencil, Play, Plus, RotateCcw, Search, Sparkles, Target, Trash2, Upload, Zap, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { BookOpen, CalendarClock, CheckCircle2, ClipboardPaste, Cloud, FileText, Flame, HardDrive, Layers3, ListOrdered, Pencil, Play, Plus, RotateCcw, Search, Shuffle, Sparkles, Target, Trash2, Upload, Zap, X } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { fetchBoard, readCache } from "../lib/projectStore";
-import { dueCards, type Flashcard, type FlashcardDeck, type FlashcardRating } from "../lib/flashcards";
+import { dueCards, recommendDailyTarget, studyContextKey, vietnamStudyDate, type Flashcard, type FlashcardDeck, type FlashcardRating, type StudyEvent } from "../lib/flashcards";
 import { aiErrorMessage } from "../lib/aiErrors";
 import { useFlashcards } from "../hooks/useFlashcards";
 import { useLanguage } from "../lib/i18n";
-import { consumeAiManualUsage, generateFlashcards, generateFlashcardsFromFile, type GeneratedFlashcard, type GeneratedFlashcardsFromFile } from "../lib/api";
+import { consumeAiManualUsage, generateFlashcards, generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcard, type GeneratedFlashcardsFromFile, type StudyPlanRecommendation } from "../lib/api";
 import { getDocumentSource, saveDocumentToStorage } from "../lib/supabase";
 import { AI_FILE_ACCEPT, readClipboardSource, writeClipboardText } from "../lib/aiSource";
 import { MAX_FILE_BYTES } from "../lib/board";
 import Dialog from "./Dialog";
 import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
+import StudyPlanDialog from "./StudyPlanDialog";
 import { buildFlashcardsPrompt, GEMINI_WEB_URL, ManualAiValidationError, MAX_FLASHCARDS, parseManualFlashcards } from "../lib/manualAi";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
-type AiSource = "text" | "project" | "file";
+type AiSource = "text" | "project" | "file" | "deck";
 type AiPreviewCard = Omit<GeneratedFlashcard, "sourcePage"> & { id: string; sourcePage: number | null };
 type AiPreview = { title: string; provider: string; model: string; cards: AiPreviewCard[]; sourceDocumentId?: string };
 const DEFAULT_FLASHCARD_LIMIT = 50;
@@ -39,6 +40,18 @@ function boardToStudyText(board: BoardState) {
   board.nodes.filter(item => !item.hidden).forEach(item => lines.push(`Mind-map node${item.parentId ? ` (child of ${item.parentId})` : ""}: ${item.label}${item.sourcePage ? ` [PAGE ${item.sourcePage}]` : ""}`));
   board.edges.filter(item => !item.hidden && item.label).forEach(item => lines.push(`Connection: ${item.source} -> ${item.target}: ${item.label}`));
   return lines.join("\n").slice(0, 120_000);
+}
+
+function cardsToStudyText(cards: Flashcard[]) {
+  return cards.map((card, index) => `Existing card ${index + 1}\nQ: ${card.front}\nA: ${card.back}`).join("\n\n").slice(0, 120_000);
+}
+
+function deckExpansionSource(cards: Flashcard[]) {
+  return `Existing flashcard set:\n${cardsToStudyText(cards)}\n\nCreate additional cards that test related ideas. Do not repeat or lightly rephrase the existing cards.`;
+}
+
+function cardQuestionKey(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
 function StorageBadge({ mode }: { mode: "cloud" | "local" }) {
@@ -62,13 +75,15 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
   const [formError, setFormError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<FlashcardDeck | null>(null);
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
+  const [reviewCards, setReviewCards] = useState<Flashcard[]>([]);
+  const [reviewContext, setReviewContext] = useState<{ planId: string | null; contextKey: string; targetCount: number } | null>(null);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [ratingBusy, setRatingBusy] = useState(false);
+  const ratingBusyRef = useRef(false);
   const [cardQuery, setCardQuery] = useState("");
   const [sourceView, setSourceView] = useState<SourceDocumentView | null>(null);
-  const progressKey = `mindcanvas:review-progress:${owner ?? "guest"}:${new Date().toISOString().slice(0, 10)}`;
-  const [dailyGoal, setDailyGoal] = useState(() => { try { return Math.max(5, Math.min(100, Number(localStorage.getItem("mindcanvas:daily-goal")) || 20)); } catch { return 20; } });
-  const [reviewedToday, setReviewedToday] = useState(() => { try { return Math.max(0, Number(localStorage.getItem(progressKey)) || 0); } catch { return 0; } });
+  const [studyPlanDialog, setStudyPlanDialog] = useState(false);
   const [aiDialog, setAiDialog] = useState(false);
   const [aiSource, setAiSource] = useState<AiSource>("text");
   const [aiMode, setAiMode] = useState<AiMode>(owner ? "auto" : "manual");
@@ -99,8 +114,16 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
   const difficultCards = flashcards.cards.filter(card => card.lapses > 0).sort((a, b) => b.lapses - a.lapses);
   const learnedCards = flashcards.cards.filter(card => card.repetitions >= 2);
   const filteredCards = flashcards.cards.filter(card => `${card.front} ${card.back}`.toLocaleLowerCase().includes(cardQuery.trim().toLocaleLowerCase()));
-  const reviewTarget = reviewQueue[reviewIndex] ? flashcards.cards.find(card => card.id === reviewQueue[reviewIndex]) ?? null : null;
-  const reviewFinished = panel === "review" && (!reviewQueue.length || reviewIndex >= reviewQueue.length || !reviewTarget);
+  const reviewTarget = reviewQueue[reviewIndex] ? reviewCards.find(card => card.id === reviewQueue[reviewIndex]) ?? null : null;
+  const reviewFinished = panel === "review" && reviewQueue.length > 0 && reviewIndex >= reviewQueue.length;
+
+  useEffect(() => {
+    const plan = flashcards.activeStudyPlan;
+    if (!plan || flashcards.todayStudyDay || flashcards.studyLoading) return;
+    let alive = true;
+    void flashcards.loadCardsForDecks(plan.deckIds).then(cards => { if (alive) return flashcards.ensureStudyPlanDay(plan, cards); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [flashcards.activeStudyPlan, flashcards.ensureStudyPlanDay, flashcards.loadCardsForDecks, flashcards.studyLoading, flashcards.todayStudyDay]);
 
   const openCreateDeck = () => { setDeckName(""); setDeckProjectId(""); setFormError(""); setDeckDialog({ kind: "create" }); };
   const openRenameDeck = (deck: FlashcardDeck) => { setDeckName(deck.name); setDeckProjectId(deck.projectId ?? ""); setFormError(""); setDeckDialog({ kind: "rename", deck }); };
@@ -110,10 +133,11 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
     const linkedProject = flashcards.selectedDeck?.projectId ?? "";
     const nextMode = owner ? "auto" : "manual";
     const defaultMaxCards = Math.min(DEFAULT_FLASHCARD_LIMIT, maxCardsLimit);
-    setAiMode(nextMode); setAiSource(linkedProject ? "project" : "text"); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards(String(defaultMaxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards: defaultMaxCards, language }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); setAiDialog(true);
+    const source: AiSource = flashcards.cards.length ? "deck" : linkedProject ? "project" : "text";
+    setAiMode(nextMode); setAiSource(source); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards(String(defaultMaxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards: defaultMaxCards, language, text: source === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); setAiDialog(true);
   };
   const closeAiGenerator = () => { if (aiBusy) return; aiController.current?.abort(); setAiDialog(false); setAiPreview(null); setManualPrompt(""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); };
-  const changeAiMode = (nextMode: AiMode) => { const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? Math.min(DEFAULT_FLASHCARD_LIMIT, maxCardsLimit); setAiMode(nextMode); if (nextMode === "manual") setAiMaxCards(String(maxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards, language }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); };
+  const changeAiMode = (nextMode: AiMode) => { const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? Math.min(DEFAULT_FLASHCARD_LIMIT, maxCardsLimit); setAiMode(nextMode); if (nextMode === "manual") setAiMaxCards(String(maxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards, language, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); };
   const sourceForAi = async (signal: AbortSignal) => {
     if (aiSource === "text") {
       const text = aiText.trim();
@@ -132,6 +156,10 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
       const text = boardToStudyText(board);
       if (!text.trim() || text.trim() === `Title: ${board.title}`) throw new Error(t("aiProjectEmpty"));
       return { text, documentId: undefined as string | undefined, file: undefined as File | undefined };
+    }
+    if (aiSource === "deck") {
+      if (!flashcards.cards.length) throw new Error(t("aiDeckEmpty"));
+      return { text: deckExpansionSource(flashcards.cards), documentId: undefined as string | undefined, file: undefined as File | undefined };
     }
     if (!aiFile) throw new Error(t("aiFileRequired"));
     if (aiFile.size > MAX_FILE_BYTES) throw new Error(t("fileTooLarge"));
@@ -159,13 +187,16 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
       setAiError(error instanceof ManualAiValidationError && error.code === "INVALID_JSON" ? t("manualInvalidJson") : t("manualInvalidFlashcards"));
       return;
     }
+    const existingQuestions = new Set(flashcards.cards.map(card => cardQuestionKey(card.front)));
+    const parsedCards = aiSource === "deck" ? parsed.cards.filter(card => !existingQuestions.has(cardQuestionKey(card.front))) : parsed.cards;
+    if (!parsedCards.length) { setAiPreview(null); setAiError(t("aiFlashcardError")); return; }
     if (!manualUsageConsumed) {
       setAiBusy(true);
       try { await consumeAiManualUsage(); setManualUsageConsumed(true); }
       catch (error) { setAiPreview(null); setAiError(aiErrorMessage(error, t, "aiManualQuotaError")); return; }
       finally { setAiBusy(false); }
     }
-    setAiPreview({ title: parsed.title, provider: "manual", model: "Gemini Web", cards: parsed.cards.map(card => ({ ...card, id: crypto.randomUUID() })) });
+    setAiPreview({ title: parsed.title, provider: "manual", model: "Gemini Web", cards: parsedCards.map(card => ({ ...card, id: crypto.randomUUID() })) });
     setAiError("");
   };
   const generateAiPreview = async (event: React.FormEvent) => {
@@ -183,9 +214,11 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
         ? await generateFlashcardsFromFile(source.file, maxCards, request.signal)
         : await generateFlashcards(source.text, source.documentId, maxCards, request.signal);
       if (request.signal.aborted) return;
-      if (result.provider === "demo" || !result.cards?.length || result.cards.length > maxCardsLimit) throw new Error(t("aiDemo"));
+      const existingQuestions = new Set(flashcards.cards.map(card => cardQuestionKey(card.front)));
+      const generatedCards = aiSource === "deck" ? result.cards.filter(card => !existingQuestions.has(cardQuestionKey(card.front))) : result.cards;
+      if (result.provider === "demo" || !generatedCards.length || generatedCards.length > maxCardsLimit) throw new Error(aiSource === "deck" ? t("aiFlashcardError") : t("aiDemo"));
       if (source.file) { const fileResult = result as GeneratedFlashcardsFromFile; await saveDocumentToStorage(source.file, fileResult.source.id, fileResult.source.text, fileResult.source.pageCount, flashcards.selectedDeck?.projectId ?? undefined); }
-      setAiPreview({ title: result.title, provider: result.provider, model: result.model, sourceDocumentId: result.sourceDocumentId, cards: result.cards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) });
+      setAiPreview({ title: result.title, provider: result.provider, model: result.model, sourceDocumentId: result.sourceDocumentId, cards: generatedCards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) });
     } catch (err) { if (!request.signal.aborted) setAiError(aiErrorMessage(err, t, "aiFlashcardError")); }
     finally { if (!request.signal.aborted) setAiBusy(false); }
   };
@@ -205,13 +238,20 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
   const updateManualCardLimit = (value: string) => {
     const maxCards = parseFlashcardLimit(value, maxCardsLimit);
     setAiMaxCards(value);
-    setManualPrompt(maxCards ? buildFlashcardsPrompt({ maxCards, language }) : "");
+    setManualPrompt(maxCards ? buildFlashcardsPrompt({ maxCards, language, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : "");
     setManualJson(""); setAiPreview(null); setManualCopied(false); setAiError(value && !maxCards ? maxCardsError() : "");
   };
   const applyAiPreview = async () => {
     if (!aiPreview) return;
-    const cards = aiPreview.cards.map(card => ({ front: card.front.trim(), back: card.back.trim(), sourcePage: card.sourcePage })).filter(card => card.front && card.back);
-    if (!cards.length || cards.length > maxCardsLimit) { setAiError(t("manualInvalidFlashcards")); return; }
+    const existingQuestions = new Set(flashcards.cards.map(card => cardQuestionKey(card.front)));
+    const seenQuestions = new Set<string>();
+    const cards = aiPreview.cards.map(card => ({ front: card.front.trim(), back: card.back.trim(), sourcePage: card.sourcePage })).filter(card => {
+      const key = cardQuestionKey(card.front);
+      if (!card.front || !card.back || (aiSource === "deck" && existingQuestions.has(key)) || seenQuestions.has(key)) return false;
+      seenQuestions.add(key);
+      return true;
+    });
+    if (!cards.length || cards.length > maxCardsLimit) { setAiError(aiSource === "deck" ? t("aiFlashcardError") : t("manualInvalidFlashcards")); return; }
     setAiBusy(true); setAiError("");
     try { await flashcards.createCards(cards); setAiDialog(false); setAiPreview(null); }
     catch (err) { setAiError(err instanceof Error ? err.message : t("aiFlashcardError")); }
@@ -244,25 +284,79 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
     } catch (err) { setFormError(err instanceof Error ? err.message : t("error")); }
   };
 
-  const startReview = (mode: "due" | "new" | "difficult" = "due") => {
-    const cards = mode === "new" ? newCards : mode === "difficult" ? difficultCards : dueCards(flashcards.cards);
-    setReviewQueue(cards.map(card => card.id));
+  const shuffleCards = (cards: Flashcard[]) => {
+    const shuffled = [...cards];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const other = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[other]] = [shuffled[other], shuffled[index]];
+    }
+    return shuffled;
+  };
+  const beginReview = (cards: Flashcard[], context: { planId: string | null; contextKey: string; targetCount: number }, random = false) => {
+    const ordered = random ? shuffleCards(cards) : cards;
+    setReviewCards(ordered); setReviewQueue(ordered.map(card => card.id)); setReviewContext(context);
     setReviewIndex(0); setShowAnswer(false); setPanel("review");
   };
+  const startReview = (mode: "due" | "new" | "difficult" | "all" | "random" = "due") => {
+    const cards = mode === "new" ? newCards : mode === "difficult" ? difficultCards : mode === "due" ? dueCards(flashcards.cards) : flashcards.cards;
+    beginReview(cards, { planId: null, contextKey: studyContextKey(null), targetCount: 1 }, mode === "random");
+  };
+  const startPlanReview = async () => {
+    const plan = flashcards.activeStudyPlan;
+    if (!plan) return;
+    setFormError("");
+    try {
+      const cards = await flashcards.loadCardsForDecks(plan.deckIds);
+      const day = flashcards.todayStudyDay ?? await flashcards.ensureStudyPlanDay(plan, cards);
+      const cardById = new Map(cards.map(card => [card.id, card]));
+      const ids = [...new Set([...day.forgottenCardIds, ...day.assignedCardIds.filter(id => !day.reviewedCardIds.includes(id))])];
+      const assigned = ids.map(id => cardById.get(id)).filter((card): card is Flashcard => !!card);
+      if (!assigned.length) { setFormError(t("noCardsForPlan")); return; }
+      beginReview(assigned, { planId: plan.id, contextKey: studyContextKey(plan.id), targetCount: day.targetCount });
+    } catch (err) { setFormError(err instanceof Error ? err.message : t("studyPlanLoadError")); }
+  };
 
-  const rateReview = async (rating: FlashcardRating) => {
-    if (!reviewTarget) return;
+  const rateReview = async (rating: Extract<FlashcardRating, "again" | "good">) => {
+    if (!reviewTarget || ratingBusyRef.current) return;
+    ratingBusyRef.current = true;
+    setRatingBusy(true);
+    const studyDate = vietnamStudyDate();
+    const context = reviewContext ?? { planId: null, contextKey: studyContextKey(null), targetCount: 1 };
+    const currentDay = flashcards.studyDays.find(day => day.studyDate === studyDate && day.contextKey === context.contextKey);
+    const goalUnit: 0 | 1 = context.planId && currentDay?.reviewedCardIds.includes(reviewTarget.id) ? 0 : 1;
+    const event: StudyEvent = { eventId: crypto.randomUUID(), studyDate, contextKey: context.contextKey, planId: context.planId, cardId: reviewTarget.id, rating, goalUnit, targetCount: context.targetCount, createdAt: new Date().toISOString() };
     try {
       await flashcards.reviewCard(reviewTarget, rating);
-      setReviewedToday(current => { const next = current + 1; try { localStorage.setItem(progressKey, String(next)); } catch {} return next; });
+      await flashcards.recordStudy(event);
+      if (rating === "again") setReviewQueue(queue => [...queue, reviewTarget.id]);
       setShowAnswer(false); setReviewIndex(index => index + 1);
     } catch { /* the hook keeps the visible error and the card stays on screen */ }
+    finally { ratingBusyRef.current = false; setRatingBusy(false); }
   };
   const openCardSource = async (card: Flashcard) => {
     if (!card.sourcePage || !flashcards.selectedDeck?.projectId) return;
     setFormError("");
     try { const source = await getDocumentSource({ projectId: flashcards.selectedDeck.projectId }); setSourceView({ url: source.url, name: source.name, page: card.sourcePage }); }
     catch { setFormError(t("sourceError")); }
+  };
+  const generatePlanFile = async (file: File, maxCards: number, targetDeckId: string) => {
+    if (!owner) throw new Error(t("loginRequired"));
+    if (file.size > MAX_FILE_BYTES) throw new Error(t("fileTooLarge"));
+    const result = await generateFlashcardsFromFile(file, maxCards);
+    if (result.provider === "demo" || !result.cards?.length) throw new Error(t("aiDemo"));
+    const targetDeck = flashcards.decks.find(deck => deck.id === targetDeckId);
+    const fileResult = result as GeneratedFlashcardsFromFile;
+    await saveDocumentToStorage(file, fileResult.source.id, fileResult.source.text, fileResult.source.pageCount, targetDeck?.projectId ?? undefined);
+    return { title: result.title, sourceDocumentId: result.sourceDocumentId ?? fileResult.source.id, cards: result.cards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) };
+  };
+  const recommendPlan = async (cards: Flashcard[], dailyMinutes: number): Promise<StudyPlanRecommendation> => {
+    const fallback = { provider: "local", model: "heuristic", dailyTarget: recommendDailyTarget(cards, dailyMinutes), focus: "balanced" as const, rationale: "Safe local recommendation" };
+    if (!owner) return fallback;
+    try {
+      return await recommendStudyPlan(cards.map(card => ({ due: new Date(card.dueAt).getTime() <= Date.now(), repetitions: card.repetitions, lapses: card.lapses, intervalDays: card.intervalDays })), dailyMinutes, language);
+    } catch {
+      return fallback;
+    }
   };
 
   return <section className="flashcards-page">
@@ -283,7 +377,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
         {!flashcards.selectedDeck ? <div className="flashcards-empty"><BookOpen size={48}/><h2>{t("chooseDeck")}</h2><p>{t("chooseDeckHint")}</p><button className="primary-button" onClick={openCreateDeck}><Plus size={17}/>{t("newDeck")}</button></div> : <>
           <header className="flashcards-content-heading">
             <div><div className="flashcards-title-line"><BookOpen size={21}/><h2>{flashcards.selectedDeck.name}</h2></div><div className="flashcards-meta"><span>{t("cardCount", { count: flashcards.cards.length })}</span><span>·</span><span>{t("dueCount", { count: due.length })}</span>{flashcards.selectedDeck.projectId && <><span>·</span><span><FileText size={13}/>{availableProjects.find(project => project.id === flashcards.selectedDeck?.projectId)?.title ?? t("linkedProject")}</span></>}</div></div>
-            <div className="actions"><button className="icon-button danger" aria-label={t("deleteDeck")} title={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={17}/></button><button className="secondary-button" disabled={flashcards.busy || aiBusy} title={!owner ? t("aiManualHint") : t("generateFlashcards")} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button><button className="secondary-button" disabled={!due.length || flashcards.busy || aiBusy} onClick={() => startReview("due")}><Play size={16}/>{t("startReview")}</button><button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div>
+            <div className="actions"><button className="icon-button danger" aria-label={t("deleteDeck")} title={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={17}/></button><button className="secondary-button" disabled={flashcards.busy || aiBusy} title={!owner ? t("aiManualHint") : t("generateFlashcards")} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button><button className="secondary-button" disabled={flashcards.busy || aiBusy} onClick={() => setStudyPlanDialog(true)}><CalendarClock size={16}/>{flashcards.activeStudyPlan ? t("manageStudyPlan") : t("createStudyPlan")}</button>{flashcards.activeStudyPlan && <button className="primary-button" disabled={flashcards.busy || aiBusy || !flashcards.todayStudyDay || flashcards.todayStudyDay.completed} onClick={() => void startPlanReview()}><Play size={16}/>{t("startPlanReview")}</button>}<button className="secondary-button" disabled={!due.length || flashcards.busy || aiBusy} onClick={() => startReview("due")}><Play size={16}/>{t("startReview")}</button><button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div>
           </header>
           <div className="study-overview">
             <button disabled={!due.length} onClick={() => startReview("due")}><span><RotateCcw size={16}/>{t("reviewDue")}</span><strong>{due.length}</strong></button>
@@ -291,9 +385,10 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
             <button disabled={!difficultCards.length} onClick={() => startReview("difficult")}><span><Target size={16}/>{t("difficultCards")}</span><strong>{difficultCards.length}</strong></button>
             <div><span><CheckCircle2 size={16}/>{t("learnedCards")}</span><strong>{learnedCards.length}</strong></div>
           </div>
-          <div className="daily-goal"><div><span>{t("dailyGoal")}</span><strong>{reviewedToday} / {dailyGoal}</strong></div><progress value={Math.min(reviewedToday, dailyGoal)} max={dailyGoal}/><label><Target size={14}/><input aria-label={t("dailyGoal")} type="number" min="5" max="100" step="5" value={dailyGoal} onChange={event => { const value = Math.max(5, Math.min(100, Number(event.target.value) || 20)); setDailyGoal(value); try { localStorage.setItem("mindcanvas:daily-goal", String(value)); } catch {} }}/></label></div>
+          <div className={`study-plan-banner ${flashcards.activeStudyPlan ? "has-plan" : "manual-mode"}`}><div className="study-plan-banner-main"><span className="streak-flame"><Flame size={19}/></span><div><span className="study-plan-kicker">{flashcards.activeStudyPlan ? t("aiPlanToday") : t("manualPractice")}</span><strong>{flashcards.streak.current} {t("streakDays")}</strong><small>{flashcards.activeStudyPlan ? `${flashcards.streak.todayProgress} / ${flashcards.streak.todayTarget} ${t("targetCards").toLocaleLowerCase()}` : t("manualStreakHint")}</small></div></div><div className="study-plan-banner-progress"><div><span>{flashcards.activeStudyPlan ? flashcards.activeStudyPlan.name : t("streak")}</span><b>{flashcards.streak.todayCompleted ? t("streakEarned") : flashcards.activeStudyPlan ? t("streakLocked") : t("studyOneCard")}</b></div><progress value={Math.min(flashcards.streak.todayProgress, Math.max(1, flashcards.streak.todayTarget))} max={Math.max(1, flashcards.streak.todayTarget)}/></div><div className="streak-best"><span>{t("bestStreak")}</span><strong>{flashcards.streak.best}</strong></div></div>
+          <div className="study-mode-toolbar"><span><Target size={16}/>{t("studyMode")}</span><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("all")}><ListOrdered size={15}/>{t("studyOrder")}</button><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("random")}><Shuffle size={15}/>{t("random")}</button><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("new")}><Zap size={15}/>{t("studyNew")}</button></div>
           <div className="flashcard-tabs" role="tablist"><button role="tab" aria-selected={panel === "cards"} className={panel === "cards" ? "active" : ""} onClick={() => setPanel("cards")}>{t("allCards")}</button><button role="tab" aria-selected={panel === "review"} className={panel === "review" ? "active" : ""} onClick={() => startReview("due")}><RotateCcw size={15}/>{t("review")}{due.length > 0 && <span>{due.length}</span>}</button></div>
-          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} dailyCurrent={reviewedToday} dailyGoal={dailyGoal} showAnswer={showAnswer} onShowAnswer={() => setShowAnswer(true)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
+          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} forgottenCount={flashcards.todayStudyDay?.forgottenCardIds.length ?? 0} dailyCurrent={flashcards.streak.todayProgress} dailyGoal={flashcards.streak.todayTarget} planMode={!!reviewContext?.planId} ratingBusy={ratingBusy} showAnswer={showAnswer} onShowAnswer={() => setShowAnswer(true)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
         </>}
       </section>
     </div>
@@ -314,9 +409,10 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
       {!aiPreview ? <form onSubmit={event => void generateAiPreview(event)}>
       {aiMode === "auto" ? <>
         <p>{t("aiFlashcardHint")}</p><small className="field-hint">{t("aiFileHint")}</small>
-        <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { setAiSource(event.target.value as AiSource); setManualPrompt(""); setManualJson(""); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
+        <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { const next = event.target.value as AiSource; setAiSource(next); setManualPrompt(next === "deck" ? buildFlashcardsPrompt({ maxCards: parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? DEFAULT_FLASHCARD_LIMIT, language, text: deckExpansionSource(flashcards.cards) }) : ""); setManualJson(""); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="deck" disabled={!flashcards.cards.length}>{t("aiSourceDeck")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
         {aiSource === "text" && <div className="ai-text-source"><label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => { setAiText(event.target.value); setManualPrompt(""); setManualJson(""); }} placeholder={t("sourceTextPlaceholder")}/></label><button type="button" className="secondary-button clipboard-button" disabled={aiBusy} onClick={() => void (async () => { try { const pasted = await readClipboardSource(); if (pasted.kind === "image") { setAiSource("file"); setAiFile(pasted.file); } else setAiText(pasted.text); setManualPrompt(""); setManualJson(""); setAiError(""); } catch (err) { setAiError(err instanceof Error && err.message === "CLIPBOARD_EMPTY" ? t("clipboardEmpty") : t("clipboardReadError")); } })()}><ClipboardPaste size={16}/>{t("pasteFromClipboard")}</button><small className="field-hint">{t("clipboardSourceHint")}</small></div>}
         {aiSource === "project" && <label>{t("sourceProject")}<select required value={aiProjectId} disabled={aiBusy || !availableProjects.length} onChange={event => { setAiProjectId(event.target.value); setManualPrompt(""); setManualJson(""); }}><option value="">{t("chooseProject")}</option>{availableProjects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select><small>{t("sourceProjectHint")}</small></label>}
+        {aiSource === "deck" && <div className="ai-deck-source"><Layers3 size={17}/><span>{t("aiExpandDeckHint", { count: flashcards.cards.length })}</span></div>}
         {aiSource === "file" && <label className="upload-drop ai-file-drop" onDragOver={event => { event.preventDefault(); event.currentTarget.classList.add("dragging"); }} onDragLeave={event => event.currentTarget.classList.remove("dragging")} onDrop={event => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); const file = event.dataTransfer.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}><span><Upload size={20}/>{t("chooseAiFile")}</span><input type="file" accept={AI_FILE_ACCEPT} disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("aiFileHint")}</small>{aiFile && <small>{aiFile.name}</small>}</label>}
         <label>{t("maxGeneratedCards")}<input type="number" min="3" max={maxCardsLimit} step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => { setAiMaxCards(event.target.value); setManualPrompt(""); setManualJson(""); }}/></label>
       </> : <section className="ai-manual-panel">
@@ -337,6 +433,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
       {aiError && <p className="form-error" role="alert">{aiError}</p>}{aiBusy && <p role="status">{t("saving")}</p>}
       <footer className="actions"><button type="button" className="secondary-button" disabled={aiBusy} onClick={() => { setAiPreview(null); setAiError(""); }}>{t("backToSource")}</button><button type="button" className="primary-button" disabled={aiBusy || !aiPreview.cards.some(card => card.front.trim() && card.back.trim())} onClick={() => void applyAiPreview()}>{aiBusy ? t("saving") : t("applyToDeck")}</button></footer>
     </>}</Dialog>}
+    {studyPlanDialog && <StudyPlanDialog decks={flashcards.decks} selectedDeckId={flashcards.selectedDeckId} maxCards={maxCardsLimit} onClose={() => setStudyPlanDialog(false)} onLoadCards={flashcards.loadCardsForDecks} onGenerateFile={generatePlanFile} onCreateCards={flashcards.createCardsForDeck} onRecommend={recommendPlan} onSavePlan={flashcards.saveStudyPlan}/>}
     {deleteTarget && <Dialog title={t("deleteDeck")} onClose={() => { if (!flashcards.busy) setDeleteTarget(null); }}><p>{t("deleteDeckHint", { name: deleteTarget.name })}</p><footer className="actions"><button className="secondary-button" disabled={flashcards.busy} onClick={() => setDeleteTarget(null)}>{t("cancel")}</button><button className="danger-button" disabled={flashcards.busy} onClick={() => void flashcards.removeDeck(deleteTarget).then(() => setDeleteTarget(null)).catch(() => undefined)}><Trash2 size={16}/>{t("deleteDeck")}</button></footer></Dialog>}
     {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
   </section>;
@@ -351,8 +448,36 @@ function CardRow({ card, language, onEdit, onDelete, onOpenSource, busy, t }: { 
   </article>;
 }
 
-function ReviewPanel({ target, finished, index, total, dailyCurrent, dailyGoal, showAnswer, onShowAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; dailyCurrent: number; dailyGoal: number; showAnswer: boolean; onShowAnswer: () => void; onRate: (rating: FlashcardRating) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
-  if (finished) return <div className="review-finished"><CheckCircle2 size={46}/><h3>{t("reviewComplete")}</h3><p>{t("reviewCompleteHint", { count: total })}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
+function ReviewPanel({ target, finished, index, total, forgottenCount, dailyCurrent, dailyGoal, planMode, ratingBusy, showAnswer, onShowAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; forgottenCount: number; dailyCurrent: number; dailyGoal: number; planMode: boolean; ratingBusy: boolean; showAnswer: boolean; onShowAnswer: () => void; onRate: (rating: Extract<FlashcardRating, "again" | "good">) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
+  const pointerStart = useRef<number | null>(null);
+  const [dragX, setDragX] = useState(0);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!target || finished || (event.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName))) return;
+      if (event.key === " " || event.key === "Enter") { event.preventDefault(); if (!showAnswer) onShowAnswer(); }
+      if (showAnswer && event.key === "ArrowLeft") { event.preventDefault(); onRate("again"); }
+      if (showAnswer && event.key === "ArrowRight") { event.preventDefault(); onRate("good"); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [finished, onRate, onShowAnswer, showAnswer, target]);
+  const pointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!showAnswer || ratingBusy) return;
+    pointerStart.current = event.clientX;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const pointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    if (pointerStart.current === null) return;
+    setDragX(event.clientX - pointerStart.current);
+  };
+  const pointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    if (pointerStart.current === null) return;
+    const distance = event.clientX - pointerStart.current;
+    pointerStart.current = null;
+    setDragX(0);
+    if (Math.abs(distance) >= 72 && showAnswer) onRate(distance > 0 ? "good" : "again");
+  };
+  if (finished) return <div className="review-finished"><CheckCircle2 size={46}/><h3>{planMode ? t("reviewGoalComplete") : t("reviewComplete")}</h3><p>{t("reviewCompleteHint", { count: total })}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
   if (!target) return <div className="review-finished"><BookOpen size={46}/><h3>{t("nothingDue")}</h3><p>{t("nothingDueHint")}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
-  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span>{t("reviewKeyboardHint")}</span></div><progress className="review-session-progress" value={index} max={Math.max(1, total)} aria-label={t("sessionProgress")}/><article className="review-card"><div className="review-face"><span className="flashcard-label">{t("questionSide")}</span><p>{target.front}</p></div>{showAnswer && <div className="review-face answer"><span className="flashcard-label">{t("answerSide")}</span><p>{target.back}</p></div>}</article>{target.sourcePage && <span className="review-source">{t("page")} {target.sourcePage}</span>}{!showAnswer ? <button className="primary-button show-answer" onClick={onShowAnswer}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-rating-buttons"><button className="rating-again" onClick={() => onRate("again")}>{t("again")}</button><button className="rating-hard" onClick={() => onRate("hard")}>{t("hard")}</button><button className="rating-good" onClick={() => onRate("good")}>{t("good")}</button><button className="rating-easy" onClick={() => onRate("easy")}>{t("easy")}</button></div></div>}<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small></div>;
+  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span>{t("reviewKeyboardHint")}</span></div><progress className="review-session-progress" value={index} max={Math.max(1, total)} aria-label={t("sessionProgress")}/><article className={`review-card-scene ${showAnswer ? "is-flipped" : ""}`} tabIndex={0} aria-label={showAnswer ? t("answerSide") : t("questionSide")} onClick={() => { if (!showAnswer) onShowAnswer(); }} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { pointerStart.current = null; setDragX(0); }}><div className="review-card-inner" style={{ transform: `translateX(${dragX}px) rotate(${dragX / 18}deg)${showAnswer ? " rotateY(180deg)" : ""}` }}><div className="review-card-face front"><span className="flashcard-label">{t("questionSide")}</span><p>{target.front}</p><small>{t("flipCardHint")}</small></div><div className="review-card-face back"><span className="flashcard-label">{t("answerSide")}</span><p>{target.back}</p><small>{t("swipeHint")}</small></div></div>{showAnswer && dragX !== 0 && <span className={`review-swipe-feedback ${dragX > 0 ? "remembered" : "forgotten"}`}>{dragX > 0 ? t("remembered") : t("forgotten")}</span>}</article>{target.sourcePage && <span className="review-source">{t("page")} {target.sourcePage}</span>}{!showAnswer ? <button className="primary-button show-answer" onClick={event => { event.stopPropagation(); onShowAnswer(); }}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-swipe-actions"><button className="rating-again" disabled={ratingBusy} onClick={() => onRate("again")}>← {t("swipeForgotten")}</button><button className="rating-good" disabled={ratingBusy} onClick={() => onRate("good")}>{t("swipeRemembered")} →</button></div>{forgottenCount > 0 && <small className="review-forgotten-count">{t("forgottenCount", { count: forgottenCount })}</small>}</div>}<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small></div>;
 }

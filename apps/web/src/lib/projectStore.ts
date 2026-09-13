@@ -1,7 +1,7 @@
 import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { parseBoard } from "./board";
-import type { Flashcard, FlashcardDeck, FlashcardStorage } from "./flashcards";
+import type { Flashcard, FlashcardDeck, FlashcardStorage, StudyDayProgress, StudyEvent, StudyPlan, StudyPlanSourceType, StudyPlanStatus } from "./flashcards";
 import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
 
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number };
@@ -19,6 +19,9 @@ export const cacheKey = (owner: string | null) => `mindcanvas:projects:v3:${owne
 export const versionCacheKey = (owner: string | null, projectId: string) => `mindcanvas:versions:v1:${owner ?? "guest"}:${projectId}`;
 export const flashcardDeckCacheKey = (owner: string | null) => `mindcanvas:flashcards:v1:${owner ?? "guest"}:decks`;
 export const flashcardCacheKey = (owner: string | null, deckId: string) => `mindcanvas:flashcards:v1:${owner ?? "guest"}:cards:${deckId}`;
+export const flashcardStudyPlanCacheKey = (owner: string | null) => `mindcanvas:flashcards:v2:${owner ?? "guest"}:plans`;
+export const flashcardStudyDayCacheKey = (owner: string | null) => `mindcanvas:flashcards:v2:${owner ?? "guest"}:study-days`;
+export const flashcardStudyEventQueueCacheKey = (owner: string | null) => `mindcanvas:flashcards:v2:${owner ?? "guest"}:study-events`;
 const memoryCaches = new Map<string, CachedProject[]>();
 const memoryOnlyCaches = new Set<string>();
 const hydratedCaches = new Set<string>();
@@ -454,6 +457,287 @@ export async function deleteFlashcard(owner: string | null, card: Flashcard): Pr
   }
   writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
   return "local";
+}
+
+export type StudyRepositoryResult<T> = { item: T; source: FlashcardStorage };
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter(item => typeof item === "string") : [];
+}
+
+function planFromRow(row: any, source: FlashcardStorage): StudyPlan | null {
+  if (!row || typeof row.id !== "string" || typeof row.name !== "string") return null;
+  const sourceType: StudyPlanSourceType = row.source_type === "document" || row.source_type === "mixed" ? row.source_type : "decks";
+  const status: StudyPlanStatus = row.status === "paused" ? "paused" : "active";
+  const timestamp = typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString();
+  const dailyTarget = Number(row.daily_target);
+  const dailyMinutes = Number(row.daily_minutes);
+  return {
+    id: row.id,
+    name: row.name,
+    sourceType,
+    deckIds: stringArray(row.deck_ids),
+    sourceDocumentId: typeof row.source_document_id === "string" ? row.source_document_id : null,
+    dailyTarget: Number.isInteger(dailyTarget) ? Math.max(1, Math.min(500, dailyTarget)) : 1,
+    dailyMinutes: Number.isInteger(dailyMinutes) ? Math.max(5, Math.min(180, dailyMinutes)) : 20,
+    timezone: typeof row.timezone === "string" && row.timezone ? row.timezone : "Asia/Ho_Chi_Minh",
+    startDate: typeof row.start_date === "string" ? row.start_date : timestamp.slice(0, 10),
+    status,
+    createdAt: typeof row.created_at === "string" ? row.created_at : timestamp,
+    updatedAt: timestamp,
+    source,
+  };
+}
+
+function studyDayFromRow(row: any, source: FlashcardStorage): StudyDayProgress | null {
+  if (!row || typeof row.study_date !== "string" || typeof row.context_key !== "string") return null;
+  const targetCount = Number(row.target_count);
+  const reviewedCount = Number(row.reviewed_count);
+  const retryCount = Number(row.retry_count);
+  const timestamp = typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString();
+  const target = Number.isInteger(targetCount) ? Math.max(1, targetCount) : 1;
+  const reviewed = Number.isInteger(reviewedCount) ? Math.max(0, reviewedCount) : 0;
+  const planId = typeof row.plan_id === "string" ? row.plan_id : null;
+  const forgottenCardIds = stringArray(row.forgotten_card_ids);
+  return {
+    studyDate: row.study_date,
+    contextKey: row.context_key,
+    planId,
+    targetCount: target,
+    reviewedCount: reviewed,
+    retryCount: Number.isInteger(retryCount) ? Math.max(0, retryCount) : 0,
+    assignedCardIds: stringArray(row.assigned_card_ids),
+    reviewedCardIds: stringArray(row.reviewed_card_ids),
+    forgottenCardIds,
+    completed: row.completed === true || (reviewed >= target && (!planId || forgottenCardIds.length === 0)),
+    firstReviewAt: typeof row.first_review_at === "string" ? row.first_review_at : null,
+    lastReviewAt: typeof row.last_review_at === "string" ? row.last_review_at : null,
+    createdAt: typeof row.created_at === "string" ? row.created_at : timestamp,
+    updatedAt: timestamp,
+    source,
+  };
+}
+
+function studyDayKey(day: Pick<StudyDayProgress, "studyDate" | "contextKey">) {
+  return `${day.studyDate}:${day.contextKey}`;
+}
+
+function localStudyPlans(owner: string | null) {
+  return readLocalList<StudyPlan>(flashcardStudyPlanCacheKey(owner)).filter(plan => typeof plan?.id === "string" && typeof plan.name === "string");
+}
+
+function localStudyDays(owner: string | null) {
+  return readLocalList<StudyDayProgress>(flashcardStudyDayCacheKey(owner)).filter(day => typeof day?.studyDate === "string" && typeof day.contextKey === "string").map(day => ({
+    ...day,
+    planId: typeof day.planId === "string" ? day.planId : null,
+    targetCount: Number.isInteger(day.targetCount) ? Math.max(1, day.targetCount) : 1,
+    reviewedCount: Number.isInteger(day.reviewedCount) ? Math.max(0, day.reviewedCount) : 0,
+    retryCount: Number.isInteger(day.retryCount) ? Math.max(0, day.retryCount) : 0,
+    assignedCardIds: stringArray(day.assignedCardIds),
+    reviewedCardIds: stringArray(day.reviewedCardIds),
+    forgottenCardIds: stringArray(day.forgottenCardIds),
+    completed: !!day.completed,
+  }));
+}
+
+function localStudyEvents(owner: string | null) {
+  return readLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner)).filter(event => typeof event?.eventId === "string" && typeof event.studyDate === "string");
+}
+
+function cacheStudyPlan(owner: string | null, plan: StudyPlan) {
+  writeLocalList(flashcardStudyPlanCacheKey(owner), [plan, ...localStudyPlans(owner).filter(item => item.id !== plan.id)].slice(0, 20));
+}
+
+function cacheStudyDay(owner: string | null, day: StudyDayProgress) {
+  writeLocalList(flashcardStudyDayCacheKey(owner), [day, ...localStudyDays(owner).filter(item => studyDayKey(item) !== studyDayKey(day))].slice(0, 730));
+}
+
+function cacheStudyEvent(owner: string | null, event: StudyEvent) {
+  writeLocalList(flashcardStudyEventQueueCacheKey(owner), [event, ...localStudyEvents(owner).filter(item => item.eventId !== event.eventId)].slice(0, 5000));
+}
+
+function removeStudyEvent(owner: string | null, eventId: string) {
+  writeLocalList(flashcardStudyEventQueueCacheKey(owner), localStudyEvents(owner).filter(event => event.eventId !== eventId));
+}
+
+export function readStudyPlans(owner: string | null) {
+  return localStudyPlans(owner);
+}
+
+export function readStudyDays(owner: string | null) {
+  return localStudyDays(owner);
+}
+
+export async function fetchStudyPlans(owner: string | null): Promise<FlashcardRepositoryResult<StudyPlan>> {
+  if (!owner) return { items: localStudyPlans(null), source: "local" };
+  try {
+    const client = await clientFor(owner);
+    const { data, error } = await client.from("flashcard_study_plans").select("id,name,source_type,deck_ids,source_document_id,daily_target,daily_minutes,timezone,start_date,status,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+    if (error) throw error;
+    const items = (data ?? []).map(row => planFromRow(row, "cloud")).filter((item): item is StudyPlan => !!item);
+    writeLocalList(flashcardStudyPlanCacheKey(owner), items);
+    return { items, source: "cloud" };
+  } catch {
+    return { items: localStudyPlans(owner), source: "local" };
+  }
+}
+
+export async function upsertStudyPlan(owner: string | null, plan: StudyPlan): Promise<FlashcardStorage> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const { error } = await client.from("flashcard_study_plans").upsert({ id: plan.id, user_id: owner, name: plan.name, source_type: plan.sourceType, deck_ids: plan.deckIds, source_document_id: plan.sourceDocumentId, daily_target: plan.dailyTarget, daily_minutes: plan.dailyMinutes, timezone: plan.timezone, start_date: plan.startDate, status: plan.status, created_at: plan.createdAt, updated_at: plan.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      if (error) throw error;
+      cacheStudyPlan(owner, { ...plan, source: "cloud" });
+      return "cloud";
+    } catch {
+      // The migration may be applied after the UI is deployed. Keep plan setup
+      // usable locally until the cloud table becomes available.
+    }
+  }
+  cacheStudyPlan(owner, { ...plan, source: "local" });
+  return "local";
+}
+
+export async function fetchStudyDays(owner: string | null): Promise<FlashcardRepositoryResult<StudyDayProgress>> {
+  if (!owner) return { items: localStudyDays(null), source: "local" };
+  await flushStudyEvents(owner);
+  try {
+    const client = await clientFor(owner);
+    const { data, error } = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).order("study_date", { ascending: false }).limit(730).abortSignal(AbortSignal.timeout(20000));
+    if (error) throw error;
+    const remote = (data ?? []).map(row => studyDayFromRow(row, "cloud")).filter((item): item is StudyDayProgress => !!item);
+    const merged = new Map(remote.map(day => [studyDayKey(day), day]));
+    for (const day of localStudyDays(owner)) {
+      const previous = merged.get(studyDayKey(day));
+      if (!previous || day.updatedAt >= previous.updatedAt) merged.set(studyDayKey(day), day);
+    }
+    const items = [...merged.values()].sort((a, b) => b.studyDate.localeCompare(a.studyDate) || b.updatedAt.localeCompare(a.updatedAt)).slice(0, 730);
+    writeLocalList(flashcardStudyDayCacheKey(owner), items);
+    return { items, source: "cloud" };
+  } catch {
+    return { items: localStudyDays(owner), source: "local" };
+  }
+}
+
+export async function upsertStudyDay(owner: string | null, day: StudyDayProgress): Promise<StudyRepositoryResult<StudyDayProgress>> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const row = { user_id: owner, study_date: day.studyDate, context_key: day.contextKey, plan_id: day.planId, target_count: day.targetCount, reviewed_count: day.reviewedCount, retry_count: day.retryCount, assigned_card_ids: day.assignedCardIds, reviewed_card_ids: day.reviewedCardIds, forgotten_card_ids: day.forgottenCardIds, completed: day.completed, first_review_at: day.firstReviewAt, last_review_at: day.lastReviewAt, created_at: day.createdAt, updated_at: day.updatedAt };
+      let result: any = await client.from("flashcard_study_days").insert(row).select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,first_review_at,last_review_at,created_at,updated_at").abortSignal(AbortSignal.timeout(20000)).single();
+      if (result.error?.code === "23505") {
+        result = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).eq("study_date", day.studyDate).eq("context_key", day.contextKey).abortSignal(AbortSignal.timeout(20000)).single();
+      }
+      const { data, error } = result;
+      if (error) throw error;
+      const saved = studyDayFromRow(data, "cloud");
+      if (!saved) throw new Error("Invalid study day returned by Supabase.");
+      cacheStudyDay(owner, saved);
+      return { item: saved, source: "cloud" };
+    } catch {
+      // Fall through to the offline copy when the V4.2 migration is not live.
+    }
+  }
+  const saved = { ...day, source: "local" as const };
+  cacheStudyDay(owner, saved);
+  return { item: saved, source: "local" };
+}
+
+function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForCloud: boolean) {
+  const existingEvent = localStudyEvents(owner).find(item => item.eventId === event.eventId);
+  const current = localStudyDays(owner).find(day => studyDayKey(day) === studyDayKey(event)) ?? {
+    studyDate: event.studyDate,
+    contextKey: event.contextKey,
+    planId: event.planId,
+    targetCount: Math.max(1, event.targetCount),
+    reviewedCount: 0,
+    retryCount: 0,
+    assignedCardIds: [],
+    reviewedCardIds: [],
+    forgottenCardIds: [],
+    completed: false,
+    firstReviewAt: null,
+    lastReviewAt: null,
+    createdAt: event.createdAt ?? new Date().toISOString(),
+    updatedAt: event.createdAt ?? new Date().toISOString(),
+  } satisfies StudyDayProgress;
+  if (existingEvent) return current;
+  const timestamp = event.createdAt ?? new Date().toISOString();
+  const alreadyCounted = !!event.cardId && current.reviewedCardIds.includes(event.cardId);
+  const increment = alreadyCounted ? 0 : event.goalUnit;
+  const reviewedCardIds = event.cardId && increment > 0 && !alreadyCounted ? [...current.reviewedCardIds, event.cardId] : current.reviewedCardIds;
+  const forgottenCardIds = event.cardId
+    ? event.rating === "again"
+      ? [...new Set([...current.forgottenCardIds, event.cardId])]
+      : current.forgottenCardIds.filter(id => id !== event.cardId)
+    : current.forgottenCardIds;
+  const targetCount = Math.max(1, current.targetCount, event.targetCount);
+  const saved: StudyDayProgress = {
+    ...current,
+    planId: current.planId ?? event.planId,
+    targetCount,
+    reviewedCount: current.reviewedCount + increment,
+    retryCount: current.retryCount + (event.rating === "again" ? 1 : 0),
+    reviewedCardIds,
+    completed: current.completed || (current.reviewedCount + increment >= targetCount && (event.planId ? forgottenCardIds.length === 0 : true)),
+    forgottenCardIds,
+    firstReviewAt: current.firstReviewAt ?? timestamp,
+    lastReviewAt: timestamp,
+    updatedAt: timestamp,
+    source: "local",
+  };
+  cacheStudyDay(owner, saved);
+  cacheStudyEvent(owner, event);
+  if (!queueForCloud) removeStudyEvent(owner, event.eventId);
+  return saved;
+}
+
+async function recordCloudStudyEvent(owner: string, event: StudyEvent) {
+  const client = await clientFor(owner);
+  const { data, error } = await client.rpc("record_flashcard_study_event", {
+    p_event_id: event.eventId,
+    p_user_id: owner,
+    p_study_date: event.studyDate,
+    p_context_key: event.contextKey,
+    p_plan_id: event.planId,
+    p_card_id: event.cardId,
+    p_rating: event.rating,
+    p_goal_unit: event.goalUnit,
+    p_target_count: event.targetCount,
+  }).abortSignal(AbortSignal.timeout(20000));
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  const saved = studyDayFromRow(row, "cloud");
+  if (!saved) throw new Error("Invalid study event returned by Supabase.");
+  cacheStudyDay(owner, saved);
+  cacheStudyEvent(owner, event);
+  removeStudyEvent(owner, event.eventId);
+  return saved;
+}
+
+async function flushStudyEvents(owner: string) {
+  for (const event of localStudyEvents(owner)) {
+    try {
+      await recordCloudStudyEvent(owner, event);
+    } catch {
+      break;
+    }
+  }
+}
+
+export async function recordFlashcardStudy(owner: string | null, event: StudyEvent): Promise<StudyRepositoryResult<StudyDayProgress>> {
+  if (owner) {
+    await flushStudyEvents(owner);
+    try {
+      const saved = await recordCloudStudyEvent(owner, event);
+      return { item: saved, source: "cloud" };
+    } catch {
+      const saved = localApplyStudyEvent(owner, event, true);
+      return { item: saved, source: "local" };
+    }
+  }
+  return { item: localApplyStudyEvent(null, event, false), source: "local" };
 }
 
 // A rejected save must not poison subsequent saves. Requests remain ordered.

@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 
 export type PlanId = "free" | "plus" | "pro" | "max";
-export type UsageKind = "document_upload" | "ai_mind_map" | "ai_flashcards" | "ai_selection" | "project_save" | "manual_ai";
+export type UsageKind = "document_upload" | "ai_mind_map" | "ai_flashcards" | "ai_selection" | "ai_study_plan" | "project_save" | "manual_ai";
 export type QuotaKind = "ai_auto" | "ai_manual" | "storage" | "flashcards";
 export type AiQuotaMode = "ai_auto" | "ai_manual";
 

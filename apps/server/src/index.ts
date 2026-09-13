@@ -10,6 +10,7 @@ import { generateWithFallback } from "./providers.js";
 import { AIError } from "./gemini.js";
 import { generateFlashcardsWithGemini, MAX_FLASHCARDS } from "./flashcards.js";
 import { generateSelectionWithGemini, selectionActions } from "./selection.js";
+import { recommendStudyPlanWithGemini } from "./studyPlan.js";
 import { aiScheduler } from "./aiScheduler.js";
 
 const app = express();
@@ -18,7 +19,7 @@ app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
   mode: "server",
-  release: "4.0",
+  release: "4.2",
   ai: "gemini",
   aiConfigured: Boolean(config.GEMINI_API_KEY),
   aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,
@@ -175,6 +176,20 @@ app.post("/api/ai/flashcards", requireUser, async (req, res) => {
   const parsed = flashcardInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid flashcard input." });
   try { await enforceQuota(req.userId!, "flashcards", parsed.data.maxCards); const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini(parsed.data))); await recordUsage(req.userId!, "ai_flashcards", 1, 0, { source: "text", cardCount: result.cards.length }); return res.json(result); }
   catch (error) { return sendAiError(res, error, "Flashcard generation failed."); }
+});
+
+const studyPlanInput = z.object({
+  cards: z.array(z.object({ due: z.boolean(), repetitions: z.number().int().min(0).max(100000), lapses: z.number().int().min(0).max(100000), intervalDays: z.number().int().min(0).max(100000) })).min(1).max(MAX_FLASHCARDS),
+  dailyMinutes: z.coerce.number().int().min(5).max(180).default(20),
+  language: z.enum(["vi", "en"]).default("vi"),
+});
+app.post("/api/ai/study-plan", requireUser, async (req, res) => {
+  const parsed = studyPlanInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid study plan input." });
+  try {
+    const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => recommendStudyPlanWithGemini(parsed.data)));
+    await recordUsage(req.userId!, "ai_study_plan", 1, 0, { source: "flashcards", cardCount: parsed.data.cards.length });
+    return res.json(result);
+  } catch (error) { return sendAiError(res, error, "Study plan generation failed."); }
 });
 
 const selectionInput = z.object({

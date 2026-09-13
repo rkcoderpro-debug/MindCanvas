@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { createFlashcard, dueCards, scheduleReview } from "./flashcards";
-import { deleteFlashcard, deleteFlashcardDeck, fetchFlashcardDecks, fetchFlashcards, upsertFlashcard, upsertFlashcardDeck } from "./projectStore";
+import { computeStreak, createFlashcard, dueCards, recommendDailyTarget, scheduleReview, vietnamStudyDate, type StudyDayProgress, type StudyEvent } from "./flashcards";
+import { deleteFlashcard, deleteFlashcardDeck, fetchFlashcardDecks, fetchFlashcards, fetchStudyDays, recordFlashcardStudy, upsertFlashcard, upsertFlashcardDeck, upsertStudyDay } from "./projectStore";
 
 beforeEach(() => localStorage.clear());
 
@@ -41,5 +41,69 @@ describe("local flashcard repository", () => {
     await deleteFlashcardDeck("user-a", deck.id);
     expect((await fetchFlashcardDecks("user-a")).items).toEqual([]);
   });
+
+  it("keeps study events idempotent in the offline queue", async () => {
+    const event: StudyEvent = { eventId: "event-a", studyDate: "2026-09-13", contextKey: "manual", planId: null, cardId: "card-a", rating: "good", goalUnit: 1, targetCount: 1, createdAt: "2026-09-13T10:00:00.000Z" };
+    const first = await recordFlashcardStudy("user-a", event);
+    const second = await recordFlashcardStudy("user-a", event);
+    expect(first.item.reviewedCount).toBe(1);
+    expect(second.item.reviewedCount).toBe(1);
+    expect(second.item.completed).toBe(true);
+  });
+
+  it("requires forgotten plan cards to be remembered before completion", async () => {
+    const day: StudyDayProgress = { studyDate: "2026-09-13", contextKey: "plan:plan-a", planId: "plan-a", targetCount: 1, reviewedCount: 0, retryCount: 0, assignedCardIds: ["card-a"], reviewedCardIds: [], forgottenCardIds: [], completed: false, firstReviewAt: null, lastReviewAt: null, createdAt: "2026-09-13T10:00:00.000Z", updatedAt: "2026-09-13T10:00:00.000Z" };
+    await upsertStudyDay("user-a", day);
+    const forgotten = await recordFlashcardStudy("user-a", { eventId: "event-forgot", studyDate: day.studyDate, contextKey: day.contextKey, planId: day.planId, cardId: "card-a", rating: "again", goalUnit: 1, targetCount: 1, createdAt: "2026-09-13T10:01:00.000Z" });
+    expect(forgotten.item.reviewedCount).toBe(1);
+    expect(forgotten.item.forgottenCardIds).toEqual(["card-a"]);
+    expect(forgotten.item.completed).toBe(false);
+    const remembered = await recordFlashcardStudy("user-a", { eventId: "event-good", studyDate: day.studyDate, contextKey: day.contextKey, planId: day.planId, cardId: "card-a", rating: "good", goalUnit: 0, targetCount: 1, createdAt: "2026-09-13T10:02:00.000Z" });
+    expect(remembered.item.forgottenCardIds).toEqual([]);
+    expect(remembered.item.completed).toBe(true);
+    expect((await fetchStudyDays("user-a")).items[0].completed).toBe(true);
+  });
 });
 
+describe("study streak rules", () => {
+  it("uses Vietnam calendar boundaries and counts consecutive qualifying days", () => {
+    expect(vietnamStudyDate(new Date("2026-09-13T16:59:59.000Z"))).toBe("2026-09-13");
+    expect(vietnamStudyDate(new Date("2026-09-13T17:00:00.000Z"))).toBe("2026-09-14");
+    const days: StudyDayProgress[] = [
+      { studyDate: "2026-09-11", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: [], reviewedCardIds: ["a"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+      { studyDate: "2026-09-12", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: [], reviewedCardIds: ["b"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+      { studyDate: "2026-09-13", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 0, retryCount: 0, assignedCardIds: [], reviewedCardIds: [], forgottenCardIds: [], completed: false, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+    ];
+    const streak = computeStreak(days, new Date("2026-09-13T16:00:00.000Z"));
+    expect(streak.current).toBe(2);
+    expect(streak.best).toBe(2);
+    expect(streak.todayCompleted).toBe(false);
+  });
+
+  it("does not let manual practice bypass an incomplete active plan", () => {
+    const days: StudyDayProgress[] = [
+      { studyDate: "2026-09-13", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: [], reviewedCardIds: ["a"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+      { studyDate: "2026-09-13", contextKey: "plan:plan-a", planId: "plan-a", targetCount: 5, reviewedCount: 2, retryCount: 0, assignedCardIds: ["a", "b"], reviewedCardIds: ["a", "b"], forgottenCardIds: [], completed: false, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+    ];
+    expect(computeStreak(days, new Date("2026-09-13T16:00:00.000Z"), "plan-a").todayCompleted).toBe(false);
+  });
+
+  it("does not count manual study when the active plan day is missing", () => {
+    const days: StudyDayProgress[] = [{ studyDate: "2026-09-13", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: [], reviewedCardIds: ["a"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" }];
+    expect(computeStreak(days, new Date("2026-09-13T16:00:00.000Z"), "plan-a").todayCompleted).toBe(false);
+  });
+
+  it("ignores old plan progress after the plan is paused", () => {
+    const days: StudyDayProgress[] = [
+      { studyDate: "2026-09-13", contextKey: "plan:old", planId: "old", targetCount: 2, reviewedCount: 2, retryCount: 0, assignedCardIds: ["a", "b"], reviewedCardIds: ["a", "b"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+      { studyDate: "2026-09-13", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: [], reviewedCardIds: ["c"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" },
+    ];
+    expect(computeStreak(days, new Date("2026-09-13T16:00:00.000Z"), null).todayCompleted).toBe(true);
+  });
+
+  it("suggests a bounded target from card pressure and available time", () => {
+    const cards = Array.from({ length: 40 }, (_, index) => createFlashcard("deck", `Q${index}`, `A${index}`, null, null, new Date("2026-09-13T10:00:00.000Z")));
+    expect(recommendDailyTarget(cards, 20, new Date("2026-09-13T10:00:00.000Z"))).toBeGreaterThan(0);
+    expect(recommendDailyTarget(cards, 180, new Date("2026-09-13T10:00:00.000Z"))).toBeLessThanOrEqual(40);
+  });
+});

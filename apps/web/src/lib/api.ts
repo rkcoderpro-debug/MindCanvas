@@ -160,6 +160,13 @@ export function generateFlashcardsFromFile(file: File, maxCards = 20, signal?: A
   return generateFromFile<GeneratedFlashcardsFromFile>(file, "flashcards", maxCards, signal);
 }
 
+export type StudyPlanCardSignal = { due: boolean; repetitions: number; lapses: number; intervalDays: number };
+export type StudyPlanRecommendation = { provider: string; model: string; dailyTarget: number; focus: "due" | "new" | "difficult" | "balanced"; rationale: string };
+
+export function recommendStudyPlan(cards: StudyPlanCardSignal[], dailyMinutes: number, language: "vi" | "en", signal?: AbortSignal) {
+  return accountRequest<StudyPlanRecommendation>("/api/ai/study-plan", { method: "POST", body: JSON.stringify({ cards, dailyMinutes, language }), signal });
+}
+
 export async function transformSelection(action: SelectionAiAction, text: string, language: "vi" | "en", signal?: AbortSignal) {
   const response = await fetch(`${apiBase}/api/ai/selection`, {
     method: "POST",
