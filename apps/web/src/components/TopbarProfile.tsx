@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LogIn, LogOut } from "lucide-react";
+import { ChevronDown, LogIn, LogOut, ShieldCheck } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { useLanguage } from "../lib/i18n";
 
@@ -9,9 +9,11 @@ type Props = {
   working: boolean;
   canSignIn: boolean;
   onAuth: () => void;
+  isAdmin?: boolean;
+  onAdmin?: () => void;
 };
 
-export default function TopbarProfile({ user, accountName, working, canSignIn, onAuth }: Props) {
+export default function TopbarProfile({ user, accountName, working, canSignIn, onAuth, isAdmin = false, onAdmin }: Props) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -47,6 +49,7 @@ export default function TopbarProfile({ user, accountName, working, canSignIn, o
     </button>
     {open && <div className="topbar-profile-menu" role="menu">
       <div className="topbar-profile-details"><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div>
+      {isAdmin && onAdmin && <button type="button" role="menuitem" onClick={() => { setOpen(false); onAdmin(); }}><ShieldCheck size={16}/><span>{t("adminDashboard")}</span></button>}
       <button type="button" role="menuitem" disabled={working || (!user && !canSignIn)} onClick={authenticate}>{user ? <LogOut size={16}/> : <LogIn size={16}/>}<span>{user ? t("logout") : t("login")}</span></button>
     </div>}
   </div>;

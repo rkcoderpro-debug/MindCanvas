@@ -1,5 +1,6 @@
 import type { StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
+import type { AccountPlan, PlanId } from "./account";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8787";
 
@@ -12,6 +13,30 @@ export class ApiError extends Error {
     public retryAfterSeconds?: number,
   ) { super(message); }
 }
+
+export type AdminUserSummary = AccountPlan & {
+  userId: string;
+  email: string;
+  displayName: string;
+  lastSignInAt: string | null;
+  createdAt: string | null;
+};
+
+export type AdminSummary = {
+  generatedAt: string;
+  totalUsers: number;
+  planCounts: Record<PlanId, number>;
+  storageBytes: number;
+  aiAutoCount: number;
+  uploads: number;
+};
+
+export type AdminUserDetail = {
+  user: AdminUserSummary;
+  plan: AccountPlan;
+  usage: AccountPlan["usage"][];
+  events: Array<{ id: string; kind: string; units: number; bytes: number; metadata: Record<string, unknown>; created_at: string }>;
+};
 
 async function responseError(response: Response, fallback: string) {
   const detail = await response.json().catch(() => null) as { error?: unknown; code?: unknown; retryable?: unknown; retryAfterSeconds?: unknown } | null;
@@ -29,6 +54,39 @@ async function responseError(response: Response, fallback: string) {
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await getCurrentSession();
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
+
+async function accountRequest<T>(path: string, init: RequestInit = {}) {
+  const response = await fetch(`${apiBase}${path}`, { ...init, headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...(await authHeaders()), ...(init.headers ?? {}) } });
+  if (!response.ok) await responseError(response, `MindCanvas API HTTP ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+export function getAccountPlan(signal?: AbortSignal) {
+  return accountRequest<AccountPlan>("/api/account/plan", { signal });
+}
+
+export function getAdminStatus(signal?: AbortSignal) {
+  return accountRequest<{ isAdmin: boolean }>("/api/admin/me", { signal });
+}
+
+export function getAdminSummary(signal?: AbortSignal) {
+  return accountRequest<AdminSummary>("/api/admin/summary", { signal });
+}
+
+export function getAdminUsers(query = "", plan = "", signal?: AbortSignal) {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("query", query.trim());
+  if (plan) params.set("plan", plan);
+  return accountRequest<{ users: AdminUserSummary[] }>(`/api/admin/users${params.size ? `?${params}` : ""}`, { signal });
+}
+
+export function getAdminUserDetail(userId: string, signal?: AbortSignal) {
+  return accountRequest<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(userId)}`, { signal });
+}
+
+export function assignAdminPlan(userId: string, body: { planId: PlanId; expiresAt: string | null; note: string | null }) {
+  return accountRequest<{ ok: true }>(`/api/admin/users/${encodeURIComponent(userId)}/plan`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export type UploadedDocument = { id: string; kind: "pdf" | "docx" | "pptx" | "text" | "image"; fileName: string; mimeType: string; text: string; pageCount?: number };

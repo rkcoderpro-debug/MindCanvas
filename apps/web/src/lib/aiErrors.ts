@@ -6,6 +6,7 @@ type Translate = (key: MessageKey, values?: Record<string, string | number>) => 
 export function aiErrorMessage(error: unknown, t: Translate, fallback: MessageKey) {
   if (error instanceof ApiError) {
     if (error.status === 401) return t("aiSessionExpired");
+    if (error.code === "PLAN_LIMIT") return t("planLimitReached");
     if (error.code === "AI_BUSY") return t("aiQueueBusy");
     if (error.code === "AI_UNAVAILABLE") return t("aiTemporarilyBusy");
     if (error.code === "AI_MODEL_UNAVAILABLE" || error.code === "AI_CONFIG") return t("aiModelUnavailable");

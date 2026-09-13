@@ -120,8 +120,12 @@ export async function saveDocumentToStorage(file: File, documentId: string, extr
   const path = `${user.id}/${documentId}.${extension}`;
   const upload = await supabase.storage.from("documents").upload(path, file, { contentType, upsert: false });
   if (upload.error) throw upload.error;
-  const { error } = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
-  if (error) throw error;
+  const modern = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount, file_size_bytes: file.size });
+  if (modern.error && !/file_size_bytes|column/i.test(modern.error.message)) throw modern.error;
+  if (modern.error) {
+    const legacy = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
+    if (legacy.error) throw legacy.error;
+  }
 }
 
 export async function getDocumentSource(options: { documentId?: string; projectId?: string }) {
