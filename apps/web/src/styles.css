@@ -981,3 +981,65 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
   .sidebar[data-sidebar-density="narrow"] .folder-open { padding-right: 8px; }
   .sidebar[data-sidebar-density="narrow"] .folder-dropdown { padding-left: 30px; padding-right: 6px; }
 }
+
+/* Manual AI stays explicit: the only cross-site actions are initiated by a
+   visible click, and the result always passes through a local validation step. */
+.ai-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; padding: 4px; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); }
+.ai-mode-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; min-height: 38px; padding: 8px 10px; color: var(--muted); background: transparent; border-radius: 8px; font-size: 13px; font-weight: 650; }
+.ai-mode-switch button:hover, .ai-mode-switch button.active { color: var(--accent); background: var(--surface-raised); box-shadow: 0 2px 7px var(--shadow); }
+.ai-mode-switch button:disabled { color: var(--muted); background: transparent; box-shadow: none; }
+.ai-manual-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--accent-border); border-radius: 9px; color: var(--accent); background: var(--accent-soft); font-size: 12px; line-height: 1.5; }
+.ai-manual-steps { display: flex; gap: 6px; margin: 0 0 14px; padding: 2px 0 4px; overflow-x: auto; scrollbar-width: thin; }
+.ai-manual-step { display: inline-flex; flex: 1 0 84px; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 32px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--soft); font-size: 10px; font-weight: 650; text-align: center; white-space: nowrap; }
+.ai-manual-step.active { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.ai-manual-step.complete { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, var(--line)); }
+.ai-manual-step-number { display: grid; flex: 0 0 19px; place-items: center; width: 19px; height: 19px; border-radius: 50%; color: var(--accent-contrast); background: var(--accent); font-size: 10px; }
+.ai-manual-panel { display: grid; gap: 9px; margin-top: 14px; }
+.ai-manual-prompt, .ai-manual-json { display: grid; gap: 8px; }
+.ai-manual-prompt textarea, .ai-manual-json textarea { min-height: 126px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; }
+.ai-manual-prompt textarea { min-height: 170px; }
+.ai-manual-json textarea { min-height: 138px; }
+.ai-manual-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-manual-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.ai-manual-valid { margin: 0; padding: 9px 11px; border-radius: 8px; color: var(--success); background: color-mix(in srgb, var(--success) 12%, var(--surface)); font-size: 12px; line-height: 1.45; }
+html { -webkit-text-size-adjust: 100%; }
+
+/* Sidebar labels can yield space during a resize, but navigation icons keep a
+   fixed box and never participate in flex shrinking or visual scaling. */
+.sidebar .nav-list button > svg,
+.sidebar .folder-open > svg,
+.sidebar .folder-expand-toggle > svg,
+.sidebar .folder-more > svg,
+.sidebar .folder-dropdown button > svg,
+.sidebar .manage-folders-button > svg,
+.sidebar .sidebar-bottom > button > svg,
+.sidebar .section-label > .icon-button > svg,
+.sidebar .sidebar-control-button > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  transform: none !important;
+  animation: none !important;
+}
+.sidebar .folder-expand-toggle > svg { width: 15px; height: 15px; min-width: 15px; min-height: 15px; }
+.sidebar .folder-more > svg { width: 16px; height: 16px; min-width: 16px; min-height: 16px; }
+.sidebar .folder-dropdown button > svg { width: 14px; height: 14px; min-width: 14px; min-height: 14px; }
+.sidebar .sidebar-control-chevron { width: 15px; height: 15px; min-width: 15px; min-height: 15px; }
+.sidebar .nav-list button > .nav-label,
+.sidebar .folder-open > .nav-label,
+.sidebar .manage-folders-button > .nav-label,
+.sidebar .sidebar-bottom > button > .nav-label { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar .nav-list button > .nav-count { flex: 0 0 auto; min-width: 18px; }
+
+@media (max-width: 620px) {
+  .app-shell { min-height: 100svh; height: 100dvh; }
+  .sidebar { padding-top: calc(9px + env(safe-area-inset-top)); }
+  .main-area { padding-bottom: calc(9px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+  .topbar { padding-top: max(6px, env(safe-area-inset-top)); }
+  .inspector { bottom: max(8px, env(safe-area-inset-bottom)); padding-bottom: calc(18px + env(safe-area-inset-bottom)); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .dialog { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .dialog input:not([type=file]):not([type=range]):not([type=color]), .dialog select, .dialog textarea { font-size: 16px; }
+  .ai-manual-step { flex-basis: 88px; }
+}

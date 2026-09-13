@@ -81,7 +81,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
         <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-name">MindCanvas</span><span className="beta">V3.8.1</span></button>
-        <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={`${toggleLabel}${isMobile ? "" : " · Ctrl/⌘+Shift+B"}`} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
+        <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav aria-label={t("workspace")} className="nav-list">
         <button className={!boardOpen && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, null)} onClick={goHome}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button>

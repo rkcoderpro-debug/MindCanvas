@@ -121,6 +121,11 @@ describe("Workspace UI", () => {
     expect(localStorage.getItem("mindcanvas:sidebar-collapsed")).toBe("true");
     expect(host.querySelector('[aria-label="Mở rộng thanh điều hướng"]')).not.toBeNull();
   });
+  it("keeps the sidebar expanded until the hamburger is clicked", async () => {
+    await act(async () => root.render(<App/>));
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })));
+    expect(host.querySelector(".sidebar")?.classList.contains("sidebar-collapsed")).toBe(false);
+  });
   it("keeps the sidebar expanded when dragged to its narrowest width", async () => {
     await act(async () => root.render(<App/>));
     const handle = host.querySelector(".sidebar-resize-handle") as HTMLDivElement;

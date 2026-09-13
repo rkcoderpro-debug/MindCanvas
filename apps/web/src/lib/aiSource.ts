@@ -26,3 +26,9 @@ export async function readClipboardSource(): Promise<ClipboardSource> {
   if (!text) throw new Error("CLIPBOARD_EMPTY");
   return { kind: "text", text };
 }
+
+export async function writeClipboardText(text: string): Promise<void> {
+  const clipboard = navigator.clipboard as (Clipboard & { writeText?: (value: string) => Promise<void> }) | undefined;
+  if (!clipboard?.writeText) throw new Error("CLIPBOARD_WRITE_UNAVAILABLE");
+  await clipboard.writeText(text);
+}

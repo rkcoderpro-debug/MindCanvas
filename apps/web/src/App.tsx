@@ -89,7 +89,6 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") { event.preventDefault(); setCommandOpen(value => !value); }
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "b") { event.preventDefault(); setSidebarCollapsed(value => !value); }
     };
     window.addEventListener("keydown", shortcut); return () => window.removeEventListener("keydown", shortcut);
   }, []);
