@@ -7,13 +7,15 @@ alter table public.plans
   add column if not exists ai_manual_daily_limit integer not null default 0,
   add column if not exists ai_manual_included boolean not null default false;
 
+-- Cast the first multiplier to bigint so the 2 GB and 10 GB products do not
+-- overflow PostgreSQL's 32-bit integer arithmetic before assignment.
 update public.plans
 set
   storage_limit_bytes = case id
-    when 'free' then 20 * 1024 * 1024
-    when 'plus' then 500 * 1024 * 1024
-    when 'pro' then 2 * 1024 * 1024 * 1024
-    when 'max' then 10 * 1024 * 1024 * 1024
+    when 'free' then 20::bigint * 1024 * 1024
+    when 'plus' then 500::bigint * 1024 * 1024
+    when 'pro' then 2::bigint * 1024 * 1024 * 1024
+    when 'max' then 10::bigint * 1024 * 1024 * 1024
   end,
   ai_auto_daily_limit = case id when 'free' then 1 when 'plus' then 20 when 'pro' then 60 when 'max' then 150 end,
   ai_manual_daily_limit = case id when 'free' then 3 else 0 end,
