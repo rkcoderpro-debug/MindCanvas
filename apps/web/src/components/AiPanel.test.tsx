@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AiPanel from "./AiPanel";
 import { LanguageProvider } from "../lib/i18n";
 
+vi.mock("../lib/api", () => ({
+  consumeAiManualUsage: vi.fn(async () => ({ ok: true, requestId: "test-request" })),
+  generateMindMap: vi.fn(),
+  generateMindMapFromFile: vi.fn(),
+}));
+
 let root: Root;
 let host: HTMLDivElement;
 
@@ -28,7 +34,10 @@ describe("AI Manual mind-map flow", () => {
   it("uses a detail-specific generic prompt and applies pasted JSON without calling the Auto API", async () => {
     const beforeGenerate = vi.fn(async () => true);
     const onApply = vi.fn();
-    await act(async () => root.render(<LanguageProvider><AiPanel projectId="project" canUse={false} beforeGenerate={beforeGenerate} onClose={() => undefined} onApply={onApply}/></LanguageProvider>));
+    await act(async () => root.render(<LanguageProvider><AiPanel projectId="project" canUse={true} beforeGenerate={beforeGenerate} onClose={() => undefined} onApply={onApply}/></LanguageProvider>));
+
+    const manualMode = [...host.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find(button => button.textContent?.includes("AI Manual"))!;
+    await act(async () => manualMode.click());
 
     expect(host.querySelector(".ai-source-tabs")).toBeNull();
     const detail = host.querySelector(".ai-manual-panel select") as HTMLSelectElement;

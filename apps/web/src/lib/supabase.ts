@@ -120,11 +120,15 @@ export async function saveDocumentToStorage(file: File, documentId: string, extr
   const path = `${user.id}/${documentId}.${extension}`;
   const upload = await supabase.storage.from("documents").upload(path, file, { contentType, upsert: false });
   if (upload.error) throw upload.error;
+  const removeUploadedFile = async () => {
+    const cleanup = await supabase.storage.from("documents").remove([path]);
+    if (cleanup.error) console.warn("MindCanvas could not clean up an unlinked document", cleanup.error);
+  };
   const modern = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount, file_size_bytes: file.size });
-  if (modern.error && !/file_size_bytes|column/i.test(modern.error.message)) throw modern.error;
+  if (modern.error && !/file_size_bytes|column/i.test(modern.error.message)) { await removeUploadedFile(); throw modern.error; }
   if (modern.error) {
     const legacy = await supabase.from("documents").upsert({ id: documentId, user_id: user.id, note_id: noteId, file_path: path, file_name: file.name, extracted_text: extractedText, page_count: pageCount });
-    if (legacy.error) throw legacy.error;
+    if (legacy.error) { await removeUploadedFile(); throw legacy.error; }
   }
 }
 

@@ -4,7 +4,7 @@ import multer from "multer";
 import { z } from "zod";
 import { config } from "./config.js";
 import { requireAdmin, requireUser } from "./auth.js";
-import { assignPlan, enforceQuota, getAccountPlan, getAdminSummary, getAdminUserDetail, listAdminUsers, PlanLimitError, recordUsage, type PlanId } from "./account.js";
+import { assignPlan, commitAiUsage, enforceQuota, getAccountPlan, getAdminSummary, getAdminUserDetail, getSubscriptionHistory, listAdminUsers, PlanLimitError, recordUsage, releaseAiUsage, reserveAiUsage, type AiQuotaMode, type PlanId } from "./account.js";
 import { extractDocument, UnsupportedDocumentError } from "./document.js";
 import { generateWithFallback } from "./providers.js";
 import { AIError } from "./gemini.js";
@@ -28,6 +28,27 @@ app.get("/api/health", (_req, res) => res.json({
 app.get("/api/account/plan", requireUser, async (req, res) => {
   try { return res.json(await getAccountPlan(req.userId!)); }
   catch { return res.status(503).json({ error: "Account plan service is temporarily unavailable." }); }
+});
+
+app.get("/api/account/subscription-history", requireUser, async (req, res) => {
+  try { return res.json({ history: await getSubscriptionHistory(req.userId!) }); }
+  catch { return res.status(503).json({ error: "Subscription history is temporarily unavailable." }); }
+});
+
+app.post("/api/ai/manual/usage/consume", requireUser, async (req, res) => {
+  const requestId = typeof req.body?.requestId === "string" && req.body.requestId.trim().length >= 8 ? req.body.requestId.trim() : crypto.randomUUID();
+  try {
+    const reservation = await reserveAiUsage(req.userId!, "ai_manual", requestId);
+    try {
+      await commitAiUsage(requestId);
+    } catch (error) {
+      await releaseAiUsage(requestId);
+      throw error;
+    }
+    return res.json({ ...reservation, committed: true, requestId });
+  } catch (error) {
+    return sendAiError(res, error, "AI Manual quota could not be updated.");
+  }
 });
 
 app.get("/api/admin/me", requireUser, (req, res) => {
@@ -57,6 +78,7 @@ app.get("/api/admin/users/:userId", requireAdmin, async (req, res) => {
 
 const planAssignmentInput = z.object({
   planId: z.enum(["free", "plus", "pro", "max"]),
+  addonEnabled: z.boolean().optional().default(false),
   expiresAt: z.string().trim().max(64).nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),
 });
@@ -68,10 +90,23 @@ app.patch("/api/admin/users/:userId/plan", requireAdmin, async (req, res) => {
   const expiresAt = parsed.data.expiresAt || null;
   if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return res.status(400).json({ error: "Invalid expiration date." });
   try {
-    await assignPlan(req.userId!, userId, parsed.data.planId as PlanId, expiresAt, parsed.data.note || null);
+    await assignPlan(req.userId!, userId, parsed.data.planId as PlanId, expiresAt, parsed.data.note || null, parsed.data.addonEnabled);
     return res.json({ ok: true });
   } catch { return res.status(503).json({ error: "Could not update the user plan." }); }
 });
+
+async function runWithAiQuota<T>(userId: string, mode: AiQuotaMode, work: () => Promise<T>) {
+  const requestId = crypto.randomUUID();
+  await reserveAiUsage(userId, mode, requestId);
+  try {
+    const result = await work();
+    await commitAiUsage(requestId);
+    return result;
+  } catch (error) {
+    await releaseAiUsage(requestId);
+    throw error;
+  }
+}
 
 function sendAiError(res: express.Response, error: unknown, fallbackMessage: string) {
   if (error instanceof PlanLimitError) return res.status(error.quota === "storage" ? 413 : 429).json({ error: error.message, code: "PLAN_LIMIT", quota: error.quota, retryable: false });
@@ -104,7 +139,7 @@ app.post("/api/documents/upload", requireUser, upload.single("file"), async (req
 const aiInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional() });
 app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   const parsed = aiInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid document input." });
-  try { await enforceQuota(req.userId!, "ai_auto"); const result = await aiScheduler.run(req.userId!, () => generateWithFallback(parsed.data)); await recordUsage(req.userId!, "ai_mind_map", 1, 0, { source: "text" }); return res.json(result); }
+  try { const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateWithFallback(parsed.data))); await recordUsage(req.userId!, "ai_mind_map", 1, 0, { source: "text" }); return res.json(result); }
   catch (error) { return sendAiError(res, error, "AI processing failed."); }
 });
 
@@ -114,13 +149,17 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
   if (!parsed.success) return res.status(400).json({ error: "Invalid file AI request." });
   if (!req.file) return res.status(400).json({ error: "A source file is required." });
   try {
-    await enforceQuota(req.userId!, "ai_auto");
     await enforceQuota(req.userId!, "storage", req.file.size);
-    const source = await extractDocument(req.file.buffer, req.file.originalname, req.file.mimetype);
-    const documentId = crypto.randomUUID();
-    const result: any = parsed.data.task === "mind-map"
-      ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image }))
-      : await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image }));
+    if (parsed.data.task === "flashcards") await enforceQuota(req.userId!, "flashcards", parsed.data.maxCards);
+    const generatedBundle = await runWithAiQuota(req.userId!, "ai_auto", async () => {
+      const source = await extractDocument(req.file!.buffer, req.file!.originalname, req.file!.mimetype);
+      const documentId = crypto.randomUUID();
+      const generated: any = parsed.data.task === "mind-map"
+        ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image }))
+        : await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image }));
+      return { source, documentId, result: generated };
+    });
+    const { source, documentId, result } = generatedBundle;
     await recordUsage(req.userId!, "document_upload", 1, req.file.size, { fileName: req.file.originalname, mimeType: req.file.mimetype, source: "ai" });
     await recordUsage(req.userId!, parsed.data.task === "mind-map" ? "ai_mind_map" : "ai_flashcards", 1, 0, { source: "file", cardCount: result.cards?.length ?? 0 });
     return res.json({ ...result, source: { id: documentId, kind: source.kind, fileName: source.fileName, mimeType: source.mimeType, text: source.text, pageCount: source.pageCount } });
@@ -134,7 +173,7 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
 const flashcardInput = aiInput.extend({ maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20) });
 app.post("/api/ai/flashcards", requireUser, async (req, res) => {
   const parsed = flashcardInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid flashcard input." });
-  try { await enforceQuota(req.userId!, "ai_auto"); const result = await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini(parsed.data)); await recordUsage(req.userId!, "ai_flashcards", 1, 0, { source: "text", cardCount: result.cards.length }); return res.json(result); }
+  try { await enforceQuota(req.userId!, "flashcards", parsed.data.maxCards); const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini(parsed.data))); await recordUsage(req.userId!, "ai_flashcards", 1, 0, { source: "text", cardCount: result.cards.length }); return res.json(result); }
   catch (error) { return sendAiError(res, error, "Flashcard generation failed."); }
 });
 
@@ -145,7 +184,7 @@ const selectionInput = z.object({
 });
 app.post("/api/ai/selection", requireUser, async (req, res) => {
   const parsed = selectionInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid selection input." });
-  try { await enforceQuota(req.userId!, "ai_auto"); const result = await aiScheduler.run(req.userId!, () => generateSelectionWithGemini(parsed.data)); await recordUsage(req.userId!, "ai_selection", 1, 0, { source: "selection", action: parsed.data.action }); return res.json(result); }
+  try { const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateSelectionWithGemini(parsed.data))); await recordUsage(req.userId!, "ai_selection", 1, 0, { source: "selection", action: parsed.data.action }); return res.json(result); }
   catch (error) { return sendAiError(res, error, "Selection AI failed."); }
 });
 

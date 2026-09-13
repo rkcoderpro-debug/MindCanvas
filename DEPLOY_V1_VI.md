@@ -1,12 +1,28 @@
 # MindCanvas V1 — hướng dẫn đưa lên mạng
 
+## Cập nhật V4.0 — quota, add-on AI Manual và canvas UX
+
+Trước khi dùng quota mới, chạy migration `supabase/migrations/0007_v4_quota_subscriptions.sql` trên project Supabase sau các migration `0001`–`0006`. Bản này cập nhật Free thành 20 MB, 1 AI Auto/ngày, 3 AI Manual/ngày và 50 flashcard/lần; Plus/Pro/Max lần lượt 20/60/150 AI Auto/ngày, AI Manual không giới hạn và tối đa 100/200/500 flashcard/lần. Quota reset lúc 12:00 theo giờ Việt Nam. Add-on AI Manual là gói riêng 29.000₫/tháng; việc xác nhận thanh toán và cấp add-on hiện do admin thực hiện thủ công, lịch sử thay đổi được lưu trong `subscription_history`.
+
+Migration cũng thay cơ chế cộng/trừ delta của `account_storage` bằng tính lại từ `notes` và `documents`, đồng thời chặn tăng quá quota ở database. Nếu gặp lại lỗi `23514`, kiểm tra migration đã chạy thành công và deploy lại API/web cùng commit.
+
+Đã bỏ tự focus canvas khi rê chuột. Double-click text/node để mở chỉnh sửa. Toolbar tự giới hạn 80% chiều rộng/chiều cao theo vị trí đặt và có nút thu/mở; thanh thuộc tính có nút đóng/mở và vẫn giữ trong fullscreen. Wheel touchpad nhận cả `deltaX`/`deltaY` để pan chéo.
+
+### Checklist triển khai V4.0
+
+1. Chạy migration `0007_v4_quota_subscriptions.sql` và kiểm tra các bảng `usage_daily`, `account_addons`, `subscription_history` đã có.
+2. Deploy API và web từ cùng commit. Mở `/api/health`, kiểm tra release là `4.0`; không đưa `SUPABASE_SERVICE_ROLE_KEY` hoặc `GEMINI_API_KEY` lên frontend.
+3. Đăng nhập một tài khoản Free: thử 1 AI Auto, 3 AI Manual, nhập flashcard vượt 50 và file làm vượt 20 MB để kiểm tra lỗi quota. Sau 12:00 giờ Việt Nam, lượt AI phải bắt đầu lại.
+4. Trong admin, cấp Plus/Pro/Max và xác nhận giới hạn 20/60/150 AI Auto, AI Manual không giới hạn, flashcard 100/200/500; bật/tắt add-on rồi kiểm tra lịch sử thay đổi.
+5. Mở canvas, kiểm tra double-click text/node, kéo marquee sát từng cạnh để auto-pan ngang/dọc/chéo, lăn touchpad theo hai trục, đóng/mở inspector rồi fullscreen; inspector vẫn còn khi fullscreen.
+
 ## Cập nhật V3.8.1 — điều hướng, fullscreen canvas và UX
 
 V3.8.1 là bản nâng cấp frontend/shared, không cần migration Supabase hay biến môi trường mới. Sidebar giờ chỉ render một nút hamburger: desktop dùng để thu/mở, mobile dùng để mở/đóng drawer. Profile/avatar/email và đăng xuất nằm ở topbar; **Cài ứng dụng** nằm trong Settings; Flashcards được làm nổi bật như một tính năng học riêng. Folder có accordion, vùng giữa tự giãn đầy sidebar và khung cuộn mảnh. Khi kéo sidebar hẹp, badge phiên bản rồi tên MindCanvas tự ẩn theo ngưỡng; sidebar không tự minimize, icon rail chỉ bật bằng nút hamburger. Theme/ngôn ngữ dùng popover, theme vẫn preview tạm khi hover/focus và chỉ click mới lưu lựa chọn.
 
 Pan bằng Space, công cụ **Di chuyển canvas**, nút chuột giữa và pinch touch vẫn giữ nguyên. Wheel touchpad được gom theo frame và chỉ ghi một thay đổi viewport sau khi gesture dừng, nên không tạo hàng loạt lần autosave/Undo. `BoardState.viewport` vẫn độc lập với vị trí element.
 
-Trong canvas có nút **Phóng to canvas** ở góc trái trên. Fullscreen ẩn sidebar, topbar, tiêu đề, inspector, navigator và zoom control; chỉ giữ canvas, nút thoát và drawing toolbar. Vào **Cài đặt → Vị trí thanh công cụ** để chọn Trên/Dưới (ngang) hoặc Trái/Phải (dọc); lựa chọn lưu riêng trên trình duyệt.
+Trong canvas có nút **Phóng to canvas** ở góc trái trên. Fullscreen ẩn sidebar, topbar và tiêu đề; canvas vẫn giữ inspector, navigator, zoom control và drawing toolbar để tiếp tục thao tác. Vào **Cài đặt → Vị trí thanh công cụ** để chọn Trên/Dưới (ngang) hoặc Trái/Phải (dọc); lựa chọn lưu riêng trên trình duyệt.
 
 Sau khi push V3.8.1:
 
@@ -15,7 +31,7 @@ Sau khi push V3.8.1:
 3. Trên desktop, xác nhận chỉ có một hamburger; bấm để thu/mở sidebar, kéo mép phải để đổi rộng từ `154–380px`, bấm đúp mép kéo để đặt lại `280px`. Kéo qua `220px` để ẩn badge, qua `180px` để ẩn tên MindCanvas; sidebar không tự chuyển icon rail. Trên điện thoại, bấm cùng nút để mở/đóng drawer; không có icon thứ hai.
 4. Đăng nhập hoặc mở local guest, kiểm tra topbar chỉ có một profile/avatar; mở menu và kiểm tra Đăng nhập/Đăng xuất. Sidebar không còn profile, install app hoặc sign out.
 5. Tạo một folder có project, bấm mũi tên cạnh folder để mở danh sách canvas; kiểm tra vùng folder lấp phần giữa sidebar, tên folder vẫn một hàng khi kéo hẹp, khung cuộn folder khi có nhiều folder/project và kéo project vào folder.
-6. Mở **Settings**: thử **Cài ứng dụng**, đổi bốn vị trí toolbar rồi mở canvas để kiểm tra hướng xếp. Bấm nút fullscreen góc trái; kiểm tra shell/inspector/navigator/zoom ẩn và `Escape` thoát.
+6. Mở **Settings**: thử **Cài ứng dụng**, đổi bốn vị trí toolbar rồi mở canvas để kiểm tra hướng xếp. Bấm nút fullscreen góc trái; kiểm tra shell ẩn nhưng inspector/navigator/zoom/toolbar vẫn thao tác được và `Escape` thoát.
 7. Bấm **Ngôn ngữ** hoặc **Giao diện** trong sidebar; chọn theme bằng click. Hover theme trong popover/cài đặt để xem trước, rời chuột phải hoàn nguyên nếu chưa click.
 8. Mở một canvas, dùng touchpad cuộn hai ngón và thử Ctrl/Cmd + cuộn để zoom. Nền, element và minimap phải đi cùng viewport; kéo element vẫn chỉ đổi vị trí element.
 

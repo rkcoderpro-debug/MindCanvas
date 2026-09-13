@@ -1,6 +1,6 @@
 import type { StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
-import type { AccountPlan, PlanId } from "./account";
+import type { AccountPlan, PlanId, SubscriptionHistoryRecord } from "./account";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8787";
 
@@ -36,6 +36,7 @@ export type AdminUserDetail = {
   plan: AccountPlan;
   usage: AccountPlan["usage"][];
   events: Array<{ id: string; kind: string; units: number; bytes: number; metadata: Record<string, unknown>; created_at: string }>;
+  history: SubscriptionHistoryRecord[];
 };
 
 async function responseError(response: Response, fallback: string) {
@@ -66,6 +67,14 @@ export function getAccountPlan(signal?: AbortSignal) {
   return accountRequest<AccountPlan>("/api/account/plan", { signal });
 }
 
+export function getSubscriptionHistory(signal?: AbortSignal) {
+  return accountRequest<{ history: SubscriptionHistoryRecord[] }>("/api/account/subscription-history", { signal });
+}
+
+export function consumeAiManualUsage(requestId = crypto.randomUUID(), signal?: AbortSignal) {
+  return accountRequest<{ ok: boolean; requestId: string; remaining?: number | null }>("/api/ai/manual/usage/consume", { method: "POST", body: JSON.stringify({ requestId }), signal });
+}
+
 export function getAdminStatus(signal?: AbortSignal) {
   return accountRequest<{ isAdmin: boolean }>("/api/admin/me", { signal });
 }
@@ -85,7 +94,7 @@ export function getAdminUserDetail(userId: string, signal?: AbortSignal) {
   return accountRequest<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(userId)}`, { signal });
 }
 
-export function assignAdminPlan(userId: string, body: { planId: PlanId; expiresAt: string | null; note: string | null }) {
+export function assignAdminPlan(userId: string, body: { planId: PlanId; addonEnabled: boolean; expiresAt: string | null; note: string | null }) {
   return accountRequest<{ ok: true }>(`/api/admin/users/${encodeURIComponent(userId)}/plan`, { method: "PATCH", body: JSON.stringify(body) });
 }
 

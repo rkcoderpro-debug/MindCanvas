@@ -146,10 +146,10 @@ describe("Workspace UI", () => {
     await act(async () => profile.click());
     expect(host.querySelector(".topbar-profile-menu")?.textContent).toContain("Đăng nhập Google");
   });
-  it("opens the four manual plan cards from the topbar", async () => {
+  it("opens the plan cards and separate AI Manual add-on from the topbar", async () => {
     await act(async () => root.render(<App/>));
     await act(async () => (host.querySelector(".topbar-plan-button") as HTMLButtonElement).click());
-    expect(host.querySelectorAll(".pricing-card")).toHaveLength(4);
+    expect(host.querySelectorAll(".pricing-card")).toHaveLength(5);
     expect(host.querySelector(".pricing-card.current")?.textContent).toContain("Free");
     expect(host.textContent).toContain("0385287824");
     expect(host.querySelector('a[href="https://zalo.me/0385287824"]')).not.toBeNull();
@@ -163,14 +163,11 @@ describe("Workspace UI", () => {
     await act(async () => left.click());
     expect(localStorage.getItem("mindcanvas:toolbar-position")).toBe("left");
   });
-  it("shows the canvas hover-focus setting and persists the choice", async () => {
+  it("does not expose the removed canvas hover-focus setting", async () => {
     await act(async () => root.render(<App/>));
     const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
     await act(async () => settings.click());
-    const toggle = host.querySelector('input[type="checkbox"][aria-label="Tự focus canvas khi rê chuột"]') as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
-    await act(async () => toggle.click());
-    expect(toggle.checked).toBe(false);
-    expect(localStorage.getItem("mindcanvas:canvas-hover-focus")).toBe("false");
+    expect(host.querySelector('input[type="checkbox"][aria-label="Tự focus canvas khi rê chuột"]')).toBeNull();
+    expect(localStorage.getItem("mindcanvas:canvas-hover-focus")).toBeNull();
   });
 });

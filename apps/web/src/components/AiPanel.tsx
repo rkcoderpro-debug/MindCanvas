@@ -3,7 +3,7 @@ import type { StructuredMindMap } from "@mindcanvas/shared";
 import { ClipboardPaste, FileText, Sparkles, Upload } from "lucide-react";
 import Dialog from "./Dialog";
 import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
-import { generateMindMap, generateMindMapFromFile } from "../lib/api";
+import { consumeAiManualUsage, generateMindMap, generateMindMapFromFile } from "../lib/api";
 import { saveDocumentToStorage } from "../lib/supabase";
 import { useLanguage } from "../lib/i18n";
 import { AI_FILE_ACCEPT, readClipboardSource, writeClipboardText } from "../lib/aiSource";
@@ -28,12 +28,12 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
   const [file, setFile] = useState<File | null>(null), [rawText, setRawText] = useState(""), [graph, setGraph] = useState<StructuredMindMap | null>(null), [pageCount, setPageCount] = useState(0), [documentId, setDocumentId] = useState("");
   const [from, setFrom] = useState(1), [to, setTo] = useState(1), [mode, setMode] = useState<"append" | "new">("append"), [mindMapDetail, setMindMapDetail] = useState<MindMapDetail>("medium");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [provider, setProvider] = useState("");
-  const [manualPrompt, setManualPrompt] = useState(""), [manualJson, setManualJson] = useState(""), [manualCopied, setManualCopied] = useState(false);
+  const [manualPrompt, setManualPrompt] = useState(""), [manualJson, setManualJson] = useState(""), [manualCopied, setManualCopied] = useState(false), [manualUsageConsumed, setManualUsageConsumed] = useState(false);
   const controller = useRef<AbortController | undefined>(undefined), fileInput = useRef<HTMLInputElement>(null);
   const previewUrl = useMemo(() => file && (file.type === "application/pdf" || file.type.startsWith("image/")) ? URL.createObjectURL(file) : "", [file]);
   useEffect(() => () => { controller.current?.abort(); if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
-  const clearManualResult = () => { setManualPrompt(""); setManualJson(""); setManualCopied(false); };
+  const clearManualResult = () => { setManualPrompt(""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); };
   const clearResult = () => { setGraph(null); setProvider(""); setError(""); clearManualResult(); };
   const resetSource = (nextMode: SourceMode) => { setSourceMode(nextMode); setFile(null); setRawText(""); setPageCount(0); setDocumentId(""); clearResult(); if (fileInput.current) fileInput.current.value = ""; };
   const selectFile = (next: File | null) => { setFile(next); setGraph(null); setRawText(""); setPageCount(0); setDocumentId(""); setProvider(""); clearManualResult(); setError(""); };
@@ -57,11 +57,20 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
     const opened = window.open(GEMINI_WEB_URL, "_blank", "noopener,noreferrer");
     if (!opened) setError(t("popupBlocked"));
   };
-  const validateManualResult = () => {
+  const validateManualResult = async () => {
+    let next: StructuredMindMap | null = null;
     try {
-      const next = parseManualMindMap(manualJson);
-      setProvider("manual"); setGraph(next); setError("");
+      next = parseManualMindMap(manualJson);
     } catch (error) { setGraph(null); setError(error instanceof ManualAiValidationError && error.code === "INVALID_JSON" ? t("manualInvalidJson") : t("manualInvalidMindMap")); }
+    if (!next) return;
+    if (!canUse) { setGraph(null); setError(t("manualRequiresLogin")); return; }
+    if (!manualUsageConsumed) {
+      setBusy(true);
+      try { await consumeAiManualUsage(); setManualUsageConsumed(true); }
+      catch (error) { setGraph(null); setError(aiErrorMessage(error, t, "aiManualQuotaError")); return; }
+      finally { setBusy(false); }
+    }
+    setProvider("manual"); setGraph(next); setError("");
   };
   const importManualJsonFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files?.[0];
@@ -114,7 +123,7 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
   return <Dialog title={t("aiMindMapTitle")} onClose={onClose}>
     <p className="dialog-intro">{t("aiMindMapHint")}</p>
     <AiModeSwitch mode={aiMode} autoAvailable={canUse} onChange={changeAiMode} />
-    {aiMode === "manual" ? <p className="ai-manual-note">{t("aiManualHint")} {t("manualNoLoginHint")}</p> : !canUse && <p role="alert">{t("loginRequired")}</p>}
+    {aiMode === "manual" ? <p className="ai-manual-note">{t("aiManualHint")} {t("aiManualUsageHint")} {t("manualNoLoginHint")}</p> : !canUse && <p role="alert">{t("loginRequired")}</p>}
     {aiMode === "auto" ? <>
       <div className="ai-source-tabs" role="tablist" aria-label={t("aiSource")}>
         <button type="button" role="tab" aria-selected={sourceMode === "text"} className={sourceMode === "text" ? "active" : ""} onClick={() => resetSource("text")}><FileText size={16}/>{t("aiSourceText")}</button>
@@ -133,7 +142,7 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
       <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea readOnly value={currentManualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{t("aiManualMindMapWorkflow")}</small></div>
       <label className="ai-manual-json"><span>{t("aiManualJsonLabel")}</span><textarea value={manualJson} onChange={event => { setManualJson(event.target.value); setGraph(null); setProvider(""); setError(""); }} placeholder={t("aiManualJsonPlaceholder")} /><small className="field-hint">{t("aiManualJsonHint")}</small></label>
       <label className="secondary-button ai-json-file-input"><Upload size={16}/><span>{t("uploadJsonFile")}</span><input type="file" accept=".json,application/json" disabled={busy} onChange={event => void importManualJsonFile(event)}/></label>
-      <button type="button" className="secondary-button" disabled={!manualJson.trim() || busy} onClick={validateManualResult}>{t("validateResult")}</button>
+      <button type="button" className="secondary-button" disabled={!manualJson.trim() || busy} onClick={() => void validateManualResult()}>{t("validateResult")}</button>
     </section>}
     {error && <p className="form-error" role="alert">{error}</p>}{busy && <p className="ai-working" role="status"><Sparkles size={16}/>{t("generatingMindMap")}</p>}
     {graph && <div className="graph-preview"><div className="ai-preview-heading"><strong>{graph.nodes.length} {t("nodes")} · {graph.edges.length} {t("edges")}</strong><small>{provider === "manual" ? t("manualProvider") : provider} · {t("previewChanges")}</small></div>{graph.nodes.map((n, i) => <label key={n.id}>{i + 1}{n.sourcePage ? " · " + t("page") + " " + n.sourcePage : ""}<input maxLength={10000} value={n.label} onChange={event => setGraph({ ...graph, nodes: graph.nodes.map((item, j) => i === j ? { ...item, label: event.target.value } : item) })}/></label>)}</div>}

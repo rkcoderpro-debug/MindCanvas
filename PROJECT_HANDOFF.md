@@ -1,5 +1,19 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-13 — V4.0 Quota, Canvas UX & Storage Repair
+
+### Implemented
+
+- Added migration `supabase/migrations/0007_v4_quota_subscriptions.sql`. Free is 20 MB with 1 AI Auto/day, 3 AI Manual/day and 50 flashcards per generation; Plus/Pro/Max provide 20/60/150 AI Auto uses per day, include unlimited AI Manual, and allow 100/200/500 flashcards per generation. The quota day runs from 12:00 to 12:00 in Vietnam time.
+- Added the separate `ai_manual` add-on at 29,000₫/month, daily reservation/commit/release RPCs, admin assignment and owner/admin subscription history. Payments remain manually confirmed outside MindCanvas.
+- Replaced delta-based storage accounting with source-row recomputation and a database guard. The reported negative `account_storage.storage_bytes` / check-constraint failure is repaired during migration and future saves return the database diagnostic instead of leaving an orphaned uploaded object.
+- Removed canvas hover auto-focus. Double-clicking a text or node block opens inline editing. Selection marquee auto-pans at every edge, including diagonal x/y movement; wheel `deltaX` and `deltaY` are both preserved for diagonal touchpad panning.
+- Toolbar placement remains configurable; the toolbar is capped at 80% of the relevant canvas dimension and can collapse/expand without covering its toggle. The properties panel has an explicit close/open control and remains available while fullscreen is active.
+
+### Verification
+
+- Web: 125 tests passed; server: 32 tests passed; web/server TypeScript checks and production builds passed locally. Production credentials, Supabase migration execution, storage RLS and a real touchpad/device still need deployment QA.
+
 ## Update 2026-09-12 — V3.8.1 Navigation UX, Theme Preview & Smooth Viewport (latest)
 
 ### Implemented

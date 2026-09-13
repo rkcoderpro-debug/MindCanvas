@@ -1,5 +1,14 @@
 # MindCanvas — Changes Compared with the Original Handoff
 
+## V4.0 — quota, add-on AI Manual, storage repair and canvas UX
+
+- Added `supabase/migrations/0007_v4_quota_subscriptions.sql` with the 20 MB Free limit, 1/3 daily Free AI Auto/Manual quotas, Plus/Pro/Max AI Auto limits of 20/60/150 per day, 100/200/500 flashcard-per-generation limits, noon Vietnam reset, the 29,000₫/month AI Manual add-on and subscription history.
+- Added atomic daily AI reservation/commit/release RPCs and authenticated account/admin endpoints. Free AI Manual uses are recorded without automating Gemini Web; Plus/Pro/Max or the add-on remove the manual limit.
+- Replaced delta-based `account_storage` updates with recomputation and a database quota guard, fixing negative storage rows such as the reported `23514` check-constraint failure and cleaning up uploaded objects when document persistence fails.
+- Removed canvas hover auto-focus. Double-click on text/node content opens inline editing; marquee selection auto-pans on all four edges and supports diagonal movement. Touchpad wheel pan preserves both axes.
+- Added a responsive 80%-bounded toolbar with collapse/expand control and an inspector close/open control that remains available in fullscreen.
+- Updated plan/admin UI, quota hints, account history, localized storage diagnostics and regression tests.
+
 ## V3.8.1 — Navigation UX, theme preview and smooth touchpad viewport
 
 - Extracted the sidebar into maintainable React components instead of keeping navigation markup inside the workspace screen.

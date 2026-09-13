@@ -20,7 +20,7 @@ import Dialog from "./Dialog";
 import { normalizeWheelDelta, panViewport, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; autoFocusOnHover?: boolean };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -125,12 +125,12 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "highlighter", icon: Highlighter, key: "B" }, { id: "rect", icon: Square, key: "R" },
   { id: "ellipse", icon: Circle, key: "O" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", autoFocusOnHover = false }: Props) {
+export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top" }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
-  const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
+  const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
-  const touchPoints = useRef(new Map<number, Vec2>());
+  const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false);
   const boardRef = useRef(board), onChangeRef = useRef(onChange);
   const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
@@ -142,8 +142,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [canvasHoverFocused, setCanvasHoverFocused] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
+  const [toolbarExpanded, setToolbarExpanded] = useState(true);
   const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
   const [mediaError, setMediaError] = useState(""), [isRecording, setIsRecording] = useState(false), [recordingSeconds, setRecordingSeconds] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
@@ -151,7 +151,6 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChange]);
-  useEffect(() => { if (!autoFocusOnHover) setCanvasHoverFocused(false); }, [autoFocusOnHover]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
   const commitWheelViewport = () => {
     if (wheelIdle.current !== null) { window.clearTimeout(wheelIdle.current); wheelIdle.current = null; }
@@ -182,6 +181,51 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const hidden = hiddenNodes(b);
   const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.media.filter(e => e.hidden).map(e => e.id), ...b.embeds.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
   const isLocked = (s: Selection) => s.kind !== "edges" && !!b[s.kind].find(e => e.id === s.id && "locked" in e && e.locked);
+  const requestAutoPanFrame = (callback: () => void) => typeof window.requestAnimationFrame === "function"
+    ? window.requestAnimationFrame(() => callback())
+    : window.setTimeout(callback, 16);
+  const stopAutoPan = () => {
+    if (autoPanFrame.current !== null) {
+      window.cancelAnimationFrame?.(autoPanFrame.current);
+      window.clearTimeout(autoPanFrame.current);
+    }
+    autoPanFrame.current = null; autoPanPointer.current = null;
+  };
+  const edgePanDelta = (clientX: number, clientY: number, elapsedMs: number) => {
+    const rect = svg.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    const edge = 64, maxSpeed = 22;
+    const speed = (distance: number) => distance < edge ? ((edge - Math.max(0, distance)) / edge) ** 2 * maxSpeed : 0;
+    const left = speed(clientX - rect.left), right = speed(rect.right - clientX), top = speed(clientY - rect.top), bottom = speed(rect.bottom - clientY);
+    const factor = Math.min(2.5, Math.max(0.5, elapsedMs / 16.67));
+    return { x: (right - left) * factor, y: (bottom - top) * factor };
+  };
+  const updateMarquee = (g: Gesture, p: Vec2) => {
+    const dx = p.x - g.start.x, dy = p.y - g.start.y;
+    const rect = { x: Math.min(g.start.x, p.x), y: Math.min(g.start.y, p.y), width: Math.abs(dx), height: Math.abs(dy) };
+    setMarquee(rect);
+    const found = orderedElements(g.base).filter(s => { if (hidden.has(s.id) || s.kind === "edges") return false; const bounds = elementBounds(g.base, s)!; return bounds.x >= rect.x && bounds.y >= rect.y && bounds.x + bounds.width <= rect.x + rect.width && bounds.y + bounds.height <= rect.y + rect.height; });
+    setSelections(expandGroups(g.base, [...(g.selections ?? []), ...found]));
+  };
+  const autoPanTick = () => {
+    autoPanFrame.current = null;
+    const g = gesture.current, pointer = autoPanPointer.current;
+    if (!g || g.mode !== "marquee" || !pointer) return;
+    const now = performance.now(), previous = autoPanLastAt.current ?? now, elapsed = Math.min(50, Math.max(1, now - previous));
+    autoPanLastAt.current = now;
+    const delta = edgePanDelta(pointer.x, pointer.y, elapsed);
+    if (delta.x !== 0 || delta.y !== 0) {
+      g.next = { ...g.next, viewport: panViewport(g.next.viewport, delta.x, delta.y) };
+      updateMarquee(g, point(pointer.x, pointer.y, g.next));
+      setPreview(g.next);
+    }
+    autoPanFrame.current = requestAutoPanFrame(autoPanTick);
+  };
+  const scheduleAutoPan = () => {
+    if (autoPanFrame.current !== null) return;
+    autoPanLastAt.current = performance.now();
+    autoPanFrame.current = requestAutoPanFrame(autoPanTick);
+  };
   useEffect(() => { setInk(current => current === previousThemeInk.current ? palette.ink : current); previousThemeInk.current = palette.ink; }, [palette.ink]);
   useEffect(() => { const ids = new Set(orderedElements(board).map(s => s.id)); if (!editing && selections.some(s => !ids.has(s.id))) setSelections(selections.filter(s => ids.has(s.id))); }, [board, editing, selections]);
   useEffect(() => {
@@ -189,7 +233,25 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     const timer = window.setInterval(() => setRecordingSeconds(seconds => seconds + 1), 1000);
     return () => window.clearInterval(timer);
   }, [isRecording]);
+  useEffect(() => {
+    toolbarUserExpanded.current = false;
+    const updateToolbarFit = () => {
+      const host = frame.current, bar = toolbar.current;
+      if (!host || !bar || toolbarUserExpanded.current) return;
+      const hostRect = host.getBoundingClientRect();
+      const available = toolbarPosition === "top" || toolbarPosition === "bottom" ? hostRect.width * .8 : hostRect.height * .8;
+      const contentSize = toolbarPosition === "top" || toolbarPosition === "bottom" ? bar.scrollWidth : bar.scrollHeight;
+      if (contentSize > available + 4) setToolbarExpanded(false);
+    };
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(updateToolbarFit) : null;
+    if (frame.current) observer?.observe(frame.current);
+    if (toolbar.current) observer?.observe(toolbar.current);
+    window.addEventListener("resize", updateToolbarFit);
+    const timer = window.setTimeout(updateToolbarFit, 0);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", updateToolbarFit); window.clearTimeout(timer); };
+  }, [toolbarPosition, inspectorOpen, isFullscreen]);
   useEffect(() => () => {
+    stopAutoPan();
     recorder.current?.stop();
     recorderStream.current?.getTracks().forEach(track => track.stop());
   }, []);
@@ -315,6 +377,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       const initial = e.shiftKey ? selections : [];
       setSelections(initial); setMarquee({ ...p, width: 0, height: 0 });
       gesture.current = { mode: "marquee", start: p, screen: p, base, selections: initial, pointer: e.pointerId, next: base };
+      autoPanPointer.current = { x: e.clientX, y: e.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
     } else if (tool === "text") {
       const id = crypto.randomUUID();
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
@@ -330,7 +393,13 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   };
   const move = (e: ReactPointerEvent<SVGSVGElement>) => {
     const g = gesture.current; if (!g || e.pointerId !== g.pointer) return;
-    e.preventDefault(); const p = point(e.clientX, e.clientY, g.base), dx = p.x - g.start.x, dy = p.y - g.start.y;
+    e.preventDefault();
+    if (g.mode === "marquee") {
+      autoPanPointer.current = { x: e.clientX, y: e.clientY }; scheduleAutoPan();
+      updateMarquee(g, point(e.clientX, e.clientY, g.next));
+      return;
+    }
+    const p = point(e.clientX, e.clientY, g.base), dx = p.x - g.start.x, dy = p.y - g.start.y;
     let next = g.next;
     if (g.mode === "move") {
       if (snap) {
@@ -344,12 +413,6 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         })?.id;
         setDropTarget(g.target ?? null);
       }
-    }
-    if (g.mode === "marquee") {
-      const rect = { x: Math.min(g.start.x, p.x), y: Math.min(g.start.y, p.y), width: Math.abs(dx), height: Math.abs(dy) }; setMarquee(rect);
-      const found = orderedElements(g.base).filter(s => { if (hidden.has(s.id) || s.kind === "edges") return false; const b = elementBounds(g.base, s)!; return b.x >= rect.x && b.y >= rect.y && b.x + b.width <= rect.x + rect.width && b.y + b.height <= rect.y + rect.height; });
-      setSelections(expandGroups(g.base, [...(g.selections ?? []), ...found]));
-      return;
     }
     if (g.mode === "resize") {
       const selections = g.selections ?? [g.selection!];
@@ -368,6 +431,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   };
   const finish = (cancel = false) => {
     const g = gesture.current; if (!g) return;
+    stopAutoPan(); autoPanLastAt.current = null;
     gesture.current = null; setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]);
     if (g.mode === "marquee") { if (cancel) setSelections(g.selections ?? []); }
     if (!cancel && g.reparent && g.target) g.next = reparentNode(g.next, g.selection!.id, g.target);
@@ -443,14 +507,6 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     onChange(parent ? connect(next, parent.id, id) : next); setTool("select"); setSelected({ kind: "nodes", id });
   };
 
-  const focusCanvasOnHover = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!autoFocusOnHover || event.pointerType !== "mouse") return;
-    const target = event.target;
-    if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
-    svg.current?.focus({ preventScroll: true });
-    setCanvasHoverFocused(true);
-  };
-
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -523,8 +579,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     if (value !== undefined && key === "trimEnd" && selectedMedia.trimStart !== undefined && value <= selectedMedia.trimStart) value = selectedMedia.trimStart + .1;
     patch({ [key]: value });
   };
-  return <div className={`editor-layout toolbar-${toolbarPosition} ${autoFocusOnHover && canvasHoverFocused ? "canvas-hover-focus-active" : ""}`}>
-    <div className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
+  return <div className={`editor-layout toolbar-${toolbarPosition}`}>
+    <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
       const item = [...event.clipboardData.items].find(entry => entry.type.startsWith("image/"));
@@ -533,8 +589,10 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       else void paste();
     }}>
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
-      <div className="drawing-toolbar" role="toolbar" aria-label={t("properties")}>{tools.map(({ id, icon: Icon, key }) =>
-        <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
+      <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"}`} role="toolbar" aria-label={t("properties")}>
+        <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
+        <span className="drawing-toolbar-tools">{tools.map(({ id, icon: Icon, key }) =>
+          <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={() => { finishEdit(); mediaInput.current?.click(); }}><ImagePlus size={19}/></button>
         <button aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
@@ -544,9 +602,10 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         <button className={snap ? "selected" : ""} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
         <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
         <button aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>
-        <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></div>
+        <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></span>
+      </div>
       <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
-      <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`} onPointerEnter={focusCanvasOnHover} onPointerLeave={() => setCanvasHoverFocused(false)}
+      <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => touchEndCapture(e)} onPointerCancelCapture={e => touchEndCapture(e, true)}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
         <CanvasBackground board={b}/>
@@ -604,12 +663,12 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
           })}
           {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; return <g key={text.id} data-element={text.id} opacity={text.opacity ?? 1} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "texts", id: text.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}>
-            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height}><div className="canvas-copy" style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color), backgroundColor: text.backgroundColor, fontWeight: text.bold ? 700 : 400, fontStyle: text.italic ? "italic" : "normal", textDecoration: text.underline ? "underline" : "none", textAlign: text.textAlign ?? "left" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
+            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height} onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}><div className="canvas-copy" onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }} style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color), backgroundColor: text.backgroundColor, fontWeight: text.bold ? 700 : 400, fontStyle: text.italic ? "italic" : "normal", textDecoration: text.underline ? "underline" : "none", textAlign: text.textAlign ?? "left" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
           </g>; })}
           {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => <g key={n.id} data-element={n.id} className="mind-node" opacity={n.opacity ?? 1} transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, { kind: "nodes", id: n.id })}
             onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}>
             <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "var(--node-fill)"} stroke={dropTarget === n.id ? "var(--accent)" : "var(--element-stroke)"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
-            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)}><div className="node-copy" style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
+            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)} onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}><div className="node-copy" onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }} style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
             {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
           </g>)}
           </LayerStack>
@@ -647,10 +706,10 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
           {mindMapLayoutSummary[side].length ? mindMapLayoutSummary[side].map(branch => <div className="mind-map-branch-group" key={branch.rootId}><strong>{branch.rootLabel}</strong><ul>{branch.nodeLabels.map((label, index) => <li key={`${branch.rootId}-${index}`} title={label}>{label}</li>)}</ul></div>) : <small className="mind-map-no-branch">{t("mindMapNoBranches")}</small>}
         </section>)}</div>
       </aside>}
-      <button className="mobile-inspector-toggle" aria-label={t("properties")} aria-expanded={inspectorOpen} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
+      <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
       <div className="zoom-control"><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
-    <aside className={`inspector ${inspectorOpen ? "mobile-open" : ""}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button className="icon-button inspector-close" aria-label={t("close")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
+    <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
       <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={(board.background ?? "dots") === option ? "active" : ""} aria-pressed={(board.background ?? "dots") === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div></section>
       {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}
       {selections.length > 0 && <div className="selection-actions"><strong>{selections.length} {t("selectedElements")}</strong><div className="property-grid">

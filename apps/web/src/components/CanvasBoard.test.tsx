@@ -7,9 +7,9 @@ import CanvasBoard from "./CanvasBoard";
 import { blankBoard } from "../lib/board";
 let root: Root, host: HTMLDivElement, current: BoardState;
 const commit = vi.fn();
-function Harness({ initial, autoFocusOnHover = false }: { initial: BoardState; autoFocusOnHover?: boolean }) {
+function Harness({ initial }: { initial: BoardState }) {
   const [board, setBoard] = useState(initial); current = board;
-  return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}} autoFocusOnHover={autoFocusOnHover}/>;
+  return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
 }
 function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit & { pointerType?: string; pointerId?: number } = {}) {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
@@ -23,16 +23,14 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("Canvas interactions", () => {
-  it("focuses the canvas on mouse hover only when the preference is enabled", async () => {
-    await act(async () => root.render(<Harness initial={blankBoard()} autoFocusOnHover/>));
+  it("does not focus the canvas when the pointer only hovers it", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const svg = host.querySelector("svg.canvas-svg")!;
     const enter = new MouseEvent("pointerover", { bubbles: true, cancelable: true });
     Object.defineProperty(enter, "pointerType", { value: "mouse" });
     await act(async () => svg.dispatchEvent(enter));
-    expect(document.activeElement).toBe(svg);
-    expect(host.querySelector(".editor-layout")?.classList.contains("canvas-hover-focus-active")).toBe(true);
-    await act(async () => svg.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, cancelable: true, relatedTarget: document.body })));
-    expect(host.querySelector(".editor-layout")?.classList.contains("canvas-hover-focus-active")).toBe(false);
+    expect(document.activeElement).not.toBe(svg);
+    expect(host.querySelector(".canvas-hover-focus-active")).toBeNull();
   });
 
   it("selects a marquee, moves multiple elements once, and groups/ungroups them", async () => {
@@ -141,6 +139,21 @@ describe("Canvas interactions", () => {
     expect(current.nodes).toHaveLength(1); expect(current.edges).toHaveLength(0);
     await act(async () => host.querySelector("[data-element]")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
     expect(host.querySelector("textarea")).not.toBeNull();
+  });
+  it("opens the inline editor when a text block is double-clicked", async () => {
+    const b = { ...blankBoard(), texts: [{ id: "txt", text: "Editable text", x: 20, y: 40, width: 200 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => host.querySelector(".canvas-copy")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Sửa nội dung"]')?.value).toBe("Editable text");
+  });
+  it("keeps the properties panel toggle available after closing it", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const inspector = host.querySelector("aside.inspector")!;
+    expect(inspector.classList.contains("is-open")).toBe(true);
+    await act(async () => (host.querySelector('[aria-label="Đóng thanh thuộc tính"]') as HTMLButtonElement).click());
+    expect(inspector.classList.contains("is-closed")).toBe(true);
+    await act(async () => (host.querySelector('[aria-label="Mở thanh thuộc tính"]') as HTMLButtonElement).click());
+    expect(inspector.classList.contains("is-open")).toBe(true);
   });
   it("moves text in one undoable commit per gesture", async () => {
     const b = { ...blankBoard(), texts: [{ id: "txt", text: "Hello", x: 20, y: 40, width: 200 }] };
