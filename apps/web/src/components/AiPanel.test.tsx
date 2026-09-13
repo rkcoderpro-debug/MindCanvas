@@ -25,18 +25,17 @@ afterEach(async () => {
 });
 
 describe("AI Manual mind-map flow", () => {
-  it("works for a guest without calling the Auto API", async () => {
+  it("uses a detail-specific generic prompt and applies pasted JSON without calling the Auto API", async () => {
     const beforeGenerate = vi.fn(async () => true);
     const onApply = vi.fn();
     await act(async () => root.render(<LanguageProvider><AiPanel projectId="project" canUse={false} beforeGenerate={beforeGenerate} onClose={() => undefined} onApply={onApply}/></LanguageProvider>));
 
-    const textTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(button => button.textContent?.includes("Dán văn bản"))!;
-    await act(async () => textTab.click());
-    const source = host.querySelector(".ai-text-source textarea") as HTMLTextAreaElement;
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(source, "Nội dung học tập");
-    await act(async () => source.dispatchEvent(new Event("input", { bubbles: true })));
-    await act(async () => (host.querySelector("footer .primary-button") as HTMLButtonElement).click());
-    expect(host.querySelector(".ai-manual-prompt textarea")).not.toBeNull();
+    expect(host.querySelector(".ai-source-tabs")).toBeNull();
+    const detail = host.querySelector(".ai-manual-panel select") as HTMLSelectElement;
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(detail, "detailed");
+    await act(async () => detail.dispatchEvent(new Event("change", { bubbles: true })));
+    expect((host.querySelector(".ai-manual-prompt textarea") as HTMLTextAreaElement).value).toContain("Detail level: detailed");
+    expect((host.querySelector(".ai-manual-prompt textarea") as HTMLTextAreaElement).value).toContain("mindcanvas-mindmap.json");
 
     const json = host.querySelector(".ai-manual-json textarea") as HTMLTextAreaElement;
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(json, JSON.stringify({ title: "Bản đồ", nodes: [{ id: "root", label: "Ý chính" }], edges: [] }));

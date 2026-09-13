@@ -7,9 +7,9 @@ import CanvasBoard from "./CanvasBoard";
 import { blankBoard } from "../lib/board";
 let root: Root, host: HTMLDivElement, current: BoardState;
 const commit = vi.fn();
-function Harness({ initial }: { initial: BoardState }) {
+function Harness({ initial, autoFocusOnHover = false }: { initial: BoardState; autoFocusOnHover?: boolean }) {
   const [board, setBoard] = useState(initial); current = board;
-  return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
+  return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}} autoFocusOnHover={autoFocusOnHover}/>;
 }
 function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit & { pointerType?: string; pointerId?: number } = {}) {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
@@ -23,6 +23,18 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("Canvas interactions", () => {
+  it("focuses the canvas on mouse hover only when the preference is enabled", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()} autoFocusOnHover/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    const enter = new MouseEvent("pointerover", { bubbles: true, cancelable: true });
+    Object.defineProperty(enter, "pointerType", { value: "mouse" });
+    await act(async () => svg.dispatchEvent(enter));
+    expect(document.activeElement).toBe(svg);
+    expect(host.querySelector(".editor-layout")?.classList.contains("canvas-hover-focus-active")).toBe(true);
+    await act(async () => svg.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, cancelable: true, relatedTarget: document.body })));
+    expect(host.querySelector(".editor-layout")?.classList.contains("canvas-hover-focus-active")).toBe(false);
+  });
+
   it("selects a marquee, moves multiple elements once, and groups/ungroups them", async () => {
     const b = { ...blankBoard(), shapes: ["a","b"].map((id,i) => ({id,kind:"rect" as const,x:20+i*80,y:20,width:50,height:50,color:"#ffffff"})) };
     await act(async () => root.render(<Harness initial={b}/>)); const svg=host.querySelector("svg.canvas-svg")!;

@@ -1,6 +1,6 @@
-# MindCanvas V3.8.1
+# MindCanvas V3.9
 
-MindCanvas is a visual study workspace for turning notes and private documents into editable canvases, mind maps and flashcards. V3.8.1 refines the V3.8 server-side AI file pipeline with one responsive navigation toggle, progressive resizable navigation density, expandable folder browsing, working appearance controls, fullscreen canvas mode, configurable toolbar placement, temporary theme previews and smoother touchpad viewport navigation. V3.7.1 media/resize work and the V3.5.1 shared Gemini reliability hotfix remain included. This repository contains a React/Vite frontend, an Express server boundary for private AI/document operations, shared graph types, and Supabase migration scaffolding.
+MindCanvas is a visual study workspace for turning notes and private documents into editable canvases, mind maps and flashcards. V3.9 adds a configurable mouse-hover canvas focus preference so keyboard shortcuts are ready when the pointer enters the board, while retaining the V3.8 server-side AI file pipeline, responsive navigation, fullscreen canvas mode, configurable toolbar placement, temporary theme previews and smoother touchpad viewport navigation. V3.7.1 media/resize work and the V3.5.1 shared Gemini reliability hotfix remain included. This repository contains a React/Vite frontend, an Express server boundary for private AI/document operations, shared graph types, and Supabase migration scaffolding.
 
 ## Run locally
 

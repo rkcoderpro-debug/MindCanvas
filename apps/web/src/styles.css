@@ -515,6 +515,11 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .command-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .command-empty { padding: 36px 12px; color: var(--muted); text-align: center; }
 .settings-layout { display: grid; gap: 22px; }
+.settings-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.settings-toggle input { flex: 0 0 auto; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); }
+.settings-toggle > span { display: grid; min-width: 0; gap: 4px; }
+.settings-toggle strong { font-size: 14px; }
+.settings-toggle small { color: var(--muted); line-height: 1.45; }
 .settings-section + .settings-section { padding-top: 20px; border-top: 1px solid var(--line); }
 .settings-section-heading { display: grid; gap: 4px; margin-bottom: 12px; }
 .settings-section-heading strong { font-size: 14px; }
@@ -786,7 +791,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 
-/* V3.8.1 navigation: the rail is resizable on desktop and becomes a real drawer on mobile. */
+/* V3.9 navigation: the rail is resizable on desktop and becomes a real drawer on mobile. */
 .sidebar {
   position: relative;
   flex: 0 0 var(--sidebar-width, 280px);
@@ -852,7 +857,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
   .sidebar-appearance-popover { left: 8px; right: 8px; bottom: 10px; width: auto; max-height: 72dvh; }
 }
 
-/* V3.8.1 UX patch: one responsive navigation control, compact folders and a topbar account menu. */
+/* V3.9 UX patch: one responsive navigation control, compact folders and a topbar account menu. */
 .sidebar-toggle-button { flex: 0 0 auto; width: 36px; height: 36px; }
 .topbar-profile { position: relative; flex: 0 0 auto; min-width: 0; }
 .topbar-profile-button { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: min(260px, 30vw); padding: 4px 6px 4px 4px; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 10px; text-align: left; }
@@ -883,6 +888,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .folder-list > small { padding-inline: 6px; }
 .sidebar-collapsed .folder-list { padding: 4px; max-height: 30vh; }
 .sidebar-collapsed .nav-list .nav-flashcards { margin-top: 6px; }
+.canvas-hover-focus-active .canvas-svg { outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent); }
 .canvas-fullscreen-toggle { position: absolute; z-index: 7; top: 12px; left: 12px; width: 36px; height: 36px; color: var(--text); background: var(--control-bg); border: 1px solid var(--line); box-shadow: 0 5px 16px var(--shadow); backdrop-filter: blur(14px); }
 .canvas-fullscreen-toggle:hover { color: var(--accent); background: var(--surface-raised); border-color: var(--accent-border); }
 .canvas-fullscreen-mode .sidebar, .canvas-fullscreen-mode .topbar, .canvas-fullscreen-mode .editor-heading, .canvas-fullscreen-mode .update-banner, .canvas-fullscreen-mode .error-banner, .canvas-fullscreen-mode .sidebar-backdrop { display: none !important; }
@@ -924,7 +930,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
   .toolbar-position-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* V3.8.1 sidebar density: let folders own the available middle space and
+/* V3.9 sidebar density: let folders own the available middle space and
    progressively remove decoration before the rail takes over. */
 .sidebar:not(.sidebar-collapsed) .folder-list,
 .sidebar-collapsed .folder-list {

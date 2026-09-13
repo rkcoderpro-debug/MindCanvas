@@ -15,11 +15,14 @@ describe("manual AI exchange", () => {
     expect(prompt).toContain("Return exactly one valid JSON object");
     expect(prompt).toContain("Mục tiêu học tập");
     expect(prompt).toContain('"parentId"');
+    expect(buildMindMapPrompt({ fileName: "notes.pdf", detail: "detailed", language: "en" })).toContain("Detail level: detailed");
+    expect(buildMindMapPrompt({ fileName: "notes.pdf", detail: "basic", language: "en" })).toContain("Detail level: basic");
 
     expect(buildSelectionPrompt({ action: "expand", text: "A selected idea", language: "en" })).toContain('"action":"summarize|explain|rewrite|expand"');
     const flashcardPrompt = buildFlashcardsPrompt({ fileName: "notes.pdf", maxCards: 12, language: "en" });
     expect(flashcardPrompt).toContain("notes.pdf");
     expect(flashcardPrompt).toContain("mindcanvas-flashcards.json");
+    expect(flashcardPrompt).toContain("Create no more than 12 useful cards");
     expect(flashcardPrompt).toContain("escape every internal ASCII double quote");
   });
 
