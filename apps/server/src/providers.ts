@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { generateGemini, type GeminiImageInput } from "./gemini.js";
+import { parseLenientJson } from "./json.js";
 
 type AIProviderName = "experiential-labs" | "gemini" | "demo";
 type StructuredMindMap = { title: string; nodes: Array<{ id: string; label: string; parentId?: string; sourcePage?: number }>; edges: Array<{ id: string; source: string; target: string; label?: string }>; sourceDocumentId?: string };
@@ -17,8 +18,7 @@ export interface AIProvider {
 const instruction = (text: string) => `Return only valid JSON with this shape: {"title":string,"nodes":[{"id":string,"label":string,"parentId":string|null,"sourcePage":number|null}],"edges":[{"id":string,"source":string,"target":string,"label":string|null}]}. Create a concise, hierarchical editable mind map from the document. Preserve source page numbers only when present. Document:\n${text.slice(0, 120000)}`;
 
 function parseGraph(raw: string, provider: AIProviderName, model: string, documentId?: string): ProviderResult {
-  const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-  const value = JSON.parse(cleaned) as Partial<StructuredMindMap>;
+  const value = parseLenientJson<Partial<StructuredMindMap>>(raw);
   if (typeof value.title !== "string" || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) throw new Error("AI returned an invalid graph.");
   return { provider, model, graph: { title: value.title, nodes: value.nodes as StructuredMindMap["nodes"], edges: value.edges as StructuredMindMap["edges"], sourceDocumentId: documentId } };
 }

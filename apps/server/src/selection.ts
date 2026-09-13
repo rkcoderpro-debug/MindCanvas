@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseLenientJson } from "./json.js";
 import { config } from "./config.js";
 import { generateGeminiJson } from "./gemini.js";
 
@@ -11,12 +12,8 @@ const resultSchema = z.object({
   ideas: z.array(z.string().trim().min(1).max(2_000)).max(12).default([]),
 });
 
-function cleanJson(text: string) {
-  return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-}
-
 export function parseSelectionResult(text: string) {
-  const parsed = resultSchema.parse(JSON.parse(cleanJson(text)));
+  const parsed = resultSchema.parse(parseLenientJson(text));
   const seen = new Set<string>();
   const ideas = parsed.ideas.filter(idea => {
     const key = idea.toLocaleLowerCase();

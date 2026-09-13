@@ -58,6 +58,12 @@ test("long Retry-After skips waiting and moves to the next model", async () => {
 test("broken graph references fall back", async () => {
   let calls = 0; const result = await generateGemini(input, options, async () => ++calls === 1 ? ok({ ...graph, nodes: [{ id: "root", label: "Topic", parentId: "missing" as any }] }) : ok()); assert.equal(result.model, "gemini-3.7-flash");
 });
+test("repairs quoted labels, code fences and trailing commas in a model graph", async () => {
+  const raw = 'Kết quả:\n```json\n{"title":"Bản đồ "光"","nodes":[{"id":"root","label":"Chủ đề\nchính","parentId":null,}],"edges":[],}\n```';
+  const result = await generateGemini(input, options, async () => Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: raw }] } }] }));
+  assert.equal(result.graph.title, 'Bản đồ "光"');
+  assert.equal(result.graph.nodes[0].label, "Chủ đề\nchính");
+});
 test("safety block stops without model fallback", async () => {
   let calls = 0; await assert.rejects(generateGemini(input, options, async () => { calls++; return Response.json({ promptFeedback: { blockReason: "SAFETY" } }); }), /chặn/); assert.equal(calls, 1);
 });

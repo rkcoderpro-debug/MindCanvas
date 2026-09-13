@@ -12,3 +12,11 @@ test("parses and deduplicates contextual AI ideas", () => {
 test("rejects empty contextual AI output", () => {
   assert.throws(() => parseSelectionResult(JSON.stringify({ title: "", text: "", ideas: [] })));
 });
+
+test("repairs quoted terms and raw line breaks in contextual AI output", () => {
+  const raw = '{"title":"Giải thích "光"","text":"Dòng một\nDòng hai","ideas":["Ví dụ "光 + V""]}';
+  const result = parseSelectionResult(raw);
+  assert.equal(result.title, 'Giải thích "光"');
+  assert.equal(result.text, "Dòng một\nDòng hai");
+  assert.deepEqual(result.ideas, ['Ví dụ "光 + V"']);
+});

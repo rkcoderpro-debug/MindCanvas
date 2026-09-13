@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseLenientJson } from "./json.js";
 import { config } from "./config.js";
 import { generateGeminiJson, type GeminiImageInput } from "./gemini.js";
 
@@ -21,13 +22,9 @@ export type FlashcardPreview = {
   sourceDocumentId?: string;
 };
 
-function cleanJson(text: string) {
-  return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-}
-
 export function parseFlashcardPreview(text: string, maxCards: number): Omit<FlashcardPreview, "sourceDocumentId"> {
   if (!Number.isInteger(maxCards) || maxCards < 1 || maxCards > MAX_FLASHCARDS) throw new Error("Invalid flashcard limit.");
-  const parsed = previewSchema.parse(JSON.parse(cleanJson(text)));
+  const parsed = previewSchema.parse(parseLenientJson(text));
   const seen = new Set<string>();
   const cards = parsed.cards.filter(card => {
     const key = `${card.front.toLocaleLowerCase()}\u0000${card.back.toLocaleLowerCase()}`;

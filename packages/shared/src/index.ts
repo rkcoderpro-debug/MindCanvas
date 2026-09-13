@@ -1,5 +1,7 @@
 export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "rect" | "ellipse" | "connector";
 
+export { LenientJsonError, parseLenientJson } from "./json.js";
+
 export type Vec2 = { x: number; y: number };
 
 export type MindMapNode = {

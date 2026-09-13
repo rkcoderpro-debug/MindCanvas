@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseLenientJson } from "./json.js";
 
 export class AIError extends Error {
   constructor(public code: string, message: string, public status = 502, public retryAfterSeconds?: number) { super(message); }
@@ -37,7 +38,7 @@ const graphSchema = z.object({
 });
 
 function parseGraph(text: string, documentId?: string) {
-  const graph = graphSchema.parse(JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")));
+  const graph = graphSchema.parse(parseLenientJson(text));
   const ids = new Set(graph.nodes.map(n => n.id));
   if (ids.size !== graph.nodes.length || new Set(graph.edges.map(e => e.id)).size !== graph.edges.length ||
       graph.edges.some(e => !ids.has(e.source) || !ids.has(e.target)) ||

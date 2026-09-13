@@ -1,4 +1,4 @@
-import type { StructuredMindMap } from "@mindcanvas/shared";
+import { parseLenientJson, type StructuredMindMap } from "@mindcanvas/shared";
 
 import type { SelectionAiAction, SelectionAiResult } from "./api";
 
@@ -59,130 +59,14 @@ function readOptionalPage(value: unknown, code: ManualAiErrorCode): number | und
   return value;
 }
 
-function extractBalancedObjects(raw: string): string[] {
-  const objects: string[] = [];
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < raw.length; index += 1) {
-    const character = raw[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (character === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (character === "{") {
-      if (depth === 0) start = index;
-      depth += 1;
-    } else if (character === "}" && depth > 0) {
-      depth -= 1;
-      if (depth === 0 && start >= 0) {
-        objects.push(raw.slice(start, index + 1));
-        start = -1;
-      }
-    }
-  }
-
-  return objects;
-}
-
-function isLikelyStringTerminator(raw: string, index: number): boolean {
-  let next = index + 1;
-  while (/\s/.test(raw[next] ?? "")) next += 1;
-  const character = raw[next];
-  if (character === undefined || character === "}" || character === "]" || character === ":") return true;
-  if (character !== ",") return false;
-  next += 1;
-  while (/\s/.test(raw[next] ?? "")) next += 1;
-  return raw[next] === '"' || raw[next] === "}" || raw[next] === "]";
-}
-
-/**
- * Gemini occasionally returns human-readable JSON with unescaped quotes in a
- * question such as `Từ "迷" có nghĩa là gì?`. Try a conservative local repair
- * only after strict JSON.parse candidates fail. Valid JSON is always preferred.
- */
-function repairCommonJson(raw: string): string {
-  let repaired = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < raw.length; index += 1) {
-    const character = raw[index];
-    if (!inString) {
-      repaired += character;
-      if (character === '"') inString = true;
-      continue;
-    }
-
-    if (escaped) {
-      repaired += character;
-      escaped = false;
-      continue;
-    }
-    if (character === "\\") {
-      repaired += character;
-      escaped = true;
-      continue;
-    }
-    if (character === '"') {
-      if (isLikelyStringTerminator(raw, index)) {
-        repaired += character;
-        inString = false;
-      } else {
-        repaired += '\\"';
-      }
-      continue;
-    }
-    if (character === "\n") { repaired += "\\n"; continue; }
-    if (character === "\r") { repaired += "\\r"; continue; }
-    if (character === "\t") { repaired += "\\t"; continue; }
-    repaired += character;
-  }
-
-  return repaired.replace(/,\s*([}\]])/g, "$1");
-}
-
 function parseJsonObject(raw: string): JsonObject {
-  const value = raw.trim();
-  if (!value) return fail("EMPTY");
-
-  const candidates = new Set<string>([value]);
-  const fenced = value.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  if (fenced?.[1]) candidates.add(fenced[1].trim());
-  for (const object of extractBalancedObjects(value)) candidates.add(object);
-
-  for (const candidate of [...candidates]) {
-    const firstObject = candidate.indexOf("{");
-    const lastObject = candidate.lastIndexOf("}");
-    if (firstObject >= 0 && lastObject > firstObject) candidates.add(candidate.slice(firstObject, lastObject + 1));
+  if (!raw.trim()) return fail("EMPTY");
+  try {
+    const parsed = parseLenientJson<unknown>(raw);
+    return isObject(parsed) ? parsed : fail("INVALID_JSON");
+  } catch {
+    return fail("INVALID_JSON");
   }
-  for (const candidate of [...candidates]) candidates.add(repairCommonJson(candidate));
-
-  for (const candidate of candidates) {
-    try {
-      const parsed: unknown = JSON.parse(candidate);
-      if (isObject(parsed)) return parsed;
-    } catch {
-      // Try the next candidate. Gemini sometimes wraps JSON in a code fence or prose.
-    }
-  }
-
-  return fail("INVALID_JSON");
 }
 
 function languageInstruction(language: string): string {

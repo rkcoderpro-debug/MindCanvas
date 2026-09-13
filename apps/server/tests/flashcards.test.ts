@@ -24,3 +24,10 @@ test("accepts the 500-card generation limit", () => {
   const result = parseFlashcardPreview(JSON.stringify({ title: "Large set", cards }), MAX_FLASHCARDS);
   assert.equal(result.cards.length, MAX_FLASHCARDS);
 });
+
+test("repairs common Gemini JSON mistakes inside flashcard strings", () => {
+  const raw = '{"title":"Bài 2","cards":[{"front":"Từ ghép với 迷: "音乐迷" có nghĩa là gì?","back":"Dòng một\nDòng hai","sourcePage":null,}],}';
+  const result = parseFlashcardPreview(raw, 20);
+  assert.equal(result.cards[0].front, 'Từ ghép với 迷: "音乐迷" có nghĩa là gì?');
+  assert.equal(result.cards[0].back, "Dòng một\nDòng hai");
+});
