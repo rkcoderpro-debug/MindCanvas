@@ -517,6 +517,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .settings-layout { display: grid; gap: 22px; }
 .settings-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
 .settings-toggle input { flex: 0 0 auto; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); }
+.dialog .settings-toggle input[type="checkbox"] { flex: 0 0 18px; width: 18px; min-width: 18px; height: 18px; }
 .settings-toggle > span { display: grid; min-width: 0; gap: 4px; }
 .settings-toggle strong { font-size: 14px; }
 .settings-toggle small { color: var(--muted); line-height: 1.45; }
@@ -914,6 +915,25 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .toolbar-position-preview.left::after { left: 6px; }
 .toolbar-position-preview.right::after { right: 6px; }
 
+.mind-map-layout-report { position: absolute; z-index: 8; top: 58px; right: 12px; width: min(430px, calc(100% - 24px)); max-height: min(62dvh, 560px); overflow: auto; padding: 12px; border: 1px solid var(--accent-border); border-radius: 12px; color: var(--text); background: color-mix(in srgb, var(--surface-raised) 94%, transparent); box-shadow: 0 14px 34px var(--shadow-strong); backdrop-filter: blur(16px); }
+.mind-map-layout-report > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.mind-map-layout-report > header > div { display: grid; gap: 3px; min-width: 0; }
+.mind-map-layout-report > header strong { font-size: 13px; }
+.mind-map-layout-report > header small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.mind-map-layout-report > header .icon-button { flex: 0 0 28px; width: 28px; height: 28px; }
+.mind-map-layout-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.mind-map-layout-side { min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.mind-map-layout-side.left { border-top: 3px solid #60a5fa; }
+.mind-map-layout-side.right { border-top: 3px solid var(--accent); }
+.mind-map-layout-side-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+.mind-map-layout-side-heading strong { font-size: 12px; }
+.mind-map-layout-side-heading small { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.mind-map-branch-group + .mind-map-branch-group { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+.mind-map-branch-group > strong { display: block; overflow: hidden; color: var(--accent); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.mind-map-branch-group ul { display: grid; gap: 3px; margin: 5px 0 0; padding-left: 16px; color: var(--muted); font-size: 11px; }
+.mind-map-branch-group li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mind-map-no-branch { color: var(--muted); font-size: 11px; }
+
 @media (max-width: 620px) {
   .sidebar-toggle-button { width: 40px; height: 40px; }
   .topbar-profile-copy { display: none; }
@@ -928,6 +948,8 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
   .toolbar-left .drawing-toolbar { left: 9px; right: auto; }
   .toolbar-right .drawing-toolbar { left: auto; right: 9px; }
   .toolbar-position-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mind-map-layout-report { top: 54px; right: 8px; width: calc(100% - 16px); max-height: min(56dvh, 460px); }
+  .mind-map-layout-columns { grid-template-columns: 1fr; }
 }
 
 /* V3.9 sidebar density: let folders own the available middle space and

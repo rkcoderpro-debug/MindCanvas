@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { layoutMindMap, nodeHeight } from "./mindMapLayout";
+import { layoutMindMap, layoutMindMapTwoSided, nodeHeight } from "./mindMapLayout";
 import { applyGraph, arrangeMindMap, blankBoard } from "./board";
 const node = (id: string) => ({ id, label: id, x: 0, y: 0, width: 190, height: 76 });
 describe("Mind-map hierarchy layout", () => {
@@ -33,5 +33,16 @@ describe("Mind-map hierarchy layout", () => {
     const before = { ...blankBoard(), nodes: [node("a"), node("b")], edges: [{ id: "e", source: "a", target: "b" }], shapes: [{ id: "s", kind: "rect" as const, x: 400, y: 0, width: 200, height: 200, color: "#fff" }] };
     const next = arrangeMindMap(before); expect(next.edges).toBe(before.edges); expect(next.shapes).toBe(before.shapes); expect(next.nodes[0].x).toBeGreaterThan(600);
     expect(next.nodes.map(n => n.id)).toEqual(["a", "b"]); expect(before.nodes[0].x).toBe(0);
+  });
+  it("balances root branches on both sides and reports their node membership", () => {
+    const nodes = ["root", "alpha", "alpha-child", "beta", "beta-child", "gamma"].map(node);
+    const edges = [["root", "alpha"], ["alpha", "alpha-child"], ["root", "beta"], ["beta", "beta-child"], ["root", "gamma"]].map(([source, target], index) => ({ id: String(index), source, target }));
+    const result = layoutMindMapTwoSided(nodes, edges, { x: 500, y: 100 });
+    const byId = new Map(result.nodes.map(item => [item.id, item]));
+    expect(byId.get("root")!.x).toBe(500);
+    expect(byId.get("alpha")!.x).toBeLessThan(byId.get("root")!.x);
+    expect(byId.get("beta")!.x).toBeGreaterThan(byId.get("root")!.x);
+    expect(result.summary.left.flatMap(branch => branch.nodeIds)).toEqual(["alpha", "alpha-child", "gamma"]);
+    expect(result.summary.right.flatMap(branch => branch.nodeIds)).toEqual(["beta", "beta-child"]);
   });
 });

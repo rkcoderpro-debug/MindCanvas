@@ -1,5 +1,5 @@
 import type { BoardState, CanvasBackground, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
-import { layoutMindMap, nodeHeight } from "./mindMapLayout";
+import { layoutMindMap, layoutMindMapTwoSided, nodeHeight, type MindMapLayoutSummary } from "./mindMapLayout";
 
 export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "media" | "embeds" | "edges";
 export type Selection = { kind: ElementKind; id: string };
@@ -335,6 +335,16 @@ export function arrangeMindMap(board: BoardState): BoardState {
   const other = (["shapes", "texts", "drawings", "media", "embeds"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
   const x = other.length ? Math.max(...other.map(b => b.x + b.width)) + 100 : Math.min(...board.nodes.map(n => n.x));
   return { ...board, nodes: layoutMindMap(board.nodes, board.edges, { x, y: Math.min(...board.nodes.map(n => n.y)) }) };
+}
+
+export function arrangeMindMapTwoSided(board: BoardState): { board: BoardState; summary: MindMapLayoutSummary } {
+  if (!board.nodes.length) return { board, summary: { rootId: "", rootLabel: "", left: [], right: [] } };
+  const other = (["shapes", "texts", "drawings", "media", "embeds"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
+  const minX = Math.min(...board.nodes.map(node => node.x));
+  const maxX = Math.max(...board.nodes.map(node => node.x + node.width));
+  const x = other.length ? Math.max(...other.map(bounds => bounds.x + bounds.width)) + 100 : (minX + maxX) / 2 - 130;
+  const result = layoutMindMapTwoSided(board.nodes, board.edges, { x, y: Math.min(...board.nodes.map(node => node.y)) });
+  return { board: { ...board, nodes: result.nodes }, summary: result.summary };
 }
 
 const obj = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);

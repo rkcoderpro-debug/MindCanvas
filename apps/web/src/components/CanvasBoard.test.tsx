@@ -122,6 +122,19 @@ describe("Canvas interactions", () => {
     expect(commit).toHaveBeenCalledTimes(1); expect(current.nodes[1].x).toBeGreaterThan(current.nodes[0].x);
     expect(current.edges).toEqual(b.edges); expect(current.nodes.map(n => n.label)).toEqual(["a", "b"]);
   });
+  it("arranges branches on both sides and shows the node membership report", async () => {
+    const b = { ...blankBoard(), nodes: ["root", "left", "right"].map(id => ({ id, label: id, x: 0, y: 0, width: 190, height: 76 })), edges: [{ id: "e1", source: "root", target: "left" }, { id: "e2", source: "root", target: "right" }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Sắp xếp mind map hai phía"]') as HTMLButtonElement).click());
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(host.querySelector(".mind-map-layout-report")).not.toBeNull();
+    expect(host.querySelector(".mind-map-layout-report")?.textContent).toContain("Nhánh trái");
+    expect(host.querySelector(".mind-map-layout-report")?.textContent).toContain("Nhánh phải");
+    expect(current.nodes.find(node => node.id === "left")!.x).toBeLessThan(current.nodes.find(node => node.id === "root")!.x);
+    expect(current.nodes.find(node => node.id === "right")!.x).toBeGreaterThan(current.nodes.find(node => node.id === "root")!.x);
+    await act(async () => (host.querySelector('[aria-label="Đóng danh sách nhánh"]') as HTMLButtonElement).click());
+    expect(host.querySelector(".mind-map-layout-report")).toBeNull();
+  });
   it("adds the first editable mind-map node to an empty board", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     await act(async () => (host.querySelector('[aria-label="Node sơ đồ tư duy"]') as HTMLButtonElement).click());
