@@ -2,6 +2,24 @@ export type FlashcardRating = "again" | "hard" | "good" | "easy";
 export type FlashcardStorage = "cloud" | "local";
 export type StudyPlanSourceType = "decks" | "document" | "mixed";
 export type StudyPlanStatus = "active" | "paused";
+export type StudyPlanMode = "ai" | "manual" | "hybrid";
+export type StudyTaskKind = "flashcards" | "quiz" | "focus" | "custom";
+
+export type StudyPlanTask = {
+  id: string;
+  kind: StudyTaskKind;
+  title: string;
+  deckIds?: string[];
+  quizId?: string | null;
+  targetCount?: number;
+  minutes?: number;
+};
+
+export type StudyPlanDay = {
+  studyDate: string;
+  tasks: StudyPlanTask[];
+  restDay?: boolean;
+};
 
 export type FlashcardDeck = {
   id: string;
@@ -41,6 +59,8 @@ export type StudyPlan = {
   timezone: "Asia/Ho_Chi_Minh" | string;
   startDate: string;
   status: StudyPlanStatus;
+  mode?: StudyPlanMode;
+  schedule?: StudyPlanDay[];
   createdAt: string;
   updatedAt: string;
   source?: FlashcardStorage;
@@ -61,6 +81,12 @@ export type StudyDayProgress = {
   lastReviewAt: string | null;
   createdAt: string;
   updatedAt: string;
+  taskIds?: string[];
+  completedTaskIds?: string[];
+  taskCardIds?: Record<string, string[]>;
+  taskCount?: number;
+  completedTaskCount?: number;
+  restDay?: boolean;
   source?: FlashcardStorage;
 };
 
@@ -86,6 +112,8 @@ export type StreakStats = {
   todayTarget: number;
   todayProgress: number;
   todayRetryCount: number;
+  todayTaskCount: number;
+  todayCompletedTaskCount: number;
 };
 
 function createId() {
@@ -166,10 +194,46 @@ function qualifiedDay(days: StudyDayProgress[], date: string, activePlanId?: str
   if (activePlanId) {
     // An active AI plan is the source of truth for that day. Missing plan
     // progress is incomplete; a manual review must not silently satisfy it.
-    return onDate.find(day => day.planId === activePlanId)?.completed === true;
+    return onDate.some(day => day.planId === activePlanId && isStudyDayComplete(day));
   }
   // When no plan is active, only the explicit manual context qualifies.
-  return onDate.some(day => !day.planId && day.completed);
+  return onDate.some(day => !day.planId && isStudyDayComplete(day));
+}
+
+/** A plan day is complete only after every assigned task is complete. */
+export function isStudyDayComplete(day: Pick<StudyDayProgress, "completed" | "taskIds" | "completedTaskIds" | "forgottenCardIds" | "restDay">) {
+  if (day.restDay) return true;
+  const taskIds = day.taskIds ?? [];
+  if (taskIds.length) {
+    const completed = new Set(day.completedTaskIds ?? []);
+    return taskIds.every(id => completed.has(id)) && (day.forgottenCardIds ?? []).length === 0;
+  }
+  return day.completed === true;
+}
+
+export function studyPlanMode(plan: Pick<StudyPlan, "mode"> | null | undefined): StudyPlanMode {
+  return plan?.mode === "manual" || plan?.mode === "hybrid" ? plan.mode : "ai";
+}
+
+export function studyPlanDayFor(plan: Pick<StudyPlan, "schedule"> | null | undefined, studyDate: string): StudyPlanDay | null {
+  return plan?.schedule?.find(day => day.studyDate === studyDate) ?? null;
+}
+
+/** Recomputes flashcard task completion after a review event. */
+export function applyStudyEventToTasks(day: StudyDayProgress, event: Pick<StudyEvent, "cardId" | "rating">): StudyDayProgress {
+  if (!day.taskIds?.length || !event.cardId) return day;
+  const reviewed = new Set(day.reviewedCardIds);
+  const forgotten = new Set(day.forgottenCardIds);
+  if (event.rating === "again") forgotten.add(event.cardId);
+  else forgotten.delete(event.cardId);
+  const completed = new Set(day.completedTaskIds ?? []);
+  for (const taskId of day.taskIds) {
+    const cardIds = day.taskCardIds?.[taskId] ?? [];
+    if (cardIds.length && cardIds.every(id => reviewed.has(id)) && cardIds.every(id => !forgotten.has(id))) completed.add(taskId);
+  }
+  const completedTaskIds = [...completed];
+  const next = { ...day, completedTaskIds, completedTaskCount: completedTaskIds.length, forgottenCardIds: [...forgotten] };
+  return { ...next, completed: isStudyDayComplete(next) };
 }
 
 function dayForStats(days: StudyDayProgress[], date: string, activePlanId?: string | null) {
@@ -204,9 +268,11 @@ export function computeStreak(days: StudyDayProgress[], now = new Date(), active
     lastStudyDate: qualifyingDates[qualifyingDates.length - 1] ?? null,
     today,
     todayCompleted: qualifiedDay(validDays, today, activePlanId),
-    todayTarget: todayDay?.targetCount ?? 1,
-    todayProgress: todayDay?.reviewedCount ?? 0,
+    todayTarget: todayDay?.taskCount ?? todayDay?.targetCount ?? 1,
+    todayProgress: todayDay?.taskCount ? todayDay.completedTaskCount ?? 0 : todayDay?.reviewedCount ?? 0,
     todayRetryCount: todayDay?.retryCount ?? 0,
+    todayTaskCount: todayDay?.taskCount ?? 0,
+    todayCompletedTaskCount: todayDay?.completedTaskCount ?? 0,
   };
 }
 
@@ -218,6 +284,8 @@ export function createStudyPlan(input: {
   dailyTarget: number;
   dailyMinutes: number;
   startDate?: string;
+  mode?: StudyPlanMode;
+  schedule?: StudyPlanDay[];
   now?: Date;
 }): StudyPlan {
   const now = input.now ?? new Date();
@@ -233,6 +301,18 @@ export function createStudyPlan(input: {
     timezone: "Asia/Ho_Chi_Minh",
     startDate: input.startDate ?? vietnamStudyDate(now),
     status: "active",
+    mode: input.mode ?? "ai",
+    schedule: input.schedule?.map(day => ({
+      studyDate: day.studyDate,
+      restDay: !!day.restDay,
+      tasks: day.tasks.map(task => ({
+        ...task,
+        deckIds: task.deckIds ? [...new Set(task.deckIds)] : undefined,
+        quizId: task.quizId ?? null,
+        targetCount: task.targetCount === undefined ? undefined : Math.max(1, Math.min(500, Math.round(task.targetCount))),
+        minutes: task.minutes === undefined ? undefined : Math.max(1, Math.min(240, Math.round(task.minutes))),
+      })),
+    })) ?? [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };

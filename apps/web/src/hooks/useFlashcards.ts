@@ -3,9 +3,12 @@ import {
   createDeck as makeDeck,
   createFlashcard as makeCard,
   createStudyPlan as makeStudyPlan,
+  applyStudyEventToTasks,
   computeStreak,
   dueCards,
+  isStudyDayComplete,
   studyContextKey,
+  studyPlanDayFor,
   vietnamStudyDate,
   type StudyDayProgress,
   type StudyEvent,
@@ -26,6 +29,7 @@ import {
   upsertStudyDay,
   upsertStudyPlan,
   recordFlashcardStudy,
+  saveStudyDay,
   upsertFlashcard,
   upsertFlashcards,
   upsertFlashcardDeck,
@@ -228,6 +232,9 @@ export function useFlashcards(owner: string | null) {
     dailyTarget: number;
     dailyMinutes: number;
     assignedCardIds: string[];
+    mode?: StudyPlan["mode"];
+    schedule?: StudyPlan["schedule"];
+    taskCardIds?: Record<string, string[]>;
   }) => {
     const plan = makeStudyPlan(input);
     const previous = studyPlans.find(item => item.status === "active" && item.id !== plan.id);
@@ -242,6 +249,9 @@ export function useFlashcards(owner: string | null) {
       setStudySource(source);
       const timestamp = new Date().toISOString();
       const assigned = [...new Set(input.assignedCardIds)];
+      const scheduleDay = studyPlanDayFor(plan, plan.startDate);
+      const taskIds = scheduleDay?.tasks.map(task => task.id) ?? [];
+      const taskCardIds = input.taskCardIds ?? {};
       const day: StudyDayProgress = {
         studyDate: plan.startDate,
         contextKey: studyContextKey(plan.id),
@@ -252,11 +262,17 @@ export function useFlashcards(owner: string | null) {
         assignedCardIds: assigned,
         reviewedCardIds: [],
         forgottenCardIds: [],
-        completed: false,
+        completed: scheduleDay?.restDay === true || (!scheduleDay && assigned.length === 0),
         firstReviewAt: null,
         lastReviewAt: null,
         createdAt: timestamp,
         updatedAt: timestamp,
+        taskIds,
+        completedTaskIds: [],
+        taskCardIds,
+        taskCount: taskIds.length || undefined,
+        completedTaskCount: 0,
+        restDay: scheduleDay?.restDay ?? false,
       };
       const savedDay = await upsertStudyDay(owner, day);
       setStudyPlans(items => [plan, ...items.filter(item => item.id !== plan.id)]);
@@ -273,26 +289,50 @@ export function useFlashcards(owner: string | null) {
   const ensureStudyPlanDay = useCallback(async (plan: StudyPlan, sourceCards: Flashcard[]) => {
     const existing = studyDays.find(day => day.studyDate === today && day.contextKey === studyContextKey(plan.id));
     if (existing) return existing;
+    const scheduleDay = studyPlanDayFor(plan, today);
     const due = dueCards(sourceCards);
     const difficult = sourceCards.filter(card => card.lapses > 0).sort((a, b) => b.lapses - a.lapses);
     const remaining = sourceCards.filter(card => !due.some(item => item.id === card.id) && !difficult.some(item => item.id === card.id));
-    const assigned = [...new Map([...due, ...difficult, ...remaining].map(card => [card.id, card])).values()].slice(0, plan.dailyTarget).map(card => card.id);
+    const ranked = [...new Map([...due, ...difficult, ...remaining].map(card => [card.id, card])).values()];
+    const taskCardIds: Record<string, string[]> = {};
+    const taskIds = scheduleDay?.tasks.map(task => task.id) ?? [];
+    let assigned: string[] = [];
+    if (scheduleDay) {
+      for (const task of scheduleDay.tasks) {
+        if (task.kind !== "flashcards") continue;
+        const allowedDecks = task.deckIds?.length ? new Set(task.deckIds) : null;
+        const limit = Math.max(1, Math.min(500, task.targetCount ?? plan.dailyTarget));
+        const taskCards = ranked.filter(card => (!allowedDecks || allowedDecks.has(card.deckId)) && !assigned.includes(card.id)).slice(0, limit);
+        taskCardIds[task.id] = taskCards.map(card => card.id);
+        assigned = [...assigned, ...taskCards.map(card => card.id)];
+      }
+    } else {
+      assigned = ranked.slice(0, plan.dailyTarget).map(card => card.id);
+    }
+    const target = scheduleDay?.tasks.filter(task => task.kind === "flashcards").reduce((sum, task) => sum + (taskCardIds[task.id]?.length ?? 0), 0) || (assigned.length || plan.dailyTarget);
+    const restDay = scheduleDay?.restDay ?? false;
     const timestamp = new Date().toISOString();
     const day: StudyDayProgress = {
       studyDate: today,
       contextKey: studyContextKey(plan.id),
       planId: plan.id,
-      targetCount: Math.max(1, Math.min(plan.dailyTarget, assigned.length || plan.dailyTarget)),
+      targetCount: Math.max(1, Math.min(plan.dailyTarget, target)),
       reviewedCount: 0,
       retryCount: 0,
       assignedCardIds: assigned,
       reviewedCardIds: [],
       forgottenCardIds: [],
-      completed: false,
+      completed: restDay || (!scheduleDay && !taskIds.length && assigned.length === 0),
       firstReviewAt: null,
       lastReviewAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
+      taskIds,
+      completedTaskIds: [],
+      taskCardIds,
+      taskCount: taskIds.length || undefined,
+      completedTaskCount: 0,
+      restDay,
     };
     const saved = await upsertStudyDay(owner, day);
     setStudyDays(items => [saved.item, ...items.filter(item => studyDayKey(item) !== studyDayKey(saved.item))]);
@@ -302,10 +342,32 @@ export function useFlashcards(owner: string | null) {
 
   const recordStudy = useCallback(async (event: StudyEvent) => {
     const result = await recordFlashcardStudy(owner, event);
-    setStudyDays(items => [result.item, ...items.filter(item => studyDayKey(item) !== studyDayKey(result.item))]);
-    setStudySource(result.source);
-    return result.item;
-  }, [owner]);
+    const previous = studyDays.find(day => studyDayKey(day) === studyDayKey(result.item));
+    const taskAware = applyStudyEventToTasks(previous ? { ...result.item, taskIds: result.item.taskIds?.length ? result.item.taskIds : previous.taskIds, completedTaskIds: result.item.completedTaskIds?.length ? result.item.completedTaskIds : previous.completedTaskIds, taskCardIds: Object.keys(result.item.taskCardIds ?? {}).length ? result.item.taskCardIds : previous.taskCardIds, taskCount: result.item.taskCount ?? previous.taskCount, completedTaskCount: result.item.completedTaskCount ?? previous.completedTaskCount, restDay: result.item.restDay ?? previous.restDay } : result.item, event);
+    const needsTaskSave = !!taskAware.taskIds?.length || !!taskAware.restDay;
+    const saved = needsTaskSave ? await saveStudyDay(owner, { ...taskAware, updatedAt: new Date().toISOString() }) : { item: taskAware, source: result.source };
+    setStudyDays(items => [saved.item, ...items.filter(item => studyDayKey(item) !== studyDayKey(saved.item))]);
+    setStudySource(saved.source);
+    return saved.item;
+  }, [owner, studyDays]);
+
+  const completeStudyTask = useCallback(async (taskId: string, studyDate = today) => {
+    const plan = studyPlans.find(item => item.status === "active" && item.startDate <= studyDate);
+    if (!plan) throw new Error("No active study plan.");
+    let day = studyDays.find(item => item.studyDate === studyDate && item.contextKey === studyContextKey(plan.id));
+    if (!day) {
+      const sourceCards = await loadCardsForDecks(plan.deckIds);
+      if (studyDate !== today) throw new Error("Open this study day before marking its tasks complete.");
+      day = await ensureStudyPlanDay(plan, sourceCards);
+    }
+    if (day.taskIds?.length && !day.taskIds.includes(taskId)) throw new Error("This task is not part of the selected study day.");
+    const completedTaskIds = [...new Set([...(day.completedTaskIds ?? []), taskId])];
+    const next = { ...day, completedTaskIds, completedTaskCount: completedTaskIds.length, completed: isStudyDayComplete({ ...day, completedTaskIds }), updatedAt: new Date().toISOString() };
+    const saved = await saveStudyDay(owner, next);
+    setStudyDays(items => [saved.item, ...items.filter(item => studyDayKey(item) !== studyDayKey(saved.item))]);
+    setStudySource(saved.source);
+    return saved.item;
+  }, [ensureStudyPlanDay, loadCardsForDecks, owner, studyDays, studyPlans, today]);
 
   return {
     decks,
@@ -342,8 +404,11 @@ export function useFlashcards(owner: string | null) {
     saveStudyPlan,
     ensureStudyPlanDay,
     recordStudy,
+    completeStudyTask,
   };
 }
+
+export type FlashcardStore = ReturnType<typeof useFlashcards>;
 
 function studyDayKey(day: Pick<StudyDayProgress, "studyDate" | "contextKey">) {
   return `${day.studyDate}:${day.contextKey}`;

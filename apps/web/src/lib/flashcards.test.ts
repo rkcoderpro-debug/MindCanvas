@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { computeStreak, createFlashcard, dueCards, recommendDailyTarget, scheduleReview, vietnamStudyDate, type StudyDayProgress, type StudyEvent } from "./flashcards";
+import { applyStudyEventToTasks, computeStreak, createFlashcard, dueCards, isStudyDayComplete, recommendDailyTarget, scheduleReview, vietnamStudyDate, type StudyDayProgress, type StudyEvent } from "./flashcards";
 import { deleteFlashcard, deleteFlashcardDeck, fetchFlashcardDecks, fetchFlashcards, fetchStudyDays, recordFlashcardStudy, upsertFlashcard, upsertFlashcardDeck, upsertStudyDay } from "./projectStore";
 
 beforeEach(() => localStorage.clear());
@@ -91,6 +91,22 @@ describe("study streak rules", () => {
   it("does not count manual study when the active plan day is missing", () => {
     const days: StudyDayProgress[] = [{ studyDate: "2026-09-13", contextKey: "manual", planId: null, targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: [], reviewedCardIds: ["a"], forgottenCardIds: [], completed: true, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "" }];
     expect(computeStreak(days, new Date("2026-09-13T16:00:00.000Z"), "plan-a").todayCompleted).toBe(false);
+  });
+
+  it("requires every manually selected task before awarding a streak", () => {
+    const base: StudyDayProgress = { studyDate: "2026-09-13", contextKey: "plan:manual", planId: "manual", targetCount: 1, reviewedCount: 1, retryCount: 0, assignedCardIds: ["card-a"], reviewedCardIds: ["card-a"], forgottenCardIds: [], completed: false, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "", taskIds: ["cards", "quiz", "focus"], completedTaskIds: ["cards"], taskCardIds: { cards: ["card-a"] }, taskCount: 3, completedTaskCount: 1 };
+    expect(isStudyDayComplete(base)).toBe(false);
+    expect(computeStreak([base], new Date("2026-09-13T16:00:00.000Z"), "manual").todayCompleted).toBe(false);
+    const completed = { ...base, completedTaskIds: ["cards", "quiz", "focus"], completedTaskCount: 3, completed: true };
+    expect(isStudyDayComplete(completed)).toBe(true);
+    expect(computeStreak([completed], new Date("2026-09-13T16:00:00.000Z"), "manual").todayCompleted).toBe(true);
+  });
+
+  it("marks a flashcard task complete only after all assigned cards are remembered", () => {
+    const base: StudyDayProgress = { studyDate: "2026-09-13", contextKey: "plan:manual", planId: "manual", targetCount: 2, reviewedCount: 2, retryCount: 0, assignedCardIds: ["card-a", "card-b"], reviewedCardIds: ["card-a", "card-b"], forgottenCardIds: ["card-b"], completed: false, firstReviewAt: null, lastReviewAt: null, createdAt: "", updatedAt: "", taskIds: ["cards"], completedTaskIds: [], taskCardIds: { cards: ["card-a", "card-b"] }, taskCount: 1, completedTaskCount: 0 };
+    const result = applyStudyEventToTasks(base, { cardId: "card-b", rating: "good" });
+    expect(result.completedTaskIds).toEqual(["cards"]);
+    expect(result.completed).toBe(true);
   });
 
   it("ignores old plan progress after the plan is paused", () => {

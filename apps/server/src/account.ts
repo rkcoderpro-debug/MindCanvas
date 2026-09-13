@@ -1,8 +1,8 @@
 import { config } from "./config.js";
 
 export type PlanId = "free" | "plus" | "pro" | "max";
-export type UsageKind = "document_upload" | "ai_mind_map" | "ai_flashcards" | "ai_selection" | "ai_study_plan" | "project_save" | "manual_ai";
-export type QuotaKind = "ai_auto" | "ai_manual" | "storage" | "flashcards";
+export type UsageKind = "document_upload" | "ai_mind_map" | "ai_flashcards" | "ai_quiz" | "ai_selection" | "ai_study_plan" | "project_save" | "manual_ai";
+export type QuotaKind = "ai_auto" | "ai_manual" | "storage" | "flashcards" | "quiz";
 export type AiQuotaMode = "ai_auto" | "ai_manual";
 
 type PlanDefinition = {
@@ -227,7 +227,7 @@ export async function enforceQuota(userId: string, kind: QuotaKind, bytes = 0) {
   const account = await getAccountPlan(userId);
   if (account.status === "local-fallback") return;
   if (kind === "storage" && account.usage.storageBytes + bytes > account.storageLimitBytes) throw new PlanLimitError("storage", "Account storage limit reached for this plan.");
-  if (kind === "flashcards" && bytes > account.maxCards) throw new PlanLimitError("flashcards", `This plan allows at most ${account.maxCards} flashcards per generation.`);
+  if ((kind === "flashcards" || kind === "quiz") && bytes > account.maxCards) throw new PlanLimitError(kind, `This plan allows at most ${account.maxCards} ${kind === "quiz" ? "quiz questions" : "flashcards"} per generation.`);
   if (kind === "ai_auto" && account.usage.aiAutoDailyCount >= account.aiAutoDailyLimit) throw new PlanLimitError("ai_auto", "AI Auto daily limit reached for this plan.");
   if (kind === "ai_manual" && !account.aiManualUnlimited && account.usage.aiManualDailyCount >= account.aiManualDailyLimit) throw new PlanLimitError("ai_manual", "AI Manual daily limit reached for this plan. Mua add-on AI Manual để sử dụng không giới hạn.");
 }

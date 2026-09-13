@@ -8,7 +8,8 @@ import FolderManager from "./components/FolderManager";
 import Dialog from "./components/Dialog";
 import AiPanel from "./components/AiPanel";
 import VersionHistory from "./components/VersionHistory";
-import FlashcardsPage from "./components/FlashcardsPage";
+import LearningHubPage from "./components/LearningHubPage";
+import FloatingTimer from "./components/FloatingTimer";
 import CloudConflictDialog from "./components/CloudConflictDialog";
 import ThemePicker from "./components/ThemePicker";
 import CommandPalette from "./components/CommandPalette";
@@ -122,7 +123,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   };
   const openView = (view: SidebarView) => { void ws.home(); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
   const openFolder = (folderId: string) => { void ws.home(); setFilter(folderId); setRecent(false); };
-  const openFlashcards = () => openView("__flashcards");
+  const openFlashcards = () => openView("__learning");
   const openAdmin = () => { void ws.home(); setFilter("__admin"); setRecent(false); };
   const openPlans = () => {
     setModal("plans");
@@ -145,9 +146,10 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
           <button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
           <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button></div></div>
         <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onUndo={ws.undo} onRedo={ws.redo} onSave={() => void ws.flush()} canUseAi={!!user} isFullscreen={canvasFullscreen} onToggleFullscreen={() => setCanvasFullscreen(value => !value)} toolbarPosition={toolbarPosition}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__flashcards" ? <FlashcardsPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
+    <FloatingTimer />
     {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
       <label>{t("name")}<input autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button" disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}

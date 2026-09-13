@@ -125,7 +125,7 @@ export async function generateMindMap(text: string, documentId?: string, signal?
 export type AiFileSource = { id: string; kind: "pdf" | "docx" | "pptx" | "text" | "image"; fileName: string; mimeType: string; text: string; pageCount?: number };
 export type GeneratedMindMap = { provider: string; model?: string; graph: StructuredMindMap; source: AiFileSource };
 
-async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards", maxCards: number | undefined, signal?: AbortSignal) {
+async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal) {
   const body = new FormData();
   body.append("file", file);
   body.append("task", task);
@@ -158,6 +158,18 @@ export async function generateFlashcards(text: string, documentId?: string, maxC
 
 export function generateFlashcardsFromFile(file: File, maxCards = 20, signal?: AbortSignal) {
   return generateFromFile<GeneratedFlashcardsFromFile>(file, "flashcards", maxCards, signal);
+}
+
+export type GeneratedQuizQuestion = { id?: string; prompt: string; options: [string, string, string, string]; correctIndex: 0 | 1 | 2 | 3; explanation: string; sourcePage?: number; topic?: string };
+export type GeneratedQuiz = { provider: string; model: string; title: string; description: string; questions: GeneratedQuizQuestion[]; sourceDocumentId?: string };
+export type GeneratedQuizFromFile = GeneratedQuiz & { source: AiFileSource };
+
+export function generateQuiz(text: string, documentId?: string, maxQuestions = 10, language: "vi" | "en" = "vi", signal?: AbortSignal) {
+  return accountRequest<GeneratedQuiz>("/api/ai/quiz", { method: "POST", body: JSON.stringify({ text, documentId, maxQuestions, language }), signal });
+}
+
+export function generateQuizFromFile(file: File, maxQuestions = 10, signal?: AbortSignal) {
+  return generateFromFile<GeneratedQuizFromFile>(file, "quiz", maxQuestions, signal);
 }
 
 export type StudyPlanCardSignal = { due: boolean; repetitions: number; lapses: number; intervalDays: number };

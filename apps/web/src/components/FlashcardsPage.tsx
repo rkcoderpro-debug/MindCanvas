@@ -6,7 +6,7 @@ import type { AccountPlan } from "../lib/account";
 import { fetchBoard, readCache } from "../lib/projectStore";
 import { dueCards, recommendDailyTarget, studyContextKey, vietnamStudyDate, type Flashcard, type FlashcardDeck, type FlashcardRating, type StudyEvent } from "../lib/flashcards";
 import { aiErrorMessage } from "../lib/aiErrors";
-import { useFlashcards } from "../hooks/useFlashcards";
+import { useFlashcards, type FlashcardStore } from "../hooks/useFlashcards";
 import { useLanguage } from "../lib/i18n";
 import { consumeAiManualUsage, generateFlashcards, generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcard, type GeneratedFlashcardsFromFile, type StudyPlanRecommendation } from "../lib/api";
 import { getDocumentSource, saveDocumentToStorage } from "../lib/supabase";
@@ -61,9 +61,10 @@ function StorageBadge({ mode }: { mode: "cloud" | "local" }) {
   </span>;
 }
 
-export default function FlashcardsPage({ owner, projects, accountPlan }: { owner: string | null; projects: Project[]; accountPlan?: AccountPlan }) {
+export default function FlashcardsPage({ owner, projects, accountPlan, store }: { owner: string | null; projects: Project[]; accountPlan?: AccountPlan; store?: FlashcardStore }) {
   const { t, language } = useLanguage();
-  const flashcards = useFlashcards(owner);
+  const localFlashcards = useFlashcards(owner);
+  const flashcards = store ?? localFlashcards;
   const [panel, setPanel] = useState<"cards" | "review">("cards");
   const [deckDialog, setDeckDialog] = useState<DeckDialog | null>(null);
   const [deckName, setDeckName] = useState("");
@@ -388,7 +389,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan }: { owner
           <div className={`study-plan-banner ${flashcards.activeStudyPlan ? "has-plan" : "manual-mode"}`}><div className="study-plan-banner-main"><span className="streak-flame"><Flame size={19}/></span><div><span className="study-plan-kicker">{flashcards.activeStudyPlan ? t("aiPlanToday") : t("manualPractice")}</span><strong>{flashcards.streak.current} {t("streakDays")}</strong><small>{flashcards.activeStudyPlan ? `${flashcards.streak.todayProgress} / ${flashcards.streak.todayTarget} ${t("targetCards").toLocaleLowerCase()}` : t("manualStreakHint")}</small></div></div><div className="study-plan-banner-progress"><div><span>{flashcards.activeStudyPlan ? flashcards.activeStudyPlan.name : t("streak")}</span><b>{flashcards.streak.todayCompleted ? t("streakEarned") : flashcards.activeStudyPlan ? t("streakLocked") : t("studyOneCard")}</b></div><progress value={Math.min(flashcards.streak.todayProgress, Math.max(1, flashcards.streak.todayTarget))} max={Math.max(1, flashcards.streak.todayTarget)}/></div><div className="streak-best"><span>{t("bestStreak")}</span><strong>{flashcards.streak.best}</strong></div></div>
           <div className="study-mode-toolbar"><span><Target size={16}/>{t("studyMode")}</span><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("all")}><ListOrdered size={15}/>{t("studyOrder")}</button><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("random")}><Shuffle size={15}/>{t("random")}</button><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("new")}><Zap size={15}/>{t("studyNew")}</button></div>
           <div className="flashcard-tabs" role="tablist"><button role="tab" aria-selected={panel === "cards"} className={panel === "cards" ? "active" : ""} onClick={() => setPanel("cards")}>{t("allCards")}</button><button role="tab" aria-selected={panel === "review"} className={panel === "review" ? "active" : ""} onClick={() => startReview("due")}><RotateCcw size={15}/>{t("review")}{due.length > 0 && <span>{due.length}</span>}</button></div>
-          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} forgottenCount={flashcards.todayStudyDay?.forgottenCardIds.length ?? 0} dailyCurrent={flashcards.streak.todayProgress} dailyGoal={flashcards.streak.todayTarget} planMode={!!reviewContext?.planId} ratingBusy={ratingBusy} showAnswer={showAnswer} onShowAnswer={() => setShowAnswer(true)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
+          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} forgottenCount={flashcards.todayStudyDay?.forgottenCardIds.length ?? 0} dailyCurrent={flashcards.streak.todayProgress} dailyGoal={flashcards.streak.todayTarget} planMode={!!reviewContext?.planId} ratingBusy={ratingBusy} showAnswer={showAnswer} onToggleAnswer={() => setShowAnswer(value => !value)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
         </>}
       </section>
     </div>
@@ -448,36 +449,44 @@ function CardRow({ card, language, onEdit, onDelete, onOpenSource, busy, t }: { 
   </article>;
 }
 
-function ReviewPanel({ target, finished, index, total, forgottenCount, dailyCurrent, dailyGoal, planMode, ratingBusy, showAnswer, onShowAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; forgottenCount: number; dailyCurrent: number; dailyGoal: number; planMode: boolean; ratingBusy: boolean; showAnswer: boolean; onShowAnswer: () => void; onRate: (rating: Extract<FlashcardRating, "again" | "good">) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
-  const pointerStart = useRef<number | null>(null);
+function ReviewPanel({ target, finished, index, total, forgottenCount, dailyCurrent, dailyGoal, planMode, ratingBusy, showAnswer, onToggleAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; forgottenCount: number; dailyCurrent: number; dailyGoal: number; planMode: boolean; ratingBusy: boolean; showAnswer: boolean; onToggleAnswer: () => void; onRate: (rating: Extract<FlashcardRating, "again" | "good">) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const skipClick = useRef(false);
   const [dragX, setDragX] = useState(0);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!target || finished || (event.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName))) return;
-      if (event.key === " " || event.key === "Enter") { event.preventDefault(); if (!showAnswer) onShowAnswer(); }
+      if (event.key === " " || event.key === "Enter") { event.preventDefault(); onToggleAnswer(); }
       if (showAnswer && event.key === "ArrowLeft") { event.preventDefault(); onRate("again"); }
       if (showAnswer && event.key === "ArrowRight") { event.preventDefault(); onRate("good"); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [finished, onRate, onShowAnswer, showAnswer, target]);
+  }, [finished, onRate, onToggleAnswer, showAnswer, target]);
   const pointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!showAnswer || ratingBusy) return;
-    pointerStart.current = event.clientX;
+    if (ratingBusy) return;
+    skipClick.current = false;
+    pointerStart.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const pointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     if (pointerStart.current === null) return;
-    setDragX(event.clientX - pointerStart.current);
+    if (showAnswer) setDragX(event.clientX - pointerStart.current.x);
   };
   const pointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     if (pointerStart.current === null) return;
-    const distance = event.clientX - pointerStart.current;
+    const distance = event.clientX - pointerStart.current.x;
+    const verticalDistance = event.clientY - pointerStart.current.y;
+    const moved = Math.hypot(distance, verticalDistance) >= 12;
     pointerStart.current = null;
     setDragX(0);
-    if (Math.abs(distance) >= 72 && showAnswer) onRate(distance > 0 ? "good" : "again");
+    if (moved) skipClick.current = true;
+    if (Math.abs(distance) >= 72 && Math.abs(distance) > Math.abs(verticalDistance) && showAnswer) {
+      skipClick.current = true;
+      onRate(distance > 0 ? "good" : "again");
+    }
   };
   if (finished) return <div className="review-finished"><CheckCircle2 size={46}/><h3>{planMode ? t("reviewGoalComplete") : t("reviewComplete")}</h3><p>{t("reviewCompleteHint", { count: total })}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
   if (!target) return <div className="review-finished"><BookOpen size={46}/><h3>{t("nothingDue")}</h3><p>{t("nothingDueHint")}</p><button className="secondary-button" onClick={onBack}>{t("backToCards")}</button></div>;
-  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span>{t("reviewKeyboardHint")}</span></div><progress className="review-session-progress" value={index} max={Math.max(1, total)} aria-label={t("sessionProgress")}/><article className={`review-card-scene ${showAnswer ? "is-flipped" : ""}`} tabIndex={0} aria-label={showAnswer ? t("answerSide") : t("questionSide")} onClick={() => { if (!showAnswer) onShowAnswer(); }} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { pointerStart.current = null; setDragX(0); }}><div className="review-card-inner" style={{ transform: `translateX(${dragX}px) rotate(${dragX / 18}deg)${showAnswer ? " rotateY(180deg)" : ""}` }}><div className="review-card-face front"><span className="flashcard-label">{t("questionSide")}</span><p>{target.front}</p><small>{t("flipCardHint")}</small></div><div className="review-card-face back"><span className="flashcard-label">{t("answerSide")}</span><p>{target.back}</p><small>{t("swipeHint")}</small></div></div>{showAnswer && dragX !== 0 && <span className={`review-swipe-feedback ${dragX > 0 ? "remembered" : "forgotten"}`}>{dragX > 0 ? t("remembered") : t("forgotten")}</span>}</article>{target.sourcePage && <span className="review-source">{t("page")} {target.sourcePage}</span>}{!showAnswer ? <button className="primary-button show-answer" onClick={event => { event.stopPropagation(); onShowAnswer(); }}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-swipe-actions"><button className="rating-again" disabled={ratingBusy} onClick={() => onRate("again")}>← {t("swipeForgotten")}</button><button className="rating-good" disabled={ratingBusy} onClick={() => onRate("good")}>{t("swipeRemembered")} →</button></div>{forgottenCount > 0 && <small className="review-forgotten-count">{t("forgottenCount", { count: forgottenCount })}</small>}</div>}<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small></div>;
+  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span>{t("reviewKeyboardHint")}</span></div><progress className="review-session-progress" value={index} max={Math.max(1, total)} aria-label={t("sessionProgress")}/><article className={`review-card-scene ${showAnswer ? "is-flipped" : ""}`} tabIndex={0} aria-label={showAnswer ? t("answerSide") : t("questionSide")} onClick={() => { if (skipClick.current) { skipClick.current = false; return; } onToggleAnswer(); }} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { pointerStart.current = null; setDragX(0); }}><div className="review-card-inner" style={{ transform: `translateX(${dragX}px) rotate(${dragX / 18}deg)${showAnswer ? " rotateY(180deg)" : ""}` }}><div className="review-card-face front"><span className="flashcard-label">{t("questionSide")}</span><p>{target.front}</p><small>{t("flipCardHint")}</small></div><div className="review-card-face back"><span className="flashcard-label">{t("answerSide")}</span><p>{target.back}</p><small>{t("flipBackHint")}</small></div></div>{showAnswer && dragX !== 0 && <span className={`review-swipe-feedback ${dragX > 0 ? "remembered" : "forgotten"}`}>{dragX > 0 ? t("remembered") : t("forgotten")}</span>}</article>{target.sourcePage && <span className="review-source">{t("page")} {target.sourcePage}</span>}{!showAnswer ? <button className="primary-button show-answer" onClick={event => { event.stopPropagation(); onToggleAnswer(); }}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-swipe-actions"><button className="rating-again" disabled={ratingBusy} onClick={() => onRate("again")}>← {t("swipeForgotten")}</button><button className="rating-good" disabled={ratingBusy} onClick={() => onRate("good")}>{t("swipeRemembered")} →</button></div>{forgottenCount > 0 && <small className="review-forgotten-count">{t("forgottenCount", { count: forgottenCount })}</small>}</div>}<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small></div>;
 }

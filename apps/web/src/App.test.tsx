@@ -94,19 +94,23 @@ describe("Workspace UI", () => {
     expect(document.documentElement.dataset.theme).toBe("cobalt");
     expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
   });
-  it("opens the flashcards workspace without injecting demo decks or cards", async () => {
+  it("opens the Learning Hub without injecting demo decks or cards", async () => {
     await act(async () => root.render(<App/>));
-    const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Flashcard") as HTMLButtonElement;
+    const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Trung tâm học tập") as HTMLButtonElement;
     await act(async () => button.click());
+    expect(host.querySelector(".learning-hub-page")).not.toBeNull();
+    expect(host.textContent).toContain("Tổng quan");
+    const flashcardTab = [...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(item => item.textContent === "Flashcard")!;
+    await act(async () => flashcardTab.click());
     expect(host.textContent).toContain("Bộ thẻ");
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V4.2 quick search and finds text stored inside a canvas", async () => {
+  it("opens V4.3 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.2");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.3");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
@@ -173,5 +177,16 @@ describe("Workspace UI", () => {
     await act(async () => settings.click());
     expect(host.querySelector('input[type="checkbox"][aria-label="Tự focus canvas khi rê chuột"]')).toBeNull();
     expect(localStorage.getItem("mindcanvas:canvas-hover-focus")).toBeNull();
+  });
+  it("keeps the floating timer available across the workspace and supports minimize/hide", async () => {
+    await act(async () => root.render(<App/>));
+    expect(host.querySelector(".floating-timer")).not.toBeNull();
+    await act(async () => (host.querySelector('[aria-label="Thu nhỏ"]') as HTMLButtonElement).click());
+    expect(host.querySelector(".floating-timer")?.classList.contains("minimized")).toBe(true);
+    await act(async () => (host.querySelector('[aria-label="Phóng to"]') as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[aria-label="Ẩn"]') as HTMLButtonElement).click());
+    expect(host.querySelector(".floating-timer")).toBeNull();
+    await act(async () => (host.querySelector('[aria-label="Hiện bộ đếm"]') as HTMLButtonElement).click());
+    expect(host.querySelector(".floating-timer")).not.toBeNull();
   });
 });

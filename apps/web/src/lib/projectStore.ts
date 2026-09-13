@@ -1,7 +1,7 @@
 import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { parseBoard } from "./board";
-import type { Flashcard, FlashcardDeck, FlashcardStorage, StudyDayProgress, StudyEvent, StudyPlan, StudyPlanSourceType, StudyPlanStatus } from "./flashcards";
+import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
 
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number };
@@ -465,6 +465,23 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter(item => typeof item === "string") : [];
 }
 
+function studyPlanSchedule(value: unknown): StudyPlanDay[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(item => item && typeof item === "object" && typeof (item as any).studyDate === "string").map(item => {
+    const raw = item as any;
+    const tasks = Array.isArray(raw.tasks) ? raw.tasks.filter((task: any) => task && typeof task.id === "string" && typeof task.title === "string").map((task: any) => ({
+      id: task.id,
+      kind: (task.kind === "quiz" || task.kind === "focus" || task.kind === "custom") ? task.kind as StudyTaskKind : "flashcards" as const,
+      title: task.title,
+      deckIds: stringArray(task.deckIds),
+      quizId: typeof task.quizId === "string" ? task.quizId : null,
+      targetCount: Number.isInteger(task.targetCount) ? Math.max(1, Math.min(500, task.targetCount)) : undefined,
+      minutes: Number.isInteger(task.minutes) ? Math.max(1, Math.min(240, task.minutes)) : undefined,
+    })) : [];
+    return { studyDate: raw.studyDate, tasks, restDay: raw.restDay === true };
+  });
+}
+
 function planFromRow(row: any, source: FlashcardStorage): StudyPlan | null {
   if (!row || typeof row.id !== "string" || typeof row.name !== "string") return null;
   const sourceType: StudyPlanSourceType = row.source_type === "document" || row.source_type === "mixed" ? row.source_type : "decks";
@@ -483,6 +500,8 @@ function planFromRow(row: any, source: FlashcardStorage): StudyPlan | null {
     timezone: typeof row.timezone === "string" && row.timezone ? row.timezone : "Asia/Ho_Chi_Minh",
     startDate: typeof row.start_date === "string" ? row.start_date : timestamp.slice(0, 10),
     status,
+    mode: row.plan_mode === "manual" || row.plan_mode === "hybrid" ? row.plan_mode as StudyPlanMode : "ai",
+    schedule: studyPlanSchedule(row.schedule),
     createdAt: typeof row.created_at === "string" ? row.created_at : timestamp,
     updatedAt: timestamp,
     source,
@@ -499,6 +518,12 @@ function studyDayFromRow(row: any, source: FlashcardStorage): StudyDayProgress |
   const reviewed = Number.isInteger(reviewedCount) ? Math.max(0, reviewedCount) : 0;
   const planId = typeof row.plan_id === "string" ? row.plan_id : null;
   const forgottenCardIds = stringArray(row.forgotten_card_ids);
+  const taskIds = stringArray(row.task_ids);
+  const completedTaskIds = stringArray(row.completed_task_ids);
+  const rawTaskCardIds = row.task_card_ids && typeof row.task_card_ids === "object" && !Array.isArray(row.task_card_ids) ? row.task_card_ids as Record<string, unknown> : {};
+  const taskCardIds = Object.fromEntries(Object.entries(rawTaskCardIds).map(([key, value]) => [key, stringArray(value)]));
+  const taskCount = Number(row.task_count);
+  const completedTaskCount = Number(row.completed_task_count);
   return {
     studyDate: row.study_date,
     contextKey: row.context_key,
@@ -509,11 +534,19 @@ function studyDayFromRow(row: any, source: FlashcardStorage): StudyDayProgress |
     assignedCardIds: stringArray(row.assigned_card_ids),
     reviewedCardIds: stringArray(row.reviewed_card_ids),
     forgottenCardIds,
-    completed: row.completed === true || (reviewed >= target && (!planId || forgottenCardIds.length === 0)),
+    completed: taskIds.length || row.rest_day === true
+      ? row.rest_day === true || (taskIds.every(id => completedTaskIds.includes(id)) && forgottenCardIds.length === 0)
+      : row.completed === true || (reviewed >= target && (!planId || forgottenCardIds.length === 0)),
     firstReviewAt: typeof row.first_review_at === "string" ? row.first_review_at : null,
     lastReviewAt: typeof row.last_review_at === "string" ? row.last_review_at : null,
     createdAt: typeof row.created_at === "string" ? row.created_at : timestamp,
     updatedAt: timestamp,
+    taskIds,
+    completedTaskIds,
+    taskCardIds,
+    taskCount: Number.isInteger(taskCount) && taskCount > 0 ? taskCount : taskIds.length || undefined,
+    completedTaskCount: Number.isInteger(completedTaskCount) && completedTaskCount >= 0 ? completedTaskCount : completedTaskIds.length,
+    restDay: row.rest_day === true,
     source,
   };
 }
@@ -536,7 +569,13 @@ function localStudyDays(owner: string | null) {
     assignedCardIds: stringArray(day.assignedCardIds),
     reviewedCardIds: stringArray(day.reviewedCardIds),
     forgottenCardIds: stringArray(day.forgottenCardIds),
-    completed: !!day.completed,
+    completed: isStudyDayComplete(day),
+    taskIds: stringArray(day.taskIds),
+    completedTaskIds: stringArray(day.completedTaskIds),
+    taskCardIds: day.taskCardIds && typeof day.taskCardIds === "object" && !Array.isArray(day.taskCardIds) ? Object.fromEntries(Object.entries(day.taskCardIds).map(([key, value]) => [key, stringArray(value)])) : {},
+    taskCount: Number.isInteger(day.taskCount) && (day.taskCount ?? 0) > 0 ? day.taskCount : stringArray(day.taskIds).length || undefined,
+    completedTaskCount: Number.isInteger(day.completedTaskCount) && (day.completedTaskCount ?? -1) >= 0 ? day.completedTaskCount : stringArray(day.completedTaskIds).length,
+    restDay: day.restDay === true,
   }));
 }
 
@@ -572,7 +611,7 @@ export async function fetchStudyPlans(owner: string | null): Promise<FlashcardRe
   if (!owner) return { items: localStudyPlans(null), source: "local" };
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("flashcard_study_plans").select("id,name,source_type,deck_ids,source_document_id,daily_target,daily_minutes,timezone,start_date,status,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("flashcard_study_plans").select("id,name,source_type,deck_ids,source_document_id,daily_target,daily_minutes,timezone,start_date,status,plan_mode,schedule,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => planFromRow(row, "cloud")).filter((item): item is StudyPlan => !!item);
     writeLocalList(flashcardStudyPlanCacheKey(owner), items);
@@ -586,7 +625,7 @@ export async function upsertStudyPlan(owner: string | null, plan: StudyPlan): Pr
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("flashcard_study_plans").upsert({ id: plan.id, user_id: owner, name: plan.name, source_type: plan.sourceType, deck_ids: plan.deckIds, source_document_id: plan.sourceDocumentId, daily_target: plan.dailyTarget, daily_minutes: plan.dailyMinutes, timezone: plan.timezone, start_date: plan.startDate, status: plan.status, created_at: plan.createdAt, updated_at: plan.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("flashcard_study_plans").upsert({ id: plan.id, user_id: owner, name: plan.name, source_type: plan.sourceType, deck_ids: plan.deckIds, source_document_id: plan.sourceDocumentId, daily_target: plan.dailyTarget, daily_minutes: plan.dailyMinutes, timezone: plan.timezone, start_date: plan.startDate, status: plan.status, plan_mode: plan.mode ?? "ai", schedule: plan.schedule ?? [], created_at: plan.createdAt, updated_at: plan.updatedAt }).abortSignal(AbortSignal.timeout(20000));
       if (error) throw error;
       cacheStudyPlan(owner, { ...plan, source: "cloud" });
       return "cloud";
@@ -604,7 +643,7 @@ export async function fetchStudyDays(owner: string | null): Promise<FlashcardRep
   await flushStudyEvents(owner);
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).order("study_date", { ascending: false }).limit(730).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).order("study_date", { ascending: false }).limit(730).abortSignal(AbortSignal.timeout(20000));
     if (error) throw error;
     const remote = (data ?? []).map(row => studyDayFromRow(row, "cloud")).filter((item): item is StudyDayProgress => !!item);
     const merged = new Map(remote.map(day => [studyDayKey(day), day]));
@@ -624,10 +663,11 @@ export async function upsertStudyDay(owner: string | null, day: StudyDayProgress
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const row = { user_id: owner, study_date: day.studyDate, context_key: day.contextKey, plan_id: day.planId, target_count: day.targetCount, reviewed_count: day.reviewedCount, retry_count: day.retryCount, assigned_card_ids: day.assignedCardIds, reviewed_card_ids: day.reviewedCardIds, forgotten_card_ids: day.forgottenCardIds, completed: day.completed, first_review_at: day.firstReviewAt, last_review_at: day.lastReviewAt, created_at: day.createdAt, updated_at: day.updatedAt };
-      let result: any = await client.from("flashcard_study_days").insert(row).select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,first_review_at,last_review_at,created_at,updated_at").abortSignal(AbortSignal.timeout(20000)).single();
+      const row = { user_id: owner, study_date: day.studyDate, context_key: day.contextKey, plan_id: day.planId, target_count: day.targetCount, reviewed_count: day.reviewedCount, retry_count: day.retryCount, assigned_card_ids: day.assignedCardIds, reviewed_card_ids: day.reviewedCardIds, forgotten_card_ids: day.forgottenCardIds, completed: day.completed, task_ids: day.taskIds ?? [], completed_task_ids: day.completedTaskIds ?? [], task_card_ids: day.taskCardIds ?? {}, task_count: day.taskCount ?? day.taskIds?.length ?? 0, completed_task_count: day.completedTaskCount ?? day.completedTaskIds?.length ?? 0, rest_day: day.restDay ?? false, first_review_at: day.firstReviewAt, last_review_at: day.lastReviewAt, created_at: day.createdAt, updated_at: day.updatedAt };
+      const select = "study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at";
+      let result: any = await client.from("flashcard_study_days").insert(row).select(select).abortSignal(AbortSignal.timeout(20000)).single();
       if (result.error?.code === "23505") {
-        result = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).eq("study_date", day.studyDate).eq("context_key", day.contextKey).abortSignal(AbortSignal.timeout(20000)).single();
+        result = await client.from("flashcard_study_days").select(select).eq("user_id", owner).eq("study_date", day.studyDate).eq("context_key", day.contextKey).abortSignal(AbortSignal.timeout(20000)).single();
       }
       const { data, error } = result;
       if (error) throw error;
@@ -644,9 +684,31 @@ export async function upsertStudyDay(owner: string | null, day: StudyDayProgress
   return { item: saved, source: "local" };
 }
 
+/** Explicit day edits (manual task completion) may overwrite an existing row. */
+export async function saveStudyDay(owner: string | null, day: StudyDayProgress): Promise<StudyRepositoryResult<StudyDayProgress>> {
+  if (owner) {
+    try {
+      const client = await clientFor(owner);
+      const row = { user_id: owner, study_date: day.studyDate, context_key: day.contextKey, plan_id: day.planId, target_count: day.targetCount, reviewed_count: day.reviewedCount, retry_count: day.retryCount, assigned_card_ids: day.assignedCardIds, reviewed_card_ids: day.reviewedCardIds, forgotten_card_ids: day.forgottenCardIds, completed: day.completed, task_ids: day.taskIds ?? [], completed_task_ids: day.completedTaskIds ?? [], task_card_ids: day.taskCardIds ?? {}, task_count: day.taskCount ?? day.taskIds?.length ?? 0, completed_task_count: day.completedTaskCount ?? day.completedTaskIds?.length ?? 0, rest_day: day.restDay ?? false, first_review_at: day.firstReviewAt, last_review_at: day.lastReviewAt, created_at: day.createdAt, updated_at: day.updatedAt };
+      const select = "study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at";
+      const { data, error } = await client.from("flashcard_study_days").upsert(row, { onConflict: "user_id,study_date,context_key" }).select(select).abortSignal(AbortSignal.timeout(20000)).single();
+      if (error) throw error;
+      const saved = studyDayFromRow(data, "cloud");
+      if (!saved) throw new Error("Invalid study day returned by Supabase.");
+      cacheStudyDay(owner, saved);
+      return { item: saved, source: "cloud" };
+    } catch {
+      // Fall through to the local copy until the V4.3 migration is live.
+    }
+  }
+  const saved = { ...day, source: "local" as const };
+  cacheStudyDay(owner, saved);
+  return { item: saved, source: "local" };
+}
+
 function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForCloud: boolean) {
   const existingEvent = localStudyEvents(owner).find(item => item.eventId === event.eventId);
-  const current = localStudyDays(owner).find(day => studyDayKey(day) === studyDayKey(event)) ?? {
+  const current: StudyDayProgress = localStudyDays(owner).find(day => studyDayKey(day) === studyDayKey(event)) ?? {
     studyDate: event.studyDate,
     contextKey: event.contextKey,
     planId: event.planId,
@@ -673,7 +735,7 @@ function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForC
       : current.forgottenCardIds.filter(id => id !== event.cardId)
     : current.forgottenCardIds;
   const targetCount = Math.max(1, current.targetCount, event.targetCount);
-  const saved: StudyDayProgress = {
+  const base: StudyDayProgress = {
     ...current,
     planId: current.planId ?? event.planId,
     targetCount,
@@ -685,8 +747,8 @@ function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForC
     firstReviewAt: current.firstReviewAt ?? timestamp,
     lastReviewAt: timestamp,
     updatedAt: timestamp,
-    source: "local",
   };
+  const saved: StudyDayProgress = { ...applyStudyEventToTasks(base, event), source: "local" };
   cacheStudyDay(owner, saved);
   cacheStudyEvent(owner, event);
   if (!queueForCloud) removeStudyEvent(owner, event.eventId);
