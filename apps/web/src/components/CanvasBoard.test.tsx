@@ -205,17 +205,41 @@ describe("Canvas interactions", () => {
     vi.useFakeTimers();
     try {
       await act(async () => root.render(<Harness initial={blankBoard()}/>));
-      const svg = host.querySelector("svg.canvas-svg")!;
+      const frame = host.querySelector(".editor-frame")!;
       await act(async () => {
-        svg.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 4, deltaY: 6, deltaMode: 0 }));
-        svg.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 5, deltaY: 7, deltaMode: 0 }));
-        svg.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 3, deltaY: 2, deltaMode: 0 }));
+        frame.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 4, deltaY: 0, deltaMode: 0 }));
+        frame.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 0, deltaY: 6, deltaMode: 0 }));
+        frame.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 5, deltaY: 7, deltaMode: 0 }));
+        frame.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 3, deltaY: 2, deltaMode: 0 }));
       });
       expect(commit).not.toHaveBeenCalled();
       await act(async () => { vi.advanceTimersByTime(140); });
       expect(commit).toHaveBeenCalledTimes(1);
       expect(current.viewport).toMatchObject({ x: -12, y: -15 });
     } finally { vi.useRealTimers(); }
+  });
+  it("shows the connector source and pulses both endpoints after a connection", async () => {
+    const b = { ...blankBoard(), nodes: [
+      { id: "source", label: "Source", x: 20, y: 40, width: 190, height: 76 },
+      { id: "target", label: "Target", x: 320, y: 40, width: 190, height: 76 },
+    ] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Đường nối"]') as HTMLButtonElement).click());
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("Bấm node hoặc hình đầu tiên");
+    await act(async () => pointer(host.querySelector('[data-element="source"]')!, "pointerdown", 30, 50));
+    expect(host.querySelector('[data-element="source"]')?.classList.contains("connector-source")).toBe(true);
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("Bây giờ bấm node hoặc hình thứ hai");
+    await act(async () => pointer(host.querySelector('[data-element="target"]')!, "pointerdown", 330, 50));
+    expect(current.edges).toHaveLength(1);
+    expect(host.querySelector(".connector-edge-pulse")).not.toBeNull();
+    expect(host.querySelector('[data-element="source"]')?.classList.contains("connector-pulse")).toBe(true);
+    expect(host.querySelector('[data-element="target"]')?.classList.contains("connector-pulse")).toBe(true);
+  });
+  it("places the minimap above the navigator action bar", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const navigator = host.querySelector(".canvas-navigator")!;
+    expect(navigator.firstElementChild?.classList.contains("minimap")).toBe(true);
+    expect(navigator.lastElementChild?.classList.contains("navigator-actions")).toBe(true);
   });
   it("pinch-zooms around the two-finger center in one viewport commit", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));

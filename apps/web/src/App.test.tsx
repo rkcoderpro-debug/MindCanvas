@@ -106,7 +106,7 @@ describe("Workspace UI", () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.0");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.1");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
@@ -151,6 +151,10 @@ describe("Workspace UI", () => {
     await act(async () => (host.querySelector(".topbar-plan-button") as HTMLButtonElement).click());
     expect(host.querySelectorAll(".pricing-card")).toHaveLength(5);
     expect(host.querySelector(".pricing-card.current")?.textContent).toContain("Free");
+    expect(host.querySelector(".pricing-card.current")?.textContent).toContain("AI Auto còn lại hôm nay");
+    expect(host.querySelector(".pricing-card.current")?.textContent).toContain("AI Manual còn lại hôm nay");
+    expect(host.querySelector(".pricing-card.current")?.textContent).toContain("1/1");
+    expect(host.querySelector(".pricing-card.current")?.textContent).toContain("3/3");
     expect(host.textContent).toContain("0385287824");
     expect(host.querySelector('a[href="https://zalo.me/0385287824"]')).not.toBeNull();
   });

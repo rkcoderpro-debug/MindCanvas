@@ -35,15 +35,15 @@ export default function PlanUpgradeDialog({ currentPlan, onClose }: { currentPla
     } catch { setCopied(false); }
   };
   const currentPlanId = currentPlan.effectivePlanId;
-  const manualUsage = currentPlan.aiManualUnlimited
-    ? t("aiManualUnlimited")
-    : `${currentPlan.usage.aiManualDailyCount}/${currentPlan.aiManualDailyLimit}`;
+  const aiAutoRemaining = Math.max(0, currentPlan.aiAutoDailyLimit - currentPlan.usage.aiAutoDailyCount);
+  const aiManualRemaining = Math.max(0, currentPlan.aiManualDailyLimit - currentPlan.usage.aiManualDailyCount);
+  const manualRemaining = currentPlan.aiManualUnlimited ? t("unlimitedShort") : `${aiManualRemaining}/${currentPlan.aiManualDailyLimit}`;
 
   return <Dialog title={t("planUpgradeTitle")} onClose={onClose}>
     <div className="plan-dialog-intro">
       <strong>{t("currentPlan")}: {PLAN_CATALOG.find(plan => plan.id === currentPlanId)?.name ?? currentPlan.name}</strong>
       <p>{t("planUpgradeHint")}</p>
-      <small>{t("planUsage", { storage: formatStorage(currentPlan.usage.storageBytes), ai: currentPlan.usage.aiAutoDailyCount, aiLimit: currentPlan.aiAutoDailyLimit, manual: manualUsage })}</small>
+      <small>{t("planUsageRemaining", { storage: formatStorage(currentPlan.usage.storageBytes), ai: aiAutoRemaining, aiLimit: currentPlan.aiAutoDailyLimit, manual: manualRemaining })}</small>
       <small className="field-hint">{t("dailyResetHint")}</small>
     </div>
     <div className="pricing-grid">
@@ -58,6 +58,7 @@ export default function PlanUpgradeDialog({ currentPlan, onClose }: { currentPla
             <li><Check size={15}/><span>{plan.maxCards} {t("maxCardsLimit").toLocaleLowerCase()}</span></li>
             <li><Check size={15}/><span>{plan.aiManualIncluded ? t("aiManualIncluded") : t("aiManualFreeLimit", { count: plan.aiManualDailyLimit })}</span></li>
           </ul>
+          {current && <div className="pricing-usage" aria-label={t("planUsageRemaining")}><div><span>{t("aiAutoRemaining")}</span><strong>{aiAutoRemaining}/{currentPlan.aiAutoDailyLimit}</strong></div><div><span>{t("aiManualRemaining")}</span><strong>{manualRemaining}</strong></div></div>}
           {current ? <button type="button" className="secondary-button" disabled><Check size={16}/>{t("planCurrent")}</button> : <a className="primary-button" href={ZALO_URL} target="_blank" rel="noreferrer"><MessageCircle size={16}/>{t("contactZalo")}</a>}
         </article>;
       })}

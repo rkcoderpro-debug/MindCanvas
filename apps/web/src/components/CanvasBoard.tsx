@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Maximize2, Network, X } from "lucide-react";
 import type { BoardState, CanvasBackground as CanvasBackgroundType, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applySelectionAi, arrangeMindMap, arrangeMindMapTwoSided, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, type Selection } from "../lib/board";
@@ -130,7 +130,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
-  const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false);
+  const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
   const boardRef = useRef(board), onChangeRef = useRef(onChange);
   const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
@@ -141,7 +141,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const [guides, setGuides] = useState<SnapGuide[]>([]);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
-  const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false);
+  const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false), [connectorSource, setConnectorSource] = useState<Selection | null>(null), [connectorPulse, setConnectorPulse] = useState<string[]>([]);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
   const [toolbarExpanded, setToolbarExpanded] = useState(true);
   const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
@@ -151,6 +151,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChange]);
+  useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
   const commitWheelViewport = () => {
     if (wheelIdle.current !== null) { window.clearTimeout(wheelIdle.current); wheelIdle.current = null; }
@@ -180,6 +181,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const selectedStudyText = selectionToStudyText(b, selections);
   const hidden = hiddenNodes(b);
   const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.media.filter(e => e.hidden).map(e => e.id), ...b.embeds.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
+  const connectorPulseIds = new Set(connectorPulse);
   const isLocked = (s: Selection) => s.kind !== "edges" && !!b[s.kind].find(e => e.id === s.id && "locked" in e && e.locked);
   const requestAutoPanFrame = (callback: () => void) => typeof window.requestAnimationFrame === "function"
     ? window.requestAnimationFrame(() => callback())
@@ -252,6 +254,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   }, [toolbarPosition, inspectorOpen, isFullscreen]);
   useEffect(() => () => {
     stopAutoPan();
+    if (connectorPulseTimer.current !== null) window.clearTimeout(connectorPulseTimer.current);
     recorder.current?.stop();
     recorderStream.current?.getTracks().forEach(track => track.stop());
   }, []);
@@ -326,6 +329,15 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     const value = "text" in el ? el.text : el.label;
     const next = { selection: s, value, fresh }; editRef.current = next; setEditing(next); setSelected(s);
   };
+  const openInlineEditor = (event: ReactMouseEvent, selection: Selection) => {
+    if (tool !== "select") return;
+    event.preventDefault(); event.stopPropagation(); edit(selection);
+  };
+  const pulseConnection = (ids: string[]) => {
+    setConnectorPulse(ids);
+    if (connectorPulseTimer.current !== null) window.clearTimeout(connectorPulseTimer.current);
+    connectorPulseTimer.current = window.setTimeout(() => { connectorPulseTimer.current = null; setConnectorPulse([]); }, 720);
+  };
   const finishEdit = (cancel = false) => {
     const e = editRef.current; if (!e) return;
     editRef.current = null; setEditing(null);
@@ -344,7 +356,12 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     svg.current?.focus();
     if (tool === "connector") {
       if (s.kind !== "nodes" && s.kind !== "shapes") return;
-      if (selected && ["nodes", "shapes"].includes(selected.kind)) onChange(connect(interactionBoard, selected.id, s.id));
+      if (!connectorSource) { setConnectorSource(s); setSelected(s); return; }
+      if (connectorSource.id === s.id) { setConnectorSource(null); setSelected(null); return; }
+      const next = connect(interactionBoard, connectorSource.id, s.id);
+      if (next !== interactionBoard) onChange(next);
+      pulseConnection([connectorSource.id, s.id]);
+      setConnectorSource(null);
       setSelected(s);
       return;
     }
@@ -378,6 +395,8 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       setSelections(initial); setMarquee({ ...p, width: 0, height: 0 });
       gesture.current = { mode: "marquee", start: p, screen: p, base, selections: initial, pointer: e.pointerId, next: base };
       autoPanPointer.current = { x: e.clientX, y: e.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
+    } else if (tool === "connector") {
+      setConnectorSource(null); setSelected(null); return;
     } else if (tool === "text") {
       const id = crypto.randomUUID();
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
@@ -538,11 +557,20 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     return () => { window.removeEventListener("keydown", keydown); window.removeEventListener("keyup", keyup); window.removeEventListener("blur", blur); };
   });
   useEffect(() => {
-    const el = svg.current; if (!el) return;
+    // Listen on the whole editor frame so diagonal trackpad gestures remain
+    // available even when the pointer is over an SVG foreignObject.
+    const el = frame.current; if (!el) return;
     const wheel = (e: WheelEvent) => {
-      if (editRef.current || gesture.current) return;
+      if (editRef.current || gesture.current || pinch.current) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest(".drawing-toolbar, .canvas-navigator, .zoom-control, .inspector-toggle, .canvas-fullscreen-toggle, .canvas-media video, .canvas-media audio, .canvas-embed-body")) return;
+      const rawX = Number.isFinite(e.deltaX) ? e.deltaX : 0, rawY = Number.isFinite(e.deltaY) ? e.deltaY : 0;
+      if (rawX === 0 && rawY === 0) return;
       e.preventDefault();
-      const delta = normalizeWheelDelta(e.deltaX, e.deltaY, e.deltaMode);
+      const normalized = normalizeWheelDelta(rawX, rawY, e.deltaMode);
+      // Some touchpads report Shift+vertical gestures as horizontal scrolling.
+      // Preserve a genuine two-axis vector whenever deltaX is present.
+      const delta = e.shiftKey && normalized.x === 0 ? { x: normalized.y, y: 0 } : normalized;
       const source = boardRef.current;
       const currentViewport = wheelPending.current?.viewport ?? source.viewport;
       const rect = el.getBoundingClientRect();
@@ -648,7 +676,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
               </foreignObject>
             </g>;
           })}
-          {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} opacity={s.opacity ?? 1} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
+          {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} className={`canvas-connectable ${connectorSource?.id === s.id ? "connector-source" : ""} ${connectorPulseIds.has(s.id) ? "connector-pulse" : ""}`} opacity={s.opacity ?? 1} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
             {s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="var(--element-stroke)"/> : <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="var(--element-stroke)"/>}</g>)}
           {b.drawings.filter(p => !hiddenElements.has(p.id)).map(p => { const r = elementBounds(b, { kind: "drawings", id: p.id })!; return <g key={p.id} data-element={p.id} transform={`rotate(${p.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "drawings", id: p.id })}>
             <path d={pathData(p.points)} fill="none" stroke={p.color} strokeWidth={p.width} opacity={p.opacity} strokeLinecap="round" strokeLinejoin="round"/>
@@ -659,18 +687,19 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
             const goesLeft = d.x + d.width < s.x, direction = goesLeft ? -1 : 1;
             const x1 = goesLeft ? s.x : s.x + s.width, y1 = s.y + s.height / 2, x2 = goesLeft ? d.x + d.width : d.x, y2 = d.y + d.height / 2, c = Math.max(40, Math.abs(x2 - x1) * .45);
             const path = `M${x1},${y1} C${x1 + direction * c},${y1} ${x2 - direction * c},${y2} ${x2},${y2}`;
-            return <g key={e.id} data-element={e.id} opacity={e.opacity ?? 1} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
+            const connectionPulse = connectorPulseIds.has(e.source) && connectorPulseIds.has(e.target);
+            return <g key={e.id} data-element={e.id} className={connectionPulse ? "connector-edge-pulse" : undefined} opacity={e.opacity ?? 1} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
           })}
-          {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; return <g key={text.id} data-element={text.id} opacity={text.opacity ?? 1} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "texts", id: text.id })}
-            onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}>
-            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height} onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }}><div className="canvas-copy" onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "texts", id: text.id }); }} style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color), backgroundColor: text.backgroundColor, fontWeight: text.bold ? 700 : 400, fontStyle: text.italic ? "italic" : "normal", textDecoration: text.underline ? "underline" : "none", textAlign: text.textAlign ?? "left" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
+          {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; const textSelection = { kind: "texts" as const, id: text.id }; return <g key={text.id} data-element={text.id} data-text-editable="true" opacity={text.opacity ?? 1} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, textSelection)}
+            onDoubleClick={e => openInlineEditor(e, textSelection)}>
+            <foreignObject x={r.x} y={r.y} width={r.width} height={r.height} data-text-editable="true" onDoubleClick={e => openInlineEditor(e, textSelection)}><div className="canvas-copy" data-text-editable="true" onDoubleClick={e => openInlineEditor(e, textSelection)} style={{ fontSize: text.fontSize ?? 16, color: canvasTextColor(text.color), backgroundColor: text.backgroundColor, fontWeight: text.bold ? 700 : 400, fontStyle: text.italic ? "italic" : "normal", textDecoration: text.underline ? "underline" : "none", textAlign: text.textAlign ?? "left" }}>{editing?.selection.id === text.id ? "" : text.text}</div></foreignObject>
           </g>; })}
-          {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => <g key={n.id} data-element={n.id} className="mind-node" opacity={n.opacity ?? 1} transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, { kind: "nodes", id: n.id })}
-            onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}>
+          {b.nodes.filter(n => !hiddenElements.has(n.id)).map(n => { const nodeSelection = { kind: "nodes" as const, id: n.id }; return <g key={n.id} data-element={n.id} data-text-editable="true" className={`mind-node ${connectorSource?.id === n.id ? "connector-source" : ""} ${connectorPulseIds.has(n.id) ? "connector-pulse" : ""}`} opacity={n.opacity ?? 1} transform={`rotate(${n.rotation ?? 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`} onPointerDown={e => selectElement(e, nodeSelection)}
+            onDoubleClick={e => openInlineEditor(e, nodeSelection)}>
             <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "var(--node-fill)"} stroke={dropTarget === n.id ? "var(--accent)" : "var(--element-stroke)"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
-            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)} onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }}><div className="node-copy" onDoubleClick={e => { if (tool !== "select") return; e.stopPropagation(); edit({ kind: "nodes", id: n.id }); }} style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
+            <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)} data-text-editable="true" onDoubleClick={e => openInlineEditor(e, nodeSelection)}><div className="node-copy" data-text-editable="true" onDoubleClick={e => openInlineEditor(e, nodeSelection)} style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
             {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
-          </g>)}
+          </g>; })}
           </LayerStack>
           {guides.map((guide, index) => guide.axis === "x"
             ? <line key={`x-${index}`} className="smart-guide" x1={guide.value} y1={guide.from} x2={guide.value} y2={guide.to} strokeWidth={1 / b.viewport.scale}/>
@@ -698,6 +727,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       {sourceError && <div className="canvas-inline-error" role="alert"><span>{sourceError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setSourceError("")}><X size={14}/></button></div>}
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
       <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "pen" || tool === "highlighter" ? "drawHint" : "canvasHint")}</div>
+      {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
       {mindMapLayoutSummary && <aside className="mind-map-layout-report" aria-label={t("mindMapLayoutReport")}>
         <header><div><strong>{t("mindMapLayoutReport")}</strong><small>{t("mindMapRoot")}: {mindMapLayoutSummary.rootLabel}</small></div><button className="icon-button" aria-label={t("closeLayoutReport")} title={t("closeLayoutReport")} onClick={() => setMindMapLayoutSummary(null)}><X size={15}/></button></header>
