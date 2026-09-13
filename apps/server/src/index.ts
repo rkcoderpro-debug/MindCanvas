@@ -7,7 +7,7 @@ import { requireUser } from "./auth.js";
 import { extractDocument, UnsupportedDocumentError } from "./document.js";
 import { generateWithFallback } from "./providers.js";
 import { AIError } from "./gemini.js";
-import { generateFlashcardsWithGemini } from "./flashcards.js";
+import { generateFlashcardsWithGemini, MAX_FLASHCARDS } from "./flashcards.js";
 import { generateSelectionWithGemini, selectionActions } from "./selection.js";
 import { aiScheduler } from "./aiScheduler.js";
 
@@ -55,7 +55,7 @@ app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   catch (error) { return sendAiError(res, error, "AI processing failed."); }
 });
 
-const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards"]), maxCards: z.coerce.number().int().min(3).max(50).default(20) });
+const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20) });
 app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) => {
   const parsed = aiFileInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid file AI request." });
@@ -73,7 +73,7 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
   }
 });
 
-const flashcardInput = aiInput.extend({ maxCards: z.coerce.number().int().min(3).max(50).default(20) });
+const flashcardInput = aiInput.extend({ maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20) });
 app.post("/api/ai/flashcards", requireUser, async (req, res) => {
   const parsed = flashcardInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid flashcard input." });
   try { const result = await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini(parsed.data)); return res.json(result); }

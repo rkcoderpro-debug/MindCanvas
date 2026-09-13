@@ -156,10 +156,14 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .sidebar { flex: 0 0 228px; min-width: 0; padding: 24px 14px 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 35%, var(--surface)) 0, var(--surface) 220px); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 22px; overflow-y: auto; }
 .sidebar-header { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sidebar-header .brand { flex: 1; min-width: 0; }
-.brand { display: flex; align-items: center; gap: 9px; background: transparent; text-align: left; font-size: 19px; font-weight: 700; padding: 0; letter-spacing: -.04em; }
+.brand { display: flex; align-items: center; gap: 9px; min-width: 0; background: transparent; text-align: left; font-size: 19px; font-weight: 700; padding: 0; letter-spacing: -.04em; }
 .sidebar-collapse-toggle { flex: 0 0 auto; }
 .mobile-menu-button { display: none; }
-.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--accent-contrast); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s ease; }
+.brand-mark { display: grid; flex: 0 0 32px; place-items: center; width: 32px; min-width: 32px; height: 32px; min-height: 32px; border-radius: 10px; color: var(--accent-contrast); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s ease; }
+.brand-mark > svg { flex: 0 0 20px; width: 20px; height: 20px; }
+.brand-copy { display: grid; min-width: 0; gap: 1px; line-height: 1.05; }
+.brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-copy .beta { display: block; min-width: 0; overflow: hidden; color: var(--muted); font-size: 9px; font-weight: 650; letter-spacing: .04em; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
 .brand:hover .brand-mark { transform: rotate(-5deg) scale(1.06); box-shadow: 0 9px 24px color-mix(in srgb, var(--accent) 38%, transparent); }
 .beta { background: var(--accent-soft); padding: 4px 6px; border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; font-size: 11px; color: var(--accent); }
 .profile-card { display: flex; align-items: center; gap: 10px; padding: 12px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
@@ -1042,4 +1046,25 @@ html { -webkit-text-size-adjust: 100%; }
   .dialog { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   .dialog input:not([type=file]):not([type=range]):not([type=color]), .dialog select, .dialog textarea { font-size: 16px; }
   .ai-manual-step { flex-basis: 88px; }
+}
+
+/* Final branding/rail layout: the logo keeps its box while the version sits
+   under the name. In the collapsed desktop rail, the brand and hamburger are
+   stacked so neither can overlap the other. */
+.brand-mark { flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
+.brand-copy { flex: 1 1 auto; min-width: 0; }
+.brand-copy .beta { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+.sidebar:not(.sidebar-collapsed) .brand-name,
+.sidebar:not(.sidebar-collapsed) .brand-copy .beta { display: block; }
+.sidebar-collapsed .sidebar-header { display: grid; grid-template-columns: 1fr; justify-items: center; align-items: center; gap: 8px; }
+.sidebar-collapsed .sidebar-header .brand { flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; justify-content: center; }
+.sidebar-collapsed:not(.mobile-open) .brand-copy { display: none; }
+.sidebar-collapsed .sidebar-toggle-button { justify-self: center; }
+.ai-manual-prompt textarea[readonly] { cursor: text; }
+.ai-json-file-input { position: relative; justify-content: center; overflow: hidden; cursor: pointer; }
+.ai-json-file-input input { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
+
+@media (max-width: 620px) {
+  .sidebar-collapsed .sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .sidebar-collapsed .sidebar-header .brand { flex: 1 1 auto; width: auto; min-width: 0; height: auto; justify-content: flex-start; }
 }

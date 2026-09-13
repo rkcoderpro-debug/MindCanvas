@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseFlashcardPreview } from "../src/flashcards.js";
+import { MAX_FLASHCARDS, parseFlashcardPreview } from "../src/flashcards.js";
 
 test("parses, trims, deduplicates and bounds an AI flashcard preview", () => {
   const result = parseFlashcardPreview(`\n\`\`\`json\n${JSON.stringify({ title: "  Biology  ", cards: [
@@ -17,4 +17,10 @@ test("parses, trims, deduplicates and bounds an AI flashcard preview", () => {
 test("rejects an empty or malformed AI preview", () => {
   assert.throws(() => parseFlashcardPreview(JSON.stringify({ title: "Empty", cards: [] }), 20));
   assert.throws(() => parseFlashcardPreview("not json", 20));
+});
+
+test("accepts the 500-card generation limit", () => {
+  const cards = Array.from({ length: MAX_FLASHCARDS }, (_, index) => ({ front: `Question ${index}`, back: `Answer ${index}`, sourcePage: null }));
+  const result = parseFlashcardPreview(JSON.stringify({ title: "Large set", cards }), MAX_FLASHCARDS);
+  assert.equal(result.cards.length, MAX_FLASHCARDS);
 });

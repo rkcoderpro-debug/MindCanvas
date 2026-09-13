@@ -17,7 +17,10 @@ describe("manual AI exchange", () => {
     expect(prompt).toContain('"parentId"');
 
     expect(buildSelectionPrompt({ action: "expand", text: "A selected idea", language: "en" })).toContain('"action":"summarize|explain|rewrite|expand"');
-    expect(buildFlashcardsPrompt({ fileName: "notes.pdf", maxCards: 12, language: "en" })).toContain("notes.pdf");
+    const flashcardPrompt = buildFlashcardsPrompt({ fileName: "notes.pdf", maxCards: 12, language: "en" });
+    expect(flashcardPrompt).toContain("notes.pdf");
+    expect(flashcardPrompt).toContain("mindcanvas-flashcards.json");
+    expect(flashcardPrompt).toContain("escape every internal ASCII double quote");
   });
 
   it("accepts a fenced or wrapped mind-map object and normalizes optional values", () => {
@@ -46,5 +49,12 @@ describe("manual AI exchange", () => {
     const cards = parseManualFlashcards(JSON.stringify({ title: "Review", cards: [{ front: "Q", back: "A", sourcePage: null }] }), 3);
     expect(cards.cards[0].sourcePage).toBeNull();
     expect(() => parseManualFlashcards(JSON.stringify({ title: "Too many", cards: [{ front: "1", back: "1" }, { front: "2", back: "2" }] }), 1)).toThrowError(ManualAiValidationError);
+  });
+
+  it("repairs common Gemini quotes and accepts up to 500 manual cards", () => {
+    const malformed = String.raw`{"title":"Review","cards":[{"front":"Từ "迷" (mí) có nghĩa là gì?","back":"Mê, say mê.","sourcePage":1}]}`;
+    expect(parseManualFlashcards(malformed, 500).cards[0].front).toContain("迷");
+    const cards = Array.from({ length: 500 }, (_, index) => ({ front: `Question ${index}`, back: `Answer ${index}`, sourcePage: null }));
+    expect(parseManualFlashcards(JSON.stringify({ title: "Large set", cards }), 500).cards).toHaveLength(500);
   });
 });

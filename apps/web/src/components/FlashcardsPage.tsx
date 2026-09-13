@@ -12,9 +12,9 @@ import { getDocumentSource, saveDocumentToStorage } from "../lib/supabase";
 import { AI_FILE_ACCEPT, readClipboardSource, writeClipboardText } from "../lib/aiSource";
 import { MAX_FILE_BYTES } from "../lib/board";
 import Dialog from "./Dialog";
-import { AiModeSwitch, ManualSteps, type AiMode } from "./AiModeSwitch";
+import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
-import { buildFlashcardsPrompt, GEMINI_WEB_URL, parseManualFlashcards } from "../lib/manualAi";
+import { buildFlashcardsPrompt, GEMINI_WEB_URL, ManualAiValidationError, MAX_FLASHCARDS, parseManualFlashcards } from "../lib/manualAi";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
@@ -68,7 +68,7 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
   const [aiText, setAiText] = useState("");
   const [aiProjectId, setAiProjectId] = useState("");
   const [aiFile, setAiFile] = useState<File | null>(null);
-  const [aiMaxCards, setAiMaxCards] = useState("20");
+  const [aiMaxCards, setAiMaxCards] = useState("50");
   const [aiPreview, setAiPreview] = useState<AiPreview | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -93,10 +93,11 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
   const openEditCard = (card: Flashcard) => { setCardFront(card.front); setCardBack(card.back); setCardPage(card.sourcePage ? String(card.sourcePage) : ""); setFormError(""); setCardDialog({ kind: "edit", card }); };
   const openAiGenerator = () => {
     const linkedProject = flashcards.selectedDeck?.projectId ?? "";
-    setAiMode(owner ? "auto" : "manual"); setAiSource(linkedProject ? "project" : "text"); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards("20"); setAiPreview(null); setManualPrompt(""); setManualJson(""); setManualCopied(false); setAiError(""); setAiDialog(true);
+    const nextMode = owner ? "auto" : "manual";
+    setAiMode(nextMode); setAiSource(linkedProject ? "project" : "text"); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards("50"); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards: MAX_FLASHCARDS, language }) : ""); setManualJson(""); setManualCopied(false); setAiError(""); setAiDialog(true);
   };
   const closeAiGenerator = () => { if (aiBusy) return; aiController.current?.abort(); setAiDialog(false); setAiPreview(null); setManualPrompt(""); setManualJson(""); setManualCopied(false); setAiError(""); };
-  const changeAiMode = (nextMode: AiMode) => { setAiMode(nextMode); setAiPreview(null); setManualPrompt(""); setManualJson(""); setManualCopied(false); setAiError(""); };
+  const changeAiMode = (nextMode: AiMode) => { setAiMode(nextMode); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards: MAX_FLASHCARDS, language }) : ""); setManualJson(""); setManualCopied(false); setAiError(""); };
   const sourceForAi = async (signal: AbortSignal) => {
     if (aiSource === "text") {
       const text = aiText.trim();
@@ -120,20 +121,9 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
     if (aiFile.size > MAX_FILE_BYTES) throw new Error(t("fileTooLarge"));
     return { text: "", documentId: undefined as string | undefined, file: aiFile };
   };
-  const createManualPrompt = async () => {
-    const maxCards = Number.parseInt(aiMaxCards, 10);
-    if (!Number.isInteger(maxCards) || maxCards < 3 || maxCards > 50) { setAiError(t("aiMaxCardsInvalid")); return; }
-    const request = new AbortController(); aiController.current = request; setAiBusy(true); setAiError(""); setManualPrompt(""); setManualJson(""); setAiPreview(null);
-    try {
-      const source = await sourceForAi(request.signal);
-      if (request.signal.aborted) return;
-      setManualPrompt(buildFlashcardsPrompt({ text: source.text || undefined, fileName: source.file?.name, maxCards, language }));
-    } catch (err) { if (!request.signal.aborted) setAiError(aiErrorMessage(err, t, "aiFlashcardError")); }
-    finally { if (!request.signal.aborted) setAiBusy(false); }
-  };
   const copyManualPrompt = async () => {
-    if (!manualPrompt) return;
-    try { await writeClipboardText(manualPrompt); setManualCopied(true); setAiError(""); window.setTimeout(() => setManualCopied(false), 2200); }
+    const prompt = manualPrompt || buildFlashcardsPrompt({ maxCards: MAX_FLASHCARDS, language });
+    try { await writeClipboardText(prompt); setManualCopied(true); setAiError(""); window.setTimeout(() => setManualCopied(false), 2200); }
     catch { setAiError(t("clipboardWriteError")); }
   };
   const openGemini = () => {
@@ -141,20 +131,22 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
     if (!opened) setAiError(t("popupBlocked"));
   };
   const validateManualResult = () => {
-    const maxCards = Number.parseInt(aiMaxCards, 10);
     try {
-      const parsed = parseManualFlashcards(manualJson, maxCards);
+      const parsed = parseManualFlashcards(manualJson, MAX_FLASHCARDS);
       setAiPreview({ title: parsed.title, provider: "manual", model: "Gemini Web", cards: parsed.cards.map(card => ({ ...card, id: crypto.randomUUID() })) });
       setAiError("");
-    } catch { setAiPreview(null); setAiError(t("manualInvalidResult")); }
+    } catch (error) {
+      setAiPreview(null);
+      setAiError(error instanceof ManualAiValidationError && error.code === "INVALID_JSON" ? t("manualInvalidJson") : t("manualInvalidFlashcards"));
+    }
   };
   const generateAiPreview = async (event: React.FormEvent) => {
     event.preventDefault();
     if (aiBusy) return;
-    if (aiMode === "manual") { await createManualPrompt(); return; }
+    if (aiMode === "manual") return;
     if (!owner) return;
     const maxCards = Number.parseInt(aiMaxCards, 10);
-    if (!Number.isInteger(maxCards) || maxCards < 3 || maxCards > 50) { setAiError(t("aiMaxCardsInvalid")); return; }
+    if (!Number.isInteger(maxCards) || maxCards < 3 || maxCards > MAX_FLASHCARDS) { setAiError(t("aiMaxCardsInvalid")); return; }
     const request = new AbortController(); aiController.current = request; setAiBusy(true); setAiError(""); setAiPreview(null);
     try {
       const source = await sourceForAi(request.signal);
@@ -163,15 +155,25 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
         ? await generateFlashcardsFromFile(source.file, maxCards, request.signal)
         : await generateFlashcards(source.text, source.documentId, maxCards, request.signal);
       if (request.signal.aborted) return;
-      if (result.provider === "demo" || !result.cards?.length || result.cards.length > 50) throw new Error(t("aiDemo"));
+      if (result.provider === "demo" || !result.cards?.length || result.cards.length > MAX_FLASHCARDS) throw new Error(t("aiDemo"));
       if (source.file) { const fileResult = result as GeneratedFlashcardsFromFile; await saveDocumentToStorage(source.file, fileResult.source.id, fileResult.source.text, fileResult.source.pageCount, flashcards.selectedDeck?.projectId ?? undefined); }
       setAiPreview({ title: result.title, provider: result.provider, model: result.model, sourceDocumentId: result.sourceDocumentId, cards: result.cards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) });
     } catch (err) { if (!request.signal.aborted) setAiError(aiErrorMessage(err, t, "aiFlashcardError")); }
     finally { if (!request.signal.aborted) setAiBusy(false); }
   };
   const updateAiCard = (id: string, patch: Partial<AiPreviewCard>) => setAiPreview(current => current ? { ...current, cards: current.cards.map(card => card.id === id ? { ...card, ...patch } : card) } : current);
-  const addAiCard = () => setAiPreview(current => current ? { ...current, cards: [...current.cards, { id: crypto.randomUUID(), front: "", back: "", sourcePage: null }] } : current);
+  const addAiCard = () => setAiPreview(current => current && current.cards.length < MAX_FLASHCARDS ? { ...current, cards: [...current.cards, { id: crypto.randomUUID(), front: "", back: "", sourcePage: null }] } : current);
   const removeAiCard = (id: string) => setAiPreview(current => current ? { ...current, cards: current.cards.filter(card => card.id !== id) } : current);
+  const importManualJsonFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      if (!text.trim()) throw new Error("EMPTY_JSON_FILE");
+      setManualJson(text); setAiPreview(null); setAiError("");
+    } catch { setAiError(t("manualJsonFileError")); }
+  };
   const applyAiPreview = async () => {
     if (!aiPreview) return;
     const cards = aiPreview.cards.map(card => ({ front: card.front.trim(), back: card.back.trim(), sourcePage: card.sourcePage })).filter(card => card.front && card.back);
@@ -275,26 +277,27 @@ export default function FlashcardsPage({ owner, projects }: { owner: string | nu
     {aiDialog && <Dialog title={t("generateFlashcards")} onClose={closeAiGenerator}>
       <AiModeSwitch mode={aiMode} autoAvailable={!!owner} onChange={changeAiMode}/>
       {aiMode === "manual" ? <p className="ai-manual-note">{t("aiManualHint")} {t("manualNoLoginHint")}</p> : !owner && <p className="form-error" role="alert">{t("loginRequired")}</p>}
-      {aiMode === "manual" && <ManualSteps current={aiPreview ? "preview" : manualJson.trim() ? "result" : manualPrompt ? "gemini" : "source"}/>}
       {!aiPreview ? <form onSubmit={event => void generateAiPreview(event)}>
-      <p>{t("aiFlashcardHint")}</p><small className="field-hint">{t("aiFileHint")}</small>
-      <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { setAiSource(event.target.value as AiSource); setManualPrompt(""); setManualJson(""); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
-      {aiSource === "text" && <div className="ai-text-source"><label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => { setAiText(event.target.value); setManualPrompt(""); setManualJson(""); }} placeholder={t("sourceTextPlaceholder")}/></label><button type="button" className="secondary-button clipboard-button" disabled={aiBusy} onClick={() => void (async () => { try { const pasted = await readClipboardSource(); if (pasted.kind === "image") { setAiSource("file"); setAiFile(pasted.file); } else setAiText(pasted.text); setManualPrompt(""); setManualJson(""); setAiError(""); } catch (err) { setAiError(err instanceof Error && err.message === "CLIPBOARD_EMPTY" ? t("clipboardEmpty") : t("clipboardReadError")); } })()}><ClipboardPaste size={16}/>{t("pasteFromClipboard")}</button><small className="field-hint">{t("clipboardSourceHint")}</small></div>}
-      {aiSource === "project" && <label>{t("sourceProject")}<select required value={aiProjectId} disabled={aiBusy || !availableProjects.length} onChange={event => { setAiProjectId(event.target.value); setManualPrompt(""); setManualJson(""); }}><option value="">{t("chooseProject")}</option>{availableProjects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select><small>{t("sourceProjectHint")}</small></label>}
-      {aiSource === "file" && <label className="upload-drop ai-file-drop" onDragOver={event => { event.preventDefault(); event.currentTarget.classList.add("dragging"); }} onDragLeave={event => event.currentTarget.classList.remove("dragging")} onDrop={event => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); const file = event.dataTransfer.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}><span><Upload size={20}/>{t("chooseAiFile")}</span><input type="file" accept={AI_FILE_ACCEPT} disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("aiFileHint")}</small>{aiFile && <small>{aiFile.name}</small>}</label>}
-      <label>{t("maxGeneratedCards")}<input type="number" min="3" max="50" step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => { setAiMaxCards(event.target.value); setManualPrompt(""); setManualJson(""); }}/></label>
-      {aiMode === "manual" && <section className="ai-manual-panel">
-        {manualPrompt && <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea value={manualPrompt} onChange={event => { setManualPrompt(event.target.value); setManualCopied(false); }}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{aiSource === "file" ? t("aiManualUploadHint") : t("aiManualTextHint")}</small></div>}
-        <label className="ai-manual-json"><span>{t("aiManualJsonLabel")}</span><textarea value={manualJson} onChange={event => { setManualJson(event.target.value); setAiPreview(null); setAiError(""); }} placeholder={t("aiManualJsonPlaceholder")}/></label>
-        <button type="button" className="secondary-button" disabled={!manualPrompt || !manualJson.trim() || aiBusy} onClick={validateManualResult}>{t("validateResult")}</button>
+      {aiMode === "auto" ? <>
+        <p>{t("aiFlashcardHint")}</p><small className="field-hint">{t("aiFileHint")}</small>
+        <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { setAiSource(event.target.value as AiSource); setManualPrompt(""); setManualJson(""); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
+        {aiSource === "text" && <div className="ai-text-source"><label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => { setAiText(event.target.value); setManualPrompt(""); setManualJson(""); }} placeholder={t("sourceTextPlaceholder")}/></label><button type="button" className="secondary-button clipboard-button" disabled={aiBusy} onClick={() => void (async () => { try { const pasted = await readClipboardSource(); if (pasted.kind === "image") { setAiSource("file"); setAiFile(pasted.file); } else setAiText(pasted.text); setManualPrompt(""); setManualJson(""); setAiError(""); } catch (err) { setAiError(err instanceof Error && err.message === "CLIPBOARD_EMPTY" ? t("clipboardEmpty") : t("clipboardReadError")); } })()}><ClipboardPaste size={16}/>{t("pasteFromClipboard")}</button><small className="field-hint">{t("clipboardSourceHint")}</small></div>}
+        {aiSource === "project" && <label>{t("sourceProject")}<select required value={aiProjectId} disabled={aiBusy || !availableProjects.length} onChange={event => { setAiProjectId(event.target.value); setManualPrompt(""); setManualJson(""); }}><option value="">{t("chooseProject")}</option>{availableProjects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select><small>{t("sourceProjectHint")}</small></label>}
+        {aiSource === "file" && <label className="upload-drop ai-file-drop" onDragOver={event => { event.preventDefault(); event.currentTarget.classList.add("dragging"); }} onDragLeave={event => event.currentTarget.classList.remove("dragging")} onDrop={event => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); const file = event.dataTransfer.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}><span><Upload size={20}/>{t("chooseAiFile")}</span><input type="file" accept={AI_FILE_ACCEPT} disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("aiFileHint")}</small>{aiFile && <small>{aiFile.name}</small>}</label>}
+        <label>{t("maxGeneratedCards")}<input type="number" min="3" max={MAX_FLASHCARDS} step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => { setAiMaxCards(event.target.value); setManualPrompt(""); setManualJson(""); }}/></label>
+      </> : <section className="ai-manual-panel">
+        <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea readOnly value={manualPrompt || buildFlashcardsPrompt({ maxCards: MAX_FLASHCARDS, language })}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{t("aiManualFileWorkflow")}</small></div>
+        <label className="ai-manual-json"><span>{t("aiManualJsonLabel")}</span><textarea value={manualJson} onChange={event => { setManualJson(event.target.value); setAiPreview(null); setAiError(""); }} placeholder={t("aiManualJsonPlaceholder")}/><small className="field-hint">{t("aiManualJsonHint")}</small></label>
+        <label className="secondary-button ai-json-file-input"><Upload size={16}/><span>{t("uploadJsonFile")}</span><input type="file" accept=".json,application/json" disabled={aiBusy} onChange={event => void importManualJsonFile(event)}/></label>
+        <button type="button" className="secondary-button" disabled={!manualJson.trim() || aiBusy} onClick={validateManualResult}>{t("validateResult")}</button>
       </section>}
       {aiError && <p className="form-error" role="alert">{aiError}</p>}{aiBusy && <p role="status">{aiMode === "manual" ? t("loading") : t("generatingFlashcards")}</p>}
-      <footer className="actions"><button type="button" className="secondary-button" disabled={aiBusy} onClick={closeAiGenerator}>{t("cancel")}</button><button type="submit" className="primary-button" disabled={aiBusy}>{aiMode === "manual" ? t("createPrompt") : aiBusy ? t("generating") : t("generatePreview")}</button></footer>
+      <footer className="actions"><button type="button" className="secondary-button" disabled={aiBusy} onClick={closeAiGenerator}>{t("cancel")}</button>{aiMode === "auto" && <button type="submit" className="primary-button" disabled={aiBusy}>{aiBusy ? t("generating") : t("generatePreview")}</button>}</footer>
     </form> : <>
       <p>{t("aiPreviewHint")}</p><small className="field-hint">{aiPreview.provider === "manual" ? t("manualProvider") : aiPreview.provider} · {aiPreview.model}</small>
       <label>{t("flashcardSetTitle")}<input value={aiPreview.title} maxLength={200} onChange={event => setAiPreview(current => current ? { ...current, title: event.target.value } : current)}/></label>
       <div className="ai-flashcards-preview">{aiPreview.cards.map((card, index) => <div className="ai-preview-card" key={card.id}><div className="ai-preview-card-heading"><strong>#{index + 1}</strong><button type="button" className="icon-button danger" aria-label={t("removePreviewCard")} onClick={() => removeAiCard(card.id)}><Trash2 size={15}/></button></div><label>{t("questionSide")}<textarea rows={3} maxLength={8_000} value={card.front} onChange={event => updateAiCard(card.id, { front: event.target.value })}/></label><label>{t("answerSide")}<textarea rows={4} maxLength={12_000} value={card.back} onChange={event => updateAiCard(card.id, { back: event.target.value })}/></label><label>{t("sourcePage")}<input type="number" min="1" step="1" value={card.sourcePage ?? ""} onChange={event => updateAiCard(card.id, { sourcePage: event.target.value ? Number(event.target.value) : null })}/></label></div>)}</div>
-      <button type="button" className="secondary-button" disabled={aiBusy || aiPreview.cards.length >= 50} onClick={addAiCard}><Plus size={16}/>{t("addPreviewCard")}</button>
+      <button type="button" className="secondary-button" disabled={aiBusy || aiPreview.cards.length >= MAX_FLASHCARDS} onClick={addAiCard}><Plus size={16}/>{t("addPreviewCard")}</button>
       {aiError && <p className="form-error" role="alert">{aiError}</p>}{aiBusy && <p role="status">{t("saving")}</p>}
       <footer className="actions"><button type="button" className="secondary-button" disabled={aiBusy} onClick={() => { setAiPreview(null); setAiError(""); }}>{t("backToSource")}</button><button type="button" className="primary-button" disabled={aiBusy || !aiPreview.cards.some(card => card.front.trim() && card.back.trim())} onClick={() => void applyAiPreview()}>{aiBusy ? t("saving") : t("applyToDeck")}</button></footer>
     </>}</Dialog>}
