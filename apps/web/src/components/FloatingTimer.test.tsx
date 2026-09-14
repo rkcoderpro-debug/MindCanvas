@@ -40,6 +40,13 @@ afterEach(async () => {
 });
 
 describe("floating timer launcher", () => {
+  it("renders neither the timer nor launcher when global visibility is disabled", async () => {
+    localStorage.setItem("mindcanvas:learning-hub-timer:v2", JSON.stringify({ open: false }));
+    await act(async () => root.render(<LanguageProvider><FloatingTimer visible={false}/></LanguageProvider>));
+    expect(host.querySelector(".floating-timer")).toBeNull();
+    expect(host.querySelector(".timer-launcher")).toBeNull();
+  });
+
   it("remembers its open position and can be dragged after hiding", async () => {
     await act(async () => root.render(<LanguageProvider><FloatingTimer /></LanguageProvider>));
     const hide = host.querySelector<HTMLButtonElement>(".floating-timer-actions button:last-child")!;

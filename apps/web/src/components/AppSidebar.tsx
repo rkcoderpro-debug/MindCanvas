@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
@@ -37,6 +37,8 @@ type Props = {
 export default function AppSidebar({ projects, folders, boardOpen, recent, filter, sidebarCollapsed, sidebarWidth, language, selectedTheme, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, onSettings, onToggleCollapsed, onResizeStart, onResetWidth }: Props) {
   const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const [showSwipeHint, setShowSwipeHint] = useState(() => { try { return localStorage.getItem("mindcanvas:mobile-nav-swiped:v1") !== "true"; } catch { return true; } });
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 620px)").matches);
   const closeMobile = () => setMobileOpen(false);
@@ -71,6 +73,18 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
     if (expandedFolderId && !folders.some(folder => folder.id === expandedFolderId)) setExpandedFolderId(null);
   }, [expandedFolderId, folders]);
 
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const active = navRef.current?.querySelector<HTMLElement>("button.active");
+    active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [boardOpen, filter, isMobile, recent]);
+
+  const markNavDiscovered = () => {
+    if (!showSwipeHint) return;
+    setShowSwipeHint(false);
+    try { localStorage.setItem("mindcanvas:mobile-nav-swiped:v1", "true"); } catch {}
+  };
   const toggleNavigation = () => {
     if (isMobile) setMobileOpen(value => !value);
     else onToggleCollapsed();
@@ -80,10 +94,10 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.5.1</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.5.2</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
-      <nav aria-label={t("workspace")} className="nav-list">
+      <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
         <button className={!boardOpen && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, null)} onClick={goHome}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button>
         <button className={!boardOpen && recent ? "active" : ""} title={t("recent")} onClick={() => goView("recent")}><Clock3 size={18}/><span className="nav-label">{t("recent")}</span><span className="nav-count">{projects.filter(project => !project.deletedAt).length}</span></button>
         <button className={!boardOpen && filter === "__favorites" ? "active" : ""} title={t("favorites")} onClick={() => goView("__favorites")}><Star size={18}/><span className="nav-label">{t("favorites")}</span></button>
@@ -91,6 +105,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
         <button className={!boardOpen && filter === "__shared" ? "active" : ""} title={t("sharedWithMe")} onClick={() => goView("__shared")}><Users size={18}/><span className="nav-label">{t("sharedWithMe")}</span><span className="nav-count">{projects.filter(project => project.shared && !project.deletedAt).length}</span></button>
         <button className={`nav-learning ${!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""}`} aria-current={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "page" : undefined} title={t("learningHub")} onClick={() => goView("__learning")}><BookOpen size={18}/><span className="nav-label">{t("learningHub")}</span></button>
       </nav>
+      {isMobile && showSwipeHint && <div className="mobile-nav-swipe-hint" role="status">{t("swipeForMore")}</div>}
       <div className="section-label"><span>{t("folders")}</span><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>
       <div className="folder-list">
         {folders.map(folder => {
@@ -116,6 +131,12 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
       </div>
       <div className="sidebar-resize-handle" role="separator" aria-orientation="vertical" aria-label={t("resizeSidebar")} title={`${t("resizeSidebar")} · ${t("resetSidebarWidth")}`} onPointerDown={onResizeStart} onDoubleClick={onResetWidth}/>
     </aside>
+    {isMobile && <nav className="mobile-compact-nav" aria-label={t("workspace")}>
+      <button className={!boardOpen && !recent && !filter ? "active" : ""} onClick={goHome}><LayoutGrid size={20}/><span>{t("workspace")}</span></button>
+      <button className={boardOpen ? "active" : ""} onClick={() => { if (!boardOpen) goView("recent"); else closeMobile(); }}><FileText size={20}/><span>Canvas</span></button>
+      <button className={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""} onClick={() => goView("__learning")}><BookOpen size={20}/><span>{t("learningHub")}</span></button>
+      <button aria-expanded={mobileOpen} className={mobileOpen ? "active" : ""} onClick={() => setMobileOpen(value => !value)}><MoreHorizontal size={20}/><span>{t("moreTools")}</span></button>
+    </nav>}
     {mobileOpen && <button className="sidebar-backdrop" aria-label={t("close")} onClick={closeMobile}/>} 
   </>;
 }

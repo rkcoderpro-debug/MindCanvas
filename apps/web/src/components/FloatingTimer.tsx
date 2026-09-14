@@ -61,17 +61,30 @@ function playRing() {
   } catch { /* Browsers may require a prior user gesture. */ }
 }
 
+function safeAreaInsets() {
+  try {
+    const styles = getComputedStyle(document.documentElement);
+    const read = (name: string) => Math.max(0, Number.parseFloat(styles.getPropertyValue(name)) || 0);
+    return { top: read("--safe-area-top"), right: read("--safe-area-right"), bottom: read("--safe-area-bottom"), left: read("--safe-area-left") };
+  } catch { return { top: 0, right: 0, bottom: 0, left: 0 }; }
+}
+
 function clampPosition(position: TimerPosition, element: HTMLElement | null): TimerPosition {
   const rect = element?.getBoundingClientRect();
   const width = rect?.width || element?.offsetWidth || 330;
   const height = rect?.height || element?.offsetHeight || 180;
+  const safe = safeAreaInsets();
+  const minLeft = 8 + safe.left, minTop = 8 + safe.top;
+  const mobileBottomReserve = (window.innerWidth <= 620 ? 74 : 8) + safe.bottom;
   return {
-    left: Math.min(Math.max(8, position.left), Math.max(8, window.innerWidth - width - 8)),
-    top: Math.min(Math.max(8, position.top), Math.max(8, window.innerHeight - height - 8)),
+    left: Math.min(Math.max(minLeft, position.left), Math.max(minLeft, window.innerWidth - width - 8 - safe.right)),
+    top: Math.min(Math.max(minTop, position.top), Math.max(minTop, window.innerHeight - height - mobileBottomReserve)),
   };
 }
 
-export default function FloatingTimer() {
+type Props = { visible?: boolean };
+
+export default function FloatingTimer({ visible = true }: Props) {
   const { t, language } = useLanguage();
   const [saved] = useState(readSaved);
   const [mode, setMode] = useState<TimerMode>(saved.mode);
@@ -256,6 +269,7 @@ export default function FloatingTimer() {
   };
 
   const floatingProps = { ref: timerRef, style: positionStyle };
+  if (!visible) return null;
   if (!open) return <button ref={launcherRef} className="timer-launcher" style={positionStyle} aria-label={t("timerShow")} title={t("timerShow")} onPointerDown={event => beginDrag(event, event.currentTarget)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen(true); }}><Timer size={18}/><span>{t("timerShow")}</span></button>;
 
   return <aside {...floatingProps} className={`floating-timer ${minimized ? "minimized" : ""}`} aria-label={t("timer")}>

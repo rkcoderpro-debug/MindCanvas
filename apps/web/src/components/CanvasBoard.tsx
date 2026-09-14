@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Maximize2, Network, X } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Type, Underline, ArrowUpRight, Maximize2, Network, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackground as CanvasBackgroundType, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applySelectionAi, arrangeMindMap, arrangeMindMapTwoSided, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
@@ -19,8 +19,9 @@ import type { SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
 import { normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
+import { DEFAULT_CANVAS_TOUCH_SETTINGS, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; readOnly?: boolean };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -125,7 +126,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "highlighter", icon: Highlighter, key: "B" }, { id: "rect", icon: Square, key: "R" },
   { id: "ellipse", icon: Circle, key: "O" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", readOnly = false }: Props) {
+export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
@@ -133,11 +134,12 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
   const boardRef = useRef(board);
   const onChange = (next: BoardState) => {
-    if (!readOnly) { onChangeProp(next); return; }
     const before = boardRef.current;
     const { viewport: _nextViewport, updatedAt: _nextUpdatedAt, ...nextContent } = next;
     const { viewport: _beforeViewport, updatedAt: _beforeUpdatedAt, ...beforeContent } = before;
-    if (JSON.stringify(nextContent) === JSON.stringify(beforeContent)) onViewportChange?.({ ...before, viewport: next.viewport });
+    const viewportOnly = JSON.stringify(nextContent) === JSON.stringify(beforeContent);
+    if (viewportOnly && onViewportChange) { onViewportChange({ ...before, viewport: next.viewport }); return; }
+    if (!readOnly) onChangeProp(next);
   };
   const onChangeRef = useRef(onChange);
   const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
@@ -151,7 +153,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false), [connectorSource, setConnectorSource] = useState<Selection | null>(null), [connectorPulse, setConnectorPulse] = useState<string[]>([]);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
-  const [toolbarExpanded, setToolbarExpanded] = useState(true);
+  const [toolbarExpanded, setToolbarExpanded] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [touchSettings, setTouchSettings] = useState(readCanvasTouchSettings);
+  const [inputMode, setInputMode] = useState<CanvasInputMode>("idle");
   const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
   const [mediaError, setMediaError] = useState(""), [isRecording, setIsRecording] = useState(false), [recordingSeconds, setRecordingSeconds] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
@@ -159,6 +164,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChangeProp, readOnly]);
+  useEffect(() => saveCanvasTouchSettings(touchSettings), [touchSettings]);
   useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
   const commitWheelViewport = () => {
@@ -358,6 +364,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const selectElement = (e: ReactPointerEvent, s: Selection) => {
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
+    if (e.pointerType === "touch") return;
     if (gesture.current || (e.button !== 0 && e.button !== 1)) return;
     if (!interactive || space || e.button === 1) return;
     e.stopPropagation(); e.preventDefault();
@@ -385,6 +392,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (s.kind === "edges") return;
     svg.current?.focus(); svg.current?.setPointerCapture(e.pointerId);
     const p = point(e.clientX, e.clientY, interactionBoard);
+    setInputMode("transforming");
     gesture.current = { mode: "move", start: p, screen: { x: e.clientX, y: e.clientY }, base: interactionBoard, selection: s, selections: targets, reparent: e.altKey && targets.length === 1 && s.kind === "nodes", pointer: e.pointerId, next: interactionBoard };
   };
   const down = (e: ReactPointerEvent<SVGSVGElement>) => {
@@ -396,24 +404,27 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     e.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
     const p = point(e.clientX, e.clientY, interactionBoard);
     const base = interactionBoard;
-    if (readOnly || space || tool === "hand" || e.button === 1 || (e.pointerType === "touch" && tool === "select")) {
-      setSelected(null); gesture.current = { mode: "pan", start: p, screen: { x: e.clientX, y: e.clientY }, base, pointer: e.pointerId, next: base };
-    } else if (tool === "select") {
+    const touchShouldPan = e.pointerType === "touch" && !(touchSettings.drawWithFinger && (tool === "pen" || tool === "highlighter"));
+    const stylusTool: ToolMode = e.pointerType === "pen" && touchSettings.stylusDrawOnly ? (tool === "highlighter" ? "highlighter" : "pen") : tool;
+    const effectiveTool = e.pointerType === "touch" ? tool : stylusTool;
+    if (readOnly || space || tool === "hand" || e.button === 1 || touchShouldPan) {
+      setSelected(null); setInputMode("panning"); gesture.current = { mode: "pan", start: p, screen: { x: e.clientX, y: e.clientY }, base, pointer: e.pointerId, next: base };
+    } else if (effectiveTool === "select") {
       const initial = e.shiftKey ? selections : [];
-      setSelections(initial); setMarquee({ ...p, width: 0, height: 0 });
+      setSelections(initial); setMarquee({ ...p, width: 0, height: 0 }); setInputMode("selecting");
       gesture.current = { mode: "marquee", start: p, screen: p, base, selections: initial, pointer: e.pointerId, next: base };
       autoPanPointer.current = { x: e.clientX, y: e.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
-    } else if (tool === "connector") {
+    } else if (effectiveTool === "connector") {
       setConnectorSource(null); setSelected(null); return;
-    } else if (tool === "text") {
+    } else if (effectiveTool === "text") {
       const id = crypto.randomUUID();
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
       setTool("select"); return;
-    } else if (tool === "pen" || tool === "highlighter") {
-      const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: tool === "highlighter" ? palette.highlighter : ink, width: tool === "highlighter" ? 20 : strokeWidth, opacity: tool === "highlighter" ? .3 : 1 }] };
-      setSelected(null); setPreview(next); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: e.pointerId, next };
-    } else if (tool === "rect" || tool === "ellipse") {
-      const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: tool, x: p.x, y: p.y, width: 1, height: 1, color: palette.fill }] };
+    } else if (effectiveTool === "pen" || effectiveTool === "highlighter") {
+      const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: effectiveTool === "highlighter" ? palette.highlighter : ink, width: effectiveTool === "highlighter" ? 20 : strokeWidth, opacity: effectiveTool === "highlighter" ? .3 : 1 }] };
+      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: e.pointerId, next };
+    } else if (effectiveTool === "rect" || effectiveTool === "ellipse") {
+      const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: effectiveTool, x: p.x, y: p.y, width: 1, height: 1, color: palette.fill }] };
       setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: e.pointerId, next };
     }
     svg.current?.setPointerCapture(e.pointerId);
@@ -456,28 +467,35 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (g.mode === "shape") next = { ...g.next, shapes: [...g.base.shapes, { ...g.next.shapes.at(-1)!, x: Math.min(p.x, g.start.x), y: Math.min(p.y, g.start.y), width: Math.max(1, Math.abs(dx)), height: Math.max(1, Math.abs(dy)) }] };
     g.next = next; setPreview(next);
   };
-  const finish = (cancel = false) => {
-    const g = gesture.current; if (!g) return;
+  const finish = (cancel = false, releaseCapture = true) => {
+    const g = gesture.current; if (!g) { setInputMode(pinch.current ? "pinching" : "idle"); return; }
     stopAutoPan(); autoPanLastAt.current = null;
     gesture.current = null; setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]);
     if (g.mode === "marquee") { if (cancel) setSelections(g.selections ?? []); }
     if (!cancel && g.reparent && g.target) g.next = reparentNode(g.next, g.selection!.id, g.target);
-    if (!cancel && JSON.stringify(g.base) !== JSON.stringify(g.next)) onChange(g.next);
-    if (svg.current?.hasPointerCapture(g.pointer)) svg.current.releasePointerCapture(g.pointer);
+    if (!cancel && JSON.stringify(g.base) !== JSON.stringify(g.next)) {
+      if (g.mode === "pan" && onViewportChange) onViewportChange({ ...boardRef.current, viewport: g.next.viewport });
+      else onChange(g.next);
+    }
+    if (releaseCapture && svg.current?.hasPointerCapture(g.pointer)) svg.current.releasePointerCapture(g.pointer);
+    setInputMode(pinch.current ? "pinching" : "idle");
   };
   const touchDownCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.pointerType !== "touch") return;
-    const interactionBoard = wheelPending.current ?? board;
+    const interactionBoard = wheelPending.current ?? boardRef.current;
     commitWheelViewport();
     touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (touchPoints.current.size !== 2) return;
-    if (gesture.current) finish(true);
+    const activeGesture = gesture.current;
+    const pinchBase = activeGesture?.next ?? interactionBoard;
+    if (activeGesture) finish(activeGesture.mode !== "draw", false);
     const entries = [...touchPoints.current.entries()] as [[number, Vec2], [number, Vec2]];
     const [, first] = entries[0], [, second] = entries[1], rect = svg.current!.getBoundingClientRect();
     const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
     const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
-    pinch.current = { pointerIds: [entries[0][0], entries[1][0]], base: interactionBoard, startDistance: distance,
-      worldCenter: { x: (center.x - interactionBoard.viewport.x) / interactionBoard.viewport.scale, y: (center.y - interactionBoard.viewport.y) / interactionBoard.viewport.scale }, next: interactionBoard };
+    pinch.current = { pointerIds: [entries[0][0], entries[1][0]], base: pinchBase, startDistance: distance,
+      worldCenter: { x: (center.x - pinchBase.viewport.x) / pinchBase.viewport.scale, y: (center.y - pinchBase.viewport.y) / pinchBase.viewport.scale }, next: pinchBase };
+    setInputMode("pinching");
     for (const [pointerId] of entries) if (!svg.current?.hasPointerCapture(pointerId)) svg.current?.setPointerCapture(pointerId);
     e.preventDefault(); e.stopPropagation();
   };
@@ -489,7 +507,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const first = touchPoints.current.get(active.pointerIds[0]), second = touchPoints.current.get(active.pointerIds[1]);
     if (!first || !second) return;
     const rect = svg.current!.getBoundingClientRect(), distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
-    const scale = clamp(active.base.viewport.scale * distance / active.startDistance, .2, 4);
+    const scale = pinchScale(active.base.viewport.scale, distance / active.startDistance, touchSettings.zoomSensitivity, touchSettings.invertZoom);
     const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
     active.next = { ...active.base, viewport: { scale, x: center.x - active.worldCenter.x * scale, y: center.y - active.worldCenter.y * scale } };
     setPreview(active.next); e.preventDefault(); e.stopPropagation();
@@ -499,11 +517,39 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     touchPoints.current.delete(e.pointerId);
     const active = pinch.current;
     if (!active) return;
-    pinch.current = null; setPreview(null);
-    if (!cancel && JSON.stringify(active.base.viewport) !== JSON.stringify(active.next.viewport)) onChange(active.next);
+    pinch.current = null; setPreview(null); setInputMode("idle");
+    if (!cancel && JSON.stringify(active.base.viewport) !== JSON.stringify(active.next.viewport)) {
+      if (onViewportChange) onViewportChange(active.next);
+      else onChange(active.next);
+    }
+    touchPoints.current.clear();
     for (const pointerId of active.pointerIds) if (svg.current?.hasPointerCapture(pointerId)) svg.current.releasePointerCapture(pointerId);
     e.preventDefault(); e.stopPropagation();
   };
+  const cancelActiveInput = () => {
+    stopAutoPan(); autoPanLastAt.current = null; autoPanPointer.current = null;
+    const activeGesture = gesture.current;
+    gesture.current = null; pinch.current = null; touchPoints.current.clear();
+    setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]); setInputMode("idle");
+    if (activeGesture && svg.current?.hasPointerCapture(activeGesture.pointer)) svg.current.releasePointerCapture(activeGesture.pointer);
+  };
+  const lostPointerCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    touchPoints.current.delete(e.pointerId);
+    if (gesture.current?.pointer === e.pointerId) finish(true, false);
+    if (pinch.current?.pointerIds.includes(e.pointerId)) { pinch.current = null; touchPoints.current.clear(); setPreview(null); setInputMode("idle"); }
+  };
+  useEffect(() => {
+    if (!gesture.current && !pinch.current) return;
+    cancelActiveInput();
+  }, [tool]);
+  useEffect(() => {
+    const cancel = () => cancelActiveInput();
+    const visibility = () => { if (document.visibilityState !== "visible") cancel(); };
+    window.addEventListener("blur", cancel);
+    window.addEventListener("orientationchange", cancel);
+    document.addEventListener("visibilitychange", visibility);
+    return () => { window.removeEventListener("blur", cancel); window.removeEventListener("orientationchange", cancel); document.removeEventListener("visibilitychange", visibility); };
+  }, []);
   const duplicate = () => { if (!selected) return; const next = duplicateSelection(board, selections); setSelections(next.selection); onChange(next.board); };
   const copy = async () => { if (!selections.length) return; await copyCanvasSelection(board, selections); setHasCopy(true); };
   const paste = async () => {
@@ -613,7 +659,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (value !== undefined && key === "trimEnd" && selectedMedia.trimStart !== undefined && value <= selectedMedia.trimStart) value = selectedMedia.trimStart + .1;
     patch({ [key]: value });
   };
-  return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""}`} aria-readonly={readOnly}>
+  const activeTool = tools.find(item => item.id === tool) ?? tools[0];
+  const ActiveToolIcon = activeTool.icon;
+  const chooseTool = (id: ToolMode) => { finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false); };
+  return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -624,24 +673,25 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     }}>
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
       {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"}`} role="toolbar" aria-label={t("properties")}>
+        {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(tool)} title={t(tool)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/><span>{t(tool)}</span></button>}
         <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
         <span className="drawing-toolbar-tools">{tools.map(({ id, icon: Icon, key }) =>
-          <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
-        <span className="toolbar-divider"/><button aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
-        <button aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={() => { finishEdit(); mediaInput.current?.click(); }}><ImagePlus size={19}/></button>
-        <button aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
-        <button aria-label={t("pasteImage")} title={t("pasteImageHint")} onClick={() => void addClipboardImage()}><ClipboardPaste size={18}/></button>
-        <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} aria-label={t(isRecording ? "stopRecording" : "recordAudio")} title={t(isRecording ? "stopRecording" : "recordAudio")} onClick={() => isRecording ? stopRecording() : void startRecording()}>{isRecording ? <Square size={17}/> : <Mic size={19}/>}</button>
+          <button key={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
+        <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
+        <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={() => { finishEdit(); mediaInput.current?.click(); }}><ImagePlus size={19}/></button>
+        <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
+        <button className="mobile-extra-action" aria-label={t("pasteImage")} title={t("pasteImageHint")} onClick={() => void addClipboardImage()}><ClipboardPaste size={18}/></button>
+        <button className={`${isRecording ? "selected recording-button" : ""} mobile-extra-action`} aria-pressed={isRecording} aria-label={t(isRecording ? "stopRecording" : "recordAudio")} title={t(isRecording ? "stopRecording" : "recordAudio")} onClick={() => isRecording ? stopRecording() : void startRecording()}>{isRecording ? <Square size={17}/> : <Mic size={19}/>}</button>
         {isRecording && <span className="recording-time" role="status">{t("recording", { seconds: recordingSeconds })}</span>}
-        <button className={snap ? "selected" : ""} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
-        <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
-        <button aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>
-        <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></span>
+        <button className={`${snap ? "selected" : ""} mobile-extra-action`} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
+        <button className="mobile-extra-action" aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
+        <button className="mobile-extra-action" aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>
+        <span className="toolbar-divider mobile-extra-action"/><button className="mobile-extra-action" aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button><button type="button" className="canvas-more-tools-trigger" aria-label={t("moreTools")} title={t("moreTools")} aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen(value => !value)}><MoreHorizontal size={20}/></button></span>
       </div>}
       <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => touchEndCapture(e)} onPointerCancelCapture={e => touchEndCapture(e, true)}
-        onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }}>
+        onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }} onLostPointerCapture={lostPointerCapture}>
         <CanvasBackground board={b}/>
         <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="var(--connector)"/></marker></defs>
         <g transform={`translate(${b.viewport.x} ${b.viewport.y}) scale(${b.viewport.scale})`}>
@@ -730,8 +780,21 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
               onKeyDown={e => { e.stopPropagation(); if (e.nativeEvent.isComposing) return; if (e.key === "Escape") { e.preventDefault(); finishEdit(true); } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); finishEdit(); } }}/></foreignObject>}
         </g>
       </svg>
+      {mobileMoreOpen && !readOnly && <div className="canvas-tools-sheet-backdrop" onClick={() => setMobileMoreOpen(false)}><aside className="canvas-tools-sheet" aria-label={t("moreTools")} onClick={event => event.stopPropagation()}>
+        <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
+        <div className="canvas-tools-sheet-grid">{tools.filter(item => ["rect", "ellipse", "connector"].includes(item.id)).map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} onClick={() => chooseTool(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
+          <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>
+          <button onClick={() => { mediaInput.current?.click(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
+          <button onClick={() => { setEmbedOpen(true); setMobileMoreOpen(false); }}><Globe2 size={19}/><span>{t("embedWeb")}</span></button>
+          <button className={snap ? "selected" : ""} onClick={() => setSnap(value => !value)}><Magnet size={19}/><span>{t("snap")}</span></button>
+          {onToggleTimer && <button className={timerVisible ? "selected" : ""} aria-pressed={timerVisible} onClick={onToggleTimer}><Timer size={19}/><span>{t("showFocusTimer")}</span></button>}
+        </div>
+        <section className="canvas-touch-settings"><strong>{t("canvasControls")}</strong><label><input type="checkbox" checked={touchSettings.drawWithFinger} onChange={event => setTouchSettings(current => ({ ...current, drawWithFinger: event.target.checked }))}/><span>{t("drawWithFinger")}</span></label><label><input type="checkbox" checked={touchSettings.stylusDrawOnly} onChange={event => setTouchSettings(current => ({ ...current, stylusDrawOnly: event.target.checked }))}/><span>{t("stylusDrawOnly")}</span></label><small>{t("oneFingerPans")} · {t("twoFingerGestures")}</small><label className="touch-range"><span>{t("zoomSensitivity")}</span><input type="range" min="0.5" max="2" step="0.1" value={touchSettings.zoomSensitivity} onChange={event => setTouchSettings(current => ({ ...current, zoomSensitivity: Number(event.target.value) }))}/><output>{touchSettings.zoomSensitivity.toFixed(1)}×</output></label><label><input type="checkbox" checked={touchSettings.invertZoom} onChange={event => setTouchSettings(current => ({ ...current, invertZoom: event.target.checked }))}/><span>{t("invertZoom")}</span></label><button className="secondary-button" onClick={() => setTouchSettings({ ...DEFAULT_CANVAS_TOUCH_SETTINGS })}><RotateCcw size={15}/>{t("resetCanvasControls")}</button></section>
+      </aside></div>}
       {sourceError && <div className="canvas-inline-error" role="alert"><span>{sourceError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setSourceError("")}><X size={14}/></button></div>}
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
+      {(inputMode === "drawing" || (tool === "pen" && inputMode !== "pinching")) && <div className="pen-mode-badge" role="status"><PenLine size={14}/><span>{t("pen")}</span></div>}
+      {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
       <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "pen" || tool === "highlighter" ? "drawHint" : "canvasHint")}</div>
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>

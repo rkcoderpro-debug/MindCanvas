@@ -7,9 +7,14 @@ import CanvasBoard from "./CanvasBoard";
 import { blankBoard } from "../lib/board";
 let root: Root, host: HTMLDivElement, current: BoardState;
 const commit = vi.fn();
+const navigateCommit = vi.fn();
 function Harness({ initial }: { initial: BoardState }) {
   const [board, setBoard] = useState(initial); current = board;
   return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
+}
+function ViewportHarness({ initial }: { initial: BoardState }) {
+  const [board, setBoard] = useState(initial); current = board;
+  return <CanvasBoard board={board} onChange={b => { commit(b); setBoard(b); }} onViewportChange={b => { navigateCommit(b); setBoard(b); }} onUndo={() => {}} onRedo={() => {}} onSave={() => {}}/>;
 }
 function pointer(target: Element, type: string, x: number, y: number, modifiers: MouseEventInit & { pointerType?: string; pointerId?: number } = {}) {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
@@ -19,7 +24,7 @@ beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   SVGElement.prototype.setPointerCapture = () => {}; SVGElement.prototype.hasPointerCapture = () => false;
   SVGElement.prototype.releasePointerCapture = () => {};
-  host = document.createElement("div"); document.body.append(host); root = createRoot(host); commit.mockClear();
+  host = document.createElement("div"); document.body.append(host); root = createRoot(host); commit.mockClear(); navigateCommit.mockClear(); localStorage.clear();
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 describe("Canvas interactions", () => {
@@ -264,6 +269,86 @@ describe("Canvas interactions", () => {
     });
     expect(commit).toHaveBeenCalledTimes(1); expect(current.viewport).toMatchObject({ x: -40, y: -50, scale: 2 });
   });
+
+  it("routes touch pan through viewport navigation without content autosave", async () => {
+    await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 20, 30, { pointerType: "touch", pointerId: 11 });
+      pointer(svg, "pointermove", 80, 90, { pointerType: "touch", pointerId: 11 });
+      pointer(svg, "pointerup", 80, 90, { pointerType: "touch", pointerId: 11 });
+    });
+    expect(commit).not.toHaveBeenCalled();
+    expect(navigateCommit).toHaveBeenCalledTimes(1);
+    expect(current.viewport).toMatchObject({ x: 60, y: 60 });
+  });
+
+  it("releases pointer capture after pen pointerup and pointercancel", async () => {
+    const captured = new Set<number>();
+    const release = vi.fn((id: number) => captured.delete(id));
+    SVGElement.prototype.setPointerCapture = (id: number) => { captured.add(id); };
+    SVGElement.prototype.hasPointerCapture = (id: number) => captured.has(id);
+    SVGElement.prototype.releasePointerCapture = release;
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => { pointer(svg, "pointerdown", 20, 20, { pointerType: "pen", pointerId: 31 }); pointer(svg, "pointermove", 40, 40, { pointerType: "pen", pointerId: 31 }); pointer(svg, "pointerup", 40, 40, { pointerType: "pen", pointerId: 31 }); });
+    expect(release).toHaveBeenCalledWith(31);
+    await act(async () => { pointer(svg, "pointerdown", 50, 50, { pointerType: "pen", pointerId: 32 }); pointer(svg, "pointercancel", 50, 50, { pointerType: "pen", pointerId: 32 }); });
+    expect(release).toHaveBeenCalledWith(32);
+    expect(current.drawings).toHaveLength(1);
+  });
+
+  it("finishes finger drawing safely when a second finger starts pinch, then draws again", async () => {
+    localStorage.setItem("mindcanvas:canvas-touch:v1", JSON.stringify({ drawWithFinger: true, stylusDrawOnly: true, zoomSensitivity: 1, invertZoom: false }));
+    await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 40, 50, { pointerType: "touch", pointerId: 1 });
+      pointer(svg, "pointermove", 70, 70, { pointerType: "touch", pointerId: 1 });
+      pointer(svg, "pointerdown", 140, 50, { pointerType: "touch", pointerId: 2 });
+      pointer(svg, "pointermove", 240, 50, { pointerType: "touch", pointerId: 2 });
+      pointer(svg, "pointerup", 240, 50, { pointerType: "touch", pointerId: 2 });
+      pointer(svg, "pointerup", 70, 70, { pointerType: "touch", pointerId: 1 });
+    });
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(navigateCommit).toHaveBeenCalledTimes(1);
+    expect(current.drawings).toHaveLength(1);
+    expect(current.viewport.scale).toBeGreaterThan(1);
+    await act(async () => {
+      pointer(svg, "pointerdown", 90, 90, { pointerType: "touch", pointerId: 3 });
+      pointer(svg, "pointermove", 110, 110, { pointerType: "touch", pointerId: 3 });
+      pointer(svg, "pointerup", 110, 110, { pointerType: "touch", pointerId: 3 });
+    });
+    expect(current.drawings).toHaveLength(2);
+    expect(commit).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps pinch available after repeated stylus strokes without creating pinch strokes", async () => {
+    await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    for (let i = 0; i < 5; i++) {
+      await act(async () => {
+        pointer(svg, "pointerdown", 20 + i * 5, 20 + i * 5, { pointerType: "pen", pointerId: 100 + i });
+        pointer(svg, "pointermove", 50 + i * 5, 50 + i * 5, { pointerType: "pen", pointerId: 100 + i });
+        pointer(svg, "pointerup", 50 + i * 5, 50 + i * 5, { pointerType: "pen", pointerId: 100 + i });
+      });
+    }
+    expect(current.drawings).toHaveLength(5);
+    expect(commit).toHaveBeenCalledTimes(5);
+    await act(async () => {
+      pointer(svg, "pointerdown", 50, 80, { pointerType: "touch", pointerId: 201 });
+      pointer(svg, "pointerdown", 150, 80, { pointerType: "touch", pointerId: 202 });
+      pointer(svg, "pointermove", 250, 80, { pointerType: "touch", pointerId: 202 });
+      pointer(svg, "pointerup", 250, 80, { pointerType: "touch", pointerId: 202 });
+      pointer(svg, "pointerup", 50, 80, { pointerType: "touch", pointerId: 201 });
+    });
+    expect(current.drawings).toHaveLength(5);
+    expect(commit).toHaveBeenCalledTimes(5);
+    expect(navigateCommit).toHaveBeenCalledTimes(1);
+  });
+
   it("switches paper styles and formats text without an alert", async () => {
     const b = { ...blankBoard(), texts: [{ id: "txt", text: "Editable", x: 20, y: 40, width: 200 }] };
     await act(async () => root.render(<Harness initial={b}/>));
