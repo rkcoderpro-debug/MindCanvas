@@ -190,7 +190,28 @@ export function mergeProjects(remote: Project[], cache: CachedProject[], owner: 
 }
 async function clientFor(owner: string) {
   const session = await getCurrentSession();
-  if (!supabase || !session || session.user.id !== owner) throw new Error("Session changed. Please sign in again.");
+  if (!supabase || !session || session.user.id !== owner) throw new Error("Phiên đăng nhập đã thay đổi. Hãy đăng nhập lại.");
+
+  // getSession() only reads the browser cache.  A stale/expired access token
+  // can therefore look valid here while Postgres receives no authenticated
+  // identity and rejects an insert with 42501.  Verify the token with the
+  // Supabase Auth endpoint before any cloud read/write.  The optional guard
+  // keeps lightweight unit-test clients (which only implement `from`) valid.
+  const auth = (supabase as unknown as {
+    auth?: {
+      getUser?: () => Promise<{ data?: { user?: { id?: string } | null }; error?: { message?: string } | null }>;
+      refreshSession?: () => Promise<{ error?: { message?: string } | null }>;
+    };
+  }).auth;
+  if (typeof auth?.getUser === "function") {
+    let verified = await auth.getUser();
+    if (verified.error && typeof auth.refreshSession === "function") {
+      const refreshed = await auth.refreshSession();
+      if (!refreshed.error) verified = await auth.getUser();
+    }
+    if (verified.error) throw new Error("Phiên Supabase đã hết hạn. Hãy đăng nhập lại rồi thử lưu.");
+    if (verified.data?.user?.id !== owner) throw new Error("Tài khoản Supabase hiện tại không khớp với workspace. Hãy đăng nhập lại.");
+  }
   return supabase;
 }
 export async function fetchProjects(owner: string): Promise<Project[]> {
@@ -238,11 +259,35 @@ export async function persistProject(owner: string, project: CachedProject): Pro
   const client = await clientFor(owner);
   const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt };
   if (project.revision === undefined) {
-    const modern = await client.from("notes").upsert({ ...payload, user_id: owner, revision: 0 }).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    // A newly created canvas must go through INSERT, not UPSERT.  UPSERT is
+    // an INSERT ... ON CONFLICT UPDATE and can unexpectedly require the
+    // editor/update policy (or attempt to change ownership) even for a fresh
+    // local UUID.  Existing legacy rows are handled only after a duplicate
+    // key response below.
+    const modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
     if (!modern.error) return { revision: Number(modern.data?.revision ?? 0) };
-    if (!/revision|column/i.test(modern.error.message)) throw modern.error;
-    const legacy = await client.from("notes").upsert({ ...payload, user_id: owner }).abortSignal(AbortSignal.timeout(20000));
-    if (legacy.error) throw legacy.error;
+    const modernMessage = String(modern.error.message ?? "");
+    const modernCode = String((modern.error as { code?: unknown }).code ?? "");
+    const duplicate = modernCode === "23505" || /duplicate key|already exists/i.test(modernMessage);
+    if (!duplicate && !/revision|column/i.test(modernMessage)) throw modern.error;
+
+    // A pre-revision database can still accept a brand-new note.  Do not
+    // retry a 42501/RLS failure with a broader write; surface that exact
+    // problem so the UI can point to the Supabase project/session mismatch.
+    if (!duplicate && /revision|column/i.test(modernMessage)) {
+      const legacy = await client.from("notes").insert({ ...payload, user_id: owner }).abortSignal(AbortSignal.timeout(20000));
+      if (!legacy.error) return {};
+      const legacyMessage = String(legacy.error.message ?? "");
+      const legacyCode = String((legacy.error as { code?: unknown }).code ?? "");
+      if (!(legacyCode === "23505" || /duplicate key|already exists/i.test(legacyMessage))) throw legacy.error;
+    }
+
+    // Imported boards may retain an id that already belongs to this owner.
+    // Update that row explicitly instead of using UPSERT, so a shared editor
+    // can never accidentally send their own user_id as a new owner.
+    const existing = await client.from("notes").update(payload).eq("id", project.id).eq("user_id", owner).select("id").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    if (existing.error) throw existing.error;
+    if (!existing.data) throw modern.error;
     return {};
   }
   const nextRevision = project.revision + 1;

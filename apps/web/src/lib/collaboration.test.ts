@@ -35,7 +35,15 @@ describe("V4.5.1 collaboration helpers", () => {
       details: "Searched for the function public.list_project_members with parameter p_project_id",
       message: "Could not find the function public.list_project_members(p_project_id) in the schema cache",
     });
-    expect(error.message).toContain("0012_v4_5_1_share_rpc_repair.sql");
+    expect(error.message).toContain("0013_v4_5_1_runtime_repairs.sql");
+  });
+
+  it("turns the runtime project_id ambiguity into a repair hint", () => {
+    const error = collaborationRpcError({
+      code: "42702",
+      message: 'column reference "project_id" is ambiguous',
+    });
+    expect(error.message).toContain("0013_v4_5_1_runtime_repairs.sql");
   });
 
   it("preserves non-sharing Supabase errors", () => {

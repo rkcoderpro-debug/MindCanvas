@@ -5,7 +5,9 @@
 ### Implemented
 
 - Share now renders as a full workspace page instead of a constrained dialog; all sharing controls fit the viewport without a horizontal scrollbar, including the 390px mobile layout.
-- Added `supabase/migrations/0012_v4_5_1_share_rpc_repair.sql`, an idempotent repair for the V4.4 sharing tables/RPCs with exact PostgREST parameter names and an explicit `notify pgrst, 'reload schema'`.
+- Added `supabase/migrations/0012_v4_5_1_share_rpc_repair.sql` and `0013_v4_5_1_runtime_repairs.sql`. The follow-up migration qualifies every sharing-RPC column (fixing runtime `42702 project_id is ambiguous`), recreates the note RLS policies and explicitly reloads PostgREST's schema cache.
+- New canvas persistence uses an explicit INSERT for new UUIDs, verifies the current Supabase access token before cloud writes and gives a targeted `42501 notes` diagnosis instead of silently retrying with a broader UPSERT.
+- Bumped the service-worker shell cache to `v4.5.1-rpc-rls-repair` so installed PWAs receive the corrected client bundle.
 - Client errors for missing `create_project_invitation`, `list_project_members` or `list_project_invitations` now include the migration and schema-cache recovery steps.
 - Canvas wheel input is vertical by default; holding `Alt` maps the same wheel gesture to horizontal panning while pinch/`Ctrl` zoom remains unchanged.
 - Mobile canvas controls are separated into a compact horizontal toolbar, bottom action zones and a touch-safe inspector sheet; the existing fullscreen, pinch/pan and toolbar-position preferences remain compatible.
@@ -13,7 +15,7 @@
 
 ### Supabase action required
 
-Run migration `0011_v4_4_collaboration.sql` once when the V4.4 tables are missing, then run `0012_v4_5_1_share_rpc_repair.sql` in the Supabase SQL Editor. The second migration also reloads PostgREST's schema cache. Do not expose `token_hash` to the browser or replace the RPCs with direct table writes.
+Run migration `0011_v4_4_collaboration.sql` once when the V4.4 tables are missing, then run `0012_v4_5_1_share_rpc_repair.sql` and `0013_v4_5_1_runtime_repairs.sql` in the Supabase SQL Editor. Migration 0013 also reloads PostgREST's schema cache. Do not expose `token_hash` to the browser or replace the RPCs with direct table writes.
 
 ### Verification
 

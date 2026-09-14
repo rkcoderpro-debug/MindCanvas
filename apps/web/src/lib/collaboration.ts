@@ -39,7 +39,9 @@ export type ProjectPresence = {
 };
 
 const COLLABORATION_RPC_MIGRATION_HINT =
-  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy supabase/migrations/0011_v4_4_collaboration.sql và supabase/migrations/0012_v4_5_1_share_rpc_repair.sql trong Supabase SQL Editor, sau đó reload schema cache.";
+  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy lần lượt supabase/migrations/0011_v4_4_collaboration.sql, 0012_v4_5_1_share_rpc_repair.sql và 0013_v4_5_1_runtime_repairs.sql trên đúng project Supabase của Render, sau đó tải lại ứng dụng.";
+const COLLABORATION_RPC_RUNTIME_HINT =
+  "RPC chia sẻ đang chạy phiên bản cũ và bị tham chiếu project_id mơ hồ (42702). Hãy chạy supabase/migrations/0013_v4_5_1_runtime_repairs.sql trên đúng project Supabase của Render, rồi tải lại ứng dụng.";
 
 /** Convert PostgREST's opaque missing-function error into an actionable message. */
 export function collaborationRpcError(error: unknown): Error {
@@ -49,6 +51,7 @@ export function collaborationRpcError(error: unknown): Error {
   const details = typeof candidate?.details === "string" ? candidate.details : "";
   const raw = `${code} ${message} ${details}`;
   if (code === "PGRST202" && /project_(invitation|members)/i.test(raw)) return new Error(COLLABORATION_RPC_MIGRATION_HINT);
+  if (code === "42702" && /project_id/i.test(raw)) return new Error(COLLABORATION_RPC_RUNTIME_HINT);
   if (error instanceof Error) return error;
   return new Error(message || "Không thể hoàn tất thao tác cộng tác.");
 }
