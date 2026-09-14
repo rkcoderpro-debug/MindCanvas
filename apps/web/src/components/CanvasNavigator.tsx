@@ -34,6 +34,6 @@ export default function CanvasNavigator({ board, selection, svg, onChange }: { b
       const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix.inverse());
       onChange({ ...board, viewport: { ...board.viewport, x: size.width / 2 - point.x * board.viewport.scale, y: size.height / 2 - point.y * board.viewport.scale } });
     }}>{entries.filter(s => s.kind !== "edges").map(s => { const b = elementBounds(board, s); return b && <rect key={s.id} {...b} fill={selection.some(item => item.id === s.id) ? "var(--accent)" : "var(--accent-border)"}/>; })}<rect {...view} fill="color-mix(in srgb, var(--accent) 8%, transparent)" stroke="var(--accent)" strokeWidth={Math.max(w, h) / 180}/></svg>}
-    <div className="navigator-actions"><button disabled={!all} onClick={() => fit(false)} title="Shift+1">{t("fitCanvas")}</button><button disabled={!chosen} onClick={() => fit(true)} title="Shift+2">{t("fitSelection")}</button><button aria-pressed={show} onClick={() => setShow(!show)}>{t("minimap")}</button></div>
+    <div className="navigator-actions"><button disabled={!all} onClick={() => fit(false)} title="Shift+1">{t("fitCanvas")}</button>{chosen && <button onClick={() => fit(true)} title="Shift+2">{t("fitSelection")}</button>}<button className="navigator-minimap-toggle" aria-pressed={show} onClick={() => setShow(!show)}>{t("minimap")}</button></div>
   </div>;
 }

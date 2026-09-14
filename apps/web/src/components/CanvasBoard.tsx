@@ -797,7 +797,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
       <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "pen" || tool === "highlighter" ? "drawHint" : "canvasHint")}</div>
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
-      <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
+      <div className="canvas-mobile-dock">
+        <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
+        <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
+      </div>
       {mindMapLayoutSummary && <aside className="mind-map-layout-report" aria-label={t("mindMapLayoutReport")}>
         <header><div><strong>{t("mindMapLayoutReport")}</strong><small>{t("mindMapRoot")}: {mindMapLayoutSummary.rootLabel}</small></div><button className="icon-button" aria-label={t("closeLayoutReport")} title={t("closeLayoutReport")} onClick={() => setMindMapLayoutSummary(null)}><X size={15}/></button></header>
         <div className="mind-map-layout-columns">{(["left", "right"] as const).map(side => <section key={side} className={`mind-map-layout-side ${side}`}>
@@ -805,7 +808,6 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           {mindMapLayoutSummary[side].length ? mindMapLayoutSummary[side].map(branch => <div className="mind-map-branch-group" key={branch.rootId}><strong>{branch.rootLabel}</strong><ul>{branch.nodeLabels.map((label, index) => <li key={`${branch.rootId}-${index}`} title={label}>{label}</li>)}</ul></div>) : <small className="mind-map-no-branch">{t("mindMapNoBranches")}</small>}
         </section>)}</div>
       </aside>}
-      <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
       <div className="zoom-control"><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
     {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>

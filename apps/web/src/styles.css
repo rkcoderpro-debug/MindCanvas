@@ -2128,3 +2128,344 @@ html { -webkit-text-size-adjust: 100%; }
   .pen-mode-badge,
   .gesture-mode-badge { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* V4.5.3: mobile layout stabilization after real-device review. */
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+.mobile-canvas-header,
+.mobile-project-sheet-backdrop { display: none; }
+.canvas-mobile-dock { display: contents; }
+
+@media (max-width: 620px) {
+  .app-shell,
+  .main-area,
+  .main-area > *,
+  .editor-layout,
+  .editor-frame,
+  .learning-hub-page,
+  .workspace-home {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .canvas-open-mode .main-area {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0 8px 8px;
+  }
+
+  .canvas-open-mode .canvas-desktop-topbar,
+  .canvas-open-mode .canvas-editor-heading { display: none !important; }
+
+  .mobile-canvas-header {
+    position: relative;
+    z-index: 72;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto 44px;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 56px;
+    padding: max(6px, env(safe-area-inset-top)) 2px 6px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-canvas-back,
+  .mobile-project-menu-trigger {
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  .mobile-canvas-title {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+  }
+  .mobile-canvas-title strong,
+  .mobile-canvas-title small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-canvas-title strong { color: var(--text); font-size: 14px; line-height: 1.25; }
+  .mobile-canvas-title small { color: var(--muted); font-size: 10px; }
+
+  .mobile-save-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    background: var(--control-bg);
+  }
+  .mobile-save-status span { display: none; }
+  .mobile-save-status.saved { color: var(--success); }
+  .mobile-save-status.localSaved,
+  .mobile-save-status.saving,
+  .mobile-save-status.pending { color: var(--local-status); }
+  .mobile-save-status.offline,
+  .mobile-save-status.saveError { color: var(--danger); }
+
+  .canvas-open-mode .editor-layout {
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    margin-top: 8px;
+    border-radius: 13px;
+  }
+  .canvas-open-mode .editor-frame {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 100%;
+  }
+
+  .canvas-mobile-dock {
+    position: absolute;
+    z-index: 12;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    left: 8px;
+    display: flex;
+    align-items: stretch;
+    gap: 7px;
+    min-width: 0;
+    pointer-events: none;
+  }
+  .canvas-mobile-dock > * { pointer-events: auto; }
+
+  .editor-layout .canvas-mobile-dock .inspector-toggle {
+    position: static;
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 44%;
+    min-height: 48px;
+    padding: 8px 11px;
+    overflow: hidden;
+    border-radius: 12px;
+    white-space: nowrap;
+  }
+  .editor-layout .canvas-mobile-dock .inspector-toggle span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .editor-layout .canvas-mobile-dock .canvas-navigator {
+    position: static;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: stretch;
+    gap: 0;
+  }
+  .editor-layout .canvas-mobile-dock .canvas-navigator .minimap,
+  .editor-layout .canvas-mobile-dock .navigator-minimap-toggle { display: none; }
+  .editor-layout .canvas-mobile-dock .navigator-actions {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    gap: 3px;
+    padding: 4px;
+    overflow: hidden;
+    border-radius: 12px;
+  }
+  .editor-layout .canvas-mobile-dock .navigator-actions button {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .editor-layout .zoom-control {
+    top: auto;
+    right: 8px;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    z-index: 11;
+  }
+
+  .editor-layout .drawing-toolbar.toolbar-collapsed,
+  .editor-layout.toolbar-top .drawing-toolbar.toolbar-collapsed,
+  .editor-layout.toolbar-bottom .drawing-toolbar.toolbar-collapsed,
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-collapsed,
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-collapsed {
+    right: auto;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 8px;
+    width: max-content;
+    max-width: calc(100% - 138px);
+    transform: none;
+  }
+  .editor-layout .drawing-toolbar.toolbar-collapsed .toolbar-current-tool {
+    max-width: min(160px, calc(100vw - 205px));
+  }
+  .editor-layout .drawing-toolbar.toolbar-collapsed .toolbar-current-tool span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inspector {
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    left: 8px;
+    width: auto;
+    max-width: none;
+    max-height: min(62dvh, 560px);
+  }
+
+  .mobile-project-sheet-backdrop {
+    position: fixed;
+    z-index: 110;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+    background: var(--overlay);
+    overscroll-behavior: contain;
+  }
+  .mobile-project-sheet {
+    width: min(100%, 520px);
+    max-height: min(78dvh, 680px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 20px 20px 14px 14px;
+    background: var(--surface-raised);
+    box-shadow: 0 24px 70px var(--shadow-strong);
+  }
+  .mobile-project-sheet > header {
+    position: sticky;
+    z-index: 1;
+    top: -14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -14px -14px 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+    backdrop-filter: blur(14px);
+  }
+  .mobile-project-sheet > header > div { display: grid; min-width: 0; gap: 2px; }
+  .mobile-project-sheet > header strong,
+  .mobile-project-sheet > header small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-project-sheet > header small { color: var(--muted); font-size: 10px; }
+  .mobile-project-sheet .title-input { width: 100%; margin-bottom: 10px; font-size: 18px; }
+  .mobile-project-sheet-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mobile-project-sheet-grid button {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 72px;
+    padding: 9px 6px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--control-bg);
+  }
+  .mobile-project-sheet-grid button span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+  .mobile-project-sheet-grid button:disabled { opacity: .45; }
+  .mobile-project-sheet-grid .mobile-project-ai-action {
+    color: var(--accent-contrast);
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+
+  .learning-hub-nav {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 5px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .learning-hub-nav button {
+    scroll-snap-align: start;
+    min-height: 44px;
+  }
+
+  .canvas-fullscreen-mode .mobile-canvas-header,
+  .canvas-fullscreen-mode .mobile-compact-nav,
+  .canvas-fullscreen-mode .mobile-project-sheet-backdrop { display: none !important; }
+  .canvas-fullscreen-mode .main-area {
+    width: 100%;
+    height: 100dvh;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+  .canvas-fullscreen-mode .editor-layout {
+    width: 100%;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .canvas-fullscreen-mode .canvas-mobile-dock { bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .canvas-fullscreen-mode .editor-layout .zoom-control,
+  .canvas-fullscreen-mode .editor-layout .drawing-toolbar.toolbar-collapsed { bottom: calc(68px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 420px) {
+  .canvas-open-mode .main-area {
+    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+  .canvas-open-mode.canvas-fullscreen-mode .main-area { padding-bottom: 0 !important; }
+
+  .learning-hub-nav button {
+    gap: 5px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .learning-hub-nav button span { display: inline; }
+
+  .mobile-project-sheet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 340px) {
+  .mobile-canvas-header { grid-template-columns: 42px minmax(0, 1fr) 38px 42px; gap: 2px; }
+  .mobile-save-status { min-width: 36px; padding-inline: 7px; }
+  .editor-layout .canvas-mobile-dock .inspector-toggle span { display: none; }
+  .editor-layout .canvas-mobile-dock .inspector-toggle { width: 48px; padding-inline: 0; justify-content: center; }
+  .editor-layout .drawing-toolbar.toolbar-collapsed .toolbar-current-tool span { display: none; }
+}
