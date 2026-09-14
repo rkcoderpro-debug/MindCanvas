@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
@@ -41,6 +41,10 @@ export default function LearningHubPage({ owner, projects, accountPlan }: { owne
   const quizzes = useQuizzes(owner);
   const [tab, setTab] = useState<HubTab>("overview");
   const [openAiPlan, setOpenAiPlan] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const [showNavSwipeHint, setShowNavSwipeHint] = useState(() => {
+    try { return localStorage.getItem("mindcanvas:learning-nav-swiped:v1") !== "true"; } catch { return true; }
+  });
   const today = vietnamStudyDate();
 
   useEffect(() => {
@@ -50,6 +54,17 @@ export default function LearningHubPage({ owner, projects, accountPlan }: { owne
     void flashcards.loadCardsForDecks(plan.deckIds).then(cards => { if (alive) void flashcards.ensureStudyPlanDay(plan, cards); }).catch(() => undefined);
     return () => { alive = false; };
   }, [flashcards.activeStudyPlan, flashcards.ensureStudyPlanDay, flashcards.loadCardsForDecks, flashcards.studyLoading, flashcards.todayStudyDay]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia?.("(max-width: 620px)").matches) return;
+    const active = navRef.current?.querySelector<HTMLElement>("button.active");
+    active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [tab]);
+
+  const markNavDiscovered = () => {
+    if (!showNavSwipeHint) return;
+    setShowNavSwipeHint(false);
+    try { localStorage.setItem("mindcanvas:learning-nav-swiped:v1", "true"); } catch {}
+  };
 
   const onQuizCompleted = async (quizId: string) => {
     const plan = flashcards.activeStudyPlan;
@@ -73,7 +88,7 @@ export default function LearningHubPage({ owner, projects, accountPlan }: { owne
 
   return <section className="learning-hub-page">
     <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></header>
-    <nav className="learning-hub-nav" aria-label={t("learningHub")} role="tablist">{tabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={17}/><span>{label}</span>{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>
+    <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={17}/><span>{label}</span>{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
     {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
     {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}
     {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}

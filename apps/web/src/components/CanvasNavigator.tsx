@@ -1,11 +1,15 @@
 import { useEffect, useState, type RefObject } from "react";
+import { Crosshair, Map, Maximize2, Navigation } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import { hiddenNodes, elementBounds, type Selection } from "../lib/board";
 import { orderedElements, selectionBounds, fittedViewport } from "../lib/editorCommands";
 import { useLanguage } from "../lib/i18n";
 
 export default function CanvasNavigator({ board, selection, svg, onChange }: { board: BoardState; selection: Selection[]; svg: RefObject<SVGSVGElement | null>; onChange: (b: BoardState) => void }) {
-  const { t } = useLanguage(); const [size, setSize] = useState({ width: 800, height: 600 }), [show, setShow] = useState(true);
+  const { t } = useLanguage();
+  const [size, setSize] = useState({ width: 800, height: 600 });
+  const [show, setShow] = useState(() => typeof window === "undefined" || !window.matchMedia?.("(max-width: 620px)").matches);
+  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
     const el = svg.current; if (!el) return;
     const update = () => { const r = el.getBoundingClientRect(); setSize({ width: r.width || 800, height: r.height || 600 }); }; update();
@@ -28,12 +32,21 @@ export default function CanvasNavigator({ board, selection, svg, onChange }: { b
       if (e.shiftKey && !e.ctrlKey && !e.metaKey && ["Digit1", "Digit2"].includes(e.code)) { e.preventDefault(); fit(e.code === "Digit2"); }
     }; window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key);
   });
-  return <div className="canvas-navigator">
+  const runMobileAction = (action: () => void) => { action(); setMobileOpen(false); };
+  return <div className={`canvas-navigator ${mobileOpen ? "mobile-expanded" : ""}`}>
     {show && <svg className="minimap" aria-label={t("minimap")} role="img" viewBox={`${x} ${y} ${w} ${h}`} onPointerDown={e => {
       const matrix = e.currentTarget.getScreenCTM(); if (!matrix) return;
       const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix.inverse());
       onChange({ ...board, viewport: { ...board.viewport, x: size.width / 2 - point.x * board.viewport.scale, y: size.height / 2 - point.y * board.viewport.scale } });
     }}>{entries.filter(s => s.kind !== "edges").map(s => { const b = elementBounds(board, s); return b && <rect key={s.id} {...b} fill={selection.some(item => item.id === s.id) ? "var(--accent)" : "var(--accent-border)"}/>; })}<rect {...view} fill="color-mix(in srgb, var(--accent) 8%, transparent)" stroke="var(--accent)" strokeWidth={Math.max(w, h) / 180}/></svg>}
     <div className="navigator-actions"><button disabled={!all} onClick={() => fit(false)} title="Shift+1">{t("fitCanvas")}</button>{chosen && <button onClick={() => fit(true)} title="Shift+2">{t("fitSelection")}</button>}<button className="navigator-minimap-toggle" aria-pressed={show} onClick={() => setShow(!show)}>{t("minimap")}</button></div>
+    <div className="mobile-navigator-controls">
+      {mobileOpen && <div className="mobile-navigator-actions" role="menu">
+        <button disabled={!all} onClick={() => runMobileAction(() => fit(false))} title={t("fitCanvas")}><Maximize2 size={17}/><span>{t("fitCanvas")}</span></button>
+        <button disabled={!chosen} onClick={() => runMobileAction(() => fit(true))} title={t("fitSelection")}><Crosshair size={17}/><span>{t("fitSelection")}</span></button>
+        <button aria-pressed={show} onClick={() => runMobileAction(() => setShow(value => !value))} title={t("minimap")}><Map size={17}/><span>{t("minimap")}</span></button>
+      </div>}
+      <button type="button" className={`mobile-navigator-trigger ${mobileOpen ? "selected" : ""}`} aria-expanded={mobileOpen} aria-label={t("canvasNavigation")} title={t("canvasNavigation")} onClick={() => setMobileOpen(value => !value)}><Navigation size={19}/></button>
+    </div>
   </div>;
 }

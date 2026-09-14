@@ -5,8 +5,15 @@ import { CANVAS_TOUCH_SETTINGS_KEY, DEFAULT_CANVAS_TOUCH_SETTINGS, normalizeCanv
 describe("canvas touch settings", () => {
   beforeEach(() => localStorage.clear());
 
-  it("defaults to finger drawing off and stylus drawing only", () => {
+  it("defaults to finger drawing on so the Pen tool behaves like the selected tool on mobile", () => {
     expect(readCanvasTouchSettings()).toEqual(DEFAULT_CANVAS_TOUCH_SETTINGS);
+  });
+
+
+  it("migrates V4.5.2 touch settings without leaving Pen stuck in temporary pan", () => {
+    localStorage.setItem("mindcanvas:canvas-touch:v1", JSON.stringify({ drawWithFinger: false, stylusDrawOnly: true, zoomSensitivity: 1.4, invertZoom: true }));
+    expect(readCanvasTouchSettings()).toMatchObject({ drawWithFinger: true, stylusDrawOnly: true, zoomSensitivity: 1.4, invertZoom: true });
+    expect(JSON.parse(localStorage.getItem(CANVAS_TOUCH_SETTINGS_KEY)!)).toMatchObject({ drawWithFinger: true, zoomSensitivity: 1.4 });
   });
 
   it("normalizes, persists and clamps sensitivity", () => {

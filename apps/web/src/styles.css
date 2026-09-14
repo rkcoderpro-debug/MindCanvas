@@ -2469,3 +2469,298 @@ body,
   .editor-layout .canvas-mobile-dock .inspector-toggle { width: 48px; padding-inline: 0; justify-content: center; }
   .editor-layout .drawing-toolbar.toolbar-collapsed .toolbar-current-tool span { display: none; }
 }
+
+/* V4.5.4: mobile canvas controls, swipe affordance and tool-state polish.
+   Desktop canvas rules above remain untouched; all layout overrides are mobile-scoped. */
+.mobile-navigator-controls,
+.toolbar-swipe-hint,
+.learning-hub-swipe-hint { display: none; }
+
+@media (max-width: 620px) {
+  /* Keep zoom independent from the bottom dock and toolbar. */
+  .editor-layout .zoom-control,
+  .canvas-fullscreen-mode .editor-layout .zoom-control {
+    top: 8px;
+    right: 8px;
+    bottom: auto;
+    z-index: 14;
+  }
+
+  /* Expanded mobile toolbar exposes every drawing tool and scrolls in the
+     direction implied by its configured position. */
+  .editor-layout .drawing-toolbar.toolbar-expanded .mobile-secondary-tool { display: grid; }
+  .editor-layout .drawing-toolbar.toolbar-expanded .mobile-extra-action,
+  .editor-layout .drawing-toolbar.toolbar-expanded .toolbar-divider { display: none; }
+  .editor-layout .drawing-toolbar.toolbar-expanded .canvas-more-tools-trigger { display: grid; }
+
+  .editor-layout .drawing-toolbar.toolbar-expanded {
+    z-index: 13;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    padding: 5px;
+    gap: 3px;
+    overflow: visible;
+  }
+  .editor-layout .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools {
+    min-width: 0;
+    min-height: 0;
+    justify-content: flex-start;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-behavior: smooth;
+  }
+  .editor-layout .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools::-webkit-scrollbar { display: none; }
+  .editor-layout .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools button { scroll-snap-align: center; }
+
+  .editor-layout.toolbar-top .drawing-toolbar.toolbar-expanded {
+    top: 8px;
+    right: 138px;
+    bottom: auto;
+    left: 60px;
+    transform: none;
+    flex-direction: row;
+  }
+  .editor-layout.toolbar-bottom .drawing-toolbar.toolbar-expanded {
+    top: auto;
+    right: 8px;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 8px;
+    transform: none;
+    flex-direction: row;
+  }
+  .editor-layout.toolbar-top .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools,
+  .editor-layout.toolbar-bottom .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools {
+    flex: 1 1 auto;
+    flex-direction: row;
+    max-width: 100%;
+    max-height: none;
+    padding-inline: 10px 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    touch-action: pan-x;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 18px), transparent 100%);
+  }
+
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-expanded,
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-expanded {
+    top: 62px;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    width: 54px;
+    transform: none;
+    flex-direction: column;
+  }
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-expanded { right: auto; left: 8px; }
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-expanded { right: 8px; left: auto; }
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools,
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools {
+    flex: 1 1 auto;
+    flex-direction: column;
+    width: 44px;
+    max-width: 44px;
+    max-height: 100%;
+    padding-block: 10px 20px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scroll-snap-type: y proximity;
+    touch-action: pan-y;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 18px), transparent 100%);
+  }
+
+  /* Collapsed toolbar follows the same configured edge instead of always
+     being forced to the bottom. */
+  .editor-layout.toolbar-top .drawing-toolbar.toolbar-collapsed {
+    top: 8px;
+    right: auto;
+    bottom: auto;
+    left: 60px;
+    max-width: calc(100% - 206px);
+    transform: none;
+    flex-direction: row;
+  }
+  .editor-layout.toolbar-bottom .drawing-toolbar.toolbar-collapsed {
+    top: auto;
+    right: auto;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 8px;
+    max-width: calc(100% - 138px);
+    transform: none;
+    flex-direction: row;
+  }
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-collapsed,
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-collapsed {
+    top: 62px;
+    bottom: auto;
+    max-width: 54px;
+    transform: none;
+    flex-direction: column;
+  }
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-collapsed { right: auto; left: 8px; }
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-collapsed { right: 8px; left: auto; }
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-collapsed .toolbar-current-tool,
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-collapsed .toolbar-current-tool {
+    width: 44px;
+    max-width: 44px;
+    padding-inline: 0;
+  }
+  .editor-layout.toolbar-left .drawing-toolbar.toolbar-collapsed .toolbar-current-tool span,
+  .editor-layout.toolbar-right .drawing-toolbar.toolbar-collapsed .toolbar-current-tool span { display: none; }
+
+  /* One-time discoverability hint for scrollable tool strips. */
+  .toolbar-swipe-hint {
+    position: absolute;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    max-width: 150px;
+    padding: 4px 9px;
+    border: 1px solid var(--accent-border);
+    border-radius: 999px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: 0 7px 20px var(--shadow);
+    font-size: 9px;
+    font-weight: 800;
+    pointer-events: none;
+    animation: mobile-swipe-nudge .9s ease-in-out 2;
+  }
+  .toolbar-top .toolbar-swipe-hint { top: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
+  .toolbar-bottom .toolbar-swipe-hint { right: 8px; bottom: calc(100% + 6px); }
+  .toolbar-left .toolbar-swipe-hint { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); }
+  .toolbar-right .toolbar-swipe-hint { top: 50%; right: calc(100% + 6px); transform: translateY(-50%); }
+
+  /* Mobile navigator: a single launcher fans out into Fit / Selection / Minimap. */
+  .editor-layout .canvas-mobile-dock .canvas-navigator {
+    position: static;
+    flex: 0 0 48px;
+    margin-left: auto;
+    width: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    overflow: visible;
+  }
+  .editor-layout .canvas-mobile-dock .canvas-navigator .navigator-actions { display: none; }
+  .editor-layout .canvas-mobile-dock .canvas-navigator .minimap {
+    position: absolute;
+    right: 0;
+    bottom: 58px;
+    display: block;
+    width: min(138px, 38vw);
+    height: 92px;
+    border-radius: 10px;
+    box-shadow: 0 10px 26px var(--shadow);
+  }
+  .editor-layout .canvas-mobile-dock .canvas-navigator.mobile-expanded .minimap { bottom: 194px; }
+  .editor-layout.toolbar-bottom .canvas-mobile-dock .canvas-navigator .minimap { bottom: 118px; }
+  .editor-layout.toolbar-bottom .canvas-mobile-dock .canvas-navigator.mobile-expanded .minimap { bottom: 254px; }
+  .editor-layout.toolbar-right .canvas-mobile-dock .canvas-navigator .minimap { right: 58px; }
+  .editor-layout.toolbar-bottom .mobile-navigator-actions { bottom: 116px; }
+  .mobile-navigator-controls {
+    position: relative;
+    display: grid;
+    width: 48px;
+    height: 48px;
+  }
+  .mobile-navigator-trigger {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--muted);
+    background: var(--control-bg);
+    box-shadow: 0 7px 20px var(--shadow);
+  }
+  .mobile-navigator-trigger.selected,
+  .mobile-navigator-trigger:active { color: var(--accent); background: var(--accent-soft); }
+  .mobile-navigator-actions {
+    position: absolute;
+    right: 0;
+    bottom: 56px;
+    display: grid;
+    gap: 6px;
+    width: min(210px, calc(100vw - 32px));
+    padding: 7px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+    z-index: 4;
+    box-shadow: 0 16px 40px var(--shadow-strong);
+    backdrop-filter: blur(16px);
+  }
+  .mobile-navigator-actions button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    color: var(--muted);
+    background: transparent;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .mobile-navigator-actions button:hover,
+  .mobile-navigator-actions button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+  .mobile-navigator-actions button:disabled { opacity: .42; }
+
+  /* Let Properties keep a usable label while leaving room for the compact navigator. */
+  .editor-layout .canvas-mobile-dock .inspector-toggle {
+    flex: 0 1 auto;
+    max-width: min(46%, 170px);
+  }
+
+  /* Learning Hub tabs intentionally peek/fade at the edges so horizontal
+     scrolling is discoverable instead of looking clipped. */
+  .learning-hub-nav {
+    position: relative;
+    padding-right: 28px;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+  }
+  .learning-hub-nav::-webkit-scrollbar { display: none; }
+  .learning-hub-nav button { flex: 0 0 auto; }
+  .learning-hub-swipe-hint {
+    display: inline-flex;
+    align-items: center;
+    width: max-content;
+    margin: -4px 0 8px 12px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    font-size: 9px;
+    font-weight: 800;
+    pointer-events: none;
+    animation: mobile-swipe-nudge .9s ease-in-out 2;
+  }
+
+  @keyframes mobile-swipe-nudge {
+    0%, 100% { opacity: .72; translate: 0 0; }
+    50% { opacity: 1; translate: -5px 0; }
+  }
+}
+
+@media (max-width: 340px) {
+  .editor-layout.toolbar-top .drawing-toolbar.toolbar-expanded { right: 126px; left: 56px; }
+  .editor-layout.toolbar-top .drawing-toolbar.toolbar-collapsed { left: 56px; max-width: calc(100% - 188px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-swipe-hint,
+  .learning-hub-swipe-hint { animation: none !important; }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 620px) {
+  .editor-layout .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools,
+  .learning-hub-nav { scroll-behavior: auto; }
+}

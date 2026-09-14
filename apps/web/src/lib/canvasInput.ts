@@ -8,13 +8,14 @@ export type CanvasTouchSettings = {
 };
 
 export const DEFAULT_CANVAS_TOUCH_SETTINGS: CanvasTouchSettings = {
-  drawWithFinger: false,
+  drawWithFinger: true,
   stylusDrawOnly: true,
   zoomSensitivity: 1,
   invertZoom: false,
 };
 
-export const CANVAS_TOUCH_SETTINGS_KEY = "mindcanvas:canvas-touch:v1";
+export const CANVAS_TOUCH_SETTINGS_KEY = "mindcanvas:canvas-touch:v2";
+const LEGACY_CANVAS_TOUCH_SETTINGS_KEY = "mindcanvas:canvas-touch:v1";
 
 export function normalizeCanvasTouchSettings(value: unknown): CanvasTouchSettings {
   const raw = value && typeof value === "object" ? value as Partial<CanvasTouchSettings> : {};
@@ -29,7 +30,15 @@ export function normalizeCanvasTouchSettings(value: unknown): CanvasTouchSetting
 
 export function readCanvasTouchSettings(): CanvasTouchSettings {
   try {
-    return normalizeCanvasTouchSettings(JSON.parse(localStorage.getItem(CANVAS_TOUCH_SETTINGS_KEY) ?? "{}"));
+    const current = localStorage.getItem(CANVAS_TOUCH_SETTINGS_KEY);
+    if (current) return normalizeCanvasTouchSettings(JSON.parse(current));
+    const legacy = localStorage.getItem(LEGACY_CANVAS_TOUCH_SETTINGS_KEY);
+    if (legacy) {
+      const migrated = normalizeCanvasTouchSettings({ ...JSON.parse(legacy), drawWithFinger: true });
+      localStorage.setItem(CANVAS_TOUCH_SETTINGS_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    return { ...DEFAULT_CANVAS_TOUCH_SETTINGS };
   } catch {
     return { ...DEFAULT_CANVAS_TOUCH_SETTINGS };
   }

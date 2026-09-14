@@ -129,7 +129,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
 export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
-  const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
+  const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
   const boardRef = useRef(board);
@@ -154,6 +154,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false), [connectorSource, setConnectorSource] = useState<Selection | null>(null), [connectorPulse, setConnectorPulse] = useState<string[]>([]);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
   const [toolbarExpanded, setToolbarExpanded] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
+  const [toolbarOverflowing, setToolbarOverflowing] = useState(false);
+  const [showToolbarSwipeHint, setShowToolbarSwipeHint] = useState(() => {
+    try { return localStorage.getItem("mindcanvas:mobile-toolbar-swiped:v1") !== "true"; } catch { return true; }
+  });
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [touchSettings, setTouchSettings] = useState(readCanvasTouchSettings);
   const [inputMode, setInputMode] = useState<CanvasInputMode>("idle");
@@ -266,6 +270,33 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const timer = window.setTimeout(updateToolbarFit, 0);
     return () => { observer?.disconnect(); window.removeEventListener("resize", updateToolbarFit); window.clearTimeout(timer); };
   }, [toolbarPosition, inspectorOpen, isFullscreen]);
+  useEffect(() => {
+    const track = toolbarTools.current;
+    const mobile = typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches;
+    if (!track || !toolbarExpanded || !mobile) { setToolbarOverflowing(false); return; }
+    const vertical = toolbarPosition === "left" || toolbarPosition === "right";
+    const update = () => setToolbarOverflowing(vertical ? track.scrollHeight > track.clientHeight + 4 : track.scrollWidth > track.clientWidth + 4);
+    update();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
+    observer?.observe(track);
+    window.addEventListener("resize", update);
+    const timer = window.setTimeout(update, 30);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", update); window.clearTimeout(timer); };
+  }, [toolbarExpanded, toolbarPosition]);
+  useEffect(() => {
+    const track = toolbarTools.current;
+    if (!track || !toolbarExpanded || typeof window === "undefined" || !window.matchMedia?.("(max-width: 620px)").matches) return;
+    const active = track.querySelector<HTMLElement>(`[data-tool="${tool}"]`);
+    active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [tool, toolbarExpanded, toolbarPosition]);
+  useEffect(() => {
+    if (!toolbarExpanded || !toolbarOverflowing || !showToolbarSwipeHint) return;
+    const timer = window.setTimeout(() => {
+      setShowToolbarSwipeHint(false);
+      try { localStorage.setItem("mindcanvas:mobile-toolbar-swiped:v1", "true"); } catch {}
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [toolbarExpanded, toolbarOverflowing, showToolbarSwipeHint]);
   useEffect(() => () => {
     stopAutoPan();
     if (connectorPulseTimer.current !== null) window.clearTimeout(connectorPulseTimer.current);
@@ -364,7 +395,6 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const selectElement = (e: ReactPointerEvent, s: Selection) => {
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
-    if (e.pointerType === "touch") return;
     if (gesture.current || (e.button !== 0 && e.button !== 1)) return;
     if (!interactive || space || e.button === 1) return;
     e.stopPropagation(); e.preventDefault();
@@ -404,7 +434,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     e.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
     const p = point(e.clientX, e.clientY, interactionBoard);
     const base = interactionBoard;
-    const touchShouldPan = e.pointerType === "touch" && !(touchSettings.drawWithFinger && (tool === "pen" || tool === "highlighter"));
+    // Touch follows the active tool. Pen/highlighter only fall back to temporary pan
+    // when finger drawing was explicitly disabled. Two-finger gestures are still
+    // promoted to pinch/pan by the capture handlers below without changing `tool`.
+    const touchShouldPan = e.pointerType === "touch" && (tool === "select" || ((tool === "pen" || tool === "highlighter") && !touchSettings.drawWithFinger));
     const stylusTool: ToolMode = e.pointerType === "pen" && touchSettings.stylusDrawOnly ? (tool === "highlighter" ? "highlighter" : "pen") : tool;
     const effectiveTool = e.pointerType === "touch" ? tool : stylusTool;
     if (readOnly || space || tool === "hand" || e.button === 1 || touchShouldPan) {
@@ -661,7 +694,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   };
   const activeTool = tools.find(item => item.id === tool) ?? tools[0];
   const ActiveToolIcon = activeTool.icon;
-  const chooseTool = (id: ToolMode) => { finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false); };
+  const chooseTool = (id: ToolMode) => {
+    finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
+    if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches) setToolbarExpanded(false);
+  };
   return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
@@ -672,11 +708,15 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       else void paste();
     }}>
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
-      {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"}`} role="toolbar" aria-label={t("properties")}>
+      {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"} ${toolbarOverflowing ? "toolbar-overflowing" : ""}`} role="toolbar" aria-label={t("properties")}>
         {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(tool)} title={t(tool)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/><span>{t(tool)}</span></button>}
         <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
-        <span className="drawing-toolbar-tools">{tools.map(({ id, icon: Icon, key }) =>
-          <button key={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
+        <span ref={toolbarTools} className="drawing-toolbar-tools" onScroll={() => {
+          if (!showToolbarSwipeHint) return;
+          setShowToolbarSwipeHint(false);
+          try { localStorage.setItem("mindcanvas:mobile-toolbar-swiped:v1", "true"); } catch {}
+        }}>{tools.map(({ id, icon: Icon, key }) =>
+          <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={() => { finishEdit(); mediaInput.current?.click(); }}><ImagePlus size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
@@ -687,6 +727,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <button className="mobile-extra-action" aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>
         <span className="toolbar-divider mobile-extra-action"/><button className="mobile-extra-action" aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button><button type="button" className="canvas-more-tools-trigger" aria-label={t("moreTools")} title={t("moreTools")} aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen(value => !value)}><MoreHorizontal size={20}/></button></span>
+        {toolbarExpanded && toolbarOverflowing && showToolbarSwipeHint && <span className="toolbar-swipe-hint" role="status">{t("swipeForMore")}</span>}
       </div>}
       <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}

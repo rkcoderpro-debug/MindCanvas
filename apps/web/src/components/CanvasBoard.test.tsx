@@ -251,11 +251,23 @@ describe("Canvas interactions", () => {
     expect(host.querySelector('[data-element="source"]')?.classList.contains("connector-pulse")).toBe(true);
     expect(host.querySelector('[data-element="target"]')?.classList.contains("connector-pulse")).toBe(true);
   });
-  it("places the minimap above the navigator action bar", async () => {
+  it("keeps the desktop navigator actions while also rendering the mobile launcher", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const navigator = host.querySelector(".canvas-navigator")!;
     expect(navigator.firstElementChild?.classList.contains("minimap")).toBe(true);
-    expect(navigator.lastElementChild?.classList.contains("navigator-actions")).toBe(true);
+    expect(navigator.querySelector(".navigator-actions")).not.toBeNull();
+    expect(navigator.querySelector(".mobile-navigator-controls")).not.toBeNull();
+  });
+  it("expands the mobile navigator into three actions and collapses after an action", async () => {
+    const b = { ...blankBoard(), nodes: [{ id: "root", label: "Root", x: 1000, y: 1000, width: 190, height: 76 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const trigger = host.querySelector<HTMLButtonElement>(".mobile-navigator-trigger")!;
+    await act(async () => trigger.click());
+    expect(host.querySelectorAll(".mobile-navigator-actions button")).toHaveLength(3);
+    const fitButton = [...host.querySelectorAll<HTMLButtonElement>(".mobile-navigator-actions button")].find(button => button.textContent?.includes("Vừa màn hình"))!;
+    await act(async () => fitButton.click());
+    expect(host.querySelector(".mobile-navigator-actions")).toBeNull();
+    expect(current.viewport.x).toBeLessThan(0);
   });
   it("pinch-zooms around the two-finger center in one viewport commit", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
@@ -296,6 +308,21 @@ describe("Canvas interactions", () => {
     await act(async () => { pointer(svg, "pointerdown", 50, 50, { pointerType: "pen", pointerId: 32 }); pointer(svg, "pointercancel", 50, 50, { pointerType: "pen", pointerId: 32 }); });
     expect(release).toHaveBeenCalledWith(32);
     expect(current.drawings).toHaveLength(1);
+  });
+
+  it("draws with one finger when Pen is selected by default instead of panning the canvas", async () => {
+    await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 30, 30, { pointerType: "touch", pointerId: 71 });
+      pointer(svg, "pointermove", 70, 70, { pointerType: "touch", pointerId: 71 });
+      pointer(svg, "pointerup", 70, 70, { pointerType: "touch", pointerId: 71 });
+    });
+    expect(current.drawings).toHaveLength(1);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(navigateCommit).not.toHaveBeenCalled();
+    expect(host.querySelector('[aria-label="Bút"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("finishes finger drawing safely when a second finger starts pinch, then draws again", async () => {
