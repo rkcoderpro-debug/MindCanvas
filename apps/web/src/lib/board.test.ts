@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGraph, applySelectionAi, blankBoard, connect, duplicateElement, elementBounds, exportCanvasSvg, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement, selectionToStudyText } from "./board";
+import { applyGraph, applySelectionAi, blankBoard, connect, connectorPath, duplicateElement, elementBounds, exportCanvasSvg, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement, selectionToStudyText } from "./board";
 import { en, vi } from "./i18n";
 const board = () => ({ ...blankBoard(), nodes: [{ id: "a", label: "A", x: 0, y: 0, width: 150, height: 60 }, { id: "b", label: "B", x: 250, y: 0, width: 150, height: 60 }] });
 describe("Editable canvas model", () => {
@@ -50,6 +50,28 @@ describe("Editable canvas model", () => {
   it("exports an editable board as a bounded SVG with labels and escaped text", () => {
     const b = { ...board(), texts: [{ id: "t", text: "A & B", x: 20, y: 100, width: 160 }], edges: [{ id: "e", source: "a", target: "b", label: "leads to" }] };
     const svg = exportCanvasSvg(b); expect(svg).toContain("A &amp; B"); expect(svg).toContain("leads to"); expect(svg).toContain("mindcanvas-arrow"); expect(svg).toContain('viewBox=');
+  });
+  it("exports left and right mind-map connectors without reversing or clipping either side", () => {
+    const b = {
+      ...blankBoard(),
+      nodes: [
+        { id: "root", label: "Root", x: 500, y: 100, width: 260, height: 76 },
+        { id: "left", label: "Left", x: 120, y: 100, width: 260, height: 76 },
+        { id: "right", label: "Right", x: 880, y: 100, width: 260, height: 76 },
+      ],
+      edges: [
+        { id: "left-edge", source: "root", target: "left" },
+        { id: "right-edge", source: "root", target: "right" },
+      ],
+    };
+    const leftPath = "M500,138 C446,138 434,138 380,138";
+    const rightPath = "M760,138 C814,138 826,138 880,138";
+    expect(connectorPath(b, b.edges[0])).toBe(leftPath);
+    expect(connectorPath(b, b.edges[1])).toBe(rightPath);
+    const svg = exportCanvasSvg(b);
+    expect(svg).toContain(`d="${leftPath}"`);
+    expect(svg).toContain(`d="${rightPath}"`);
+    expect(svg.match(/viewBox="([^"]+)"/)?.[1].split(" ").map(Number)[0]).toBe(72);
   });
   it("exports the selected paper style and rich text formatting", () => {
     const svg = exportCanvasSvg({ ...blankBoard(), background: "graph", texts: [{ id: "t", text: "Key fact", x: 10, y: 40, width: 200, bold: true, textAlign: "right", backgroundColor: "#fff2cc", opacity: .35 }] });

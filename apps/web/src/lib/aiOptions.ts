@@ -1,5 +1,6 @@
 export type AiDifficulty = "easy" | "balanced" | "hard";
 export type AiDepth = "basic" | "detailed";
+export type MindMapDetail = "basic" | "medium" | "detailed";
 
 export type AiGenerationOptions = {
   difficulty: AiDifficulty;

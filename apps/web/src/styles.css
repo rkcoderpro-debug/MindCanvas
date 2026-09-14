@@ -1067,7 +1067,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 @media (max-width: 760px) { .learning-overview-columns, .progress-columns { grid-template-columns: 1fr; } .learning-hero { padding: 23px; } .learning-hero-orbit { width: 110px; height: 110px; } .planner-form-grid { grid-template-columns: 1fr; } .floating-timer { right: 12px; bottom: 12px; } .timer-launcher { right: 12px; bottom: 12px; } }
 @media (max-width: 620px) { .learning-hub-page { padding-top: 17px; } .learning-hub-header { align-items: flex-start; } .learning-hub-header-badge { padding: 8px 10px; } .learning-hub-header-badge strong { font-size: 17px; } .learning-hub-header-badge span { display: none; } .learning-hero { min-height: 0; padding: 22px 18px; } .learning-hero-orbit { display: none; } .learning-stats-grid { gap: 8px; } .learning-stats-grid article { padding: 12px; } .learning-stats-grid article strong { font-size: 21px; } .quiz-heading, .learning-section-heading { flex-direction: column; } .quiz-heading .primary-button { width: 100%; justify-content: center; } .quiz-test-card { align-items: flex-start; flex-wrap: wrap; } .quiz-card-actions { width: 100%; padding-left: 59px; } .quiz-card-actions .primary-button { flex: 1; justify-content: center; } .quiz-option-editor { grid-template-columns: 1fr; } .quiz-runner-header { flex-wrap: wrap; } .quiz-runner-header > span { flex-basis: calc(100% - 120px); order: 2; } .quiz-runner-header > small { order: 1; margin-left: auto; } }
 
-/* V4.3.1: the timer is a movable, persistent study companion. */
+/* V4.3.2: the timer is a movable, persistent study companion. */
 .floating-timer { touch-action: none; }
 .floating-timer-header { cursor: grab; user-select: none; touch-action: none; }
 .floating-timer-header:active { cursor: grabbing; }
@@ -1094,10 +1094,11 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .timer-presets button:disabled { cursor: not-allowed; opacity: .5; }
 .timer-settings { justify-content: flex-end; }
 .timer-sound { margin-left: auto; }
-.timer-launcher { max-width: min(220px, calc(100vw - 24px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer-launcher { max-width: min(220px, calc(100vw - 24px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; touch-action: none; user-select: none; cursor: grab; }
+.timer-launcher:active { cursor: grabbing; }
 @media (max-width: 620px) { .floating-timer { max-height: calc(100dvh - 24px); overflow-y: auto; } .floating-timer.minimized { min-width: 145px; } .timer-duration-fields input { font-size: 11px; } }
 
-/* V4.3.1 learning and AI quality controls */
+/* V4.3.2 timer and AI quality controls */
 .learning-hub-header { padding: 18px 20px; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line)); border-radius: 22px; background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 13%, transparent), transparent 36%), var(--surface); box-shadow: 0 16px 44px var(--shadow); }
 .learning-hub-header-badge { box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 12%, transparent); }
 .learning-hub-nav button.active { transform: translateY(-1px); font-weight: 800; }

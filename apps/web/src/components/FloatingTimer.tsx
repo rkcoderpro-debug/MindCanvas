@@ -82,7 +82,9 @@ export default function FloatingTimer() {
   const [position, setPosition] = useState<TimerPosition | null>(saved.position);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const timerRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number; startX: number; startY: number; moved: boolean; element: HTMLElement } | null>(null);
+  const suppressLauncherClick = useRef(false);
   const announcedRef = useRef(new Set<string>());
 
   const activeSession = sessions[mode] ?? sessions.pomodoro;
@@ -137,8 +139,12 @@ export default function FloatingTimer() {
     const move = (event: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
+      if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4) {
+        drag.moved = true;
+        suppressLauncherClick.current = true;
+      }
       event.preventDefault();
-      setPosition(clampPosition({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY }, timerRef.current));
+      setPosition(clampPosition({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY }, drag.element));
     };
     const stop = (event: PointerEvent) => {
       if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
@@ -155,14 +161,14 @@ export default function FloatingTimer() {
 
   useEffect(() => {
     const handleResize = () => {
-      if (position) setPosition(current => current ? clampPosition(current, timerRef.current) : current);
+      if (position) setPosition(current => current ? clampPosition(current, open ? timerRef.current : launcherRef.current) : current);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [position]);
+  }, [open, position]);
 
   useEffect(() => {
-    if (position) setPosition(current => current ? clampPosition(current, timerRef.current) : current);
+    if (position && open) setPosition(current => current ? clampPosition(current, timerRef.current) : current);
   }, [minimized, open]);
 
   const display = useMemo(() => {
@@ -229,19 +235,28 @@ export default function FloatingTimer() {
   };
   const resetPosition = () => setPosition(null);
 
-  const onHeaderPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) return;
-    if ((event.target as HTMLElement).closest("button")) return;
-    const element = timerRef.current;
-    if (!element) return;
-    event.preventDefault();
+  const beginDrag = (event: ReactPointerEvent<HTMLElement>, element: HTMLElement | null, preventDefault = false) => {
+    if (event.button !== 0 || !element) return;
+    if ((event.target as HTMLElement).closest("button") && element !== launcherRef.current) return;
+    if (preventDefault) event.preventDefault();
+    suppressLauncherClick.current = false;
     const rect = element.getBoundingClientRect();
-    dragRef.current = { pointerId: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+    setPosition({ left: rect.left, top: rect.top });
+    dragRef.current = { pointerId: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, startX: event.clientX, startY: event.clientY, moved: false, element };
     event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const onHeaderPointerDown = (event: ReactPointerEvent<HTMLElement>) => beginDrag(event, timerRef.current, true);
+  const hideTimer = () => {
+    const element = timerRef.current;
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      if (Number.isFinite(rect.left) && Number.isFinite(rect.top)) setPosition({ left: rect.left, top: rect.top });
+    }
+    setOpen(false);
   };
 
   const floatingProps = { ref: timerRef, style: positionStyle };
-  if (!open) return <button className="timer-launcher" style={positionStyle} aria-label={t("timerShow")} title={t("timerShow")} onClick={() => setOpen(true)}><Timer size={18}/><span>{t("timerShow")}</span></button>;
+  if (!open) return <button ref={launcherRef} className="timer-launcher" style={positionStyle} aria-label={t("timerShow")} title={t("timerShow")} onPointerDown={event => beginDrag(event, event.currentTarget)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen(true); }}><Timer size={18}/><span>{t("timerShow")}</span></button>;
 
   return <aside {...floatingProps} className={`floating-timer ${minimized ? "minimized" : ""}`} aria-label={t("timer")}>
     <header className="floating-timer-header" onPointerDown={onHeaderPointerDown}>
@@ -249,7 +264,7 @@ export default function FloatingTimer() {
       <div className="floating-timer-actions">
         <button className="icon-button" aria-label={t("timerResetPosition")} title={t("timerResetPosition")} onClick={resetPosition}><LocateFixed size={15}/></button>
         <button className="icon-button" aria-label={minimized ? t("timerExpand") : t("timerMinimize")} title={minimized ? t("timerExpand") : t("timerMinimize")} onClick={() => setMinimized(value => !value)}>{minimized ? <Maximize2 size={15}/> : <Minimize2 size={15}/>}</button>
-        <button className="icon-button" aria-label={t("timerHide")} title={t("timerHide")} onClick={() => setOpen(false)}><X size={15}/></button>
+        <button className="icon-button" aria-label={t("timerHide")} title={t("timerHide")} onClick={hideTimer}><X size={15}/></button>
       </div>
     </header>
     {minimized ? <div className="timer-minimized-body" role="status"><div className="timer-mini-readout"><strong>{display}</strong><small>{modeLabel}{mode === "pomodoro" ? ` · ${state.phase === "focus" ? t("timerFocus") : t("timerBreak")}` : ""}</small></div><button className="icon-button" aria-label={running ? t("timerPause") : t("timerStart")} title={running ? t("timerPause") : t("timerStart")} onClick={() => { requestNotification(); toggleRunning(); }}>{running ? <Pause size={16}/> : <Play size={16}/>}</button></div> : <>

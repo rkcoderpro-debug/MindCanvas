@@ -1,7 +1,7 @@
 import type { StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
 import type { AccountPlan, PlanId, SubscriptionHistoryRecord } from "./account";
-import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "./aiOptions";
+import { DEFAULT_AI_OPTIONS, type AiGenerationOptions, type MindMapDetail } from "./aiOptions";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8787";
 
@@ -112,12 +112,12 @@ export async function uploadDocument(file: File, signal?: AbortSignal) {
 /** Kept as a compatibility alias for earlier V3 clients. */
 export const uploadPdf = uploadDocument;
 
-export async function generateMindMap(text: string, documentId?: string, signal?: AbortSignal) {
+export async function generateMindMap(text: string, documentId?: string, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium") {
   const response = await fetch(`${apiBase}/api/ai/mind-map`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ text, documentId }),
+    body: JSON.stringify({ text, documentId, ...options, detail }),
   });
   if (!response.ok) await responseError(response, `AI HTTP ${response.status}`);
   return response.json() as Promise<{ provider: string; graph: StructuredMindMap }>;
@@ -126,22 +126,21 @@ export async function generateMindMap(text: string, documentId?: string, signal?
 export type AiFileSource = { id: string; kind: "pdf" | "docx" | "pptx" | "text" | "image"; fileName: string; mimeType: string; text: string; pageCount?: number };
 export type GeneratedMindMap = { provider: string; model?: string; graph: StructuredMindMap; source: AiFileSource };
 
-async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
+async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium") {
   const body = new FormData();
   body.append("file", file);
   body.append("task", task);
   if (maxCards !== undefined) body.append("maxCards", String(maxCards));
-  if (task !== "mind-map") {
-    body.append("difficulty", options.difficulty);
-    body.append("depth", options.depth);
-  }
+  body.append("difficulty", options.difficulty);
+  body.append("depth", options.depth);
+  if (task === "mind-map") body.append("detail", detail);
   const response = await fetch(`${apiBase}/api/ai/file`, { method: "POST", headers: await authHeaders(), body, signal });
   if (!response.ok) await responseError(response, `Không thể xử lý file bằng AI (HTTP ${response.status}).`);
   return response.json() as Promise<T>;
 }
 
-export function generateMindMapFromFile(file: File, signal?: AbortSignal) {
-  return generateFromFile<GeneratedMindMap>(file, "mind-map", undefined, signal);
+export function generateMindMapFromFile(file: File, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium") {
+  return generateFromFile<GeneratedMindMap>(file, "mind-map", undefined, signal, options, detail);
 }
 
 export type GeneratedFlashcard = { front: string; back: string; sourcePage?: number };

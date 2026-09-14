@@ -17,6 +17,9 @@ describe("manual AI exchange", () => {
     expect(prompt).toContain('"parentId"');
     expect(buildMindMapPrompt({ fileName: "notes.pdf", detail: "detailed", language: "en" })).toContain("Detail level: detailed");
     expect(buildMindMapPrompt({ fileName: "notes.pdf", detail: "basic", language: "en" })).toContain("Detail level: basic");
+    const qualityPrompt = buildMindMapPrompt({ fileName: "notes.pdf", detail: "medium", language: "en", options: { difficulty: "hard", depth: "detailed" } });
+    expect(qualityPrompt).toContain("Difficulty: hard");
+    expect(qualityPrompt).toContain("Depth: detailed");
 
     expect(buildSelectionPrompt({ action: "expand", text: "A selected idea", language: "en" })).toContain('"action":"summarize|explain|rewrite|expand"');
     const flashcardPrompt = buildFlashcardsPrompt({ fileName: "notes.pdf", maxCards: 12, language: "en" });

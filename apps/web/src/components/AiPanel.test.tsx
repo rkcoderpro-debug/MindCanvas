@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AiPanel from "./AiPanel";
 import { LanguageProvider } from "../lib/i18n";
+import { generateMindMap } from "../lib/api";
 
 vi.mock("../lib/api", () => ({
   consumeAiManualUsage: vi.fn(async () => ({ ok: true, requestId: "test-request" })),
@@ -40,7 +41,7 @@ describe("AI Manual mind-map flow", () => {
     await act(async () => manualMode.click());
 
     expect(host.querySelector(".ai-source-tabs")).toBeNull();
-    const detail = host.querySelector(".ai-manual-panel select") as HTMLSelectElement;
+    const detail = host.querySelector(".ai-manual-panel .ai-mindmap-detail-control select") as HTMLSelectElement;
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(detail, "detailed");
     await act(async () => detail.dispatchEvent(new Event("change", { bubbles: true })));
     expect((host.querySelector(".ai-manual-prompt textarea") as HTMLTextAreaElement).value).toContain("Detail level: detailed");
@@ -55,5 +56,29 @@ describe("AI Manual mind-map flow", () => {
     await act(async () => ([...host.querySelectorAll<HTMLButtonElement>("footer .primary-button")].at(-1) as HTMLButtonElement).click());
     expect(onApply).toHaveBeenCalledTimes(1);
     expect(beforeGenerate).not.toHaveBeenCalled();
+  });
+
+  it("exposes the same quality controls in Auto and forwards them to generation", async () => {
+    vi.mocked(generateMindMap).mockResolvedValue({ provider: "gemini", graph: { title: "Map", nodes: [{ id: "root", label: "Root" }], edges: [] } });
+    await act(async () => root.render(<LanguageProvider><AiPanel projectId="project" canUse={true} beforeGenerate={async () => true} onClose={() => undefined} onApply={() => undefined}/></LanguageProvider>));
+
+    expect(host.querySelector(".ai-quality-controls")).not.toBeNull();
+    const quality = host.querySelectorAll<HTMLSelectElement>(".ai-quality-controls select");
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(quality[0], "hard");
+    await act(async () => quality[0].dispatchEvent(new Event("change", { bubbles: true })));
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(quality[1], "detailed");
+    await act(async () => quality[1].dispatchEvent(new Event("change", { bubbles: true })));
+    const detail = host.querySelector<HTMLSelectElement>(".ai-mindmap-detail-control select")!;
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(detail, "detailed");
+    await act(async () => detail.dispatchEvent(new Event("change", { bubbles: true })));
+
+    const textTab = host.querySelector<HTMLButtonElement>('.ai-source-tabs button[role="tab"]')!;
+    await act(async () => textTab.click());
+    const source = host.querySelector<HTMLTextAreaElement>(".ai-text-source textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(source, "Source text");
+    await act(async () => source.dispatchEvent(new Event("input", { bubbles: true })));
+    await act(async () => (host.querySelector(".actions .primary-button") as HTMLButtonElement).click());
+
+    expect(generateMindMap).toHaveBeenCalledWith("Source text", undefined, expect.any(AbortSignal), { difficulty: "hard", depth: "detailed" }, "detailed");
   });
 });

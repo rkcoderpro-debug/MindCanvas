@@ -3,6 +3,7 @@ import type { StructuredMindMap } from "@mindcanvas/shared";
 import { ClipboardPaste, FileText, Sparkles, Upload } from "lucide-react";
 import Dialog from "./Dialog";
 import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
+import AiQualityControls from "./AiQualityControls";
 import { consumeAiManualUsage, generateMindMap, generateMindMapFromFile } from "../lib/api";
 import { saveDocumentToStorage } from "../lib/supabase";
 import { useLanguage } from "../lib/i18n";
@@ -10,6 +11,7 @@ import { AI_FILE_ACCEPT, readClipboardSource, writeClipboardText } from "../lib/
 import { MAX_FILE_BYTES } from "../lib/board";
 import { aiErrorMessage } from "../lib/aiErrors";
 import { buildMindMapPrompt, GEMINI_WEB_URL, ManualAiValidationError, parseManualMindMap, type MindMapDetail } from "../lib/manualAi";
+import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
 
 function pageText(text: string, from: number, to: number) {
   const markers = [...text.matchAll(/\[PAGE\s+(\d+)\]/g)];
@@ -27,6 +29,7 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
   const [aiMode, setAiMode] = useState<AiMode>(canUse ? "auto" : "manual");
   const [file, setFile] = useState<File | null>(null), [rawText, setRawText] = useState(""), [graph, setGraph] = useState<StructuredMindMap | null>(null), [pageCount, setPageCount] = useState(0), [documentId, setDocumentId] = useState("");
   const [from, setFrom] = useState(1), [to, setTo] = useState(1), [mode, setMode] = useState<"append" | "new">("append"), [mindMapDetail, setMindMapDetail] = useState<MindMapDetail>("medium");
+  const [aiOptions, setAiOptions] = useState<AiGenerationOptions>(DEFAULT_AI_OPTIONS);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [provider, setProvider] = useState("");
   const [manualPrompt, setManualPrompt] = useState(""), [manualJson, setManualJson] = useState(""), [manualCopied, setManualCopied] = useState(false), [manualUsageConsumed, setManualUsageConsumed] = useState(false);
   const controller = useRef<AbortController | undefined>(undefined), fileInput = useRef<HTMLInputElement>(null);
@@ -37,7 +40,7 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
   const clearResult = () => { setGraph(null); setProvider(""); setError(""); clearManualResult(); };
   const resetSource = (nextMode: SourceMode) => { setSourceMode(nextMode); setFile(null); setRawText(""); setPageCount(0); setDocumentId(""); clearResult(); if (fileInput.current) fileInput.current.value = ""; };
   const selectFile = (next: File | null) => { setFile(next); setGraph(null); setRawText(""); setPageCount(0); setDocumentId(""); setProvider(""); clearManualResult(); setError(""); };
-  const changeAiMode = (nextMode: AiMode) => { setAiMode(nextMode); clearResult(); if (nextMode === "manual") setManualPrompt(buildMindMapPrompt({ detail: mindMapDetail, language })); };
+  const changeAiMode = (nextMode: AiMode) => { setAiMode(nextMode); clearResult(); if (nextMode === "manual") setManualPrompt(buildMindMapPrompt({ detail: mindMapDetail, language, options: aiOptions })); };
   const pasteClipboard = async () => {
     try {
       const pasted = await readClipboardSource();
@@ -47,9 +50,10 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
   };
   const chooseFile = (next: File | undefined) => { if (!next) return; if (next.size > MAX_FILE_BYTES) { setError(t("fileTooLarge")); return; } setSourceMode("file"); selectFile(next); };
 
-  const changeMindMapDetail = (nextDetail: MindMapDetail) => { setMindMapDetail(nextDetail); if (aiMode === "manual") { setManualPrompt(buildMindMapPrompt({ detail: nextDetail, language })); setManualJson(""); setGraph(null); setProvider(""); setError(""); } };
+  const changeMindMapDetail = (nextDetail: MindMapDetail) => { setMindMapDetail(nextDetail); if (aiMode === "manual") { setManualPrompt(buildMindMapPrompt({ detail: nextDetail, language, options: aiOptions })); setManualJson(""); setGraph(null); setProvider(""); setError(""); } };
+  const changeAiOptions = (nextOptions: AiGenerationOptions) => { setAiOptions(nextOptions); setGraph(null); setProvider(""); setError(""); if (aiMode === "manual") { setManualPrompt(buildMindMapPrompt({ detail: mindMapDetail, language, options: nextOptions })); setManualJson(""); } };
   const copyManualPrompt = async () => {
-    const prompt = manualPrompt || buildMindMapPrompt({ detail: mindMapDetail, language });
+    const prompt = manualPrompt || buildMindMapPrompt({ detail: mindMapDetail, language, options: aiOptions });
     try { await writeClipboardText(prompt); setManualCopied(true); setError(""); window.setTimeout(() => setManualCopied(false), 2200); }
     catch { setError(t("clipboardWriteError")); }
   };
@@ -93,13 +97,13 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
     try {
       if (!await beforeGenerate()) throw new Error(t("saveError"));
       if (sourceMode === "file" && file) {
-        const result = await generateMindMapFromFile(file, request.signal); if (request.signal.aborted) return;
+        const result = await generateMindMapFromFile(file, request.signal, aiOptions, mindMapDetail); if (request.signal.aborted) return;
         setRawText(result.source.text); setPageCount(result.source.pageCount ?? 0); setFrom(1); setTo(result.source.pageCount ?? 1); setDocumentId(result.source.id);
         await saveDocumentToStorage(file, result.source.id, result.source.text, result.source.pageCount, projectId);
         if (result.provider === "demo" || !result.graph?.nodes?.length || result.graph.nodes.length > 200 || !Array.isArray(result.graph.edges)) throw new Error(t("aiError"));
         setProvider(result.provider); setGraph({ ...result.graph, sourceDocumentId: result.source.id, sourceDocumentName: file.name });
       } else {
-        const result = await generateMindMap(rawText.trim(), undefined, request.signal); if (request.signal.aborted) return;
+        const result = await generateMindMap(rawText.trim(), undefined, request.signal, aiOptions, mindMapDetail); if (request.signal.aborted) return;
         if (result.provider === "demo" || !result.graph?.nodes?.length || result.graph.nodes.length > 200 || !Array.isArray(result.graph.edges)) throw new Error(t("aiError"));
         setProvider(result.provider); setGraph(result.graph);
       }
@@ -111,14 +115,14 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
     const selected = pageText(rawText, Math.min(from, to), Math.max(from, to));
     if (!selected) { setError(t("noTextPages")); return; }
     const request = new AbortController(); controller.current = request; setBusy(true); setError(""); setGraph(null);
-    try { const result = await generateMindMap(selected, documentId || undefined, request.signal); if (result.provider === "demo") throw new Error(t("aiDemo")); setProvider(result.provider); setGraph({ ...result.graph, sourceDocumentId: documentId || undefined, sourceDocumentName: file.name }); }
+    try { const result = await generateMindMap(selected, documentId || undefined, request.signal, aiOptions, mindMapDetail); if (result.provider === "demo") throw new Error(t("aiDemo")); setProvider(result.provider); setGraph({ ...result.graph, sourceDocumentId: documentId || undefined, sourceDocumentName: file.name }); }
     catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "aiError")); }
     finally { if (!request.signal.aborted) setBusy(false); }
   };
 
   const hasPages = pageCount > 0;
   const sourceReady = sourceMode === "text" ? !!rawText.trim() : !!file;
-  const currentManualPrompt = manualPrompt || buildMindMapPrompt({ detail: mindMapDetail, language });
+  const currentManualPrompt = manualPrompt || buildMindMapPrompt({ detail: mindMapDetail, language, options: aiOptions });
   const autoControlsDisabled = busy || (aiMode === "auto" && !canUse);
   return <Dialog title={t("aiMindMapTitle")} onClose={onClose}>
     <p className="dialog-intro">{t("aiMindMapHint")}</p>
@@ -136,9 +140,11 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
         {file && <div className="ai-file-card">{file.type.startsWith("image/") ? <img src={previewUrl} alt={file.name}/> : file.type === "application/pdf" ? <iframe title={t("pdfPreview")} src={previewUrl}/> : <span className="ai-file-icon">{file.name.toLowerCase().endsWith(".pptx") ? "PPTX" : file.name.toLowerCase().endsWith(".docx") ? "DOCX" : "FILE"}</span>}<div><strong>{file.name}</strong><small>{(file.size / 1024 / 1024).toFixed(2)} MB</small></div></div>}
         {file && rawText && <details className="ai-source-preview"><summary>{t("extractedPreview")}</summary><p>{rawText}</p></details>}
       </div>}
+      <AiQualityControls options={aiOptions} onChange={changeAiOptions}/>
+      <label className="ai-mindmap-detail-control">{t("mindMapDetail")}<select value={mindMapDetail} onChange={event => changeMindMapDetail(event.target.value as MindMapDetail)}><option value="detailed">{t("mindMapDetailDetailed")}</option><option value="medium">{t("mindMapDetailMedium")}</option><option value="basic">{t("mindMapDetailBasic")}</option></select><small className="field-hint">{t("mindMapDetailHint")}</small></label>
       {file && <div className="ai-page-controls">{hasPages && <><strong>{t("pageRange")}</strong><label><span>{t("fromPage")}</span><input type="number" min="1" max={pageCount || undefined} value={from} onChange={event => setFrom(Math.max(1, Number(event.target.value) || 1))}/></label><label><span>{t("toPage")}</span><input type="number" min="1" max={pageCount || undefined} value={to} onChange={event => setTo(Math.max(1, Number(event.target.value) || 1))}/></label><small>{t("selectedPages")}: {Math.min(from, to)}–{Math.min(pageCount, Math.max(from, to))}</small><button type="button" className="secondary-button" disabled={busy || !hasPages || !rawText} onClick={() => void regenerateRange()}>{t("generateSelectedPages")}</button></>}</div>}
     </> : !graph && <section className="ai-manual-panel">
-      <label>{t("mindMapDetail")}<select value={mindMapDetail} onChange={event => changeMindMapDetail(event.target.value as MindMapDetail)}><option value="detailed">{t("mindMapDetailDetailed")}</option><option value="medium">{t("mindMapDetailMedium")}</option><option value="basic">{t("mindMapDetailBasic")}</option></select><small className="field-hint">{t("mindMapDetailHint")}</small></label>
+      <AiQualityControls options={aiOptions} onChange={changeAiOptions}/><label className="ai-mindmap-detail-control">{t("mindMapDetail")}<select value={mindMapDetail} onChange={event => changeMindMapDetail(event.target.value as MindMapDetail)}><option value="detailed">{t("mindMapDetailDetailed")}</option><option value="medium">{t("mindMapDetailMedium")}</option><option value="basic">{t("mindMapDetailBasic")}</option></select><small className="field-hint">{t("mindMapDetailHint")}</small></label>
       <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea readOnly value={currentManualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{t("aiManualMindMapWorkflow")}</small></div>
       <label className="ai-manual-json"><span>{t("aiManualJsonLabel")}</span><textarea value={manualJson} onChange={event => { setManualJson(event.target.value); setGraph(null); setProvider(""); setError(""); }} placeholder={t("aiManualJsonPlaceholder")} /><small className="field-hint">{t("aiManualJsonHint")}</small></label>
       <label className="secondary-button ai-json-file-input"><Upload size={16}/><span>{t("uploadJsonFile")}</span><input type="file" accept=".json,application/json" disabled={busy} onChange={event => void importManualJsonFile(event)}/></label>

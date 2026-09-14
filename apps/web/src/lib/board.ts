@@ -113,11 +113,34 @@ const exportOrder = (board: BoardState): Selection[] => {
   const byId = new Map(legacy.map(item => [item.id, item]));
   return [...new Set([...(board.layerOrder ?? []), ...legacy.map(item => item.id)])].flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
 };
+type ConnectorEdge = { source: string; target: string };
+const endpoint = (board: BoardState, id: string) => [...board.nodes, ...board.shapes].find(item => item.id === id);
+function connectorGeometry(board: BoardState, edge: ConnectorEdge) {
+  const source = endpoint(board, edge.source), target = endpoint(board, edge.target);
+  if (!source || !target) return null;
+  const goesLeft = target.x + target.width < source.x, direction = goesLeft ? -1 : 1;
+  const x1 = goesLeft ? source.x : source.x + source.width, y1 = source.y + source.height / 2;
+  const x2 = goesLeft ? target.x + target.width : target.x, y2 = target.y + target.height / 2;
+  const curve = Math.max(40, Math.abs(x2 - x1) * .45);
+  const control1X = x1 + direction * curve, control2X = x2 - direction * curve;
+  const path = `M${x1},${y1} C${control1X},${y1} ${control2X},${y2} ${x2},${y2}`;
+  const strokePadding = 10;
+  const minX = Math.min(x1, x2, control1X, control2X) - strokePadding;
+  const maxX = Math.max(x1, x2, control1X, control2X) + strokePadding;
+  const minY = Math.min(y1, y2) - strokePadding;
+  const maxY = Math.max(y1, y2) + strokePadding;
+  return { path, x1, y1, x2, y2, bounds: { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) } };
+}
+export function connectorPath(board: BoardState, edge: ConnectorEdge) {
+  return connectorGeometry(board, edge)?.path ?? "";
+}
 const exportBounds = (board: BoardState): Bounds => {
   const hidden = hiddenNodes(board), bounds = exportOrder(board).flatMap(selection => {
     if (hidden.has(selection.id) || (selection.kind !== "edges" && board[selection.kind].find(item => item.id === selection.id)?.hidden)) return [];
     if (selection.kind === "edges") {
-      const edge = board.edges.find(item => item.id === selection.id), ends = edge ? [edge.source, edge.target] : [];
+      const edge = board.edges.find(item => item.id === selection.id), geometry = edge ? connectorGeometry(board, edge) : null;
+      if (geometry) return [geometry.bounds];
+      const ends = edge ? [edge.source, edge.target] : [];
       return ends.flatMap(id => exportOrder(board).filter(item => item.id === id).flatMap(item => { const bound = elementBounds(board, item); return bound ? [bound] : []; }));
     }
     const bound = elementBounds(board, selection); return bound ? [bound] : [];
@@ -126,7 +149,6 @@ const exportBounds = (board: BoardState): Bounds => {
   const x = Math.min(...bounds.map(bound => bound.x)), y = Math.min(...bounds.map(bound => bound.y));
   return { x, y, width: Math.max(1, Math.max(...bounds.map(bound => bound.x + bound.width)) - x), height: Math.max(1, Math.max(...bounds.map(bound => bound.y + bound.height)) - y) };
 };
-const endpoint = (board: BoardState, id: string) => [...board.nodes, ...board.shapes].find(item => item.id === id);
 export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette = DEFAULT_EXPORT_PALETTE) {
   const bounds = exportBounds(board), pad = 48, hidden = hiddenNodes(board), all = [...board.nodes, ...board.shapes, ...board.texts, ...board.drawings, ...board.media, ...board.embeds];
   const cropId = (id: string) => `media-crop-${id.replace(/[^a-z0-9_-]/gi, "_")}`;
@@ -140,9 +162,9 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
   const body = exportOrder(board).map(selection => {
     if (isHidden(selection.id)) return "";
     if (selection.kind === "edges") {
-      const edge = board.edges.find(item => item.id === selection.id), source = edge && endpoint(board, edge.source), target = edge && endpoint(board, edge.target);
-      if (!edge || !source || !target || isHidden(source.id) || isHidden(target.id)) return "";
-      const x1 = source.x + source.width, y1 = source.y + source.height / 2, x2 = target.x, y2 = target.y + target.height / 2, curve = Math.max(40, Math.abs(x2 - x1) * .45), path = `M${x1},${y1} C${x1 + curve},${y1} ${x2 - curve},${y2} ${x2},${y2}`;
+      const edge = board.edges.find(item => item.id === selection.id), source = edge && endpoint(board, edge.source), target = edge && endpoint(board, edge.target), geometry = edge ? connectorGeometry(board, edge) : null;
+      if (!edge || !source || !target || !geometry || isHidden(source.id) || isHidden(target.id)) return "";
+      const { x1, y1, x2, y2, path } = geometry;
       const labelLines = edge.label ? clippedLines(wrapCanvasText(edge.label, 180, 13), 3) : [];
       const labelX = (x1 + x2) / 2, labelY = (y1 + y2) / 2 - 9 - (labelLines.length - 1) * 8;
       const labelWidth = labelLines.length ? Math.min(196, Math.max(...labelLines.map(line => textWidth(line, 13))) + 16) : 0;
