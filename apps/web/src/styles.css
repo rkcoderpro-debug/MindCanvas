@@ -258,6 +258,34 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .project-preview[data-background="graph"] { background-image: linear-gradient(var(--preview-dot) 1px, transparent 1px), linear-gradient(90deg, var(--preview-dot) 1px, transparent 1px); background-size: 10px 10px; }
 .project-preview[data-background="isometric"] { background-image: linear-gradient(30deg, transparent 24%, var(--preview-dot) 25%, var(--preview-dot) 26%, transparent 27%, transparent 74%, var(--preview-dot) 75%, var(--preview-dot) 76%, transparent 77%), linear-gradient(150deg, transparent 24%, var(--preview-dot) 25%, var(--preview-dot) 26%, transparent 27%, transparent 74%, var(--preview-dot) 75%, var(--preview-dot) 76%, transparent 77%); background-size: 28px 48px; }
 .project-preview svg { max-width: 100%; max-height: 100%; }
+.project-shared-label { color: var(--accent); }
+.invite-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 12px; color: var(--text); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 10px; }
+.invite-banner > span { display: grid; gap: 3px; min-width: 0; }
+.invite-banner small { color: var(--muted); overflow-wrap: anywhere; }
+.invite-banner.success { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--line)); background: var(--success-soft); }
+.invite-banner.error { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
+.share-dialog { display: grid; gap: 18px; min-width: min(620px, 82vw); }
+.share-project-heading { display: flex; align-items: flex-start; gap: 10px; padding: 12px; color: var(--accent); border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+.share-project-heading > div { display: grid; gap: 4px; min-width: 0; }
+.share-project-heading strong { color: var(--text); overflow-wrap: anywhere; }
+.share-project-heading small { color: var(--muted); }
+.share-invite-form { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; align-items: end; gap: 10px; }
+.share-invite-form label { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 6px; }
+.share-invite-form label input, .share-invite-form label select { grid-column: 1 / -1; width: 100%; }
+.share-link-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; padding: 12px; border: 1px solid var(--accent-border); border-radius: 10px; background: var(--accent-soft); }
+.share-link-box > div { display: grid; gap: 3px; grid-column: 1 / -1; }
+.share-link-box input { min-width: 0; }
+.share-list-section { display: grid; gap: 9px; }
+.share-list-section h3 { margin: 0; }
+.share-list { display: grid; gap: 6px; padding: 0; margin: 0; list-style: none; }
+.share-list li { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.share-member-avatar { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; overflow: hidden; color: var(--accent); background: var(--accent-soft); border-radius: 8px; font-size: 12px; font-weight: 700; }
+.share-member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.share-member-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.share-member-copy strong, .share-member-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-list select { width: 124px; padding: 7px; font-size: 12px; }
+.share-role { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.shared-readonly-banner { align-self: flex-start; margin: 8px 0 2px; padding: 6px 10px; color: var(--muted); background: var(--soft); border: 1px solid var(--line); border-radius: 7px; font-size: 12px; }
 .project-meta { display: flex; align-items: flex-start; gap: 10px; padding: 16px; }
 .project-meta > svg { flex-shrink: 0; color: var(--accent); margin-top: 2px; }
 .project-meta > div { display: grid; gap: 7px; min-width: 0; }
@@ -1633,4 +1661,9 @@ html { -webkit-text-size-adjust: 100%; }
   .admin-plan-summary { align-items: flex-start; flex-direction: column; }
   .admin-search { grid-template-columns: auto minmax(0, 1fr); }
   .admin-search .secondary-button { grid-column: 1 / -1; width: 100%; }
+  .share-dialog { min-width: 0; }
+  .share-invite-form { grid-template-columns: 1fr; }
+  .share-invite-form .primary-button { width: 100%; justify-content: center; }
+  .share-list li { align-items: flex-start; flex-wrap: wrap; }
+  .share-list select { margin-left: auto; }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, Crown, Download, FolderPlus, History, LayoutGrid, Redo2, RefreshCw, Save, Search, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { ArrowLeft, Crown, Download, FolderPlus, History, LayoutGrid, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import CanvasBoard from "./components/CanvasBoard";
 import WorkspaceHome from "./components/WorkspaceHome";
 import FolderManager from "./components/FolderManager";
@@ -17,9 +17,11 @@ import SyncCenter from "./components/SyncCenter";
 import TopbarProfile from "./components/TopbarProfile";
 import PlanUpgradeDialog from "./components/PlanUpgradeDialog";
 import AdminDashboard from "./components/AdminDashboard";
+import ShareDialog from "./components/ShareDialog";
 import AppSidebar, { type SidebarView } from "./components/AppSidebar";
 import { LanguageProvider, useLanguage, useTheme, type MessageKey } from "./lib/i18n";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
+import { acceptProjectInvitation } from "./lib/collaboration";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { usePwaInstall } from "./lib/pwa";
@@ -52,7 +54,7 @@ function AuthenticatedApp() {
 }
 function Workspace({ user, authError }: { user: User | null; authError: string }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
-  const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | "versions" | "sync" | "install" | "plans" | null>(null);
+  const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
@@ -67,6 +69,13 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   });
   const [accountPlan, setAccountPlan] = useState<AccountPlan>(FREE_ACCOUNT_PLAN);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [inviteToken] = useState(() => {
+    const queryToken = new URLSearchParams(window.location.search).get("invite");
+    if (queryToken) return queryToken;
+    try { return localStorage.getItem("mindcanvas:pending-invite") ?? ""; } catch { return ""; }
+  });
+  const [inviteState, setInviteState] = useState<"idle" | "waiting" | "accepting" | "accepted" | "error">(inviteToken ? "waiting" : "idle");
+  const [inviteError, setInviteError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
   const home = () => { void ws.home(); setFilter(null); setRecent(false); setCanvasFullscreen(false); };
@@ -76,7 +85,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     try { if (modal === "project") await ws.create(name.trim(), undefined, filter && !filter.startsWith("__") ? filter : null); else await ws.newFolder(name.trim()); setModal(null); }
     finally { setWorking(false); }
   };
-  const dropProjectInto = (e: React.DragEvent, folderId: string | null) => { e.preventDefault(); const id = e.dataTransfer.getData("text/mindcanvas-project"); const project = ws.projects.find(p => p.id === id); if (project && project.folderId !== folderId) void ws.manageProject(project, { folderId }); };
+  const dropProjectInto = (e: React.DragEvent, folderId: string | null) => { e.preventDefault(); const id = e.dataTransfer.getData("text/mindcanvas-project"); const project = ws.projects.find(p => p.id === id); if (project && project.accessRole !== "viewer" && project.folderId !== folderId) void ws.manageProject(project, { folderId }); };
   const auth = async () => {
     setWorking(true);
     try {
@@ -92,8 +101,10 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     if (fileInput.current) fileInput.current.value = "";
   };
   const accountName = user?.user_metadata.full_name ?? user?.user_metadata.name ?? user?.email ?? t("guest");
-  const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : !filter || p.folderId === filter));
-  const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
+  const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : filter === "__shared" ? p.shared : !filter || p.folderId === filter));
+  const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter === "__shared" ? t("sharedWithMe") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
+  const currentProject = ws.board ? ws.projects.find(project => project.id === ws.board!.id) : undefined;
+  const readOnly = currentProject?.accessRole === "viewer";
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") { event.preventDefault(); setCommandOpen(value => !value); }
@@ -111,6 +122,27 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     void getAdminStatus().then(result => { if (alive) setIsAdmin(result.isAdmin); }).catch(() => {});
     return () => { alive = false; };
   }, [user]);
+  useEffect(() => {
+    if (!inviteToken || !user || inviteState === "accepted" || inviteState === "accepting") return;
+    let alive = true;
+    setInviteState("accepting");
+    setInviteError("");
+    void acceptProjectInvitation(inviteToken).then(result => {
+      if (!alive) return;
+      setInviteState("accepted");
+      try { localStorage.removeItem("mindcanvas:pending-invite"); } catch {}
+      setFilter(null);
+      setRecent(false);
+      window.history.replaceState({}, "", window.location.pathname);
+      void ws.refresh();
+      void ws.open({ id: result.projectId, title: result.title || t("sharedProject"), folderId: null, updatedAt: new Date().toISOString(), shared: true, accessRole: result.role });
+    }).catch(err => {
+      if (!alive) return;
+      setInviteState("error");
+      setInviteError(errorMessage(err, t("error")));
+    });
+    return () => { alive = false; };
+  }, [inviteToken, user]);
   const resizeSidebar = (event: React.PointerEvent<HTMLDivElement>) => {
     if (sidebarCollapsed) return;
     event.preventDefault();
@@ -134,18 +166,23 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
     <main className="main-area">
       <header className="topbar"><div className="breadcrumbs"><button onClick={home}>{ws.board ? <ArrowLeft size={17}/> : <LayoutGrid size={17}/>} {t("workspace")}</button>{ws.board && <span>/ {ws.board.title}</span>}</div>
-        <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button>{ws.board && <><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}
+        <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button>{ws.board && <><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
         <div className="topbar-account-actions"><button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
       </header>
       {pwa.updateReady && <div className="update-banner" role="status"><span>{t("updateReady")}</span><button onClick={pwa.applyUpdate}>{t("updateNow")}</button></div>}
       {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => ws.setError("")}><X size={16}/></button></div>}
+      {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
+      {inviteState === "accepting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("acceptInviteLoading")}</small></span></div>}
+      {inviteState === "accepted" && <div className="invite-banner success" role="status"><span><strong>{t("inviteAccepted")}</strong></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}
+      {inviteState === "error" && inviteError && <div className="invite-banner error" role="alert"><span><strong>{t("error")}</strong><small>{inviteError}</small></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}
       {ws.board ? <>
-        <div className="editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
-          <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>
-          <button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
-          <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button></div></div>
-        <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onUndo={ws.undo} onRedo={ws.redo} onSave={() => void ws.flush()} canUseAi={!!user} isFullscreen={canvasFullscreen} onToggleFullscreen={() => setCanvasFullscreen(value => !value)} toolbarPosition={toolbarPosition}/>
+        <div className="editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} disabled={readOnly} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
+          {!readOnly && <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>}
+          {ws.projects.find(project => project.id === ws.board!.id)?.accessRole === "owner" && <button className="secondary-button" onClick={() => setModal("share")}><Share2 size={17}/>{t("shareProject")}</button>}<button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
+          {!readOnly && <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button>}</div></div>
+        {readOnly && <div className="shared-readonly-banner">{t("viewerProject")}</div>}
+        <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onViewportChange={readOnly ? ws.navigate : undefined} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={() => setCanvasFullscreen(value => !value)} toolbarPosition={toolbarPosition}/>
       </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
@@ -158,6 +195,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
     {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><div className="settings-layout"><section className="settings-section"><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("theme")}</strong><small>{t("themeChoose")}</small></div><ThemePicker theme={selectedTheme} onChange={setTheme}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("toolbarPosition")}</strong><small>{t("toolbarPositionHint")}</small></div><div className="toolbar-position-options" role="radiogroup" aria-label={t("toolbarPosition")}>{TOOLBAR_POSITIONS.map(position => <button type="button" key={position} className={toolbarPosition === position ? "selected" : ""} aria-pressed={toolbarPosition === position} onClick={() => setToolbarPosition(position)}><span className={`toolbar-position-preview ${position}`} aria-hidden="true"/><span>{t(TOOLBAR_LABELS[position])}</span></button>)}</div></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("installApp")}</strong><small>{t("pwaOfflineHint")}</small></div><button className="secondary-button" onClick={() => setModal("install")}><Smartphone size={17}/>{t(pwa.installed ? "appInstalled" : "installApp")}</button></section><section className="settings-section settings-help"><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></section></div></Dialog>}
     {modal === "plans" && <PlanUpgradeDialog currentPlan={accountPlan} onClose={() => setModal(null)}/>}
+    {modal === "share" && ws.board && <ShareDialog projectId={ws.board.id} title={ws.board.title} onClose={() => setModal(null)}/>}
     {modal === "install" && <Dialog title={t("installAppTitle")} onClose={() => setModal(null)}><div className="install-app-dialog"><Smartphone size={38}/><p>{t(pwa.installed ? "appInstalledHint" : "installAppHint")}</p>{pwa.ios && <p className="install-instruction">{t("iosInstallHint")}</p>}{!pwa.installed && !pwa.canInstall && !pwa.ios && <p className="install-instruction">{t("browserInstallHint")}</p>}<small>{t("pwaOfflineHint")}</small></div><footer className="actions"><button className="secondary-button" onClick={() => setModal(null)}>{t("close")}</button>{pwa.canInstall && <button className="primary-button" disabled={working} onClick={() => { setWorking(true); void pwa.install().then(installed => { if (installed) setModal(null); }).finally(() => setWorking(false)); }}><Download size={17}/>{t("installNow")}</button>}</footer></Dialog>}
     {modal === "sync" && <SyncCenter owner={user?.id ?? null} online={ws.online} status={ws.status} projects={ws.projects} working={working} onClose={() => setModal(null)} onRetry={async () => { setWorking(true); try { const saved = await ws.flush(); if (saved) await ws.refresh(); } finally { setWorking(false); } }}/>}
     {modal === "versions" && ws.board && <VersionHistory versions={ws.versions} loading={ws.versionLoading} working={working} onClose={() => { if (!working) setModal(null); }} onCheckpoint={async () => { setWorking(true); try { await ws.saveCheckpoint(t("saveCheckpoint")); } catch (err) { ws.setError(errorMessage(err, t("error"))); } finally { setWorking(false); } }} onRestore={async version => { setWorking(true); try { await ws.restoreVersion(version); setModal(null); } catch (err) { ws.setError(errorMessage(err, t("error"))); } finally { setWorking(false); } }}/>}
@@ -166,10 +204,10 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {ws.conflict && <CloudConflictDialog conflict={ws.conflict} working={working} onResolve={async resolution => { setWorking(true); try { await ws.resolveConflict(resolution, t("copySuffix")); } finally { setWorking(false); } }}/>}
   </div>;
 }
-function TitleInput({ value, label, onCommit }: { value: string; label: string; onCommit: (value: string) => void }) {
+function TitleInput({ value, label, onCommit, disabled = false }: { value: string; label: string; onCommit: (value: string) => void; disabled?: boolean }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
-  return <input className="title-input" aria-label={label} value={draft} maxLength={120} onChange={e => setDraft(e.target.value)}
+  return <input className="title-input" aria-label={label} disabled={disabled} value={draft} maxLength={120} onChange={e => setDraft(e.target.value)}
     onBlur={() => { if (draft.trim()) { if(draft.trim() !== value) onCommit(draft.trim()); } else setDraft(value); }}
     onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setDraft(value); }}/>;
 }

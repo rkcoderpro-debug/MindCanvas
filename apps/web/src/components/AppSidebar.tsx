@@ -1,12 +1,12 @@
 import { useEffect, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
 import { sidebarDensityFor } from "../lib/sidebarLayout";
 import SidebarAppearanceControls from "./SidebarAppearanceControls";
 
-export type SidebarView = "recent" | "__favorites" | "__trash" | "__learning" | "__flashcards";
+export type SidebarView = "recent" | "__favorites" | "__trash" | "__learning" | "__flashcards" | "__shared";
 
 type Props = {
   projects: Project[];
@@ -80,7 +80,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.3.2</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.4</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav aria-label={t("workspace")} className="nav-list">
@@ -88,6 +88,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
         <button className={!boardOpen && recent ? "active" : ""} title={t("recent")} onClick={() => goView("recent")}><Clock3 size={18}/><span className="nav-label">{t("recent")}</span><span className="nav-count">{projects.filter(project => !project.deletedAt).length}</span></button>
         <button className={!boardOpen && filter === "__favorites" ? "active" : ""} title={t("favorites")} onClick={() => goView("__favorites")}><Star size={18}/><span className="nav-label">{t("favorites")}</span></button>
         <button className={!boardOpen && filter === "__trash" ? "active" : ""} title={t("trash")} onClick={() => goView("__trash")}><Trash2 size={18}/><span className="nav-label">{t("trash")}</span></button>
+        <button className={!boardOpen && filter === "__shared" ? "active" : ""} title={t("sharedWithMe")} onClick={() => goView("__shared")}><Users size={18}/><span className="nav-label">{t("sharedWithMe")}</span><span className="nav-count">{projects.filter(project => project.shared && !project.deletedAt).length}</span></button>
         <button className={`nav-learning ${!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""}`} aria-current={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "page" : undefined} title={t("learningHub")} onClick={() => goView("__learning")}><BookOpen size={18}/><span className="nav-label">{t("learningHub")}</span></button>
       </nav>
       <div className="section-label"><span>{t("folders")}</span><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>

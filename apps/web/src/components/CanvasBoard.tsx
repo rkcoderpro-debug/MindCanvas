@@ -20,7 +20,7 @@ import Dialog from "./Dialog";
 import { normalizeWheelDelta, panViewport, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -125,13 +125,21 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "highlighter", icon: Highlighter, key: "B" }, { id: "rect", icon: Square, key: "R" },
   { id: "ellipse", icon: Circle, key: "O" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top" }: Props) {
+export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
-  const boardRef = useRef(board), onChangeRef = useRef(onChange);
+  const boardRef = useRef(board);
+  const onChange = (next: BoardState) => {
+    if (!readOnly) { onChangeProp(next); return; }
+    const before = boardRef.current;
+    const { viewport: _nextViewport, updatedAt: _nextUpdatedAt, ...nextContent } = next;
+    const { viewport: _beforeViewport, updatedAt: _beforeUpdatedAt, ...beforeContent } = before;
+    if (JSON.stringify(nextContent) === JSON.stringify(beforeContent)) onViewportChange?.({ ...before, viewport: next.viewport });
+  };
+  const onChangeRef = useRef(onChange);
   const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
   const [mindMapLayoutSummary, setMindMapLayoutSummary] = useState<MindMapLayoutSummary | null>(null);
@@ -150,7 +158,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
-  useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChange]);
+  useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChangeProp, readOnly]);
   useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
   const commitWheelViewport = () => {
@@ -258,7 +266,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     recorder.current?.stop();
     recorderStream.current?.getTracks().forEach(track => track.stop());
   }, []);
-  const interactive = tool === "select" || tool === "connector";
+  const interactive = !readOnly && (tool === "select" || tool === "connector");
   const point = (clientX: number, clientY: number, base = board): Vec2 => {
     const rect = svg.current!.getBoundingClientRect();
     return { x: (clientX - rect.left - base.viewport.x) / base.viewport.scale, y: (clientY - rect.top - base.viewport.y) / base.viewport.scale };
@@ -323,14 +331,14 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     }
   };
   const edit = (s: Selection, fresh?: BoardState) => {
-    if (s.kind !== "texts" && s.kind !== "nodes") return;
+    if (readOnly || (s.kind !== "texts" && s.kind !== "nodes")) return;
     const el = (fresh ?? board)[s.kind].find(n => n.id === s.id);
     if (!el) return;
     const value = "text" in el ? el.text : el.label;
     const next = { selection: s, value, fresh }; editRef.current = next; setEditing(next); setSelected(s);
   };
   const openInlineEditor = (event: ReactMouseEvent, selection: Selection) => {
-    if (tool !== "select") return;
+    if (readOnly || tool !== "select") return;
     event.preventDefault(); event.stopPropagation(); edit(selection);
   };
   const pulseConnection = (ids: string[]) => {
@@ -388,7 +396,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     e.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
     const p = point(e.clientX, e.clientY, interactionBoard);
     const base = interactionBoard;
-    if (space || tool === "hand" || e.button === 1 || (e.pointerType === "touch" && tool === "select")) {
+    if (readOnly || space || tool === "hand" || e.button === 1 || (e.pointerType === "touch" && tool === "select")) {
       setSelected(null); gesture.current = { mode: "pan", start: p, screen: { x: e.clientX, y: e.clientY }, base, pointer: e.pointerId, next: base };
     } else if (tool === "select") {
       const initial = e.shiftKey ? selections : [];
@@ -607,7 +615,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
     if (value !== undefined && key === "trimEnd" && selectedMedia.trimStart !== undefined && value <= selectedMedia.trimStart) value = selectedMedia.trimStart + .1;
     patch({ [key]: value });
   };
-  return <div className={`editor-layout toolbar-${toolbarPosition}`}>
+  return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""}`} aria-readonly={readOnly}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -617,7 +625,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       else void paste();
     }}>
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
-      <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"}`} role="toolbar" aria-label={t("properties")}>
+      {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"}`} role="toolbar" aria-label={t("properties")}>
         <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
         <span className="drawing-toolbar-tools">{tools.map(({ id, icon: Icon, key }) =>
           <button key={id} className={tool === id ? "selected" : ""} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => { finishEdit(); setTool(id); setSelected(null); }}><Icon size={19}/></button>)}
@@ -631,7 +639,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         <button aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
         <button aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>
         <span className="toolbar-divider"/><button aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button></span>
-      </div>
+      </div>}
       <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => touchEndCapture(e)} onPointerCancelCapture={e => touchEndCapture(e, true)}
@@ -739,7 +747,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
       <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
       <div className="zoom-control"><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
-    <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
+    {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
       <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={(board.background ?? "dots") === option ? "active" : ""} aria-pressed={(board.background ?? "dots") === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div></section>
       {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}
       {selections.length > 0 && <div className="selection-actions"><strong>{selections.length} {t("selectedElements")}</strong><div className="property-grid">
@@ -790,7 +798,7 @@ export default function CanvasBoard({ board, onChange, onUndo, onRedo, onSave, c
         onMove={(sourceId, targetId) => onChange(moveLayer(board, sourceId, targetId))}
         onToggleHidden={(selection, value) => onChange(setElementFlags(board, [selection], { hidden: value }))}
         onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>
-    </aside>
+    </aside>}
     {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
     {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
     {embedOpen && <Dialog title={t("embedWeb")} onClose={() => setEmbedOpen(false)}><form onSubmit={event => { event.preventDefault(); insertEmbed(); }}>

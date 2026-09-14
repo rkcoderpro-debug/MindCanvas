@@ -4,7 +4,7 @@ import { parseBoard } from "./board";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
 
-export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number };
+export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export class ProjectConflictError extends Error {
@@ -195,23 +195,40 @@ async function clientFor(owner: string) {
 }
 export async function fetchProjects(owner: string): Promise<Project[]> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,revision").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision").order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
   if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
   if (result.error) throw result.error;
   const data = result.data as any[] | null;
-  return (data ?? []).map(p => ({ id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at, revision: typeof p.revision === "number" ? p.revision : undefined }));
+  let memberships: Record<string, "editor" | "viewer"> = {};
+  try {
+    const memberResult = await client.from("project_members").select("project_id,role").eq("user_id", owner);
+    if (!memberResult.error) memberships = Object.fromEntries((memberResult.data ?? []).map((row: any) => [String(row.project_id), row.role === "editor" ? "editor" : "viewer"]));
+  } catch { /* V4.4 migration may not be applied yet; owner projects still load. */ }
+  return (data ?? []).map(p => {
+    const ownerId = typeof p.user_id === "string" ? p.user_id : owner;
+    return { id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at, revision: typeof p.revision === "number" ? p.revision : undefined,
+      ownerId, accessRole: ownerId === owner ? "owner" : memberships[p.id] ?? "viewer", shared: ownerId !== owner };
+  });
 }
 export async function fetchProjectSnapshot(owner: string, id: string): Promise<CachedProject> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,revision,content").eq("user_id", owner).eq("id", id).abortSignal(AbortSignal.timeout(20000)).single();
+  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,content").eq("id", id).abortSignal(AbortSignal.timeout(20000)).single();
   if (result.error && /revision|column/i.test(result.error.message)) {
     result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,content").eq("user_id", owner).eq("id", id).abortSignal(AbortSignal.timeout(20000)).single();
   }
   if (result.error) throw result.error;
   const data = result.data as any;
   const board = parseBoard({ ...(data.content?.board ?? data.content), id: data.id, title: data.title });
+  const ownerId = typeof data.user_id === "string" ? data.user_id : owner;
+  let accessRole: "owner" | "editor" | "viewer" = ownerId === owner ? "owner" : "viewer";
+  if (accessRole !== "owner") {
+    try {
+      const membership = await client.from("project_members").select("role").eq("project_id", id).eq("user_id", owner).maybeSingle();
+      if (!membership.error && membership.data?.role === "editor") accessRole = "editor";
+    } catch { /* keep the read-only fallback */ }
+  }
   return { id: String(data.id), title: String(data.title), folderId: data.folder_id ?? null, updatedAt: String(data.updated_at ?? board.updatedAt),
-    favorite: !!data.is_favorite, deletedAt: data.deleted_at ?? null, revision: typeof data.revision === "number" ? data.revision : undefined, board, pending: false };
+    favorite: !!data.is_favorite, deletedAt: data.deleted_at ?? null, revision: typeof data.revision === "number" ? data.revision : undefined, ownerId, accessRole, shared: ownerId !== owner, board, pending: false };
 }
 
 export async function fetchBoard(owner: string, id: string): Promise<BoardState> {
@@ -219,17 +236,17 @@ export async function fetchBoard(owner: string, id: string): Promise<BoardState>
 }
 export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number }> {
   const client = await clientFor(owner);
-  const payload = { id: project.id, user_id: owner, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt };
+  const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt };
   if (project.revision === undefined) {
-    const modern = await client.from("notes").upsert({ ...payload, revision: 0 }).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    const modern = await client.from("notes").upsert({ ...payload, user_id: owner, revision: 0 }).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
     if (!modern.error) return { revision: Number(modern.data?.revision ?? 0) };
     if (!/revision|column/i.test(modern.error.message)) throw modern.error;
-    const legacy = await client.from("notes").upsert(payload).abortSignal(AbortSignal.timeout(20000));
+    const legacy = await client.from("notes").upsert({ ...payload, user_id: owner }).abortSignal(AbortSignal.timeout(20000));
     if (legacy.error) throw legacy.error;
     return {};
   }
   const nextRevision = project.revision + 1;
-  const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("user_id", owner).eq("revision", project.revision).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+  const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
   if (result.error) throw result.error;
   if (!result.data) throw new ProjectConflictError(project.id);
   return { revision: Number(result.data.revision ?? nextRevision) };
@@ -252,7 +269,12 @@ export async function updateProject(owner: string | null, project: Project, patc
       ...(patch.deletedAt !== undefined ? { deleted_at: patch.deletedAt } : {}),
       ...(patch.folderId !== undefined ? { folder_id: patch.folderId } : {}),
       ...(patch.title !== undefined ? { title: patch.title, updated_at: timestamp } : {}) };
-    const { error } = await client.from("notes").update(changes).eq("user_id", owner).eq("id", project.id).select("id").abortSignal(AbortSignal.timeout(20000)).single();
+    let metadataQuery = client.from("notes").update(changes).eq("id", project.id);
+    // Keep the owner filter for legacy callers and migrations. Shared members
+    // identify the owner through the RLS policy and must not filter by their
+    // own user id.
+    if (!project.shared && (!project.ownerId || project.ownerId === owner)) metadataQuery = metadataQuery.eq("user_id", owner);
+    const { error } = await metadataQuery.select("id").abortSignal(AbortSignal.timeout(20000)).single();
     if (error) throw error;
   }
   const cached = readCache(owner).find(p => p.id === project.id);

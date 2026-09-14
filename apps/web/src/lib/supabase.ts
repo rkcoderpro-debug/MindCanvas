@@ -10,7 +10,15 @@ export const isSupabaseConfigured = Boolean(supabase);
 
 export async function signInWithGoogle() {
   if (!supabase) return { error: new Error("Supabase chưa được cấu hình; ứng dụng đang ở chế độ local.") };
-  return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin, queryParams: { prompt: "select_account" } } });
+  // Preserve an invitation query through the OAuth round trip. A normal login
+  // still returns to the app origin; an invite must return to its exact link
+  // so the authenticated account can accept it.
+  const inviteToken = new URLSearchParams(window.location.search).get("invite");
+  if (inviteToken) {
+    try { localStorage.setItem("mindcanvas:pending-invite", inviteToken); } catch {}
+  }
+  const redirectTo = window.location.origin;
+  return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } });
 }
 
 export async function getCurrentSession() {

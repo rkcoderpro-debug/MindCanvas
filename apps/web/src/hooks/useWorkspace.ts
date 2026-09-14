@@ -4,6 +4,7 @@ import { blankBoard } from "../lib/board";
 import { normalizeEditor } from "../lib/editorCommands";
 import { errorMessage } from "../lib/errors";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
+import { subscribeToProject } from "../lib/collaboration";
 import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
@@ -55,7 +56,7 @@ export function useWorkspace(owner: string | null) {
         if (cacheFailed.current && current.current) {
           const b = current.current;
           const existing = readCache(owner).find(item => item.id === b.id);
-          cacheProject(owner, { id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, folderId: folderId.current, pending: !!owner, revision: existing?.revision });
+          cacheProject(owner, { ...existing, id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, folderId: folderId.current, pending: !!owner, revision: existing?.revision, ownerId: existing?.ownerId ?? owner ?? undefined, accessRole: existing?.accessRole ?? (owner ? "owner" : undefined), shared: existing?.shared ?? false });
           cacheFailed.current = false;
         }
         const pending = readCache(owner).filter(p => p.pending);
@@ -109,6 +110,37 @@ export function useWorkspace(owner: string | null) {
     return () => { alive.current = false; clearTimeout(timer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner]);
 
+  // A shared project receives durable Postgres Changes while it is open. The
+  // current viewport remains local; a remote content update is applied only
+  // when this device has no pending edit, so an in-flight local edit can still
+  // be resolved through the existing conflict dialog.
+  useEffect(() => {
+    const projectId = board?.id;
+    if (!owner || !projectId) return;
+    return subscribeToProject(projectId, update => {
+      if (!alive.current || current.current?.id !== update.projectId) return;
+      const local = current.current;
+      if (!local) return;
+      if (JSON.stringify(local) === JSON.stringify(update.board)) {
+        const cached = readCache(owner).find(item => item.id === projectId);
+        if (cached && update.revision !== undefined) cacheProject(owner, { ...cached, revision: update.revision, pending: cached.pending });
+        return;
+      }
+      // A pending edit in a different project should not pause this project's
+      // collaboration stream. The cache entry is the per-project dirty flag.
+      if (cacheFailed.current || readCache(owner).some(item => item.id === projectId && item.pending)) return;
+      const next = normalizeEditor({ ...update.board, viewport: local.viewport });
+      current.current = next;
+      setBoard(next);
+      setPast([]);
+      setFuture([]);
+      const cached = readCache(owner).find(item => item.id === projectId);
+      if (cached) cacheProject(owner, { ...cached, title: next.title, updatedAt: next.updatedAt, board: next, revision: update.revision ?? cached.revision, pending: false });
+      setProjects(items => items.map(item => item.id === projectId ? { ...item, title: next.title, updatedAt: update.updatedAt ?? next.updatedAt, revision: update.revision ?? item.revision, board: next, pending: false } : item));
+      setStatus("saved");
+    });
+  }, [owner, board?.id]);
+
   const stage = (next: BoardState, delay = 750) => {
     next = normalizeEditor(next, current.current ?? undefined);
     dirty.current = !!owner;
@@ -117,7 +149,13 @@ export function useWorkspace(owner: string | null) {
       // The cache is authoritative for the latest acknowledged revision. React
       // state can still contain the revision from the previous render.
       const existing = readCache(owner).find(p => p.id === next.id) ?? projects.find(p => p.id === next.id);
-      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
+      // Keep the access metadata from a shared project when an editor saves a
+      // board. `owner` is the signed-in user, so it cannot by itself mean that
+      // this user owns the note.
+      const ownerId = existing?.ownerId ?? owner ?? undefined;
+      const shared = existing?.shared ?? (!!ownerId && ownerId !== owner);
+      const accessRole = existing?.accessRole ?? (shared ? "viewer" : owner ? "owner" : undefined);
+      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, ownerId, accessRole, shared, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
       const activeConflict = conflictRef.current?.projectId === next.id ? { ...conflictRef.current, local: p } : null;
       if (activeConflict) { conflictRef.current = activeConflict; setConflict(activeConflict); }
@@ -126,6 +164,8 @@ export function useWorkspace(owner: string | null) {
     } catch (err) { cacheFailed.current = true; setStatus("saveError"); report(err); }
   };
   const change = (next: BoardState) => {
+    const activeProject = current.current && readCache(owner).find(item => item.id === current.current?.id);
+    if (activeProject?.accessRole === "viewer") return;
     next = normalizeEditor(next, current.current ?? undefined);
     if (current.current && current.current.id !== next.id) return;
     if (current.current && JSON.stringify(current.current) === JSON.stringify(next)) return;
@@ -142,8 +182,8 @@ export function useWorkspace(owner: string | null) {
     setPast(p => previous ? [...p.slice(-49), previous] : p); setFuture([]);
     stage({ ...next, updatedAt: new Date().toISOString() });
   };
-  const undo = () => { const previous = past.at(-1), now = current.current; if (!previous || !now) return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
-  const redo = () => { const next = future[0], now = current.current; if (!next || !now) return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
+  const undo = () => { const previous = past.at(-1), now = current.current; if (!previous || !now || readCache(owner).find(item => item.id === now.id)?.accessRole === "viewer") return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
+  const redo = () => { const next = future[0], now = current.current; if (!next || !now || readCache(owner).find(item => item.id === now.id)?.accessRole === "viewer") return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
   const loadVersions = async () => {
     const projectId = current.current?.id;
     if (!projectId) { setVersions([]); return []; }
@@ -158,6 +198,7 @@ export function useWorkspace(owner: string | null) {
   const saveCheckpoint = async (label?: string) => {
     const snapshot = current.current;
     if (!snapshot) return null;
+    if (readCache(owner).find(item => item.id === snapshot.id)?.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
     if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
     const version = await createProjectVersion(owner, snapshot, label);
     if (alive.current && current.current?.id === snapshot.id) setVersions(items => [version, ...items.filter(item => item.id !== version.id)].sort((a, b) => b.version - a.version).slice(0, 30));
@@ -166,6 +207,7 @@ export function useWorkspace(owner: string | null) {
   const restoreVersion = async (version: ProjectVersion) => {
     const snapshot = current.current;
     if (!snapshot || snapshot.id !== version.projectId) throw new Error("This version belongs to another project.");
+    if (readCache(owner).find(item => item.id === snapshot.id)?.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
     if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
     await createProjectVersion(owner, snapshot, "Before restore");
     change({ ...version.board, id: snapshot.id, updatedAt: new Date().toISOString() });
@@ -183,6 +225,9 @@ export function useWorkspace(owner: string | null) {
       if (!alive.current || ticket !== navigation.current) return;
       current.current = normalizeEditor(next); folderId.current = p.folderId; setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
       if (!cached?.pending) cacheProject(owner, { ...p, board: next, pending: false });
+      // Publish the access metadata immediately so a newly accepted viewer
+      // cannot get one editable render while the background refresh completes.
+      upsertSummary({ ...p, title: next.title, updatedAt: next.updatedAt, board: next, pending: false });
       const history = await fetchProjectVersions(owner, next.id);
       if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
     } catch (err) { report(err); }
@@ -197,19 +242,34 @@ export function useWorkspace(owner: string | null) {
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
   const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
   const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };
-  const move = (id: string | null) => { if (!current.current) return; folderId.current = id; stage({ ...current.current, updatedAt: new Date().toISOString() }); };
+  const move = (id: string | null) => {
+    if (!current.current) return;
+    const project = readCache(owner).find(item => item.id === current.current?.id);
+    if (project?.accessRole === "viewer") return;
+    folderId.current = id;
+    stage({ ...current.current, updatedAt: new Date().toISOString() });
+  };
+  const navigate = (next: BoardState) => {
+    const currentBoard = current.current;
+    if (!currentBoard || currentBoard.id !== next.id) return;
+    current.current = next;
+    setBoard(next);
+    const cached = readCache(owner).find(item => item.id === next.id);
+    if (cached) cacheProject(owner, { ...cached, board: next });
+  };
   const manageProject = async (project: Project, patch: ProjectPatch) => {
+    if (project.shared && project.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
     try { if (!await flush()) throw new Error("Please save your pending changes and reconnect first."); await updateProject(owner, project, patch); await refresh(); }
     catch (err) { report(err); throw err; }
   };
-  const duplicateProject = async (project: Project, title: string, targetFolderId = project.folderId) => {
+  const duplicateProject = async (project: Project, title: string, targetFolderId = project.shared ? null : project.folderId) => {
     try {
       if (!await flush()) throw new Error("Please save your pending changes and reconnect first.");
       const cached = readCache(owner).find(p => p.id === project.id);
       const source = owner ? await fetchBoard(owner, project.id) : cached?.board;
       if (!source) throw new Error("Project unavailable");
       const copy = { ...structuredClone(source), id: crypto.randomUUID(), title, updatedAt: new Date().toISOString() };
-      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, pending: !!owner, favorite: false, deletedAt: null });
+      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, pending: !!owner, favorite: false, deletedAt: null, ownerId: owner ?? undefined, accessRole: owner ? "owner" : undefined, shared: false });
       if (!await flush()) throw new Error("Copy is kept locally; retry saving to finish cloud sync.");
       await refresh();
     } catch (err) { report(err); throw err; }
@@ -258,5 +318,5 @@ export function useWorkspace(owner: string | null) {
       setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false;
     }
   });
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, navigate, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
 }
