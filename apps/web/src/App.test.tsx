@@ -32,6 +32,7 @@ describe("Workspace UI", () => {
   });
   it("renders real projects as home cards and opens a selected project", async () => {
     const board = blankBoard("My notes"); cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
+    await import("./components/CanvasBoard");
     await act(async () => root.render(<App/>));
     expect(host.querySelector(".project-card")?.textContent).toContain("My notes");
     expect(host.querySelector("svg.canvas-svg")).toBeNull();
@@ -42,6 +43,7 @@ describe("Workspace UI", () => {
   });
   it("uses an in-app form for a new project, never window.prompt", async () => {
     const prompt = vi.spyOn(window, "prompt");
+    await import("./components/CanvasBoard");
     await act(async () => root.render(<App/>));
     const create = [...host.querySelectorAll("button")].find(b => b.textContent?.includes("Project mới"))!;
     await act(async () => create.click());
@@ -95,6 +97,7 @@ describe("Workspace UI", () => {
     expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
   });
   it("opens the Learning Hub without injecting demo decks or cards", async () => {
+    await import("./components/LearningHubPage");
     await act(async () => root.render(<App/>));
     const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Trung tâm học tập") as HTMLButtonElement;
     await act(async () => button.click());
@@ -106,11 +109,11 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V4.4 quick search and finds text stored inside a canvas", async () => {
+  it("opens V4.5 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.4");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.5");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
@@ -150,7 +153,18 @@ describe("Workspace UI", () => {
     await act(async () => profile.click());
     expect(host.querySelector(".topbar-profile-menu")?.textContent).toContain("Đăng nhập Google");
   });
+  it("toggles and persists the V4.5 focus mode without losing the topbar exit control", async () => {
+    await act(async () => root.render(<App/>));
+    const toggle = host.querySelector('[aria-label="Chế độ tập trung"]') as HTMLButtonElement;
+    await act(async () => toggle.click());
+    expect(host.querySelector(".app-shell")?.classList.contains("focus-mode")).toBe(true);
+    expect(localStorage.getItem("mindcanvas:focus-mode")).toBe("true");
+    expect(host.querySelector('[aria-label="Thoát chế độ tập trung"]')).not.toBeNull();
+    await act(async () => (host.querySelector('[aria-label="Thoát chế độ tập trung"]') as HTMLButtonElement).click());
+    expect(host.querySelector(".app-shell")?.classList.contains("focus-mode")).toBe(false);
+  });
   it("opens the plan cards and separate AI Manual add-on from the topbar", async () => {
+    await import("./components/PlanUpgradeDialog");
     await act(async () => root.render(<App/>));
     await act(async () => (host.querySelector(".topbar-plan-button") as HTMLButtonElement).click());
     expect(host.querySelectorAll(".pricing-card")).toHaveLength(5);

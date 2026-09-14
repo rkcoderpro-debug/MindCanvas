@@ -1,5 +1,22 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-14 — V4.5 Calm UI, Performance & Collaboration
+
+### Implemented
+
+- Added lazy-loaded route components for Canvas, Learning Hub, Folder Manager, AI, Share, Admin and heavy dialogs. The production entry chunk is now about 436 kB raw / 137 kB gzip; remaining features are emitted as separate chunks.
+- Added persistent Focus mode with `Ctrl/⌘ + Shift + F`, keeping the canvas visible while hiding the navigation rail. The preference is local to the current browser and does not alter project data.
+- Added shared motion tokens, touch-target sizing, reduced-motion-compatible route loading and a calmer presence/status surface.
+- Added lightweight Supabase Realtime presence for signed-in users viewing a project. Durable edits and V4.4 revision-safe conflict recovery remain unchanged; this is awareness, not CRDT merging.
+- Updated the app badge, service-worker cache and health endpoint to V4.5.0. No new Supabase migration is required.
+
+### Verification
+
+- Web: 25 test files, 162 tests passed; server: 40 tests passed.
+- Web/server typecheck and production build passed. Vite now emits route chunks instead of one large application entry.
+
+See [V4.5_UI_UX_HANDOFF_VI.md](./V4.5_UI_UX_HANDOFF_VI.md) for installation, testing and safe push commands.
+
 ## Update 2026-09-13 — V4.0 Quota, Canvas UX & Storage Repair
 
 ### Implemented

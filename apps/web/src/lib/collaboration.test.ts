@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { hashInvitationToken, invitationUrl, normalizeInviteEmail } from "./collaboration";
+import { hashInvitationToken, invitationUrl, normalizeInviteEmail, subscribeToProjectPresence } from "./collaboration";
 
-describe("V4.4 collaboration helpers", () => {
+describe("V4.5 collaboration helpers", () => {
   it("normalizes invitation email addresses before they reach Supabase", () => {
     expect(normalizeInviteEmail("  Student@Example.COM ")).toBe("student@example.com");
   });
@@ -19,5 +19,13 @@ describe("V4.4 collaboration helpers", () => {
     expect(first).toBe(second);
     expect(first).toHaveLength(64);
     expect(first).not.toBe("opaque-token");
+  });
+
+  it("keeps the presence subscription safe in local-only mode", () => {
+    let emitted = false;
+    const stop = subscribeToProjectPresence("project-123", { userId: "user-1", displayName: "Student", role: "owner", color: "#2563eb" }, () => { emitted = true; });
+    expect(stop).toBeTypeOf("function");
+    stop();
+    expect(emitted).toBe(false);
   });
 });

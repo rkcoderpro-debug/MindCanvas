@@ -30,6 +30,14 @@ export type CollaborationUpdate = {
   updatedAt?: string;
 };
 
+export type ProjectPresence = {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  role: CollaborationRole;
+  color: string;
+};
+
 function requireClient() {
   if (!supabase) throw new Error("Supabase chưa được cấu hình.");
   return supabase;
@@ -190,4 +198,40 @@ export function subscribeToProject(projectId: string, onUpdate: (update: Collabo
       void supabase?.removeChannel(active);
     }
   };
+}
+
+/**
+ * Lightweight awareness for a shared project. This intentionally does not
+ * mutate board data: durable edits still use the revision-safe autosave path.
+ */
+export function subscribeToProjectPresence(
+  projectId: string,
+  identity: ProjectPresence,
+  onPresence: (people: ProjectPresence[]) => void,
+  onStatus?: (status: string) => void,
+) {
+  if (!supabase) return () => undefined;
+  const channel = supabase.channel("mindcanvas:presence:" + projectId, {
+    config: { presence: { key: identity.userId } },
+  });
+  const emit = () => {
+    const state = channel.presenceState<ProjectPresence>();
+    const people = Object.values(state)
+      .flat()
+      .filter(person => person && typeof person.userId === "string")
+      .reduce<ProjectPresence[]>((all, person) => {
+        if (!all.some(item => item.userId === person.userId)) all.push(person);
+        return all;
+      }, []);
+    onPresence(people);
+  };
+  channel
+    .on("presence", { event: "sync" }, emit)
+    .on("presence", { event: "join" }, emit)
+    .on("presence", { event: "leave" }, emit)
+    .subscribe(status => {
+      onStatus?.(status);
+      if (status === "SUBSCRIBED") void channel.track(identity);
+    });
+  return () => { void supabase?.removeChannel(channel); };
 }
