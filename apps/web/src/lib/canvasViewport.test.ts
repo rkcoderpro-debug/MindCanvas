@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWheelDelta, panViewport, zoomViewportAtPoint } from "./canvasViewport";
+import { normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "./canvasViewport";
 
 describe("canvas viewport wheel helpers", () => {
   it("normalizes line and page wheel units", () => {
     expect(normalizeWheelDelta(2, -3, 0)).toEqual({ x: 2, y: -3 });
     expect(normalizeWheelDelta(1, -2, 1)).toEqual({ x: 16, y: -32 });
     expect(normalizeWheelDelta(1, -1, 2)).toEqual({ x: 800, y: -800 });
+  });
+
+  it("keeps regular wheel input vertical and maps Alt wheel input horizontally", () => {
+    expect(wheelPanDelta({ x: 4, y: -12 })).toEqual({ x: 0, y: -12 });
+    expect(wheelPanDelta({ x: 4, y: -12 }, true)).toEqual({ x: 4, y: 0 });
+    expect(wheelPanDelta({ x: 0, y: -12 }, true)).toEqual({ x: -12, y: 0 });
   });
 
   it("pans only the viewport", () => {

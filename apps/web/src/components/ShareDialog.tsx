@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Clipboard, Mail, Shield, Trash2, UserPlus, Users } from "lucide-react";
-import Dialog from "./Dialog";
+import { ArrowLeft, Check, Clipboard, Mail, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import {
   createProjectInvitation,
@@ -107,7 +106,18 @@ export default function ShareDialog({ projectId, title, onClose }: { projectId: 
     }
   };
 
-  return <Dialog title={t("shareProject")} onClose={onClose}>
+  return <section className="share-page" aria-labelledby="share-page-title">
+    <header className="share-page-header">
+      <div className="share-page-title-group">
+        <button type="button" className="secondary-button share-page-back" onClick={onClose}><ArrowLeft size={17}/>{t("workspace")}</button>
+        <div>
+          <p className="eyebrow">{t("shareProject")}</p>
+          <h1 id="share-page-title">{t("shareProject")}</h1>
+          <p>{t("shareProjectHint")}</p>
+        </div>
+      </div>
+      <button type="button" className="secondary-button share-page-close" onClick={onClose}>{t("close")}</button>
+    </header>
     <div className="share-dialog">
       <div className="share-project-heading"><Users size={22}/><div><strong>{title}</strong><small>{t("shareProjectHint")}</small></div></div>
       <form className="share-invite-form" onSubmit={invite}>
@@ -117,9 +127,9 @@ export default function ShareDialog({ projectId, title, onClose }: { projectId: 
       </form>
       {inviteUrl && <div className="share-link-box"><div><strong>{t("shareLinkReady")}</strong><small>{t("shareLinkHint")}</small></div><input readOnly value={inviteUrl}/><button className="secondary-button" onClick={() => void copy(inviteUrl)}>{copied ? <Check size={16}/> : <Clipboard size={16}/>} {copied ? t("shareCopied") : t("copyLink")}</button></div>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <section className="share-list-section"><h3>{t("shareMembers")}</h3>{loading ? <p>{t("loading")}</p> : !members.length ? <p>{t("shareNoMembers")}</p> : <ul className="share-list">{members.map(member => <li key={member.userId}><span className="share-member-avatar">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : (member.displayName[0] ?? "M").toUpperCase()}</span><span className="share-member-copy"><strong>{member.displayName}</strong><small>{member.email}</small></span><select disabled={working} value={member.role} onChange={event => void updateRole(member, event.target.value as "editor" | "viewer")}><option value="editor">{t("shareEditor")}</option><option value="viewer">{t("shareViewer")}</option></select><button className="icon-button danger" aria-label={t("removeMember")} title={t("removeMember")} disabled={working} onClick={() => void remove(member)}><Trash2 size={16}/></button></li>)}</ul>}</section>
-      {!!invitations.length && <section className="share-list-section"><h3>{t("shareInvitations")}</h3><ul className="share-list">{invitations.map(invitation => <li key={invitation.id}><Mail size={17}/><span className="share-member-copy"><strong>{invitation.email}</strong><small>{t(invitation.status === "pending" ? "sharePending" : invitation.status === "accepted" ? "shareAccepted" : invitation.status === "expired" ? "shareExpired" : "shareRevoked")} · {new Date(invitation.expiresAt).toLocaleDateString()}</small></span><span className="share-role">{invitation.role === "editor" ? t("shareEditor") : t("shareViewer")}</span>{invitation.status === "pending" && <button className="icon-button danger" aria-label={t("revokeInvite")} title={t("revokeInvite")} disabled={working} onClick={() => void revoke(invitation)}><Trash2 size={16}/></button>}</li>)}</ul></section>}
-      <footer className="actions"><button className="secondary-button" onClick={onClose}>{t("close")}</button></footer>
+      <section className="share-list-section"><h2>{t("shareMembers")}</h2>{loading ? <p>{t("loading")}</p> : !members.length ? <p>{t("shareNoMembers")}</p> : <ul className="share-list">{members.map(member => <li key={member.userId}><span className="share-member-avatar">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : (member.displayName[0] ?? "M").toUpperCase()}</span><span className="share-member-copy"><strong>{member.displayName}</strong><small>{member.email}</small></span><select disabled={working} value={member.role} onChange={event => void updateRole(member, event.target.value as "editor" | "viewer")}><option value="editor">{t("shareEditor")}</option><option value="viewer">{t("shareViewer")}</option></select><button type="button" className="icon-button danger" aria-label={t("removeMember")} title={t("removeMember")} disabled={working} onClick={() => void remove(member)}><Trash2 size={16}/></button></li>)}</ul>}</section>
+      {!!invitations.length && <section className="share-list-section"><h2>{t("shareInvitations")}</h2><ul className="share-list">{invitations.map(invitation => <li key={invitation.id}><Mail size={17}/><span className="share-member-copy"><strong>{invitation.email}</strong><small>{t(invitation.status === "pending" ? "sharePending" : invitation.status === "accepted" ? "shareAccepted" : invitation.status === "expired" ? "shareExpired" : "shareRevoked")} · {new Date(invitation.expiresAt).toLocaleDateString()}</small></span><span className="share-role">{invitation.role === "editor" ? t("shareEditor") : t("shareViewer")}</span>{invitation.status === "pending" && <button type="button" className="icon-button danger" aria-label={t("revokeInvite")} title={t("revokeInvite")} disabled={working} onClick={() => void revoke(invitation)}><Trash2 size={16}/></button>}</li>)}</ul></section>}
+      <footer className="actions share-page-actions"><button type="button" className="secondary-button" onClick={onClose}>{t("close")}</button></footer>
     </div>
-  </Dialog>;
+  </section>;
 }

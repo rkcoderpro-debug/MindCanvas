@@ -1,5 +1,26 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-14 — V4.5.1 Share, Wheel & Mobile Canvas Repair
+
+### Implemented
+
+- Share now renders as a full workspace page instead of a constrained dialog; all sharing controls fit the viewport without a horizontal scrollbar, including the 390px mobile layout.
+- Added `supabase/migrations/0012_v4_5_1_share_rpc_repair.sql`, an idempotent repair for the V4.4 sharing tables/RPCs with exact PostgREST parameter names and an explicit `notify pgrst, 'reload schema'`.
+- Client errors for missing `create_project_invitation`, `list_project_members` or `list_project_invitations` now include the migration and schema-cache recovery steps.
+- Canvas wheel input is vertical by default; holding `Alt` maps the same wheel gesture to horizontal panning while pinch/`Ctrl` zoom remains unchanged.
+- Mobile canvas controls are separated into a compact horizontal toolbar, bottom action zones and a touch-safe inspector sheet; the existing fullscreen, pinch/pan and toolbar-position preferences remain compatible.
+- Bumped the visible release badge, API health release and PWA cache to `4.5.1`.
+
+### Supabase action required
+
+Run migration `0011_v4_4_collaboration.sql` once when the V4.4 tables are missing, then run `0012_v4_5_1_share_rpc_repair.sql` in the Supabase SQL Editor. The second migration also reloads PostgREST's schema cache. Do not expose `token_hash` to the browser or replace the RPCs with direct table writes.
+
+### Verification
+
+- Web: 25 test files, 166 tests passed; server: 40 tests passed.
+- Web/server typecheck and production build passed locally; `git diff --check` passed.
+- Run the deployment and Supabase steps in [V4.5.1_SHARE_CANVAS_HANDOFF_VI.md](./V4.5.1_SHARE_CANVAS_HANDOFF_VI.md) before pushing.
+
 ## Update 2026-09-14 — V4.5 Calm UI, Performance & Collaboration
 
 ### Implemented
@@ -8,7 +29,7 @@
 - Added persistent Focus mode with `Ctrl/⌘ + Shift + F`, keeping the canvas visible while hiding the navigation rail. The preference is local to the current browser and does not alter project data.
 - Added shared motion tokens, touch-target sizing, reduced-motion-compatible route loading and a calmer presence/status surface.
 - Added lightweight Supabase Realtime presence for signed-in users viewing a project. Durable edits and V4.4 revision-safe conflict recovery remain unchanged; this is awareness, not CRDT merging.
-- Updated the app badge, service-worker cache and health endpoint to V4.5.0. No new Supabase migration is required.
+- Updated the app badge, service-worker cache and health endpoint to V4.5.0. No new Supabase migration was required for that slice.
 
 ### Verification
 

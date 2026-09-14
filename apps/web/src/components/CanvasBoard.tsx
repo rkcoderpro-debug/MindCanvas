@@ -17,7 +17,7 @@ import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipb
 import { getDocumentSource } from "../lib/supabase";
 import type { SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
-import { normalizeWheelDelta, panViewport, zoomViewportAtPoint } from "../lib/canvasViewport";
+import { normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; readOnly?: boolean };
@@ -576,16 +576,14 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       if (rawX === 0 && rawY === 0) return;
       e.preventDefault();
       const normalized = normalizeWheelDelta(rawX, rawY, e.deltaMode);
-      // Some touchpads report Shift+vertical gestures as horizontal scrolling.
-      // Preserve a genuine two-axis vector whenever deltaX is present.
-      const delta = e.shiftKey && normalized.x === 0 ? { x: normalized.y, y: 0 } : normalized;
       const source = boardRef.current;
       const currentViewport = wheelPending.current?.viewport ?? source.viewport;
       const rect = el.getBoundingClientRect();
       const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const pan = wheelPanDelta(normalized, e.altKey);
       const viewport = e.ctrlKey || e.metaKey
-        ? zoomViewportAtPoint(currentViewport, delta.y, anchor)
-        : panViewport(currentViewport, -delta.x, -delta.y);
+        ? zoomViewportAtPoint(currentViewport, normalized.y, anchor)
+        : panViewport(currentViewport, -pan.x, -pan.y);
       wheelPending.current = { ...source, viewport };
       scheduleWheelPreview();
       scheduleWheelCommit();

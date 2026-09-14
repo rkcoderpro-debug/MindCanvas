@@ -10,6 +10,19 @@ export function normalizeWheelDelta(deltaX: number, deltaY: number, deltaMode: n
   return { x: deltaX * unit, y: deltaY * unit };
 }
 
+/**
+ * Keep the canvas wheel contract predictable across mouse wheels and
+ * touchpads: regular wheel input moves vertically, while Alt switches the
+ * same gesture to horizontal panning. A vertical wheel delta is used as the
+ * horizontal value when Alt is held because most mouse wheels report only
+ * deltaY.
+ */
+export function wheelPanDelta(delta: { x: number; y: number }, altKey = false) {
+  const x = Number.isFinite(delta.x) ? delta.x : 0;
+  const y = Number.isFinite(delta.y) ? delta.y : 0;
+  return altKey ? { x: x || y, y: 0 } : { x: 0, y };
+}
+
 export function panViewport(viewport: CanvasViewport, dx: number, dy: number): CanvasViewport {
   return { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
 }

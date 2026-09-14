@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { hashInvitationToken, invitationUrl, normalizeInviteEmail, subscribeToProjectPresence } from "./collaboration";
+import { collaborationRpcError, hashInvitationToken, invitationUrl, normalizeInviteEmail, subscribeToProjectPresence } from "./collaboration";
 
-describe("V4.5 collaboration helpers", () => {
+describe("V4.5.1 collaboration helpers", () => {
   it("normalizes invitation email addresses before they reach Supabase", () => {
     expect(normalizeInviteEmail("  Student@Example.COM ")).toBe("student@example.com");
   });
@@ -27,5 +27,19 @@ describe("V4.5 collaboration helpers", () => {
     expect(stop).toBeTypeOf("function");
     stop();
     expect(emitted).toBe(false);
+  });
+
+  it("turns a missing sharing RPC into a migration hint", () => {
+    const error = collaborationRpcError({
+      code: "PGRST202",
+      details: "Searched for the function public.list_project_members with parameter p_project_id",
+      message: "Could not find the function public.list_project_members(p_project_id) in the schema cache",
+    });
+    expect(error.message).toContain("0012_v4_5_1_share_rpc_repair.sql");
+  });
+
+  it("preserves non-sharing Supabase errors", () => {
+    const original = new Error("Network offline");
+    expect(collaborationRpcError(original)).toBe(original);
   });
 });

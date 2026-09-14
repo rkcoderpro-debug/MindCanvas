@@ -1,6 +1,11 @@
--- MindCanvas V4.4: project sharing, invitations and collaborative access.
--- The note owner remains the source of truth. Members are scoped to one note,
--- and all reads/writes continue to pass through RLS.
+-- MindCanvas V4.5.1: repair the V4.4 sharing RPCs and refresh PostgREST.
+--
+-- Some hosted projects received the web bundle before migration 0011 was
+-- applied (or retained an old PostgREST schema cache). This idempotent repair
+-- keeps the V4.4 schema compatible, recreates the RPCs with their exact
+-- parameter names, grants them to signed-in users and asks PostgREST to
+-- reload immediately. Run migration 0011 first when the V4.4 tables do not
+-- exist yet; the guards below make a partial/old deployment recoverable.
 
 create table if not exists public.project_members (
   project_id uuid not null references public.notes(id) on delete cascade,
@@ -55,25 +60,6 @@ set search_path = public
 as $$
   select n.user_id from public.notes n where n.id = p_project_id;
 $$;
-
-create or replace function public.prevent_note_owner_change()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if tg_op = 'UPDATE' and new.user_id <> old.user_id then
-    raise exception 'Project ownership cannot be changed';
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists notes_owner_immutable on public.notes;
-create trigger notes_owner_immutable
-before update on public.notes
-for each row execute procedure public.prevent_note_owner_change();
 
 create or replace function public.can_access_project(p_project_id uuid, p_user_id uuid default auth.uid())
 returns boolean
@@ -135,88 +121,6 @@ begin
   values (p_project_id, auth.uid(), left(trim(p_event_type), 80), coalesce(p_metadata, '{}'::jsonb));
 end;
 $$;
-
--- Access to the parent note is granted to owners and members.
-alter table public.notes enable row level security;
-drop policy if exists "notes own" on public.notes;
-drop policy if exists "notes accessible to project members" on public.notes;
-create policy "notes accessible to project members"
-  on public.notes for select
-  using (public.can_access_project(id, auth.uid()));
-
-drop policy if exists "notes insert own" on public.notes;
-create policy "notes insert own"
-  on public.notes for insert
-  with check (user_id = auth.uid());
-
-drop policy if exists "notes update by project editors" on public.notes;
-create policy "notes update by project editors"
-  on public.notes for update
-  using (public.can_edit_project(id, auth.uid()))
-  with check (user_id = public.project_owner_id(id));
-
-drop policy if exists "notes delete own" on public.notes;
-create policy "notes delete own"
-  on public.notes for delete
-  using (user_id = auth.uid());
-
-alter table public.project_members enable row level security;
-drop policy if exists "project members readable by collaborators" on public.project_members;
-create policy "project members readable by collaborators"
-  on public.project_members for select
-  using (public.can_access_project(project_id, auth.uid()));
-drop policy if exists "project members managed by owner" on public.project_members;
-create policy "project members managed by owner"
-  on public.project_members for all
-  using (public.project_owner_id(project_id) = auth.uid())
-  with check (public.project_owner_id(project_id) = auth.uid() and user_id <> auth.uid());
-
-alter table public.project_invitations enable row level security;
--- Invitations are intentionally accessed through security-definer functions so
--- token hashes are never exposed to a regular client query.
-drop policy if exists "project invitations owner read" on public.project_invitations;
-
-alter table public.project_activity enable row level security;
-drop policy if exists "project activity collaborators read" on public.project_activity;
-create policy "project activity collaborators read"
-  on public.project_activity for select
-  using (public.can_access_project(project_id, auth.uid()));
-
--- Shared project source documents can be read by project collaborators. Upload,
--- update and delete remain owner-only.
-drop policy if exists "documents own" on public.documents;
-drop policy if exists "documents readable by project collaborators" on public.documents;
-create policy "documents readable by project collaborators"
-  on public.documents for select
-  using (user_id = auth.uid() or public.can_access_project(note_id, auth.uid()));
-drop policy if exists "documents insert own" on public.documents;
-create policy "documents insert own"
-  on public.documents for insert
-  with check (user_id = auth.uid());
-drop policy if exists "documents update own" on public.documents;
-create policy "documents update own"
-  on public.documents for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
-drop policy if exists "documents delete own" on public.documents;
-create policy "documents delete own"
-  on public.documents for delete
-  using (user_id = auth.uid());
-
-drop policy if exists "document objects read own" on storage.objects;
-create policy "document objects read own"
-  on storage.objects for select
-  using (
-    bucket_id = 'documents'
-    and (
-      (storage.foldername(name))[1] = auth.uid()::text
-      or exists (
-        select 1 from public.documents d
-        where d.file_path = name
-          and public.can_access_project(d.note_id, auth.uid())
-      )
-    )
-  );
 
 create or replace function public.create_project_invitation(
   p_project_id uuid,
@@ -398,6 +302,24 @@ begin
 end;
 $$;
 
+alter table public.project_members enable row level security;
+drop policy if exists "project members readable by collaborators" on public.project_members;
+create policy "project members readable by collaborators"
+  on public.project_members for select
+  using (public.can_access_project(project_id, auth.uid()));
+drop policy if exists "project members managed by owner" on public.project_members;
+create policy "project members managed by owner"
+  on public.project_members for all
+  using (public.project_owner_id(project_id) = auth.uid())
+  with check (public.project_owner_id(project_id) = auth.uid() and user_id <> auth.uid());
+
+alter table public.project_invitations enable row level security;
+alter table public.project_activity enable row level security;
+drop policy if exists "project activity collaborators read" on public.project_activity;
+create policy "project activity collaborators read"
+  on public.project_activity for select
+  using (public.can_access_project(project_id, auth.uid()));
+
 grant execute on function public.create_project_invitation(uuid, text, text, text, timestamptz) to authenticated;
 grant execute on function public.list_project_members(uuid) to authenticated;
 grant execute on function public.list_project_invitations(uuid) to authenticated;
@@ -406,16 +328,14 @@ grant execute on function public.accept_project_invitation(text) to authenticate
 grant execute on function public.set_project_member_role(uuid, uuid, text) to authenticated;
 grant execute on function public.remove_project_member(uuid, uuid) to authenticated;
 
--- Realtime Postgres Changes sends only rows that the subscriber may read.
-alter table public.notes replica identity full;
 do $$
 begin
-  alter publication supabase_realtime add table public.notes;
-exception
-  when duplicate_object then null;
-  when undefined_object then null;
+  begin
+    alter publication supabase_realtime add table public.notes;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
 end $$;
 
--- Ensure PostgREST sees the RPCs immediately after the first collaboration
--- migration is applied in a hosted Supabase project.
 notify pgrst, 'reload schema';

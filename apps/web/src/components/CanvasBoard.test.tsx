@@ -201,7 +201,7 @@ describe("Canvas interactions", () => {
     await act(async () => { pointer(svg, "pointerdown", 20, 30, { pointerType: "touch" }); pointer(svg, "pointermove", 77, 101, { pointerType: "touch" }); pointer(svg, "pointerup", 77, 101, { pointerType: "touch" }); });
     expect(pattern()).not.toBe(before); expect(current.viewport).toMatchObject({ x: 57, y: 71 }); expect(current.nodes).toEqual(b.nodes);
   });
-  it("batches a high-frequency touchpad wheel gesture into one viewport commit", async () => {
+  it("batches a high-frequency wheel gesture into one vertical viewport commit", async () => {
     vi.useFakeTimers();
     try {
       await act(async () => root.render(<Harness initial={blankBoard()}/>));
@@ -215,7 +215,18 @@ describe("Canvas interactions", () => {
       expect(commit).not.toHaveBeenCalled();
       await act(async () => { vi.advanceTimersByTime(140); });
       expect(commit).toHaveBeenCalledTimes(1);
-      expect(current.viewport).toMatchObject({ x: -12, y: -15 });
+      expect(current.viewport).toMatchObject({ x: 0, y: -15 });
+    } finally { vi.useRealTimers(); }
+  });
+  it("maps Alt plus wheel to horizontal panning", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => root.render(<Harness initial={blankBoard()}/>));
+      const frame = host.querySelector(".editor-frame")!;
+      await act(async () => frame.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 0, deltaY: 10, deltaMode: 0, altKey: true })));
+      await act(async () => { vi.advanceTimersByTime(140); });
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(current.viewport).toMatchObject({ x: -10, y: 0 });
     } finally { vi.useRealTimers(); }
   });
   it("shows the connector source and pulses both endpoints after a connection", async () => {

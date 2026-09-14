@@ -38,6 +38,21 @@ export type ProjectPresence = {
   color: string;
 };
 
+const COLLABORATION_RPC_MIGRATION_HINT =
+  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy supabase/migrations/0011_v4_4_collaboration.sql và supabase/migrations/0012_v4_5_1_share_rpc_repair.sql trong Supabase SQL Editor, sau đó reload schema cache.";
+
+/** Convert PostgREST's opaque missing-function error into an actionable message. */
+export function collaborationRpcError(error: unknown): Error {
+  const candidate = error as { code?: unknown; message?: unknown; details?: unknown } | null;
+  const code = typeof candidate?.code === "string" ? candidate.code : "";
+  const message = typeof candidate?.message === "string" ? candidate.message : "";
+  const details = typeof candidate?.details === "string" ? candidate.details : "";
+  const raw = `${code} ${message} ${details}`;
+  if (code === "PGRST202" && /project_(invitation|members)/i.test(raw)) return new Error(COLLABORATION_RPC_MIGRATION_HINT);
+  if (error instanceof Error) return error;
+  return new Error(message || "Không thể hoàn tất thao tác cộng tác.");
+}
+
 function requireClient() {
   if (!supabase) throw new Error("Supabase chưa được cấu hình.");
   return supabase;
@@ -86,7 +101,7 @@ export async function createProjectInvitation(projectId: string, email: string, 
     p_token_hash: tokenHash,
     p_expires_at: expiresAt,
   });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.id) throw new Error("Supabase không trả về lời mời hợp lệ.");
   return { invitation: invitationFromRow(row), url: invitationUrl(projectId, token) };
@@ -119,7 +134,7 @@ export async function listProjectMembers(projectId: string) {
   const client = requireClient();
   await requireSession();
   const { data, error } = await client.rpc("list_project_members", { p_project_id: projectId });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   return (data ?? []).map(memberFromRow);
 }
 
@@ -127,7 +142,7 @@ export async function listProjectInvitations(projectId: string) {
   const client = requireClient();
   await requireSession();
   const { data, error } = await client.rpc("list_project_invitations", { p_project_id: projectId });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   return (data ?? []).map(invitationFromRow);
 }
 
@@ -135,7 +150,7 @@ export async function revokeProjectInvitation(invitationId: string) {
   const client = requireClient();
   await requireSession();
   const { data, error } = await client.rpc("revoke_project_invitation", { p_invitation_id: invitationId });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   if (!data) throw new Error("Lời mời đã được dùng hoặc không còn tồn tại.");
 }
 
@@ -143,7 +158,7 @@ export async function setProjectMemberRole(projectId: string, userId: string, ro
   const client = requireClient();
   await requireSession();
   const { data, error } = await client.rpc("set_project_member_role", { p_project_id: projectId, p_user_id: userId, p_role: role });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   if (!data) throw new Error("Không thể đổi quyền thành viên.");
 }
 
@@ -151,7 +166,7 @@ export async function removeProjectMember(projectId: string, userId: string) {
   const client = requireClient();
   await requireSession();
   const { data, error } = await client.rpc("remove_project_member", { p_project_id: projectId, p_user_id: userId });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   if (!data) throw new Error("Thành viên đã được xoá hoặc không còn quyền quản lý.");
 }
 
@@ -160,7 +175,7 @@ export async function acceptProjectInvitation(token: string) {
   await requireSession();
   const tokenHash = await hashInvitationToken(token);
   const { data, error } = await client.rpc("accept_project_invitation", { p_token_hash: tokenHash });
-  if (error) throw error;
+  if (error) throw collaborationRpcError(error);
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.project_id) throw new Error("Lời mời không trả về project.");
   return { projectId: String(row.project_id), role: (row.role === "editor" ? "editor" : "viewer") as "editor" | "viewer", title: String(row.title ?? "") };

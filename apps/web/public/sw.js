@@ -1,4 +1,4 @@
-const CACHE_NAME = "mindcanvas-shell-v4.5-calm-collab";
+const CACHE_NAME = "mindcanvas-shell-v4.5.1-share-canvas";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/mindcanvas-192.png", "/icons/mindcanvas-512.png", "/icons/mindcanvas-maskable-512.png"];
 
 async function cacheAppShell() {
