@@ -1,22 +1,41 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Clock3, Maximize2, Minimize2, Pause, Play, RotateCcw, SkipForward, Timer, Volume2, VolumeX, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Bell, GripVertical, LocateFixed, Maximize2, Minimize2, Pause, Play, RotateCcw, SkipForward, Timer, Volume2, VolumeX, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
-import { clampTimerSeconds, formatTimerTime, initialTimerState, tickTimer, type TimerMode, type TimerState } from "../lib/timer";
+import { clampTimerSeconds, formatTimerTime, initialTimerSessions, normalizeTimerSessions, timerParts, timerSecondsFromParts, tickTimer, toggleTimerSession, TIMER_MODES, type TimerMode, type TimerParts, type TimerSessions } from "../lib/timer";
 
-const STORAGE_KEY = "mindcanvas:learning-hub-timer:v1";
+const STORAGE_KEY = "mindcanvas:learning-hub-timer:v2";
+type TimerPosition = { left: number; top: number };
 
-function readSaved(): { state: TimerState; open: boolean; minimized: boolean; sound: boolean } {
-  const fallback = initialTimerState();
+type SavedTimer = {
+  sessions: TimerSessions;
+  mode: TimerMode;
+  open: boolean;
+  minimized: boolean;
+  sound: boolean;
+  position: TimerPosition | null;
+};
+
+function readSaved(): SavedTimer {
+  const now = Date.now();
+  const fallback = initialTimerSessions(now);
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, unknown>;
+    const rawMode = parsed.mode;
+    const mode = TIMER_MODES.includes(rawMode as TimerMode) ? rawMode as TimerMode : "pomodoro";
+    const rawPosition = parsed.position as Partial<TimerPosition> | null | undefined;
+    const position = rawPosition && Number.isFinite(rawPosition.left) && Number.isFinite(rawPosition.top)
+      ? { left: Number(rawPosition.left), top: Number(rawPosition.top) }
+      : null;
     return {
-      state: { ...fallback, ...(parsed.state ?? {}), mode: parsed.state?.mode ?? fallback.mode, phase: parsed.state?.phase === "break" ? "break" : "focus" },
+      sessions: normalizeTimerSessions(parsed.sessions ?? parsed, now),
+      mode,
       open: parsed.open !== false,
       minimized: parsed.minimized === true,
       sound: parsed.sound !== false,
+      position,
     };
   } catch {
-    return { state: fallback, open: true, minimized: false, sound: true };
+    return { sessions: fallback, mode: "pomodoro", open: true, minimized: false, sound: true, position: null };
   }
 }
 
@@ -42,87 +61,225 @@ function playRing() {
   } catch { /* Browsers may require a prior user gesture. */ }
 }
 
+function clampPosition(position: TimerPosition, element: HTMLElement | null): TimerPosition {
+  const rect = element?.getBoundingClientRect();
+  const width = rect?.width || element?.offsetWidth || 330;
+  const height = rect?.height || element?.offsetHeight || 180;
+  return {
+    left: Math.min(Math.max(8, position.left), Math.max(8, window.innerWidth - width - 8)),
+    top: Math.min(Math.max(8, position.top), Math.max(8, window.innerHeight - height - 8)),
+  };
+}
+
 export default function FloatingTimer() {
   const { t, language } = useLanguage();
   const [saved] = useState(readSaved);
-  const [state, setState] = useState<TimerState>(saved.state);
+  const [mode, setMode] = useState<TimerMode>(saved.mode);
+  const [sessions, setSessions] = useState<TimerSessions>(saved.sessions);
   const [open, setOpen] = useState(saved.open);
   const [minimized, setMinimized] = useState(saved.minimized);
   const [sound, setSound] = useState(saved.sound);
-  const [running, setRunning] = useState(false);
+  const [position, setPosition] = useState<TimerPosition | null>(saved.position);
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const lastTick = useRef(Date.now());
+  const timerRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
+  const announcedRef = useRef(new Set<string>());
+
+  const activeSession = sessions[mode] ?? sessions.pomodoro;
+  const state = activeSession.state;
+  const running = activeSession.running;
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, open, minimized, sound })); } catch { /* local persistence is optional */ }
-  }, [minimized, open, sound, state]);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessions, mode, open, minimized, sound, position })); } catch { /* local persistence is optional */ }
+  }, [minimized, mode, open, position, sessions, sound]);
 
   useEffect(() => {
-    if (state.mode !== "clock") return;
+    if (mode !== "clock") return;
     const interval = window.setInterval(() => setClockNow(Date.now()), 1_000);
     return () => window.clearInterval(interval);
-  }, [state.mode]);
+  }, [mode]);
 
   useEffect(() => {
-    if (!running) return;
-    lastTick.current = Date.now();
     const interval = window.setInterval(() => {
       const now = Date.now();
-      const delta = Math.floor((now - lastTick.current) / 1000);
-      if (delta < 1) return;
-      lastTick.current += delta * 1000;
-      setState(current => {
-        const result = tickTimer(current, delta);
-        if (result.finished) {
-          if (sound) playRing();
-          if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification(t("timerFinished"));
-          if (current.mode === "countdown") setRunning(false);
+      setSessions(current => {
+        let changed = false;
+        const next = { ...current } as TimerSessions;
+        for (const timerMode of TIMER_MODES) {
+          const session = current[timerMode];
+          if (!session.running) continue;
+          const delta = Math.floor((now - session.lastTickAt) / 1000);
+          if (delta < 1) continue;
+          const result = tickTimer(session.state, delta);
+          const nextRunning = result.finished && timerMode === "countdown" ? false : session.running;
+          next[timerMode] = { ...session, state: result.state, running: nextRunning, lastTickAt: session.lastTickAt + delta * 1_000 };
+          changed = true;
+          if (result.finished) {
+            const key = `${timerMode}:${session.lastTickAt}:${result.state.phase}:${result.state.cycle}`;
+            if (!announcedRef.current.has(key)) {
+              announcedRef.current.add(key);
+              if (sound) playRing();
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification(t("timerFinished"));
+            }
+          }
         }
-        return result.state;
+        return changed ? next : current;
       });
     }, 250);
     return () => window.clearInterval(interval);
-  }, [running, sound, t]);
+  }, [sound, t]);
+
+  // Pointer capture is not consistently delivered by every browser when the
+  // pointer leaves a small header. A window-level listener keeps dragging
+  // continuous on mouse, touch and pen input, including when the pointer is
+  // released outside the timer.
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      setPosition(clampPosition({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY }, timerRef.current));
+    };
+    const stop = (event: PointerEvent) => {
+      if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+    };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (position) setPosition(current => current ? clampPosition(current, timerRef.current) : current);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [position]);
+
+  useEffect(() => {
+    if (position) setPosition(current => current ? clampPosition(current, timerRef.current) : current);
+  }, [minimized, open]);
 
   const display = useMemo(() => {
-    if (state.mode === "clock") return new Date().toLocaleTimeString(language === "vi" ? "vi-VN" : "en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    if (state.mode === "stopwatch") return formatTimerTime(state.elapsedSeconds, state.elapsedSeconds >= 3_600);
+    if (mode === "clock") return new Date(clockNow).toLocaleTimeString(language === "vi" ? "vi-VN" : "en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    if (mode === "stopwatch") return formatTimerTime(state.elapsedSeconds, state.elapsedSeconds >= 3_600);
     return formatTimerTime(state.remainingSeconds, state.remainingSeconds >= 3_600);
-  }, [clockNow, language, state]);
+  }, [clockNow, language, mode, state]);
 
-  const selectMode = (mode: TimerMode) => {
-    setRunning(false);
-    setState(current => ({ ...current, mode, remainingSeconds: mode === "pomodoro" ? current.focusSeconds : mode === "countdown" ? current.focusSeconds : current.remainingSeconds, elapsedSeconds: mode === "stopwatch" ? current.elapsedSeconds : current.elapsedSeconds, phase: "focus", cycle: 1 }));
+  const modeLabel = mode === "pomodoro" ? t("timerPomodoro") : mode === "countdown" ? t("timerCountdown") : mode === "stopwatch" ? t("timerStopwatch") : t("timerClock");
+  const positionStyle = position ? { left: position.left, top: position.top, right: "auto", bottom: "auto" } : undefined;
+
+  const selectMode = (nextMode: TimerMode) => setMode(nextMode);
+  const toggleRunning = () => {
+    if (mode === "clock") return;
+    const now = Date.now();
+    setSessions(current => {
+      return { ...current, [mode]: toggleTimerSession(current[mode], now) };
+    });
   };
   const reset = () => {
-    setRunning(false);
-    setState(current => ({ ...initialTimerState(current.mode), focusSeconds: current.focusSeconds, breakSeconds: current.breakSeconds, remainingSeconds: current.mode === "stopwatch" ? 0 : current.focusSeconds }));
+    setSessions(current => {
+      const previous = current[mode];
+      const nextState = { ...previous.state, remainingSeconds: Math.max(1, previous.state.focusSeconds), elapsedSeconds: 0, phase: "focus" as const, cycle: 1 };
+      if (mode === "clock") nextState.remainingSeconds = 0;
+      return { ...current, [mode]: { state: { ...nextState, mode }, running: false, lastTickAt: Date.now() } };
+    });
   };
+  const updateDuration = (kind: "focus" | "break", parts: TimerParts) => {
+    setSessions(current => {
+      const session = current[mode];
+      const fallback = kind === "break" ? session.state.breakSeconds : session.state.focusSeconds;
+      const seconds = Math.max(1, timerSecondsFromParts(parts, fallback));
+      const nextState = { ...session.state };
+      if (kind === "break" && mode === "pomodoro") {
+        nextState.breakSeconds = seconds;
+        if (!session.running && nextState.phase === "break") nextState.remainingSeconds = seconds;
+      } else {
+        nextState.focusSeconds = seconds;
+        if (!session.running && (mode === "countdown" || (mode === "pomodoro" && nextState.phase === "focus"))) nextState.remainingSeconds = seconds;
+      }
+      return { ...current, [mode]: { ...session, state: nextState, lastTickAt: Date.now() } };
+    });
+  };
+  const adjustDuration = (kind: "focus" | "break", delta: number) => {
+    setSessions(current => {
+      const session = current[mode];
+      if (mode === "clock") return current;
+      const currentSeconds = kind === "break" && mode === "pomodoro" ? session.state.breakSeconds : session.state.focusSeconds;
+      const seconds = Math.max(1, clampTimerSeconds(currentSeconds + delta, currentSeconds));
+      const nextState = { ...session.state };
+      if (kind === "break" && mode === "pomodoro") {
+        nextState.breakSeconds = seconds;
+        if (!session.running && nextState.phase === "break") nextState.remainingSeconds = seconds;
+      } else {
+        nextState.focusSeconds = seconds;
+        if (!session.running && (mode === "countdown" || (mode === "pomodoro" && nextState.phase === "focus"))) nextState.remainingSeconds = seconds;
+      }
+      return { ...current, [mode]: { ...session, state: nextState, lastTickAt: Date.now() } };
+    });
+  };
+  const setPreset = (minutes: number) => updateDuration("focus", { hours: Math.floor(minutes / 60), minutes: minutes % 60, seconds: 0 });
   const requestNotification = () => {
     if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission();
   };
-  const setFocusMinutes = (value: string) => {
-    const seconds = clampTimerSeconds(Number(value) * 60, state.focusSeconds);
-    setState(current => ({ ...current, focusSeconds: seconds, remainingSeconds: !running && (current.mode === "countdown" || current.mode === "pomodoro") ? seconds : current.remainingSeconds }));
+  const resetPosition = () => setPosition(null);
+
+  const onHeaderPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    const element = timerRef.current;
+    if (!element) return;
+    event.preventDefault();
+    const rect = element.getBoundingClientRect();
+    dragRef.current = { pointerId: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
-  const setBreakMinutes = (value: string) => setState(current => ({ ...current, breakSeconds: clampTimerSeconds(Number(value) * 60, current.breakSeconds) }));
 
-  if (!open) return <button className="timer-launcher" aria-label={t("timerShow")} title={t("timerShow")} onClick={() => setOpen(true)}><Timer size={18}/><span>{t("timer")}</span></button>;
+  const floatingProps = { ref: timerRef, style: positionStyle };
+  if (!open) return <button className="timer-launcher" style={positionStyle} aria-label={t("timerShow")} title={t("timerShow")} onClick={() => setOpen(true)}><Timer size={18}/><span>{t("timerShow")}</span></button>;
 
-  return <aside className={`floating-timer ${minimized ? "minimized" : ""}`} aria-label={t("timer")}>
-    <header className="floating-timer-header">
-      <span><Timer size={16}/>{t("timer")}</span>
+  return <aside {...floatingProps} className={`floating-timer ${minimized ? "minimized" : ""}`} aria-label={t("timer")}>
+    <header className="floating-timer-header" onPointerDown={onHeaderPointerDown}>
+      <span className="timer-drag-handle"><GripVertical size={14} aria-hidden="true"/><Timer size={16}/>{t("timer")}</span>
       <div className="floating-timer-actions">
+        <button className="icon-button" aria-label={t("timerResetPosition")} title={t("timerResetPosition")} onClick={resetPosition}><LocateFixed size={15}/></button>
         <button className="icon-button" aria-label={minimized ? t("timerExpand") : t("timerMinimize")} title={minimized ? t("timerExpand") : t("timerMinimize")} onClick={() => setMinimized(value => !value)}>{minimized ? <Maximize2 size={15}/> : <Minimize2 size={15}/>}</button>
         <button className="icon-button" aria-label={t("timerHide")} title={t("timerHide")} onClick={() => setOpen(false)}><X size={15}/></button>
       </div>
     </header>
-    {!minimized && <>
-      <div className="timer-mode-tabs" role="tablist" aria-label={t("timer")}>{(["pomodoro", "countdown", "stopwatch", "clock"] as TimerMode[]).map(mode => <button key={mode} role="tab" aria-selected={state.mode === mode} className={state.mode === mode ? "active" : ""} onClick={() => selectMode(mode)}>{mode === "pomodoro" ? t("timerPomodoro") : mode === "countdown" ? t("timerCountdown") : mode === "stopwatch" ? t("timerStopwatch") : t("timerClock")}</button>)}</div>
-      <div className={`timer-display ${state.phase === "break" ? "break" : ""}`}><strong>{display}</strong>{state.mode === "pomodoro" && <small>{state.phase === "focus" ? t("timerFocus") : t("timerBreak")} · {t("timerCycle")} {state.cycle}</small>}</div>
-      <div className="timer-controls"><button className="primary-button" onClick={() => { requestNotification(); lastTick.current = Date.now(); setRunning(value => !value); }}>{running ? <Pause size={16}/> : <Play size={16}/>} {running ? t("timerPause") : t("timerStart")}</button><button className="secondary-button" onClick={reset}><RotateCcw size={15}/>{t("timerReset")}</button>{state.mode === "pomodoro" && <button className="icon-button" aria-label={t("timerSkipBreak")} title={t("timerSkipBreak")} onClick={() => setState(current => ({ ...current, remainingSeconds: 0 }))}><SkipForward size={16}/></button>}</div>
-      <div className="timer-settings"><label>{t("timerMinutes")}<input type="number" min="1" max="1440" value={Math.max(1, Math.round(state.focusSeconds / 60))} disabled={running} onChange={event => setFocusMinutes(event.target.value)}/></label>{state.mode === "pomodoro" && <label>{t("timerBreak")}<input type="number" min="1" max="120" value={Math.max(1, Math.round(state.breakSeconds / 60))} disabled={running} onChange={event => setBreakMinutes(event.target.value)}/></label>}<button className="timer-sound" aria-pressed={sound} title={sound ? t("timerSoundOn") : t("timerSoundOff")} onClick={() => setSound(value => !value)}>{sound ? <Volume2 size={15}/> : <VolumeX size={15}/>}<span>{sound ? t("timerSoundOn") : t("timerSoundOff")}</span></button></div>
+    {minimized ? <div className="timer-minimized-body" role="status"><div className="timer-mini-readout"><strong>{display}</strong><small>{modeLabel}{mode === "pomodoro" ? ` · ${state.phase === "focus" ? t("timerFocus") : t("timerBreak")}` : ""}</small></div><button className="icon-button" aria-label={running ? t("timerPause") : t("timerStart")} title={running ? t("timerPause") : t("timerStart")} onClick={() => { requestNotification(); toggleRunning(); }}>{running ? <Pause size={16}/> : <Play size={16}/>}</button></div> : <>
+      <div className="timer-mode-tabs" role="tablist" aria-label={t("timer")}>{TIMER_MODES.map(timerMode => <button key={timerMode} role="tab" aria-selected={mode === timerMode} className={mode === timerMode ? "active" : ""} onClick={() => selectMode(timerMode)}>{timerMode === "pomodoro" ? t("timerPomodoro") : timerMode === "countdown" ? t("timerCountdown") : timerMode === "stopwatch" ? t("timerStopwatch") : t("timerClock")}</button>)}</div>
+      <div className={`timer-display ${state.phase === "break" ? "break" : ""}`}><strong>{display}</strong>{mode === "pomodoro" && <small>{state.phase === "focus" ? t("timerFocus") : t("timerBreak")} · {t("timerCycle")} {state.cycle}</small>}</div>
+      <div className="timer-controls"><button className="primary-button" disabled={mode === "clock"} onClick={() => { requestNotification(); toggleRunning(); }}>{running ? <Pause size={16}/> : <Play size={16}/>} {running ? t("timerPause") : t("timerStart")}</button><button className="secondary-button" disabled={mode === "clock"} onClick={reset}><RotateCcw size={15}/>{t("timerReset")}</button>{mode === "pomodoro" && <button className="icon-button" aria-label={t("timerSkipBreak")} title={t("timerSkipBreak")} onClick={() => setSessions(current => ({ ...current, [mode]: { ...current[mode], state: { ...current[mode].state, remainingSeconds: 0 } } }))}><SkipForward size={16}/></button>}</div>
+      {mode === "countdown" && <DurationEditor label={t("timerDuration")} seconds={state.focusSeconds} disabled={running} onChange={parts => updateDuration("focus", parts)} onNudge={delta => adjustDuration("focus", delta)} t={t}/>}
+      {mode === "pomodoro" && <div className="timer-duration-stack"><DurationEditor label={t("timerFocusDuration")} seconds={state.focusSeconds} disabled={running} onChange={parts => updateDuration("focus", parts)} onNudge={delta => adjustDuration("focus", delta)} t={t}/><DurationEditor label={t("timerBreakDuration")} seconds={state.breakSeconds} disabled={running} onChange={parts => updateDuration("break", parts)} onNudge={delta => adjustDuration("break", delta)} t={t}/></div>}
+      {(mode === "countdown" || mode === "pomodoro") && <div className="timer-presets"><span>{t("timerPresets")}</span>{[5, 15, 25, 50, 90].map(minutes => <button key={minutes} type="button" disabled={running} onClick={() => setPreset(minutes)}>{minutes}{t("timerMinutesShort")}</button>)}</div>}
+      <div className="timer-settings"><button className="timer-sound" aria-pressed={sound} title={sound ? t("timerSoundOn") : t("timerSoundOff")} onClick={() => setSound(value => !value)}>{sound ? <Volume2 size={15}/> : <VolumeX size={15}/>}<span>{sound ? t("timerSoundOn") : t("timerSoundOff")}</span></button></div>
       <small className="timer-hint"><Bell size={13}/>{t("timerHint")}</small>
     </>}
   </aside>;
+}
+
+function DurationEditor({ label, seconds, disabled, onChange, onNudge, t }: { label: string; seconds: number; disabled: boolean; onChange: (parts: TimerParts) => void; onNudge: (delta: number) => void; t: (key: any, values?: Record<string, string | number>) => string }) {
+  const toDraft = (value: number) => Object.fromEntries(Object.entries(timerParts(value)).map(([key, item]) => [key, String(item)])) as Record<keyof TimerParts, string>;
+  const [draft, setDraft] = useState<Record<keyof TimerParts, string>>(() => toDraft(seconds));
+  const editing = useRef(false);
+  useEffect(() => { if (!editing.current) setDraft(toDraft(seconds)); }, [seconds]);
+  const update = (key: keyof TimerParts, value: string) => { editing.current = true; setDraft(current => ({ ...current, [key]: value })); };
+  const commit = () => {
+    editing.current = false;
+    const next = (Object.keys(draft) as Array<keyof TimerParts>).reduce((parts, key) => {
+      const parsed = Number(draft[key]);
+      const max = key === "hours" ? 24 : 59;
+      return { ...parts, [key]: Math.max(0, Math.min(max, Number.isFinite(parsed) ? Math.floor(parsed) : 0)) };
+    }, {} as TimerParts);
+    setDraft(toDraft(timerSecondsFromParts(next, seconds)));
+    onChange(next);
+  };
+  return <fieldset className="timer-duration-editor"><legend>{label}</legend><div className="timer-duration-fields">{(["hours", "minutes", "seconds"] as Array<keyof TimerParts>).map(key => <label key={key}><span>{key === "hours" ? t("timerHours") : key === "minutes" ? t("timerMinutesShort") : t("timerSeconds")}</span><input type="number" min="0" max={key === "hours" ? 24 : 59} value={draft[key]} disabled={disabled} onChange={event => update(key, event.target.value)} onBlur={commit} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(); event.currentTarget.blur(); } }}/></label>)}</div><div className="timer-duration-nudges"><button type="button" disabled={disabled} onClick={() => onNudge(-60)}>{t("timerMinusMinute")}</button><button type="button" disabled={disabled} onClick={() => onNudge(60)}>{t("timerPlusMinute")}</button><button type="button" disabled={disabled} onClick={() => onNudge(300)}>{t("timerPlusFiveMinutes")}</button></div></fieldset>;
 }

@@ -1,5 +1,5 @@
 import { getCurrentSession, supabase } from "./supabase";
-import { createQuizTest, type QuizAttempt, type QuizQuestion, type QuizTest } from "./quiz";
+import { createQuizTest, parseQuizResult, type QuizAttempt, type QuizMode, type QuizQuestion, type QuizTest } from "./quiz";
 
 type RepositoryResult<T> = { items: T[]; source: "cloud" | "local" };
 type ItemResult<T> = { item: T; source: "cloud" | "local" };
@@ -22,28 +22,29 @@ function writeList<T>(key: string, items: T[]) {
 
 function questionsFrom(value: unknown): QuizQuestion[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(item => item && typeof item === "object").map((item, index) => {
-    const raw = item as any;
-    const options: [string, string, string, string] = Array.isArray(raw.options) && raw.options.length === 4
-      ? [String(raw.options[0]), String(raw.options[1]), String(raw.options[2]), String(raw.options[3])]
-      : ["A", "B", "C", "D"];
-    const correct = Number.isInteger(raw.correctIndex) && raw.correctIndex >= 0 && raw.correctIndex <= 3 ? raw.correctIndex as 0 | 1 | 2 | 3 : 0;
-    return { id: typeof raw.id === "string" ? raw.id : `question-${index + 1}`, prompt: String(raw.prompt ?? ""), options, correctIndex: correct, explanation: String(raw.explanation ?? ""), sourcePage: Number.isInteger(raw.sourcePage) ? raw.sourcePage : null, topic: typeof raw.topic === "string" ? raw.topic : undefined };
-  }).filter(question => question.prompt.trim() && question.options.every(option => option.trim()));
+  try {
+    return parseQuizResult({ title: "Imported quiz", description: "", questions: value }, 100).questions;
+  } catch {
+    // A malformed question must invalidate the imported quiz instead of being
+    // silently replaced or removed from the learner's test.
+    return [];
+  }
 }
 
 function quizFromRow(row: any, source: "cloud" | "local"): QuizTest | null {
   if (!row || typeof row.id !== "string" || typeof row.title !== "string") return null;
   const questions = questionsFrom(row.questions);
   if (!questions.length) return null;
-  return { id: row.id, title: row.title, description: typeof row.description === "string" ? row.description : "", questions, sourceDocumentId: typeof row.source_document_id === "string" ? row.source_document_id : null, createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(), updatedAt: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(), source };
+  return { id: row.id, title: row.title, description: typeof row.description === "string" ? row.description : "", questions, sourceDocumentId: typeof row.source_document_id === "string" ? row.source_document_id : typeof row.sourceDocumentId === "string" ? row.sourceDocumentId : null, createdAt: typeof row.created_at === "string" ? row.created_at : typeof row.createdAt === "string" ? row.createdAt : new Date().toISOString(), updatedAt: typeof row.updated_at === "string" ? row.updated_at : typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString(), source };
 }
 
 function attemptFromRow(row: any, source: "cloud" | "local"): QuizAttempt | null {
   if (!row || typeof row.id !== "string" || typeof row.quiz_id !== "string") return null;
   const score = Number(row.score), total = Number(row.total);
   if (!Number.isInteger(score) || !Number.isInteger(total)) return null;
-  return { id: row.id, quizId: row.quiz_id, score: Math.max(0, score), total: Math.max(0, total), answers: Array.isArray(row.answers) ? row.answers.map((value: unknown) => Number.isInteger(value) ? value as number : null) : [], durationSeconds: Number.isInteger(row.duration_seconds) ? Math.max(0, row.duration_seconds) : 0, completedAt: typeof row.completed_at === "string" ? row.completed_at : new Date().toISOString(), source };
+  const mode: QuizMode = row.mode === "practice" || row.mode === "exam" || row.mode === "review" ? row.mode : "learn";
+  const questionIds = Array.isArray(row.question_ids) ? row.question_ids.filter((value: unknown): value is string => typeof value === "string") : undefined;
+  return { id: row.id, quizId: row.quiz_id, score: Math.max(0, score), total: Math.max(0, total), answers: Array.isArray(row.answers) ? row.answers.map((value: unknown) => Number.isInteger(value) ? value as number : null) : [], durationSeconds: Number.isInteger(row.duration_seconds) ? Math.max(0, row.duration_seconds) : 0, completedAt: typeof row.completed_at === "string" ? row.completed_at : new Date().toISOString(), mode, questionIds, source };
 }
 
 async function clientFor(owner: string) {
@@ -53,7 +54,7 @@ async function clientFor(owner: string) {
 }
 
 function localTests(owner: string | null) {
-  return readList<QuizTest>(testsKey(owner)).filter(item => item && typeof item.id === "string" && typeof item.title === "string" && Array.isArray(item.questions));
+  return readList<QuizTest>(testsKey(owner)).map(item => quizFromRow(item, "local")).filter((item): item is QuizTest => !!item);
 }
 
 function localAttempts(owner: string | null) {
@@ -117,7 +118,7 @@ export async function fetchQuizAttempts(owner: string | null): Promise<Repositor
   if (!owner) return { items: localAttempts(null), source: "local" };
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("quiz_attempts").select("id,quiz_id,score,total,answers,duration_seconds,completed_at").eq("user_id", owner).order("completed_at", { ascending: false }).limit(500).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("quiz_attempts").select("id,quiz_id,score,total,answers,mode,question_ids,duration_seconds,completed_at").eq("user_id", owner).order("completed_at", { ascending: false }).limit(500).abortSignal(AbortSignal.timeout(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => attemptFromRow(row, "cloud")).filter((item): item is QuizAttempt => !!item);
     writeList(attemptsKey(owner), items);
@@ -131,7 +132,7 @@ export async function recordQuizAttempt(owner: string | null, attempt: QuizAttem
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("quiz_attempts").upsert({ id: attempt.id, user_id: owner, quiz_id: attempt.quizId, score: attempt.score, total: attempt.total, answers: attempt.answers, duration_seconds: attempt.durationSeconds, completed_at: attempt.completedAt }).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("quiz_attempts").upsert({ id: attempt.id, user_id: owner, quiz_id: attempt.quizId, score: attempt.score, total: attempt.total, answers: attempt.answers, mode: attempt.mode ?? "learn", question_ids: attempt.questionIds ?? [], duration_seconds: attempt.durationSeconds, completed_at: attempt.completedAt }).abortSignal(AbortSignal.timeout(20000));
       if (error) throw error;
       const saved = { ...attempt, source: "cloud" as const };
       cacheAttempt(owner, saved);
