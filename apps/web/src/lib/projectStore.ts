@@ -256,6 +256,12 @@ export async function fetchBoard(owner: string, id: string): Promise<BoardState>
   return (await fetchProjectSnapshot(owner, id)).board;
 }
 export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number }> {
+  if (project.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
+  // An existing shared draft without a base revision must be reconciled,
+  // never inserted under the collaborator's identity.
+  if (project.revision === undefined && (project.shared || (project.ownerId && project.ownerId !== owner))) {
+    throw new ProjectConflictError(project.id);
+  }
   const client = await clientFor(owner);
   const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt };
   if (project.revision === undefined) {
@@ -282,13 +288,9 @@ export async function persistProject(owner: string, project: CachedProject): Pro
       if (!(legacyCode === "23505" || /duplicate key|already exists/i.test(legacyMessage))) throw legacy.error;
     }
 
-    // Imported boards may retain an id that already belongs to this owner.
-    // Update that row explicitly instead of using UPSERT, so a shared editor
-    // can never accidentally send their own user_id as a new owner.
-    const existing = await client.from("notes").update(payload).eq("id", project.id).eq("user_id", owner).select("id").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
-    if (existing.error) throw existing.error;
-    if (!existing.data) throw modern.error;
-    return {};
+    // A duplicate proves this is not a new canvas. Without a base revision
+    // an automatic update would silently overwrite another device's edits.
+    throw new ProjectConflictError(project.id);
   }
   const nextRevision = project.revision + 1;
   const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();

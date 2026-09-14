@@ -220,14 +220,17 @@ export function useWorkspace(owner: string | null) {
     if (cacheFailed.current || ticket !== navigation.current) return;
     try {
       const cached = readCache(owner).find(c => c.id === p.id);
-      const next = cached && (!owner || cached.pending || !navigator.onLine) ? cached.board : owner ? await fetchBoard(owner, p.id) : cached?.board;
+      const local = cached && (!owner || cached.pending || !navigator.onLine);
+      const snapshot = !local && owner ? await fetchProjectSnapshot(owner, p.id) : undefined;
+      const metadata = snapshot ?? cached ?? p;
+      const next = local ? cached.board : snapshot?.board ?? cached?.board;
       if (!next) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
-      current.current = normalizeEditor(next); folderId.current = p.folderId; setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
-      if (!cached?.pending) cacheProject(owner, { ...p, board: next, pending: false });
+      current.current = normalizeEditor(next); folderId.current = metadata.folderId; setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
+      if (!cached?.pending) cacheProject(owner, { ...metadata, board: next, pending: false });
       // Publish the access metadata immediately so a newly accepted viewer
       // cannot get one editable render while the background refresh completes.
-      upsertSummary({ ...p, title: next.title, updatedAt: next.updatedAt, board: next, pending: false });
+      upsertSummary({ ...metadata, title: next.title, updatedAt: next.updatedAt, board: next, pending: !!cached?.pending });
       const history = await fetchProjectVersions(owner, next.id);
       if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
     } catch (err) { report(err); }

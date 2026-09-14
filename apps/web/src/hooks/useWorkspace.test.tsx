@@ -9,6 +9,21 @@ function Harness({ owner = null }: { owner?: string | null }) { api = useWorkspa
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace lifecycle", () => {
+  it("keeps the remote revision and owner when opening an invitation", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]);
+    vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    vi.spyOn(store, "fetchProjectVersions").mockResolvedValue([]);
+    const board = (await import("../lib/board")).blankBoard("Shared");
+    const snapshot: store.CachedProject = { id: board.id, title: board.title, board, folderId: null, updatedAt: board.updatedAt, pending: false, revision: 7, ownerId: "original-owner", shared: true, accessRole: "editor" };
+    vi.spyOn(store, "fetchProjectSnapshot").mockResolvedValue(snapshot);
+    const save = vi.spyOn(store, "persistProject").mockResolvedValue({ revision: 8 });
+    await act(async () => root.render(<Harness owner="editor"/>));
+    await act(async () => api.open({ id: board.id, title: board.title, folderId: null, updatedAt: board.updatedAt, shared: true, accessRole: "editor" }));
+    expect(store.readCache("editor")[0].revision).toBe(7);
+    await act(async () => api.change({ ...api.board!, title: "Editor change" }));
+    await act(async () => api.flush());
+    expect(save.mock.calls[0][1]).toMatchObject({ revision: 7, ownerId: "original-owner", accessRole: "editor" });
+  });
   it("pan/zoom persists but does not add undo steps or destroy redo", async () => {
     await act(async () => root.render(<Harness/>));
     await act(async () => api.create("Map"));
