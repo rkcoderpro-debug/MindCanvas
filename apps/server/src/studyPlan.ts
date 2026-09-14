@@ -2,6 +2,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { generateGeminiJson } from "./gemini.js";
 import { parseLenientJson } from "./json.js";
+import { aiOptionsInstruction, type AiGenerationOptions } from "./aiOptions.js";
 
 export type StudyPlanCardSignal = {
   due: boolean;
@@ -30,7 +31,7 @@ export function parseStudyPlanRecommendation(text: string, availableCards: numbe
   };
 }
 
-function promptFor(input: { cards: StudyPlanCardSignal[]; dailyMinutes: number; language: "vi" | "en" }) {
+function promptFor(input: { cards: StudyPlanCardSignal[]; dailyMinutes: number; language: "vi" | "en"; options: AiGenerationOptions }) {
   const due = input.cards.filter(card => card.due).length;
   const newCards = input.cards.filter(card => card.repetitions === 0).length;
   const difficult = input.cards.filter(card => card.lapses > 0).length;
@@ -48,10 +49,12 @@ function promptFor(input: { cards: StudyPlanCardSignal[]; dailyMinutes: number; 
     `New cards: ${newCards}`,
     `Difficult cards: ${difficult}`,
     `Available study time: ${input.dailyMinutes} minutes`,
+    aiOptionsInstruction(input.options),
   ].join("\n");
 }
 
-export async function recommendStudyPlanWithGemini(input: { cards: StudyPlanCardSignal[]; dailyMinutes: number; language: "vi" | "en" }) {
+export async function recommendStudyPlanWithGemini(input: { cards: StudyPlanCardSignal[]; dailyMinutes: number; language: "vi" | "en"; difficulty?: AiGenerationOptions["difficulty"]; depth?: AiGenerationOptions["depth"] }) {
+  const options: AiGenerationOptions = { difficulty: input.difficulty ?? "balanced", depth: input.depth ?? "basic" };
   const result = await generateGeminiJson(
     {
       apiKey: config.GEMINI_API_KEY ?? "", baseUrl: config.GEMINI_BASE_URL,
@@ -59,7 +62,7 @@ export async function recommendStudyPlanWithGemini(input: { cards: StudyPlanCard
       retriesPerModel: config.GEMINI_RETRIES_PER_MODEL, totalTimeoutMs: config.GEMINI_TOTAL_TIMEOUT_MS,
       retryBaseMs: config.GEMINI_RETRY_BASE_MS,
     },
-    promptFor(input),
+    promptFor({ ...input, options }),
     output => parseStudyPlanRecommendation(output, input.cards.length),
   );
   return { provider: "gemini" as const, model: result.model, ...result.value };

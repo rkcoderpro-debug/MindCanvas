@@ -12,6 +12,7 @@ import { generateFlashcardsWithGemini, MAX_FLASHCARDS } from "./flashcards.js";
 import { generateQuizWithGemini, MAX_QUIZ_QUESTIONS } from "./quiz.js";
 import { generateSelectionWithGemini, selectionActions } from "./selection.js";
 import { recommendStudyPlanWithGemini } from "./studyPlan.js";
+import { aiOptionsSchema } from "./aiOptions.js";
 import { aiScheduler } from "./aiScheduler.js";
 
 const app = express();
@@ -20,7 +21,7 @@ app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
   mode: "server",
-  release: "4.3",
+  release: "4.3.1",
   ai: "gemini",
   aiConfigured: Boolean(config.GEMINI_API_KEY),
   aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,
@@ -145,7 +146,7 @@ app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   catch (error) { return sendAiError(res, error, "AI processing failed."); }
 });
 
-const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards", "quiz"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20) });
+const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards", "quiz"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20), ...aiOptionsSchema.shape });
 app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) => {
   const parsed = aiFileInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid file AI request." });
@@ -160,8 +161,8 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
       const generated: any = parsed.data.task === "mind-map"
         ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image }))
         : parsed.data.task === "flashcards"
-          ? await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image }))
-          : await aiScheduler.run(req.userId!, () => generateQuizWithGemini({ text: source.text, documentId, maxQuestions: Math.min(MAX_QUIZ_QUESTIONS, parsed.data.maxCards), image: source.image }));
+          ? await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth }))
+          : await aiScheduler.run(req.userId!, () => generateQuizWithGemini({ text: source.text, documentId, maxQuestions: Math.min(MAX_QUIZ_QUESTIONS, parsed.data.maxCards), image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth }));
       return { source, documentId, result: generated };
     });
     const { source, documentId, result } = generatedBundle;
@@ -175,14 +176,14 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
   }
 });
 
-const flashcardInput = aiInput.extend({ maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20) });
+const flashcardInput = aiInput.extend({ maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20), ...aiOptionsSchema.shape });
 app.post("/api/ai/flashcards", requireUser, async (req, res) => {
   const parsed = flashcardInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid flashcard input." });
   try { await enforceQuota(req.userId!, "flashcards", parsed.data.maxCards); const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini(parsed.data))); await recordUsage(req.userId!, "ai_flashcards", 1, 0, { source: "text", cardCount: result.cards.length }); return res.json(result); }
   catch (error) { return sendAiError(res, error, "Flashcard generation failed."); }
 });
 
-const quizInput = aiInput.extend({ maxQuestions: z.coerce.number().int().min(3).max(MAX_QUIZ_QUESTIONS).default(10) });
+const quizInput = aiInput.extend({ maxQuestions: z.coerce.number().int().min(3).max(MAX_QUIZ_QUESTIONS).default(10), ...aiOptionsSchema.shape });
 app.post("/api/ai/quiz", requireUser, async (req, res) => {
   const parsed = quizInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid quiz input." });
   try {
@@ -197,6 +198,7 @@ const studyPlanInput = z.object({
   cards: z.array(z.object({ due: z.boolean(), repetitions: z.number().int().min(0).max(100000), lapses: z.number().int().min(0).max(100000), intervalDays: z.number().int().min(0).max(100000) })).min(1).max(MAX_FLASHCARDS),
   dailyMinutes: z.coerce.number().int().min(5).max(180).default(20),
   language: z.enum(["vi", "en"]).default("vi"),
+  ...aiOptionsSchema.shape,
 });
 app.post("/api/ai/study-plan", requireUser, async (req, res) => {
   const parsed = studyPlanInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid study plan input." });

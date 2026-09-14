@@ -10,8 +10,12 @@ const quiz = {
   ],
 };
 
-test("parses a four-choice quiz preview and bounds its questions", () => {
-  const result = parseQuizPreview(JSON.stringify({ ...quiz, questions: [...quiz.questions, { ...quiz.questions[0], id: "q2", prompt: "What stores genetic information?" }] }), 1);
+test("rejects a quiz preview that exceeds the selected limit instead of dropping questions", () => {
+  assert.throws(() => parseQuizPreview(JSON.stringify({ ...quiz, questions: [...quiz.questions, { ...quiz.questions[0], id: "q2", prompt: "What stores genetic information?" }] }), 1), /exceeding/);
+});
+
+test("parses a four-choice quiz preview at the selected limit", () => {
+  const result = parseQuizPreview(JSON.stringify(quiz), 1);
   assert.equal(result.title, "Biology");
   assert.equal(result.questions.length, 1);
   assert.deepEqual(result.questions[0].options, ["A unit", "A tissue", "An organ", "A system"]);

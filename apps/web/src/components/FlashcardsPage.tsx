@@ -17,6 +17,8 @@ import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
 import StudyPlanDialog from "./StudyPlanDialog";
 import { buildFlashcardsPrompt, GEMINI_WEB_URL, ManualAiValidationError, MAX_FLASHCARDS, parseManualFlashcards } from "../lib/manualAi";
+import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
+import AiQualityControls from "./AiQualityControls";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
@@ -92,6 +94,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
   const [aiProjectId, setAiProjectId] = useState("");
   const [aiFile, setAiFile] = useState<File | null>(null);
   const [aiMaxCards, setAiMaxCards] = useState(String(DEFAULT_FLASHCARD_LIMIT));
+  const [aiOptions, setAiOptions] = useState<AiGenerationOptions>(DEFAULT_AI_OPTIONS);
   const [aiPreview, setAiPreview] = useState<AiPreview | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -135,10 +138,10 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     const nextMode = owner ? "auto" : "manual";
     const defaultMaxCards = Math.min(DEFAULT_FLASHCARD_LIMIT, maxCardsLimit);
     const source: AiSource = flashcards.cards.length ? "deck" : linkedProject ? "project" : "text";
-    setAiMode(nextMode); setAiSource(source); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards(String(defaultMaxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards: defaultMaxCards, language, text: source === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); setAiDialog(true);
+    setAiMode(nextMode); setAiSource(source); setAiProjectId(linkedProject); setAiText(""); setAiFile(null); setAiMaxCards(String(defaultMaxCards)); setAiOptions(DEFAULT_AI_OPTIONS); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards: defaultMaxCards, language, options: DEFAULT_AI_OPTIONS, text: source === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); setAiDialog(true);
   };
   const closeAiGenerator = () => { if (aiBusy) return; aiController.current?.abort(); setAiDialog(false); setAiPreview(null); setManualPrompt(""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); };
-  const changeAiMode = (nextMode: AiMode) => { const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? Math.min(DEFAULT_FLASHCARD_LIMIT, maxCardsLimit); setAiMode(nextMode); if (nextMode === "manual") setAiMaxCards(String(maxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards, language, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); };
+  const changeAiMode = (nextMode: AiMode) => { const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? Math.min(DEFAULT_FLASHCARD_LIMIT, maxCardsLimit); setAiMode(nextMode); if (nextMode === "manual") setAiMaxCards(String(maxCards)); setAiPreview(null); setManualPrompt(nextMode === "manual" ? buildFlashcardsPrompt({ maxCards, language, options: aiOptions, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); setManualJson(""); setManualCopied(false); setManualUsageConsumed(false); setAiError(""); };
   const sourceForAi = async (signal: AbortSignal) => {
     if (aiSource === "text") {
       const text = aiText.trim();
@@ -212,8 +215,8 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
       const source = await sourceForAi(request.signal);
       if (request.signal.aborted) return;
       const result = source.file
-        ? await generateFlashcardsFromFile(source.file, maxCards, request.signal)
-        : await generateFlashcards(source.text, source.documentId, maxCards, request.signal);
+        ? await generateFlashcardsFromFile(source.file, maxCards, request.signal, aiOptions)
+        : await generateFlashcards(source.text, source.documentId, maxCards, request.signal, aiOptions);
       if (request.signal.aborted) return;
       const existingQuestions = new Set(flashcards.cards.map(card => cardQuestionKey(card.front)));
       const generatedCards = aiSource === "deck" ? result.cards.filter(card => !existingQuestions.has(cardQuestionKey(card.front))) : result.cards;
@@ -239,7 +242,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
   const updateManualCardLimit = (value: string) => {
     const maxCards = parseFlashcardLimit(value, maxCardsLimit);
     setAiMaxCards(value);
-    setManualPrompt(maxCards ? buildFlashcardsPrompt({ maxCards, language, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : "");
+    setManualPrompt(maxCards ? buildFlashcardsPrompt({ maxCards, language, options: aiOptions, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : "");
     setManualJson(""); setAiPreview(null); setManualCopied(false); setAiError(value && !maxCards ? maxCardsError() : "");
   };
   const applyAiPreview = async () => {
@@ -340,21 +343,21 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     try { const source = await getDocumentSource({ projectId: flashcards.selectedDeck.projectId }); setSourceView({ url: source.url, name: source.name, page: card.sourcePage }); }
     catch { setFormError(t("sourceError")); }
   };
-  const generatePlanFile = async (file: File, maxCards: number, targetDeckId: string) => {
+  const generatePlanFile = async (file: File, maxCards: number, targetDeckId: string, options: AiGenerationOptions) => {
     if (!owner) throw new Error(t("loginRequired"));
     if (file.size > MAX_FILE_BYTES) throw new Error(t("fileTooLarge"));
-    const result = await generateFlashcardsFromFile(file, maxCards);
+    const result = await generateFlashcardsFromFile(file, maxCards, undefined, options);
     if (result.provider === "demo" || !result.cards?.length) throw new Error(t("aiDemo"));
     const targetDeck = flashcards.decks.find(deck => deck.id === targetDeckId);
     const fileResult = result as GeneratedFlashcardsFromFile;
     await saveDocumentToStorage(file, fileResult.source.id, fileResult.source.text, fileResult.source.pageCount, targetDeck?.projectId ?? undefined);
     return { title: result.title, sourceDocumentId: result.sourceDocumentId ?? fileResult.source.id, cards: result.cards.map(card => ({ ...card, id: crypto.randomUUID(), sourcePage: card.sourcePage ?? null })) };
   };
-  const recommendPlan = async (cards: Flashcard[], dailyMinutes: number): Promise<StudyPlanRecommendation> => {
+  const recommendPlan = async (cards: Flashcard[], dailyMinutes: number, options: AiGenerationOptions): Promise<StudyPlanRecommendation> => {
     const fallback = { provider: "local", model: "heuristic", dailyTarget: recommendDailyTarget(cards, dailyMinutes), focus: "balanced" as const, rationale: "Safe local recommendation" };
     if (!owner) return fallback;
     try {
-      return await recommendStudyPlan(cards.map(card => ({ due: new Date(card.dueAt).getTime() <= Date.now(), repetitions: card.repetitions, lapses: card.lapses, intervalDays: card.intervalDays })), dailyMinutes, language);
+      return await recommendStudyPlan(cards.map(card => ({ due: new Date(card.dueAt).getTime() <= Date.now(), repetitions: card.repetitions, lapses: card.lapses, intervalDays: card.intervalDays })), dailyMinutes, language, undefined, options);
     } catch {
       return fallback;
     }
@@ -410,13 +413,15 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
       {!aiPreview ? <form onSubmit={event => void generateAiPreview(event)}>
       {aiMode === "auto" ? <>
         <p>{t("aiFlashcardHint")}</p><small className="field-hint">{t("aiFileHint")}</small>
-        <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { const next = event.target.value as AiSource; setAiSource(next); setManualPrompt(next === "deck" ? buildFlashcardsPrompt({ maxCards: parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? DEFAULT_FLASHCARD_LIMIT, language, text: deckExpansionSource(flashcards.cards) }) : ""); setManualJson(""); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="deck" disabled={!flashcards.cards.length}>{t("aiSourceDeck")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
+        <label>{t("aiSource")}<select value={aiSource} disabled={aiBusy} onChange={event => { const next = event.target.value as AiSource; setAiSource(next); setManualPrompt(next === "deck" ? buildFlashcardsPrompt({ maxCards: parseFlashcardLimit(aiMaxCards, maxCardsLimit) ?? DEFAULT_FLASHCARD_LIMIT, language, options: aiOptions, text: deckExpansionSource(flashcards.cards) }) : ""); setManualJson(""); setAiError(""); }}><option value="text">{t("aiSourceText")}</option><option value="deck" disabled={!flashcards.cards.length}>{t("aiSourceDeck")}</option><option value="project" disabled={!availableProjects.length}>{t("aiSourceProject")}</option><option value="file">{t("aiSourceFile")}</option></select></label>
         {aiSource === "text" && <div className="ai-text-source"><label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => { setAiText(event.target.value); setManualPrompt(""); setManualJson(""); }} placeholder={t("sourceTextPlaceholder")}/></label><button type="button" className="secondary-button clipboard-button" disabled={aiBusy} onClick={() => void (async () => { try { const pasted = await readClipboardSource(); if (pasted.kind === "image") { setAiSource("file"); setAiFile(pasted.file); } else setAiText(pasted.text); setManualPrompt(""); setManualJson(""); setAiError(""); } catch (err) { setAiError(err instanceof Error && err.message === "CLIPBOARD_EMPTY" ? t("clipboardEmpty") : t("clipboardReadError")); } })()}><ClipboardPaste size={16}/>{t("pasteFromClipboard")}</button><small className="field-hint">{t("clipboardSourceHint")}</small></div>}
         {aiSource === "project" && <label>{t("sourceProject")}<select required value={aiProjectId} disabled={aiBusy || !availableProjects.length} onChange={event => { setAiProjectId(event.target.value); setManualPrompt(""); setManualJson(""); }}><option value="">{t("chooseProject")}</option>{availableProjects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select><small>{t("sourceProjectHint")}</small></label>}
         {aiSource === "deck" && <div className="ai-deck-source"><Layers3 size={17}/><span>{t("aiExpandDeckHint", { count: flashcards.cards.length })}</span></div>}
         {aiSource === "file" && <label className="upload-drop ai-file-drop" onDragOver={event => { event.preventDefault(); event.currentTarget.classList.add("dragging"); }} onDragLeave={event => event.currentTarget.classList.remove("dragging")} onDrop={event => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); const file = event.dataTransfer.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}><span><Upload size={20}/>{t("chooseAiFile")}</span><input type="file" accept={AI_FILE_ACCEPT} disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setManualPrompt(""); setManualJson(""); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("aiFileHint")}</small>{aiFile && <small>{aiFile.name}</small>}</label>}
+        <AiQualityControls options={aiOptions} onChange={setAiOptions} />
         <label>{t("maxGeneratedCards")}<input type="number" min="3" max={maxCardsLimit} step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => { setAiMaxCards(event.target.value); setManualPrompt(""); setManualJson(""); }}/></label>
       </> : <section className="ai-manual-panel">
+        <AiQualityControls options={aiOptions} onChange={next => { setAiOptions(next); const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit); setManualPrompt(maxCards ? buildFlashcardsPrompt({ maxCards, language, options: next, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); }} />
         <label className="ai-manual-limit">{t("maxGeneratedCards")}<input type="number" min="3" max={maxCardsLimit} step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => updateManualCardLimit(event.target.value)}/></label>
         <small className="field-hint">{t("aiManualMaxCardsHint")}</small>
         <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" disabled={!manualPrompt || aiBusy} onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" disabled={!manualPrompt || aiBusy} onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{t("aiManualFileWorkflow")}</small></div>

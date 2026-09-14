@@ -1,6 +1,7 @@
 import type { StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
 import type { AccountPlan, PlanId, SubscriptionHistoryRecord } from "./account";
+import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "./aiOptions";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8787";
 
@@ -125,11 +126,15 @@ export async function generateMindMap(text: string, documentId?: string, signal?
 export type AiFileSource = { id: string; kind: "pdf" | "docx" | "pptx" | "text" | "image"; fileName: string; mimeType: string; text: string; pageCount?: number };
 export type GeneratedMindMap = { provider: string; model?: string; graph: StructuredMindMap; source: AiFileSource };
 
-async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal) {
+async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
   const body = new FormData();
   body.append("file", file);
   body.append("task", task);
   if (maxCards !== undefined) body.append("maxCards", String(maxCards));
+  if (task !== "mind-map") {
+    body.append("difficulty", options.difficulty);
+    body.append("depth", options.depth);
+  }
   const response = await fetch(`${apiBase}/api/ai/file`, { method: "POST", headers: await authHeaders(), body, signal });
   if (!response.ok) await responseError(response, `Không thể xử lý file bằng AI (HTTP ${response.status}).`);
   return response.json() as Promise<T>;
@@ -145,38 +150,38 @@ export type GeneratedFlashcardsFromFile = GeneratedFlashcards & { source: AiFile
 export type SelectionAiAction = "summarize" | "explain" | "rewrite" | "expand";
 export type SelectionAiResult = { provider: string; model: string; action: SelectionAiAction; title: string; text: string; ideas: string[] };
 
-export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal) {
+export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
   const response = await fetch(`${apiBase}/api/ai/flashcards`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ text, documentId, maxCards }),
+    body: JSON.stringify({ text, documentId, maxCards, ...options }),
   });
   if (!response.ok) await responseError(response, `AI HTTP ${response.status}`);
   return response.json() as Promise<GeneratedFlashcards>;
 }
 
-export function generateFlashcardsFromFile(file: File, maxCards = 20, signal?: AbortSignal) {
-  return generateFromFile<GeneratedFlashcardsFromFile>(file, "flashcards", maxCards, signal);
+export function generateFlashcardsFromFile(file: File, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
+  return generateFromFile<GeneratedFlashcardsFromFile>(file, "flashcards", maxCards, signal, options);
 }
 
 export type GeneratedQuizQuestion = { id?: string; prompt: string; options: [string, string, string, string]; correctIndex: 0 | 1 | 2 | 3; explanation: string; sourcePage?: number; topic?: string };
 export type GeneratedQuiz = { provider: string; model: string; title: string; description: string; questions: GeneratedQuizQuestion[]; sourceDocumentId?: string };
 export type GeneratedQuizFromFile = GeneratedQuiz & { source: AiFileSource };
 
-export function generateQuiz(text: string, documentId?: string, maxQuestions = 10, language: "vi" | "en" = "vi", signal?: AbortSignal) {
-  return accountRequest<GeneratedQuiz>("/api/ai/quiz", { method: "POST", body: JSON.stringify({ text, documentId, maxQuestions, language }), signal });
+export function generateQuiz(text: string, documentId?: string, maxQuestions = 10, language: "vi" | "en" = "vi", signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
+  return accountRequest<GeneratedQuiz>("/api/ai/quiz", { method: "POST", body: JSON.stringify({ text, documentId, maxQuestions, language, ...options }), signal });
 }
 
-export function generateQuizFromFile(file: File, maxQuestions = 10, signal?: AbortSignal) {
-  return generateFromFile<GeneratedQuizFromFile>(file, "quiz", maxQuestions, signal);
+export function generateQuizFromFile(file: File, maxQuestions = 10, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
+  return generateFromFile<GeneratedQuizFromFile>(file, "quiz", maxQuestions, signal, options);
 }
 
 export type StudyPlanCardSignal = { due: boolean; repetitions: number; lapses: number; intervalDays: number };
 export type StudyPlanRecommendation = { provider: string; model: string; dailyTarget: number; focus: "due" | "new" | "difficult" | "balanced"; rationale: string };
 
-export function recommendStudyPlan(cards: StudyPlanCardSignal[], dailyMinutes: number, language: "vi" | "en", signal?: AbortSignal) {
-  return accountRequest<StudyPlanRecommendation>("/api/ai/study-plan", { method: "POST", body: JSON.stringify({ cards, dailyMinutes, language }), signal });
+export function recommendStudyPlan(cards: StudyPlanCardSignal[], dailyMinutes: number, language: "vi" | "en", signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
+  return accountRequest<StudyPlanRecommendation>("/api/ai/study-plan", { method: "POST", body: JSON.stringify({ cards, dailyMinutes, language, ...options }), signal });
 }
 
 export async function transformSelection(action: SelectionAiAction, text: string, language: "vi" | "en", signal?: AbortSignal) {

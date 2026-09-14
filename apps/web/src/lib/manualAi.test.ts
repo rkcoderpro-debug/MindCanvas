@@ -24,6 +24,7 @@ describe("manual AI exchange", () => {
     expect(flashcardPrompt).toContain("mindcanvas-flashcards.json");
     expect(flashcardPrompt).toContain("Create no more than 12 useful cards");
     expect(flashcardPrompt).toContain("escape every internal ASCII double quote");
+    expect(buildFlashcardsPrompt({ fileName: "notes.pdf", maxCards: 12, language: "en", options: { difficulty: "hard", depth: "detailed" } })).toContain("Difficulty: hard");
   });
 
   it("accepts a fenced or wrapped mind-map object and normalizes optional values", () => {
