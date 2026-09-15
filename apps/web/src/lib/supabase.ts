@@ -169,5 +169,8 @@ export async function getDocumentSource(options: { documentId?: string; projectI
   if (!data?.file_path) throw new Error("Không tìm thấy tài liệu nguồn của project này.");
   const signed = await supabase.storage.from("documents").createSignedUrl(data.file_path as string, 15 * 60);
   if (signed.error || !signed.data?.signedUrl) throw signed.error ?? new Error("Không mở được PDF nguồn.");
-  return { id: data.id as string, name: data.file_name as string, pageCount: Number(data.page_count) || undefined, url: signed.data.signedUrl };
+  const name = data.file_name as string;
+  const extension = name.toLocaleLowerCase().split(".").pop();
+  const kind: "pdf" | "docx" | "pptx" | "other" = extension === "pdf" ? "pdf" : extension === "docx" ? "docx" : extension === "pptx" ? "pptx" : "other";
+  return { id: data.id as string, name, kind, pageCount: Number(data.page_count) || undefined, url: signed.data.signedUrl };
 }

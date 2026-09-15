@@ -12,7 +12,7 @@ import { generateFlashcardsWithGemini, MAX_FLASHCARDS } from "./flashcards.js";
 import { generateQuizWithGemini, MAX_QUIZ_QUESTIONS } from "./quiz.js";
 import { generateSelectionWithGemini, selectionActions } from "./selection.js";
 import { recommendStudyPlanWithGemini } from "./studyPlan.js";
-import { aiOptionsSchema, mindMapDetailSchema } from "./aiOptions.js";
+import { aiOptionsSchema, mindMapDetailSchema, mindMapOptionsSchema } from "./aiOptions.js";
 import { aiScheduler } from "./aiScheduler.js";
 
 const app = express();
@@ -21,7 +21,7 @@ app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
   mode: "server",
-  release: "4.5.9",
+  release: "4.6.0",
   ai: "gemini",
   aiConfigured: Boolean(config.GEMINI_API_KEY),
   aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,
@@ -111,6 +111,15 @@ async function runWithAiQuota<T>(userId: string, mode: AiQuotaMode, work: () => 
   }
 }
 
+async function runMindMapWithEntitlement<T>(userId: string, unlimited: boolean, work: () => Promise<T>) {
+  if (!unlimited) return runWithAiQuota(userId, "ai_auto", work);
+  const account = await getAccountPlan(userId);
+  if (account.effectivePlanId !== "max") throw new PlanLimitError("ai_auto", "Tạo mindmap không giới hạn chỉ dành cho gói Max.");
+  // Max's unlimited mind-map path still uses the concurrency scheduler, but
+  // deliberately does not reserve or consume an AI Auto quota unit.
+  return aiScheduler.run(userId, work);
+}
+
 function sendAiError(res: express.Response, error: unknown, fallbackMessage: string) {
   if (error instanceof PlanLimitError) return res.status(error.quota === "storage" ? 413 : 429).json({ error: error.message, code: "PLAN_LIMIT", quota: error.quota, retryable: false });
   if (error instanceof AIError) {
@@ -140,13 +149,19 @@ app.post("/api/documents/upload", requireUser, upload.single("file"), async (req
 });
 
 const aiInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional(), ...aiOptionsSchema.shape, detail: mindMapDetailSchema });
+const mindMapInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional(), ...mindMapOptionsSchema.shape, detail: mindMapDetailSchema, unlimited: z.coerce.boolean().default(false) });
 app.post("/api/ai/mind-map", requireUser, async (req, res) => {
-  const parsed = aiInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid document input." });
-  try { const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateWithFallback(parsed.data))); await recordUsage(req.userId!, "ai_mind_map", 1, 0, { source: "text" }); return res.json(result); }
+  const parsed = mindMapInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid document input." });
+  try {
+    const { unlimited, ...input } = parsed.data;
+    const result = await runMindMapWithEntitlement(req.userId!, unlimited, () => aiScheduler.run(req.userId!, () => generateWithFallback(input)));
+    await recordUsage(req.userId!, "ai_mind_map", 1, 0, { source: "text", unlimited });
+    return res.json(result);
+  }
   catch (error) { return sendAiError(res, error, "AI processing failed."); }
 });
 
-const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards", "quiz"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20), ...aiOptionsSchema.shape, detail: mindMapDetailSchema });
+const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards", "quiz"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20), ...aiOptionsSchema.shape, ...mindMapOptionsSchema.shape, detail: mindMapDetailSchema, unlimited: z.coerce.boolean().default(false) });
 app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) => {
   const parsed = aiFileInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid file AI request." });
@@ -155,11 +170,14 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
     await enforceQuota(req.userId!, "storage", req.file.size);
     if (parsed.data.task === "flashcards") await enforceQuota(req.userId!, "flashcards", parsed.data.maxCards);
     if (parsed.data.task === "quiz") await enforceQuota(req.userId!, "quiz", parsed.data.maxCards);
-    const generatedBundle = await runWithAiQuota(req.userId!, "ai_auto", async () => {
+    const runFileGeneration = <T,>(work: () => Promise<T>) => parsed.data.task === "mind-map"
+      ? runMindMapWithEntitlement(req.userId!, parsed.data.unlimited, work)
+      : runWithAiQuota(req.userId!, "ai_auto", work);
+    const generatedBundle = await runFileGeneration(async () => {
       const source = await extractDocument(req.file!.buffer, req.file!.originalname, req.file!.mimetype);
       const documentId = crypto.randomUUID();
       const generated: any = parsed.data.task === "mind-map"
-        ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth, detail: parsed.data.detail }))
+        ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image, depth: parsed.data.depth, detail: parsed.data.detail }))
         : parsed.data.task === "flashcards"
           ? await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth }))
           : await aiScheduler.run(req.userId!, () => generateQuizWithGemini({ text: source.text, documentId, maxQuestions: Math.min(MAX_QUIZ_QUESTIONS, parsed.data.maxCards), image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth }));
@@ -167,7 +185,7 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
     });
     const { source, documentId, result } = generatedBundle;
     await recordUsage(req.userId!, "document_upload", 1, req.file.size, { fileName: req.file.originalname, mimeType: req.file.mimetype, source: "ai" });
-    await recordUsage(req.userId!, parsed.data.task === "mind-map" ? "ai_mind_map" : parsed.data.task === "flashcards" ? "ai_flashcards" : "ai_quiz", 1, 0, { source: "file", cardCount: result.cards?.length ?? 0, questionCount: result.questions?.length ?? 0 });
+    await recordUsage(req.userId!, parsed.data.task === "mind-map" ? "ai_mind_map" : parsed.data.task === "flashcards" ? "ai_flashcards" : "ai_quiz", 1, 0, { source: "file", unlimited: parsed.data.task === "mind-map" ? parsed.data.unlimited : false, cardCount: result.cards?.length ?? 0, questionCount: result.questions?.length ?? 0 });
     return res.json({ ...result, source: { id: documentId, kind: source.kind, fileName: source.fileName, mimeType: source.mimeType, text: source.text, pageCount: source.pageCount } });
   } catch (error) {
     if (error instanceof PlanLimitError) return sendAiError(res, error, "Account limit reached.");

@@ -25,6 +25,7 @@ describe("canvas touch settings", () => {
   it("applies zoom sensitivity and optional inversion", () => {
     expect(pinchScale(1, 2, 1, false)).toBe(2);
     expect(pinchScale(1, 2, 1, true)).toBe(.5);
+    expect(pinchScale(1, .00001, 1, false)).toBe(.01);
   });
 
   it("detects iOS devices, including iPadOS desktop mode, without matching desktop Mac", () => {

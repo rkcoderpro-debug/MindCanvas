@@ -18,7 +18,7 @@ describe("manual AI exchange", () => {
     expect(buildMindMapPrompt({ fileName: "notes.pdf", detail: "detailed", language: "en" })).toContain("Detail level: detailed");
     expect(buildMindMapPrompt({ fileName: "notes.pdf", detail: "basic", language: "en" })).toContain("Detail level: basic");
     const qualityPrompt = buildMindMapPrompt({ fileName: "notes.pdf", detail: "medium", language: "en", options: { difficulty: "hard", depth: "detailed" } });
-    expect(qualityPrompt).toContain("Difficulty: hard");
+    expect(qualityPrompt).not.toContain("Difficulty:");
     expect(qualityPrompt).toContain("Depth: detailed");
 
     expect(buildSelectionPrompt({ action: "expand", text: "A selected idea", language: "en" })).toContain('"action":"summarize|explain|rewrite|expand"');
@@ -50,7 +50,7 @@ describe("manual AI exchange", () => {
   });
 
   it("requires the selected action and validates flashcard count", () => {
-    expect(parseManualSelectionResult(JSON.stringify({ action: "rewrite", title: "Rewrite", text: "Updated", ideas: [] }), "rewrite")).toMatchObject({ provider: "manual", model: "Gemini Web" });
+    expect(parseManualSelectionResult(JSON.stringify({ action: "rewrite", title: "Rewrite", text: "Updated", ideas: [] }), "rewrite")).toMatchObject({ provider: "manual", model: "Manual AI" });
     expect(() => parseManualSelectionResult(JSON.stringify({ action: "summarize", title: "", text: "Wrong", ideas: [] }), "explain")).toThrowError(ManualAiValidationError);
 
     const cards = parseManualFlashcards(JSON.stringify({ title: "Review", cards: [{ front: "Q", back: "A", sourcePage: null }] }), 3);

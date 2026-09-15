@@ -1,11 +1,16 @@
-import type { BoardState, CanvasBackground as CanvasBackgroundType } from "@mindcanvas/shared";
+import type { BoardState, CanvasBackgroundPattern } from "@mindcanvas/shared";
 
 const mod = (value: number, size: number) => size ? ((value % size) + size) % size : 0;
+const imageAspect = (fit: "cover" | "contain" | undefined, position: string | undefined) => {
+  const align = position === "top" ? "xMidYMin" : position === "right" ? "xMaxYMid" : position === "bottom" ? "xMidYMax" : position === "left" ? "xMinYMid" : "xMidYMid";
+  return `${align} ${fit === "contain" ? "meet" : "slice"}`;
+};
 
-export const BACKGROUND_OPTIONS: CanvasBackgroundType[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
+export const BACKGROUND_OPTIONS: CanvasBackgroundPattern[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
 
 export default function CanvasBackground({ board }: { board: BoardState }) {
-  const kind = board.background ?? "dots";
+  const media = typeof board.background === "object" ? board.background : null;
+  const kind = typeof board.background === "string" ? board.background : "plain";
   const { x, y, scale } = board.viewport;
   const dots = 22 * scale;
   const grid = 24 * scale;
@@ -39,5 +44,8 @@ export default function CanvasBackground({ board }: { board: BoardState }) {
     <rect className="canvas-background-base" width="100%" height="100%" fill="var(--canvas)"/>
     {kind !== "plain" && <rect width="100%" height="100%" fill={`url(#canvas-bg-${kind === "graph" ? "graph-minor" : kind})`}/>} 
     {kind === "graph" && <rect width="100%" height="100%" fill="url(#canvas-bg-graph-major)"/>}
+    {media?.kind === "image" && <image href={media.src} x="0" y="0" width="100%" height="100%" preserveAspectRatio={imageAspect(media.fit, media.position)} opacity={media.opacity ?? 1} style={{ filter: `blur(${media.blur ?? 0}px) brightness(${media.brightness ?? 1})`, transformOrigin: "center" }}/>} 
+    {media?.kind === "video" && <foreignObject x="0" y="0" width="100%" height="100%"><video {...{ xmlns: "http://www.w3.org/1999/xhtml" }} src={media.src} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: media.fit ?? "cover", objectPosition: media.position ?? "center", opacity: media.opacity ?? 1, filter: `blur(${media.blur ?? 0}px) brightness(${media.brightness ?? 1})` }}/></foreignObject>}
+    {media?.overlay && <rect width="100%" height="100%" fill={media.overlay} opacity=".18"/>} 
   </g>;
 }

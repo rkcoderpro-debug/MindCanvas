@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FilePlus2, FileText, FolderOpen, Search, Upload, Star, MoreHorizontal } from "lucide-react";
+import type { CanvasThumbnail, CanvasThumbnailItem } from "@mindcanvas/shared";
 import type { Project, ProjectFolder, ProjectPatch } from "../lib/projectStore";
 import { useLanguage } from "../lib/i18n";
 import { elementBounds, hiddenNodes } from "../lib/board";
@@ -21,12 +22,35 @@ function Preview({ project }: { project: Project }) {
     return <g key={n.id}>{s.kind === "nodes" && <rect {...r} fill={n.color ?? "var(--node-fill)"} stroke="var(--element-stroke)" rx={10}/>}<text x={r.x+10} y={r.y+25} fontSize={16} fill={s.kind === "nodes" ? readableTextColor(n.color) : canvasTextColor(n.color)}>{("label" in n ? n.label : n.text).slice(0,28)}</text></g>;
   })}</svg>;
 }
+function thumbnailItemLabel(item: CanvasThumbnailItem) {
+  return item.label?.slice(0, 32) || "";
+}
+function ThumbnailPreview({ thumbnail }: { thumbnail: CanvasThumbnail }) {
+  const { x, y, width, height } = thumbnail.bounds;
+  const items = [...thumbnail.items].sort((left, right) => (left.kind === "edge" ? -1 : 0) - (right.kind === "edge" ? -1 : 0));
+  return <svg width="100%" height="100%" viewBox={`${x} ${y} ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+    <rect x={x} y={y} width={width} height={height} fill="var(--canvas)" opacity=".38"/>
+    {items.map((item, index) => {
+      if (item.kind === "edge" && item.source && item.target) return <line key={`${item.kind}-${index}`} x1={item.source.x} y1={item.source.y} x2={item.target.x} y2={item.target.y} stroke={item.color ?? "var(--connector)"} strokeWidth={Math.max(2, width / 260)} opacity=".72"/>;
+      if (item.kind === "drawing" && item.points?.length) return <polyline key={`${item.kind}-${index}`} points={item.points.map(point => `${point.x},${point.y}`).join(" ")} fill="none" stroke={item.color ?? "var(--accent)"} strokeWidth={Math.max(2, width / 260)} strokeLinecap="round" strokeLinejoin="round" opacity=".82"/>;
+      if (item.kind === "node") return <g key={`${item.kind}-${index}`}><rect x={item.x} y={item.y} width={item.width} height={item.height} rx={Math.min(14, item.height / 4)} fill={item.color ?? "var(--node-fill)"} stroke="var(--element-stroke)" strokeWidth={Math.max(1, width / 420)}/><text x={item.x + Math.min(10, item.width / 10)} y={item.y + Math.min(23, item.height / 2)} fontSize={Math.max(8, Math.min(18, width / 35))} fill={readableTextColor(item.color)}>{thumbnailItemLabel(item)}</text></g>;
+      if (item.kind === "text") return <text key={`${item.kind}-${index}`} x={item.x} y={item.y + Math.min(20, item.height / 2)} fontSize={Math.max(8, Math.min(17, width / 38))} fill={canvasTextColor(item.color)}>{thumbnailItemLabel(item)}</text>;
+      if (item.kind === "shape") return <rect key={`${item.kind}-${index}`} x={item.x} y={item.y} width={item.width} height={item.height} rx={Math.min(10, item.height / 5)} fill={item.color ?? "var(--accent-soft)"} stroke="var(--element-stroke)" strokeWidth={Math.max(1, width / 420)}/>;
+      return <g key={`${item.kind}-${index}`}><rect x={item.x} y={item.y} width={item.width} height={item.height} rx={8} fill="var(--surface-raised)" stroke="var(--element-stroke)" strokeWidth={Math.max(1, width / 420)}/><text x={item.x + item.width / 2} y={item.y + item.height / 2} textAnchor="middle" fontSize={Math.max(8, Math.min(15, width / 42))} fill="var(--muted)">{thumbnailItemLabel(item)}</text></g>;
+    })}
+  </svg>;
+}
+function CardPreview({ project, loadingLabel }: { project: Project; loadingLabel: string }) {
+  if (project.thumbnail) return <ThumbnailPreview thumbnail={project.thumbnail}/>;
+  if (project.board) return <Preview project={project}/>;
+  return <span className="project-preview-skeleton" role="img" aria-label={loadingLabel}/>;
+}
 function projectSearchText(project: Project) {
   return [project.title, ...(project.board?.texts.map(item => item.text) ?? []), ...(project.board?.nodes.map(item => item.label) ?? []), ...(project.board?.media.map(item => item.name) ?? []), ...(project.board?.embeds.map(item => `${item.title ?? ""} ${item.url}`) ?? []), ...(project.board?.edges.map(item => item.label ?? "") ?? [])].join(" ").toLocaleLowerCase();
 }
-export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, onDragProject, trash = false }: {
+export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, onDragProject, onLoadThumbnail, trash = false }: {
   projects: Project[]; title: string; loading: boolean; onOpen: (p: Project) => void; onCreate: () => void; onImport: () => void;
-  folders?: ProjectFolder[]; onManage?: (p: Project, patch: ProjectPatch) => Promise<void>; onDuplicate?: (p: Project, title: string) => Promise<void>; onDragProject?: (p: Project) => void; trash?: boolean;
+  folders?: ProjectFolder[]; onManage?: (p: Project, patch: ProjectPatch) => Promise<void>; onDuplicate?: (p: Project, title: string) => Promise<void>; onDragProject?: (p: Project) => void; onLoadThumbnail?: (projectId: string) => Promise<void>; trash?: boolean;
 }) {
   const { t, language } = useLanguage();
   const [query, setQuery] = useState(""), [sort, setSort] = useState("newest"), [busy, setBusy] = useState(false);
@@ -34,13 +58,18 @@ export default function WorkspaceHome({ projects, title, loading, onOpen, onCrea
   const [dialog, setDialog] = useState<{ project: Project; kind: "rename" | "move" } | null>(null), [value, setValue] = useState("");
   const run = async (action: () => Promise<void>) => { setBusy(true); setError(""); setMenu(null); try { await action(); setDialog(null); } catch (err) { setError(err instanceof Error ? err.message : t("error")); } finally { setBusy(false); } };
   const visible = projects.filter(p => projectSearchText(p).includes(query.trim().toLocaleLowerCase())).sort((a,b) => sort === "newest" ? b.updatedAt.localeCompare(a.updatedAt) : a.title.localeCompare(b.title,language));
+  const missingThumbnailIds = visible.filter(project => !project.thumbnail).slice(0, 4).map(project => project.id).join(",");
+  useEffect(() => {
+    if (trash || !onLoadThumbnail) return;
+    visible.filter(project => missingThumbnailIds.split(",").includes(project.id)).forEach(project => void onLoadThumbnail(project.id));
+  }, [missingThumbnailIds, onLoadThumbnail, trash]);
   return <section className="workspace-home">
     <div className="home-heading"><div><span className="eyebrow">MINDCANVAS</span><h1>{title}</h1></div><div className="actions">
       <button className="secondary-button" onClick={onImport}><Upload size={18}/>{t("import")}</button><button className="primary-button" onClick={onCreate}><FilePlus2 size={18}/>{t("newProject")}</button></div></div>
     {trash && <p>{t("trashHint")}</p>}{error && <p role="alert">{error}</p>}
     <div className="home-controls"><label className="search-field"><Search size={18}/><input aria-label={t("search")} placeholder={t("search")} value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label={t("newest")} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">{t("newest")}</option><option value="name">{t("alphabetical")}</option></select></div>
     {loading ? <p role="status">{t("loading")}</p> : !visible.length ? <div className="empty-state"><FolderOpen size={42}/><h2>{query ? t("noResults") : trash ? t("trashEmpty") : t("empty")}</h2>{!trash && <><p>{t("emptyHint")}</p><button className="primary-button" onClick={onCreate}>{t("newProject")}</button></>}</div> : <div className="project-grid">{visible.map(p => { const canManageMetadata = !p.shared || p.accessRole !== "viewer"; return <article className="project-card" key={p.id} draggable={!trash && canManageMetadata} onDragStart={e => { if (!canManageMetadata) return; e.dataTransfer.setData("text/mindcanvas-project", p.id); e.dataTransfer.effectAllowed = "move"; onDragProject?.(p); }}>
-      <button className="project-open" disabled={trash || busy} onClick={() => onOpen(p)}><div className="project-preview" data-background={p.board?.background ?? "dots"} aria-hidden="true"><Preview project={p}/></div><div className="project-meta"><FileText size={19}/><div><strong>{p.title}</strong><small>{t("updated")} · {new Date(p.updatedAt).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}</small>{p.shared && <small className="project-shared-label">{t("sharedProject")} · {p.accessRole === "editor" ? t("editorProject") : t("viewerProject")}</small>}{p.pending && <small>{t("unsaved")}</small>}</div></div></button>
+      <button className="project-open" disabled={trash || busy} onClick={() => onOpen(p)}><div className="project-preview" data-background={p.thumbnail?.background ?? (typeof p.board?.background === "string" ? p.board.background : "plain")} aria-hidden="true"><CardPreview project={p} loadingLabel={t("thumbnailLoading")}/></div><div className="project-meta"><FileText size={19}/><div><strong>{p.title}</strong><small>{t("updated")} · {new Date(p.updatedAt).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}</small>{p.shared && <small className="project-shared-label">{t("sharedProject")} · {p.accessRole === "editor" ? t("editorProject") : t("viewerProject")}</small>}{p.pending && <small>{t("unsaved")}</small>}</div></div></button>
       <div className="project-card-actions">{!trash && canManageMetadata && onManage && <button className="icon-button" disabled={busy} aria-label={t(p.favorite ? "unfavorite" : "favorite")} aria-pressed={!!p.favorite} onClick={() => void run(() => onManage(p,{ favorite: !p.favorite }))}><Star size={18} fill={p.favorite ? "#f5c542" : "none"}/></button>}
         <button className="icon-button" disabled={busy} aria-label={t("projectActions") + ": " + p.title} aria-expanded={menu === p.id} onClick={() => setMenu(menu === p.id ? null : p.id)}><MoreHorizontal size={20}/></button></div>
       {menu === p.id && <div className="project-menu" onKeyDown={e => { if (e.key === "Escape") setMenu(null); }}>

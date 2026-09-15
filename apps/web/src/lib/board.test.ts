@@ -20,7 +20,14 @@ describe("Editable canvas model", () => {
     const rich = { ...board(), background: "ruled" as const, texts: [{ id: "text", text: "Study", x: 10, y: 30, width: 200, bold: true, italic: true, underline: true, textAlign: "center" as const, backgroundColor: "#fff2cc", opacity: .42 }] };
     expect(parseBoard(rich)).toMatchObject({ background: "ruled", texts: [{ bold: true, textAlign: "center" }] });
     expect(parseBoard(rich).texts[0].opacity).toBe(.42);
+    const imageBackground = { kind: "image" as const, src: "data:image/png;base64,AA==", name: "paper.png", mimeType: "image/png", opacity: .62, blur: 4, brightness: 1.1, fit: "contain" as const, position: "center", overlay: "#000000" };
+    expect(parseBoard({ ...board(), background: imageBackground }).background).toEqual(imageBackground);
+    expect(exportCanvasSvg({ ...board(), background: imageBackground })).toContain('href="data:image/png;base64,AA=="');
+    const videoBackground = { kind: "video" as const, src: "https://cdn.example.test/paper.mp4", name: "paper.mp4" };
+    expect(exportCanvasSvg({ ...board(), background: videoBackground })).toContain("paper.mp4");
     expect(() => parseBoard({ ...board(), background: "wallpaper" })).toThrow("Invalid canvas background");
+    expect(() => parseBoard({ ...board(), background: { ...imageBackground, opacity: 2 } })).toThrow("Invalid canvas background");
+    expect(() => parseBoard({ ...board(), background: { ...imageBackground, src: "data:text/plain;base64,AA==" } })).toThrow("Invalid canvas background");
     expect(() => parseBoard({ ...board(), shapes: [{ id: "shape", kind: "rect", x: 0, y: 0, width: 40, height: 40, color: "#ffffff", opacity: 1.1 }] })).toThrow("Invalid opacity");
   });
   it("persists and exports triangle shapes", () => {

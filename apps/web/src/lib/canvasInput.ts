@@ -1,3 +1,5 @@
+import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE } from "./canvasViewport";
+
 export type CanvasInputMode = "idle" | "drawing" | "panning" | "pinching" | "selecting" | "transforming";
 
 export type CanvasTouchSettings = {
@@ -63,5 +65,5 @@ export function pinchScale(baseScale: number, distanceRatio: number, sensitivity
   const safeRatio = Math.max(.01, distanceRatio);
   const exponent = Math.min(2, Math.max(.5, sensitivity));
   const adjusted = Math.pow(safeRatio, invert ? -exponent : exponent);
-  return Math.min(4, Math.max(.2, baseScale * adjusted));
+  return Math.min(MAX_CANVAS_SCALE, Math.max(MIN_CANVAS_SCALE, baseScale * adjusted));
 }

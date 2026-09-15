@@ -5,7 +5,8 @@ import { normalizeEditor } from "../lib/editorCommands";
 import { errorMessage } from "../lib/errors";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { subscribeToProject } from "../lib/collaboration";
-import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { createCanvasThumbnail } from "../lib/canvasThumbnail";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
 export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject };
@@ -33,7 +34,7 @@ export function useWorkspace(owner: string | null) {
   const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), viewportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
-  const navigation = useRef(0);
+  const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
   const report = useCallback((err: unknown) => { if (alive.current) setError(errorMessage(err, "Could not save this project.")); }, []);
   const refresh = useCallback(async () => {
     try {
@@ -59,6 +60,33 @@ export function useWorkspace(owner: string | null) {
     } catch (err) { report(err); } finally { if (alive.current) setLoading(false); }
   }, [owner, report]);
   const upsertSummary = (p: Project) => { if (alive.current) setProjects(items => [p, ...items.filter(i => i.id !== p.id)]); };
+  const loadThumbnail = useCallback(async (projectId: string) => {
+    if (thumbnailRequests.current.has(projectId)) return;
+    const cached = readCache(owner).find(project => project.id === projectId);
+    if (cached?.thumbnail) return;
+    if (cached?.board) {
+      const thumbnail = createCanvasThumbnail(cached.board);
+      cacheProject(owner, { ...cached, thumbnail });
+      if (alive.current) setProjects(items => items.map(item => item.id === projectId ? { ...item, thumbnail } : item));
+      if (owner) await updateProjectThumbnail(owner, projectId, thumbnail).catch(() => undefined);
+      return;
+    }
+    if (!owner) {
+      return;
+    }
+    thumbnailRequests.current.add(projectId);
+    try {
+      const snapshot = await fetchProjectSnapshot(owner, projectId);
+      const thumbnail = snapshot.thumbnail ?? createCanvasThumbnail(snapshot.board);
+      const current = readCache(owner).find(project => project.id === projectId);
+      if (current) cacheProject(owner, { ...current, thumbnail, board: current.board ?? snapshot.board });
+      if (alive.current) setProjects(items => items.map(item => item.id === projectId ? { ...item, thumbnail } : item));
+      if (!snapshot.thumbnail) await updateProjectThumbnail(owner, projectId, thumbnail).catch(() => undefined);
+    } catch {
+      // A missing V4.6 migration or an offline card keeps its skeleton/fallback;
+      // opening the project still uses the existing snapshot path.
+    } finally { thumbnailRequests.current.delete(projectId); }
+  }, [owner]);
 
   const flush = useCallback(async (projectId?: string): Promise<boolean> => {
     // An explicit flush for an older project must not cancel the debounce for
@@ -84,7 +112,7 @@ export function useWorkspace(owner: string | null) {
         if (cacheFailed.current && current.current?.id === targetId) {
           const b = current.current;
           const existing = readCache(owner).find(item => item.id === b.id);
-          cacheProject(owner, { ...existing, id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, folderId: folderId.current, pending: !!owner, revision: existing?.revision, ownerId: existing?.ownerId ?? owner ?? undefined, accessRole: existing?.accessRole ?? (owner ? "owner" : undefined), shared: existing?.shared ?? false });
+      cacheProject(owner, { ...existing, id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, thumbnail: createCanvasThumbnail(b), folderId: folderId.current, pending: !!owner, revision: existing?.revision, ownerId: existing?.ownerId ?? owner ?? undefined, accessRole: existing?.accessRole ?? (owner ? "owner" : undefined), shared: existing?.shared ?? false });
           cacheFailed.current = false;
         }
         const pending = readCache(owner).filter(p => {
@@ -188,8 +216,9 @@ export function useWorkspace(owner: string | null) {
       setPast([]);
       setFuture([]);
       const cached = readCache(owner).find(item => item.id === projectId);
-      if (cached) cacheProject(owner, { ...cached, title: next.title, updatedAt: next.updatedAt, board: next, revision: update.revision ?? cached.revision, pending: false });
-      setProjects(items => items.map(item => item.id === projectId ? { ...item, title: next.title, updatedAt: update.updatedAt ?? next.updatedAt, revision: update.revision ?? item.revision, board: next, pending: false } : item));
+      const thumbnail = createCanvasThumbnail(next);
+      if (cached) cacheProject(owner, { ...cached, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail, revision: update.revision ?? cached.revision, pending: false });
+      setProjects(items => items.map(item => item.id === projectId ? { ...item, title: next.title, updatedAt: update.updatedAt ?? next.updatedAt, revision: update.revision ?? item.revision, board: next, thumbnail, pending: false } : item));
       setStatus("saved");
     });
   }, [owner, board?.id]);
@@ -209,7 +238,7 @@ export function useWorkspace(owner: string | null) {
       const ownerId = existing?.ownerId ?? owner ?? undefined;
       const shared = existing?.shared ?? (!!ownerId && ownerId !== owner);
       const accessRole = existing?.accessRole ?? (shared ? "viewer" : owner ? "owner" : undefined);
-      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, ownerId, accessRole, shared, cloudOffline: existing?.cloudOffline, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, folderId: folderId.current, pending: !!owner };
+      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, ownerId, accessRole, shared, cloudOffline: existing?.cloudOffline, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: createCanvasThumbnail(next), folderId: folderId.current, pending: !!owner };
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
       const activeConflict = conflictRef.current?.projectId === next.id ? { ...conflictRef.current, local: p } : null;
       if (activeConflict) { conflictRef.current = activeConflict; setConflict(activeConflict); }
@@ -285,10 +314,10 @@ export function useWorkspace(owner: string | null) {
       if (!next) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
       current.current = normalizeEditor(next); folderId.current = metadata.folderId; setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
-      cacheProject(owner, { ...metadata, board: next, pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
+      cacheProject(owner, { ...metadata, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
       // Publish the access metadata immediately so a newly accepted viewer
       // cannot get one editable render while the background refresh completes.
-      upsertSummary({ ...metadata, title: next.title, updatedAt: next.updatedAt, board: next, pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
+      upsertSummary({ ...metadata, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
       const history = await fetchProjectVersions(owner, next.id);
       if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
     } catch (err) { report(err); }
@@ -348,7 +377,7 @@ export function useWorkspace(owner: string | null) {
       const source = owner ? await fetchBoard(owner, project.id) : cached?.board;
       if (!source) throw new Error("Project unavailable");
       const copy = { ...structuredClone(source), id: crypto.randomUUID(), title, updatedAt: new Date().toISOString() };
-      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, pending: !!owner, favorite: false, deletedAt: null, ownerId: owner ?? undefined, accessRole: owner ? "owner" : undefined, shared: false });
+      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, thumbnail: createCanvasThumbnail(copy), pending: !!owner, favorite: false, deletedAt: null, ownerId: owner ?? undefined, accessRole: owner ? "owner" : undefined, shared: false });
       if (!await flush()) throw new Error("Copy is kept locally; retry saving to finish cloud sync.");
       await refresh();
     } catch (err) { report(err); throw err; }
@@ -398,5 +427,5 @@ export function useWorkspace(owner: string | null) {
       setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false;
     }
   });
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, navigate, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject };
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, navigate, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
 }

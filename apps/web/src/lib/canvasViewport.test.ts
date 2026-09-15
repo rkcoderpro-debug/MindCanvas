@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "./canvasViewport";
+import { MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "./canvasViewport";
 
 describe("canvas viewport wheel helpers", () => {
   it("normalizes line and page wheel units", () => {
@@ -27,5 +27,17 @@ describe("canvas viewport wheel helpers", () => {
     expect(after.scale).toBeGreaterThan(1);
     expect(worldAfter.x).toBeCloseTo(worldBefore.x);
     expect(worldAfter.y).toBeCloseTo(worldBefore.y);
+  });
+
+  it("allows overview zoom down to one percent", () => {
+    expect(MIN_CANVAS_SCALE).toBe(0.01);
+    expect(zoomViewportAtPoint({ x: 0, y: 0, scale: 1 }, 10_000, { x: 0, y: 0 }).scale).toBe(0.01);
+  });
+
+  it("auto-pans in the reveal direction when a marquee reaches an edge", () => {
+    const rect = { left: 0, right: 400, top: 0, bottom: 300 };
+    expect(autoPanViewportDelta(200, 299, rect, 16.67).y).toBeLessThan(0);
+    expect(autoPanViewportDelta(200, 1, rect, 16.67).y).toBeGreaterThan(0);
+    expect(autoPanViewportDelta(200, 150, rect, 16.67)).toEqual({ x: 0, y: 0 });
   });
 });

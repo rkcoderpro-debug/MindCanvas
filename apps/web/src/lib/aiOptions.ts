@@ -30,3 +30,9 @@ export function aiOptionsInstruction(options: AiGenerationOptions) {
     : "Depth: basic. Keep each item concise and focused on the most important knowledge.";
   return `${difficulty}\n${depth}`;
 }
+
+export function mindMapDepthInstruction(depth: AiGenerationOptions["depth"] = "basic") {
+  return depth === "detailed"
+    ? "Depth: detailed. Include useful context, examples and supporting relationships when the source supports them, while keeping the map readable."
+    : "Depth: basic. Keep the map compact and focus on the most important relationships and labels.";
+}

@@ -66,7 +66,7 @@ export default function PlanUpgradeDialog({ currentPlan, onClose }: { currentPla
     <article className={`pricing-card addon-card ${currentPlan.aiManualAddOnActive ? "current" : ""}`}>
       <header><div><h3>{AI_MANUAL_ADDON.name}</h3><small>{t("aiManualAddOnDescription")}</small></div>{currentPlan.aiManualAddOnActive && <span className="pricing-current">{t("aiManualAddOnActive")}</span>}</header>
       <strong className="pricing-price">{formatVnd(AI_MANUAL_ADDON.priceVnd)}</strong>
-      <p>{t("aiManualUsageHint")}</p>
+      <p>{t("aiManualUsageHint")}</p><p className="field-hint">{t("manualPlanSupportHint")}</p>
       {currentPlan.aiManualAddOnActive ? <button type="button" className="secondary-button" disabled><Check size={16}/>{t("aiManualAddOnActive")}</button> : <a className="primary-button" href={ZALO_URL} target="_blank" rel="noreferrer"><MessageCircle size={16}/>{t("contactZalo")}</a>}
     </article>
     <section className="subscription-history">

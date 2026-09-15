@@ -1,10 +1,11 @@
-import type { BoardState } from "@mindcanvas/shared";
+import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
+import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
 
-export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean };
+export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; thumbnail?: CanvasThumbnail; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export class ProjectConflictError extends Error {
@@ -32,7 +33,7 @@ function parseProjectCache(value: unknown): CachedProject[] {
     if (!item || typeof item !== "object") throw new Error("Invalid local project cache.");
     const project = item as Partial<CachedProject>;
     if (typeof project.id !== "string" || typeof project.title !== "string" || typeof project.updatedAt !== "string" || !project.board) throw new Error("Invalid local project cache.");
-    return { ...project, folderId: typeof project.folderId === "string" ? project.folderId : null, pending: !!project.pending, board: parseBoard(project.board) } as CachedProject;
+    return { ...project, folderId: typeof project.folderId === "string" ? project.folderId : null, pending: !!project.pending, thumbnail: isCanvasThumbnail(project.thumbnail) ? project.thumbnail : undefined, board: parseBoard(project.board) } as CachedProject;
   });
 }
 function writeProjectCache(owner: string | null, projects: CachedProject[]) {
@@ -231,7 +232,7 @@ async function clientFor(owner: string) {
 }
 export async function fetchProjects(owner: string): Promise<Project[]> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision").order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
+  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,thumbnail").order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
   if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
   if (result.error) throw result.error;
   const data = result.data as any[] | null;
@@ -243,12 +244,12 @@ export async function fetchProjects(owner: string): Promise<Project[]> {
   return (data ?? []).map(p => {
     const ownerId = typeof p.user_id === "string" ? p.user_id : owner;
     return { id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at, revision: typeof p.revision === "number" ? p.revision : undefined,
-      ownerId, accessRole: ownerId === owner ? "owner" : memberships[p.id] ?? "viewer", shared: ownerId !== owner };
+      ownerId, accessRole: ownerId === owner ? "owner" : memberships[p.id] ?? "viewer", shared: ownerId !== owner, thumbnail: isCanvasThumbnail(p.thumbnail) ? p.thumbnail : undefined };
   });
 }
 export async function fetchProjectSnapshot(owner: string, id: string): Promise<CachedProject> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,content").eq("id", id).abortSignal(requestTimeoutSignal(20000)).single();
+  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,thumbnail,content").eq("id", id).abortSignal(requestTimeoutSignal(20000)).single();
   if (result.error && /revision|column/i.test(result.error.message)) {
     result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,content").eq("user_id", owner).eq("id", id).abortSignal(requestTimeoutSignal(20000)).single();
   }
@@ -264,7 +265,7 @@ export async function fetchProjectSnapshot(owner: string, id: string): Promise<C
     } catch { /* keep the read-only fallback */ }
   }
   return { id: String(data.id), title: String(data.title), folderId: data.folder_id ?? null, updatedAt: String(data.updated_at ?? board.updatedAt),
-    favorite: !!data.is_favorite, deletedAt: data.deleted_at ?? null, revision: typeof data.revision === "number" ? data.revision : undefined, ownerId, accessRole, shared: ownerId !== owner, board, pending: false };
+    favorite: !!data.is_favorite, deletedAt: data.deleted_at ?? null, revision: typeof data.revision === "number" ? data.revision : undefined, ownerId, accessRole, shared: ownerId !== owner, thumbnail: isCanvasThumbnail(data.thumbnail) ? data.thumbnail : createCanvasThumbnail(board), board, pending: false };
 }
 
 export async function fetchBoard(owner: string, id: string): Promise<BoardState> {
@@ -279,7 +280,8 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     throw new ProjectConflictError(project.id);
   }
   const client = await clientFor(owner);
-  const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, updated_at: project.board.updatedAt };
+  const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, thumbnail: project.thumbnail ?? createCanvasThumbnail(project.board), updated_at: project.board.updatedAt };
+  const { thumbnail: _thumbnail, ...payloadWithoutThumbnail } = payload;
   if (project.revision === undefined) {
     // A newly created canvas must go through INSERT, not UPSERT.  UPSERT is
     // an INSERT ... ON CONFLICT UPDATE and can unexpectedly require the
@@ -290,7 +292,8 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // policy to INSERT ... RETURNING; a shared-project SELECT policy can
     // reject a just-created row even when its INSERT WITH CHECK is valid.
     // The initial revision is known locally, so no returned column is needed.
-    const modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
+    let modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
+    if (modern.error && /thumbnail/i.test(String(modern.error.message ?? ""))) modern = await client.from("notes").insert({ ...payloadWithoutThumbnail, user_id: owner, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
     if (!modern.error) return { revision: 0 };
     const modernMessage = String(modern.error.message ?? "");
     const modernCode = String((modern.error as { code?: unknown }).code ?? "");
@@ -301,7 +304,8 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // retry a 42501/RLS failure with a broader write; surface that exact
     // problem so the UI can point to the Supabase project/session mismatch.
     if (!duplicate && /revision|column/i.test(modernMessage)) {
-      const legacy = await client.from("notes").insert({ ...payload, user_id: owner }).abortSignal(requestTimeoutSignal(20000));
+      let legacy = await client.from("notes").insert({ ...( /thumbnail/i.test(modernMessage) ? payloadWithoutThumbnail : payload), user_id: owner }).abortSignal(requestTimeoutSignal(20000));
+      if (legacy.error && /thumbnail/i.test(String(legacy.error.message ?? ""))) legacy = await client.from("notes").insert({ ...payloadWithoutThumbnail, user_id: owner }).abortSignal(requestTimeoutSignal(20000));
       if (!legacy.error) return {};
       const legacyMessage = String(legacy.error.message ?? "");
       const legacyCode = String((legacy.error as { code?: unknown }).code ?? "");
@@ -313,7 +317,8 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     throw new ProjectConflictError(project.id);
   }
   const nextRevision = project.revision + 1;
-  const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
+  let result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
+  if (result.error && /thumbnail/i.test(String(result.error.message ?? ""))) result = await client.from("notes").update({ ...payloadWithoutThumbnail, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
   if (result.error) throw result.error;
   if (!result.data) throw new ProjectConflictError(project.id);
   return { revision: Number(result.data.revision ?? nextRevision) };
@@ -326,6 +331,12 @@ export async function fetchFolders(owner: string | null): Promise<ProjectFolder[
   return data ?? [];
 }
 export type ProjectPatch = { favorite?: boolean; deletedAt?: string | null; title?: string; folderId?: string | null };
+export async function updateProjectThumbnail(owner: string | null, projectId: string, thumbnail: CanvasThumbnail) {
+  if (!owner) return;
+  const client = await clientFor(owner);
+  const { error } = await client.from("notes").update({ thumbnail }).eq("id", projectId).select("id").single();
+  if (error) throw error;
+}
 export async function updateProject(owner: string | null, project: Project, patch: ProjectPatch) {
   // Metadata writes never replace content. Cloud actions must complete before
   // the UI announces success; a failed request leaves the local record intact.

@@ -22,14 +22,14 @@ test("sends an image as inline_data without exposing it to the client", async ()
   assert.deepEqual(requestBody.contents[0].parts[1].inline_data, { mime_type: "image/png", data: "cG5n" });
   assert.equal(requestBody.contents[0].parts[0].text.includes("Build a map"), true);
 });
-test("includes mind-map quality and detail choices in the Auto prompt", async () => {
+test("includes mind-map depth and detail choices without a difficulty setting", async () => {
   let requestBody: any;
   await generateGemini({ text: "Source", difficulty: "hard", depth: "detailed", detail: "basic" }, options, async (_url, init) => {
     requestBody = JSON.parse(String(init?.body));
     return ok();
   });
   const prompt = requestBody.contents[0].parts[0].text as string;
-  assert.ok(prompt.includes("Difficulty: hard"));
+  assert.ok(!prompt.includes("Difficulty:"));
   assert.ok(prompt.includes("Depth: detailed"));
   assert.ok(prompt.includes("Mind-map detail: basic"));
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { layoutMindMap, layoutMindMapTwoSided, nodeHeight } from "./mindMapLayout";
-import { applyGraph, arrangeMindMap, blankBoard } from "./board";
+import { layoutMindMap, layoutMindMapMultiSided, layoutMindMapTwoSided, nodeHeight } from "./mindMapLayout";
+import { applyGraph, arrangeMindMap, arrangeMindMapMultiSided, blankBoard } from "./board";
 const node = (id: string) => ({ id, label: id, x: 0, y: 0, width: 190, height: 76 });
 describe("Mind-map hierarchy layout", () => {
   it("places complete subtrees in separate bands with parents to their left", () => {
@@ -44,5 +44,24 @@ describe("Mind-map hierarchy layout", () => {
     expect(byId.get("beta")!.x).toBeGreaterThan(byId.get("root")!.x);
     expect(result.summary.left.flatMap(branch => branch.nodeIds)).toEqual(["alpha", "alpha-child", "gamma"]);
     expect(result.summary.right.flatMap(branch => branch.nodeIds)).toEqual(["beta", "beta-child"]);
+  });
+
+  it("distributes first-level branches across the requested radial sides", () => {
+    const nodes = ["root", "a", "b", "c", "d", "a1", "c1"].map(node);
+    const edges = [["root", "a"], ["root", "b"], ["root", "c"], ["root", "d"], ["a", "a1"], ["c", "c1"]].map(([source, target], index) => ({ id: String(index), source, target }));
+    const result = layoutMindMapMultiSided(nodes, edges, { x: 500, y: 300 }, 4, "radial");
+    const root = result.nodes.find(item => item.id === "root")!;
+    expect(root.x).toBe(500);
+    expect(result.summary.sides).toHaveLength(4);
+    expect(result.summary.sides.flatMap(side => side.branches).map(branch => branch.rootId)).toEqual(["a", "b", "c", "d"]);
+    expect(result.nodes.every(item => Number.isFinite(item.x) && Number.isFinite(item.y))).toBe(true);
+  });
+
+  it("keeps unrelated elements in place when arranging a selected subtree", () => {
+    const before = { ...blankBoard(), nodes: [node("root"), { ...node("child"), parentId: "root" }, node("other")], edges: [{ id: "e", source: "root", target: "child" }], texts: [{ id: "t", text: "keep", x: 20, y: 20, width: 100 }] };
+    const next = arrangeMindMapMultiSided(before, "root", 3, "fan").board;
+    expect(next.nodes.find(item => item.id === "root")!.x).toBe(before.nodes[0].x);
+    expect(next.nodes.find(item => item.id === "other")).toEqual(before.nodes[2]);
+    expect(next.texts).toBe(before.texts);
   });
 });

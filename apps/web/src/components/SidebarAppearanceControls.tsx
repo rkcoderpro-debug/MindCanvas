@@ -11,9 +11,11 @@ type Props = {
   selectedTheme: Theme;
   onLanguageChange: (language: "vi" | "en") => void;
   onThemeChange: (theme: Theme) => void;
+  canUsePremium?: boolean;
+  onLockedTheme?: () => void;
 };
 
-export default function SidebarAppearanceControls({ collapsed, language, selectedTheme, onLanguageChange, onThemeChange }: Props) {
+export default function SidebarAppearanceControls({ collapsed, language, selectedTheme, onLanguageChange, onThemeChange, canUsePremium = false, onLockedTheme }: Props) {
   const { t } = useLanguage();
   const { preview, clearPreview } = useTheme();
   const [open, setOpen] = useState<AppearancePanel>(null);
@@ -44,6 +46,11 @@ export default function SidebarAppearanceControls({ collapsed, language, selecte
     setOpen(null);
   };
   const chooseTheme = (next: Theme) => {
+    const option = THEME_OPTIONS.find(item => item.id === next);
+    if (option?.access === "plus" && !canUsePremium) {
+      onLockedTheme?.();
+      return;
+    }
     onThemeChange(next);
     clearPreview();
     setOpen(null);
@@ -65,9 +72,12 @@ export default function SidebarAppearanceControls({ collapsed, language, selecte
     {open === "theme" && <div className="sidebar-appearance-popover theme-popover" role="dialog" aria-label={t("theme")}>
       <strong>{t("theme")}</strong>
       <div className="sidebar-theme-list">
-        {THEME_OPTIONS.map(option => <button key={option.id} className={selectedTheme === option.id ? "selected" : ""} aria-pressed={selectedTheme === option.id} onPointerEnter={() => preview(option.id)} onPointerLeave={clearPreview} onFocus={() => preview(option.id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) clearPreview(); }} onClick={() => chooseTheme(option.id)}>
-          <span className="sidebar-theme-dot" style={{ background: option.browserColor }}><span/></span><span className="sidebar-theme-label">{t(option.labelKey)}</span>{selectedTheme === option.id && <Check size={15}/>} 
-        </button>)}
+        {THEME_OPTIONS.map(option => {
+          const locked = option.access === "plus" && !canUsePremium;
+          return <button key={option.id} className={`${selectedTheme === option.id ? "selected" : ""} ${locked ? "locked" : ""}`} aria-pressed={selectedTheme === option.id} aria-disabled={locked} title={locked ? t("themeLockedHint") : undefined} onPointerEnter={() => preview(option.id)} onPointerLeave={clearPreview} onFocus={() => preview(option.id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) clearPreview(); }} onClick={() => chooseTheme(option.id)}>
+            <span className="sidebar-theme-dot" style={{ background: option.browserColor }}><span/></span><span className="sidebar-theme-label">{t(option.labelKey)}</span>{option.access === "plus" && <span className="sidebar-theme-premium"><Sparkles size={11}/>{t("themePremium")}</span>}{selectedTheme === option.id && <Check size={15}/>} 
+          </button>;
+        })}
       </div>
     </div>}
   </div>;

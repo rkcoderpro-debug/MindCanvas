@@ -14,6 +14,22 @@ export type MindMapLayoutSummary = {
   right: MindMapBranch[];
 };
 
+export type MindMapLayoutMode = "radial" | "fan" | "symmetric" | "left-right" | "top-bottom" | "organic";
+
+export type MindMapLayoutSide = {
+  index: number;
+  angle: number;
+  branches: MindMapBranch[];
+};
+
+export type MindMapMultiLayoutSummary = {
+  rootId: string;
+  rootLabel: string;
+  sides: MindMapLayoutSide[];
+  sideCount: number;
+  mode: MindMapLayoutMode;
+};
+
 // Conservative text sizing, independent of DOM/fonts so imports and tests agree.
 export function nodeHeight(label: string, width: number, sourcePage?: number, collapsed?: boolean) {
   const columns = Math.max(1, Math.floor((width - 24) / 12));
@@ -206,4 +222,145 @@ export function layoutMindMapTwoSided(nodes: MindMapNode[], edges: MindMapEdge[]
     placeBranch(node.id, centerY, "right", 1);
   }
   return { nodes: nodes.map(node => placed.get(node.id) ?? node), summary: { rootId: mainRootId, rootLabel: mainRoot.label, left, right } };
+}
+
+function layoutModeAngles(sideCount: number, mode: MindMapLayoutMode) {
+  if (sideCount === 2 || mode === "left-right") return Array.from({ length: sideCount }, (_, index) => index % 2 === 0 ? Math.PI : 0);
+  if (mode === "top-bottom") return Array.from({ length: sideCount }, (_, index) => index % 2 === 0 ? -Math.PI / 2 : Math.PI / 2);
+  const start = mode === "fan" ? -Math.PI * .82 : -Math.PI / 2;
+  const span = mode === "fan" ? Math.PI * 1.64 : Math.PI * 2;
+  return Array.from({ length: sideCount }, (_, index) => start + span * index / sideCount);
+}
+
+/**
+ * Arrange a selected mind-map subtree around its main node. Branches are
+ * distributed into 2–12 directional buckets, while every descendant stays
+ * inside the tangent band of its first-level branch. This keeps the result
+ * map-like without changing edge data or unrelated canvas elements.
+ */
+export function layoutMindMapMultiSided(
+  nodes: MindMapNode[],
+  edges: MindMapEdge[],
+  origin = { x: 100, y: 100 },
+  sideCount = 4,
+  mode: MindMapLayoutMode = "radial",
+  rootId?: string,
+): { nodes: MindMapNode[]; summary: MindMapMultiLayoutSummary } {
+  const count = Math.max(2, Math.min(12, Math.round(Number.isFinite(sideCount) ? sideCount : 4)));
+  const emptySummary = { rootId: "", rootLabel: "", sides: Array.from({ length: count }, (_, index) => ({ index, angle: 0, branches: [] })), sideCount: count, mode };
+  if (!nodes.length) return { nodes, summary: emptySummary };
+
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const children = new Map(nodes.map(node => [node.id, [] as string[]]));
+  const incoming = new Set<string>();
+  const explicitParent = new Set<string>();
+  const addHierarchy = (source: string, target: string) => {
+    if (source === target || !byId.has(source) || !byId.has(target) || children.get(source)!.includes(target)) return;
+    children.get(source)!.push(target);
+    incoming.add(target);
+  };
+  for (const node of nodes) if (node.parentId && byId.has(node.parentId) && node.parentId !== node.id) {
+    explicitParent.add(node.id);
+    addHierarchy(node.parentId, node.id);
+  }
+  for (const edge of edges) if (!explicitParent.has(edge.target)) addHierarchy(edge.source, edge.target);
+
+  const roots: string[] = [], visited = new Set<string>();
+  const candidates = [...nodes.filter(node => !incoming.has(node.id)), ...nodes];
+  for (const candidate of candidates) {
+    if (visited.has(candidate.id)) continue;
+    roots.push(candidate.id);
+    const stack = [candidate.id];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const branchChildren = children.get(id) ?? [];
+      for (let index = branchChildren.length - 1; index >= 0; index -= 1) stack.push(branchChildren[index]);
+    }
+  }
+  const mainRootId = rootId && byId.has(rootId) ? rootId : roots[0];
+  const mainRoot = byId.get(mainRootId)!;
+  const sizes = new Map(nodes.map(node => {
+    const width = 260;
+    return [node.id, { width, height: nodeHeight(node.label, width, node.sourcePage, node.collapsed) }];
+  }));
+  const order: string[] = [];
+  const depth = new Map<string, number>();
+  const visit = (id: string, level: number, seen = new Set<string>()) => {
+    if (seen.has(id)) return;
+    seen.add(id); order.push(id); depth.set(id, level);
+    for (const child of children.get(id) ?? []) visit(child, level + 1, seen);
+  };
+  visit(mainRootId, 0);
+  for (const root of roots) if (!order.includes(root)) visit(root, 0);
+  const spans = new Map<string, number>();
+  for (const id of [...order].reverse()) {
+    const branchChildren = children.get(id) ?? [];
+    const total = branchChildren.reduce((sum, child) => sum + (spans.get(child) ?? sizes.get(child)!.height), 0) + Math.max(0, branchChildren.length - 1) * 34;
+    spans.set(id, Math.max(sizes.get(id)!.height, total));
+  }
+
+  const branchRoots = [...(children.get(mainRootId) ?? []), ...roots.filter(id => id !== mainRootId)];
+  const angles = layoutModeAngles(count, mode);
+  const buckets = angles.map((angle, index) => ({ index, angle, branches: [] as MindMapBranch[], weight: 0 }));
+  const collectBranch = (branchRootId: string) => {
+    const result: string[] = [], stack = [branchRootId], seen = new Set<string>();
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id); result.push(id);
+      const branchChildren = children.get(id) ?? [];
+      for (let index = branchChildren.length - 1; index >= 0; index -= 1) stack.push(branchChildren[index]);
+    }
+    return result;
+  };
+  for (const [index, branchRootId] of branchRoots.entries()) {
+    const nodeIds = collectBranch(branchRootId);
+    const branch = { rootId: branchRootId, rootLabel: byId.get(branchRootId)!.label, nodeIds, nodeLabels: nodeIds.map(id => byId.get(id)!.label) };
+    const bucket = index < count ? buckets[index] : buckets.reduce((lightest, current) => current.weight < lightest.weight ? current : lightest, buckets[0]);
+    bucket.branches.push(branch);
+    bucket.weight += spans.get(branchRootId) ?? sizes.get(branchRootId)!.height;
+  }
+
+  const placed = new Map<string, MindMapNode>();
+  const rootSize = sizes.get(mainRootId)!;
+  const rootCenter = { x: origin.x + rootSize.width / 2, y: origin.y + rootSize.height / 2 };
+  placed.set(mainRootId, { ...mainRoot, ...rootSize, x: origin.x, y: origin.y });
+  const distance = mode === "organic" ? 330 : mode === "fan" ? 350 : 380;
+  const gap = mode === "organic" ? 48 : 36;
+  const placeBranch = (id: string, bucket: typeof buckets[number], top: number, level: number, branchSpan: number) => {
+    const node = byId.get(id)!;
+    const size = sizes.get(id)!;
+    const span = spans.get(id) ?? size.height;
+    const direction = { x: Math.cos(bucket.angle), y: Math.sin(bucket.angle) };
+    const tangent = { x: -direction.y, y: direction.x };
+    const center = { x: rootCenter.x + direction.x * distance * level + tangent.x * (top + (branchSpan - size.height) / 2), y: rootCenter.y + direction.y * distance * level + tangent.y * (top + (branchSpan - size.height) / 2) };
+    placed.set(id, { ...node, ...size, x: center.x - size.width / 2, y: center.y - size.height / 2 });
+    const branchChildren = children.get(id) ?? [];
+    const childSpan = branchChildren.reduce((sum, child) => sum + (spans.get(child) ?? sizes.get(child)!.height), 0) + Math.max(0, branchChildren.length - 1) * gap;
+    let childTop = top + (span - childSpan) / 2;
+    for (const child of branchChildren) {
+      const childHeight = spans.get(child) ?? sizes.get(child)!.height;
+      placeBranch(child, bucket, childTop, level + 1, childHeight);
+      childTop += childHeight + gap;
+    }
+  };
+  for (const bucket of buckets) {
+    const total = bucket.branches.reduce((sum, branch) => sum + (spans.get(branch.rootId) ?? rootSize.height), 0) + Math.max(0, bucket.branches.length - 1) * gap;
+    let top = -total / 2;
+    for (const branch of bucket.branches) {
+      const span = spans.get(branch.rootId) ?? rootSize.height;
+      placeBranch(branch.rootId, bucket, top, 1, span);
+      top += span + gap;
+    }
+  }
+  for (const node of nodes) if (!placed.has(node.id)) {
+    const bucket = buckets[0];
+    placeBranch(node.id, bucket, 0, 1, sizes.get(node.id)!.height);
+  }
+  return {
+    nodes: nodes.map(node => placed.get(node.id) ?? node),
+    summary: { rootId: mainRootId, rootLabel: mainRoot.label, sides: buckets.map(({ index, angle, branches }) => ({ index, angle, branches })), sideCount: count, mode },
+  };
 }

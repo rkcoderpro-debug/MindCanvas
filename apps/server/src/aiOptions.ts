@@ -5,6 +5,9 @@ export const aiOptionsSchema = z.object({
   depth: z.enum(["basic", "detailed"]).default("basic"),
 });
 export const mindMapDetailSchema = z.enum(["basic", "medium", "detailed"]).default("medium");
+export const mindMapOptionsSchema = z.object({
+  depth: z.enum(["basic", "detailed"]).default("basic"),
+});
 
 export type AiGenerationOptions = z.infer<typeof aiOptionsSchema>;
 export type MindMapDetail = z.infer<typeof mindMapDetailSchema>;
@@ -19,6 +22,12 @@ export function aiOptionsInstruction(options: AiGenerationOptions) {
     ? "Depth: detailed. Include useful context, examples and explanations, while keeping each item focused and learnable."
     : "Depth: basic. Keep each item concise and focused on the most important knowledge.";
   return `${difficulty}\n${depth}`;
+}
+
+export function mindMapDepthInstruction(depth: AiGenerationOptions["depth"] = "basic") {
+  return depth === "detailed"
+    ? "Depth: detailed. Include useful context, examples and supporting relationships when the source supports them, while keeping the map readable."
+    : "Depth: basic. Keep the map compact and focus on the most important relationships and labels.";
 }
 
 export function mindMapDetailInstruction(detail: MindMapDetail) {

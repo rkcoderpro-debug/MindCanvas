@@ -16,9 +16,10 @@ import Dialog from "./Dialog";
 import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
 import StudyPlanDialog from "./StudyPlanDialog";
-import { buildFlashcardsPrompt, GEMINI_WEB_URL, ManualAiValidationError, MAX_FLASHCARDS, parseManualFlashcards } from "../lib/manualAi";
+import { buildFlashcardsPrompt, ManualAiValidationError, MAX_FLASHCARDS, parseManualFlashcards } from "../lib/manualAi";
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
 import AiQualityControls from "./AiQualityControls";
+import ManualAiProviderLinks from "./ManualAiProviderLinks";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
@@ -175,10 +176,6 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     try { await writeClipboardText(prompt); setManualCopied(true); setAiError(""); window.setTimeout(() => setManualCopied(false), 2200); }
     catch { setAiError(t("clipboardWriteError")); }
   };
-  const openGemini = () => {
-    const opened = window.open(GEMINI_WEB_URL, "_blank", "noopener,noreferrer");
-    if (!opened) setAiError(t("popupBlocked"));
-  };
   const validateManualResult = async () => {
     const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit);
     if (!maxCards) { setAiError(maxCardsError()); return; }
@@ -200,7 +197,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
       catch (error) { setAiPreview(null); setAiError(aiErrorMessage(error, t, "aiManualQuotaError")); return; }
       finally { setAiBusy(false); }
     }
-    setAiPreview({ title: parsed.title, provider: "manual", model: "Gemini Web", cards: parsedCards.map(card => ({ ...card, id: crypto.randomUUID() })) });
+    setAiPreview({ title: parsed.title, provider: "manual", model: "Manual AI", cards: parsedCards.map(card => ({ ...card, id: crypto.randomUUID() })) });
     setAiError("");
   };
   const generateAiPreview = async (event: React.FormEvent) => {
@@ -424,7 +421,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
         <AiQualityControls options={aiOptions} onChange={next => { setAiOptions(next); const maxCards = parseFlashcardLimit(aiMaxCards, maxCardsLimit); setManualPrompt(maxCards ? buildFlashcardsPrompt({ maxCards, language, options: next, text: aiSource === "deck" ? deckExpansionSource(flashcards.cards) : undefined }) : ""); }} />
         <label className="ai-manual-limit">{t("maxGeneratedCards")}<input type="number" min="3" max={maxCardsLimit} step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => updateManualCardLimit(event.target.value)}/></label>
         <small className="field-hint">{t("aiManualMaxCardsHint")}</small>
-        <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" disabled={!manualPrompt || aiBusy} onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" disabled={!manualPrompt || aiBusy} onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{t("aiManualFileWorkflow")}</small></div>
+        <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" disabled={!manualPrompt || aiBusy} onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button></div><ManualAiProviderLinks disabled={!manualPrompt || aiBusy} onBlocked={() => setAiError(t("popupBlocked"))}/><small className="field-hint">{t("aiManualFileWorkflow")}</small></div>
         <label className="ai-manual-json"><span>{t("aiManualJsonLabel")}</span><textarea value={manualJson} onChange={event => { setManualJson(event.target.value); setAiPreview(null); setAiError(""); }} placeholder={t("aiManualJsonPlaceholder")}/><small className="field-hint">{t("aiManualJsonHint")}</small></label>
         <label className="secondary-button ai-json-file-input"><Upload size={16}/><span>{t("uploadJsonFile")}</span><input type="file" accept=".json,application/json" disabled={aiBusy} onChange={event => void importManualJsonFile(event)}/></label>
         <button type="button" className="secondary-button" disabled={!manualPrompt || !manualJson.trim() || aiBusy} onClick={() => void validateManualResult()}>{t("validateResult")}</button>

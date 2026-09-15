@@ -1,5 +1,6 @@
 import type { BoardState, Viewport } from "@mindcanvas/shared";
 import { elementBounds, moveElement, type Selection, type Bounds } from "./board";
+import { MIN_CANVAS_SCALE } from "./canvasViewport";
 
 export function orderedElements(board: BoardState): Selection[] {
   const legacy = (["shapes", "drawings", "media", "embeds", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
@@ -255,6 +256,6 @@ export function addRelativeNode(board: BoardState, id: string, sibling: boolean,
   return { board: { ...board, nodes: [...board.nodes.map(n => n.id === parentId ? { ...n, collapsed: false } : n), node], edges: parent ? [...board.edges, { id: crypto.randomUUID(), source: parent.id, target: node.id }] : board.edges }, selection: { kind: "nodes" as const, id: node.id } };
 }
 export function fittedViewport(bounds: Bounds, width: number, height: number): Viewport {
-  const scale = Math.max(.1, Math.min(2, (width - 100) / Math.max(1, bounds.width), (height - 100) / Math.max(1, bounds.height)));
+  const scale = Math.max(MIN_CANVAS_SCALE, Math.min(2, (width - 100) / Math.max(1, bounds.width), (height - 100) / Math.max(1, bounds.height)));
   return { scale, x: width / 2 - (bounds.x + bounds.width / 2) * scale, y: height / 2 - (bounds.y + bounds.height / 2) * scale };
 }

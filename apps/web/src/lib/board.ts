@@ -1,5 +1,5 @@
-import type { BoardState, CanvasBackground, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
-import { layoutMindMap, layoutMindMapTwoSided, nodeHeight, type MindMapLayoutSummary } from "./mindMapLayout";
+import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
+import { layoutMindMap, layoutMindMapMultiSided, layoutMindMapTwoSided, nodeHeight, type MindMapLayoutMode, type MindMapLayoutSummary, type MindMapMultiLayoutSummary } from "./mindMapLayout";
 
 export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "media" | "embeds" | "edges";
 export type Selection = { kind: ElementKind; id: string };
@@ -8,11 +8,16 @@ export type ContextAiResult = { action: "summarize" | "explain" | "rewrite" | "e
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_IMPORT_FILE_BYTES = 40 * 1024 * 1024;
 export const MAX_MEDIA_DATA_URL_LENGTH = 20 * 1024 * 1024;
-export const CANVAS_BACKGROUNDS: CanvasBackground[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
+export const CANVAS_BACKGROUNDS: CanvasBackgroundPattern[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
+export const MAX_BACKGROUND_MEDIA_DATA_URL_LENGTH = 20 * 1024 * 1024;
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 export const pathData = (points: Vec2[]) => points.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ") + (points.length === 1 ? " l0.01,0.01" : "");
 const xml = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&apos;" }[char]!));
 const color = (value: unknown, fallback: string) => typeof value === "string" && /^(#[0-9a-f]{6}|none)$/i.test(value) ? value : fallback;
+const backgroundImageAspect = (fit: "cover" | "contain" | undefined, position: string | undefined) => {
+  const align = position === "top" ? "xMidYMin" : position === "right" ? "xMaxYMid" : position === "bottom" ? "xMidYMax" : position === "left" ? "xMinYMid" : "xMidYMid";
+  return `${align} ${fit === "contain" ? "meet" : "slice"}`;
+};
 export type CanvasExportPalette = {
   canvas: string;
   dot: string;
@@ -213,14 +218,19 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
     const source = item.sourcePage ? svgText({ lines: [`Page ${item.sourcePage}`], x: item.x + 12, y: item.y + item.height - 10, fontSize: 12, lineHeight: 16, fill: textColor, weight: 500 }) : "";
     return `<g${rotation}${opacity}><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="12" fill="${nodeFill}" stroke="${palette.elementStroke}"/>${svgText({ lines, x: item.x + 12, y: labelY, fontSize: 16, lineHeight, fill: textColor, weight: 500 })}${source}</g>`;
   }).join("");
-  const background = board.background ?? "dots";
+  const background = typeof board.background === "string" ? board.background : "plain";
+  const backgroundMedia = typeof board.background === "object" ? board.background : null;
   const pattern = background === "dots" ? `<pattern id="mindcanvas-bg" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${palette.dot}"/></pattern>`
     : background === "grid" ? `<pattern id="mindcanvas-bg" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="${palette.grid}" stroke-width="1"/></pattern>`
     : background === "ruled" ? `<pattern id="mindcanvas-bg" width="320" height="32" patternUnits="userSpaceOnUse"><path d="M0 31.5H320" fill="none" stroke="${palette.rule}" stroke-width="1"/><path d="M48 0V32" fill="none" stroke="${palette.margin}" stroke-width="1"/></pattern>`
     : background === "graph" ? `<pattern id="mindcanvas-bg" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M20 0V100M40 0V100M60 0V100M80 0V100M0 20H100M0 40H100M0 60H100M0 80H100" fill="none" stroke="${palette.gridMinor}" stroke-width="1"/><path d="M100 0H0V100" fill="none" stroke="${palette.gridMajor}" stroke-width="1.25"/></pattern>`
     : background === "isometric" ? `<pattern id="mindcanvas-bg" width="48" height="28" patternUnits="userSpaceOnUse"><path d="M0 28L24 14 48 28M0 0L24 14 48 0M24 14V42" fill="none" stroke="${palette.grid}" stroke-width="1"/></pattern>` : "";
   const backgroundFill = background === "plain" ? palette.canvas : "url(#mindcanvas-bg)";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}" role="img" aria-label="${xml(board.title)}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="${palette.connector}"/></marker>${pattern}${cropDefs}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.canvas}"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${body}</svg>`;
+  const backgroundMediaSvg = backgroundMedia?.kind === "image"
+    ? `<image href="${xml(backgroundMedia.src)}" x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" preserveAspectRatio="${backgroundImageAspect(backgroundMedia.fit, backgroundMedia.position)}" opacity="${clamp(backgroundMedia.opacity ?? 1, 0, 1)}" style="filter:blur(${clamp(backgroundMedia.blur ?? 0, 0, 40)}px) brightness(${clamp(backgroundMedia.brightness ?? 1, 0, 2)})"/>`
+    : backgroundMedia?.kind === "video" ? `<rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.surface}"/><text x="${bounds.x + bounds.width / 2}" y="${bounds.y + bounds.height / 2}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" fill="${palette.text}">${xml(backgroundMedia.name || "Video background")}</text>` : "";
+  const backgroundOverlay = backgroundMedia?.overlay ? `<rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${color(backgroundMedia.overlay, palette.canvas)}" opacity=".18"/>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}" role="img" aria-label="${xml(board.title)}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="${palette.connector}"/></marker>${pattern}${cropDefs}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.canvas}"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${backgroundMediaSvg}${backgroundOverlay}${body}</svg>`;
 }
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 export function exportCanvasSvgFile(board: BoardState, palette = readCanvasExportPalette()) { downloadBlob(new Blob([exportCanvasSvg(board, palette)], { type: "image/svg+xml;charset=utf-8" }), `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.svg`); }
@@ -373,17 +383,58 @@ export function arrangeMindMapTwoSided(board: BoardState): { board: BoardState; 
   return { board: { ...board, nodes: result.nodes }, summary: result.summary };
 }
 
+export function arrangeMindMapMultiSided(board: BoardState, rootId?: string, sideCount = 4, mode: MindMapLayoutMode = "radial"): { board: BoardState; summary: MindMapMultiLayoutSummary } {
+  if (!board.nodes.length) return { board, summary: layoutMindMapMultiSided([], [], undefined, sideCount, mode).summary };
+  const selectedRoot = rootId ? board.nodes.find(node => node.id === rootId) : undefined;
+  const included = new Set<string>();
+  if (selectedRoot) {
+    const outgoing = new Map(board.nodes.map(node => [node.id, [] as string[]]));
+    for (const node of board.nodes) if (node.parentId && outgoing.has(node.parentId)) outgoing.get(node.parentId)!.push(node.id);
+    for (const edge of board.edges) if (outgoing.has(edge.source) && outgoing.get(edge.source)!.length < board.nodes.length) outgoing.get(edge.source)!.push(edge.target);
+    const stack = [selectedRoot.id];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (included.has(id)) continue;
+      included.add(id);
+      for (const child of outgoing.get(id) ?? []) if (child !== id && board.nodes.some(node => node.id === child)) stack.push(child);
+    }
+  } else board.nodes.forEach(node => included.add(node.id));
+  const nodes = board.nodes.filter(node => included.has(node.id));
+  const edges = board.edges.filter(edge => included.has(edge.source) && included.has(edge.target));
+  const other = (selectedRoot ? [] : ["shapes", "texts", "drawings", "media", "embeds"] as const).flatMap(kind => board[kind].map(element => elementBounds(board, { kind, id: element.id })!));
+  const minX = nodes.length ? Math.min(...nodes.map(node => node.x)) : 100;
+  const minY = nodes.length ? Math.min(...nodes.map(node => node.y)) : 100;
+  const origin = selectedRoot ? { x: selectedRoot.x, y: selectedRoot.y } : { x: other.length ? Math.max(...other.map(bounds => bounds.x + bounds.width)) + 100 : minX, y: minY };
+  const result = layoutMindMapMultiSided(nodes, edges, origin, sideCount, mode, selectedRoot?.id);
+  const positioned = new Map(result.nodes.map(node => [node.id, node]));
+  return { board: { ...board, nodes: board.nodes.map(node => positioned.get(node.id) ?? node) }, summary: result.summary };
+}
+
 const obj = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);
 const number = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 10000000;
 const string = (v: unknown, max = 10000) => typeof v === "string" && v.length <= max;
+function isCanvasBackgroundMedia(value: unknown): value is CanvasBackgroundMedia {
+  if (!obj(value) || !["image", "video"].includes(value.kind) || !string(value.src, MAX_BACKGROUND_MEDIA_DATA_URL_LENGTH)) return false;
+  const sourceType = /^data:(image|video)\/[a-z0-9.+-]+(?:;[^,]*)?,/i.exec(value.src)?.[1]?.toLowerCase();
+  if (sourceType ? sourceType !== value.kind : !/^https?:\/\//i.test(value.src)) return false;
+  if (value.name !== undefined && !string(value.name, 500)) return false;
+  if (value.mimeType !== undefined && (!string(value.mimeType, 120) || !value.mimeType.toLowerCase().startsWith(`${value.kind}/`))) return false;
+  if (value.opacity !== undefined && (!number(value.opacity) || value.opacity < 0 || value.opacity > 1)) return false;
+  if (value.blur !== undefined && (!number(value.blur) || value.blur < 0 || value.blur > 40)) return false;
+  if (value.brightness !== undefined && (!number(value.brightness) || value.brightness < 0 || value.brightness > 2)) return false;
+  if (value.fit !== undefined && !["cover", "contain"].includes(value.fit)) return false;
+  if (value.position !== undefined && !string(value.position, 80)) return false;
+  if (value.overlay !== undefined && (typeof value.overlay !== "string" || !/^#[0-9a-f]{6}$/i.test(value.overlay))) return false;
+  return true;
+}
 export function parseBoard(value: unknown): BoardState {
   if (!obj(value)) throw new Error("Invalid board");
   // Media was added after the original board format. Treat a missing field as
   // an empty collection so older projects remain importable.
   const b = Object.assign({}, value, { media: value.media === undefined ? [] : value.media, embeds: value.embeds === undefined ? [] : value.embeds }) as Record<string, any>;
   if (!string(b.id, 200) || !string(b.title, 500) || !string(b.updatedAt, 100) || !Number.isFinite(Date.parse(b.updatedAt))
-    || !obj(b.viewport) || !number(b.viewport.x) || !number(b.viewport.y) || !number(b.viewport.scale) || b.viewport.scale < .1 || b.viewport.scale > 10) throw new Error("Invalid board metadata");
-  if (b.background !== undefined && !CANVAS_BACKGROUNDS.includes(b.background)) throw new Error("Invalid canvas background");
+    || !obj(b.viewport) || !number(b.viewport.x) || !number(b.viewport.y) || !number(b.viewport.scale) || b.viewport.scale < .01 || b.viewport.scale > 10) throw new Error("Invalid board metadata");
+  if (b.background !== undefined && !(typeof b.background === "string" ? CANVAS_BACKGROUNDS.includes(b.background as CanvasBackgroundPattern) : isCanvasBackgroundMedia(b.background))) throw new Error("Invalid canvas background");
   if (b.sourceDocuments !== undefined) {
     if (!Array.isArray(b.sourceDocuments) || b.sourceDocuments.length > 100) throw new Error("Invalid source documents");
     const documentIds = new Set<string>();

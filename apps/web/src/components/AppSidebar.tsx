@@ -28,13 +28,15 @@ type Props = {
   onManageFolders: () => void;
   onLanguageChange: (language: "vi" | "en") => void;
   onThemeChange: (theme: Theme) => void;
+  canUsePremiumTheme?: boolean;
+  onLockedTheme?: () => void;
   onSettings: () => void;
   onToggleCollapsed: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onResetWidth: () => void;
 };
 
-export default function AppSidebar({ projects, folders, boardOpen, recent, filter, sidebarCollapsed, sidebarWidth, language, selectedTheme, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, onSettings, onToggleCollapsed, onResizeStart, onResetWidth }: Props) {
+export default function AppSidebar({ projects, folders, boardOpen, recent, filter, sidebarCollapsed, sidebarWidth, language, selectedTheme, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, canUsePremiumTheme = false, onLockedTheme, onSettings, onToggleCollapsed, onResizeStart, onResetWidth }: Props) {
   const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -94,7 +96,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.5.9</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.6.0</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
@@ -126,7 +128,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
       </div>
       <button className="manage-folders-button" title={t("manageFolders")} onClick={() => { closeMobile(); onManageFolders(); }}><FolderCog size={17}/><span className="nav-label">{t("manageFolders")}</span></button>
       <div className="sidebar-bottom">
-        <SidebarAppearanceControls collapsed={sidebarCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange}/>
+      <SidebarAppearanceControls collapsed={sidebarCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange} canUsePremium={canUsePremiumTheme} onLockedTheme={onLockedTheme}/>
         <button title={t("settings")} onClick={() => { closeMobile(); onSettings(); }}><Settings2 size={17}/><span className="nav-label">{t("settings")}</span></button>
       </div>
       <div className="sidebar-resize-handle" role="separator" aria-orientation="vertical" aria-label={t("resizeSidebar")} title={`${t("resizeSidebar")} · ${t("resetSidebarWidth")}`} onPointerDown={onResizeStart} onDoubleClick={onResetWidth}/>

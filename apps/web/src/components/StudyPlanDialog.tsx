@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, ClipboardPaste, ExternalLink, FileUp, Sparkles, Trash2 } from "lucide-react";
+import { Check, ClipboardPaste, FileUp, Sparkles, Trash2 } from "lucide-react";
 import type { Flashcard, FlashcardDeck, StudyPlan, StudyPlanDay, StudyPlanMode, StudyPlanTask } from "../lib/flashcards";
 import { dueCards, recommendDailyTarget, vietnamStudyDate } from "../lib/flashcards";
 import { useLanguage } from "../lib/i18n";
@@ -8,9 +8,10 @@ import { consumeAiManualUsage } from "../lib/api";
 import Dialog from "./Dialog";
 import AiQualityControls from "./AiQualityControls";
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
-import { buildStudyPlanPrompt, GEMINI_WEB_URL, ManualAiValidationError, parseManualStudyPlan } from "../lib/manualAi";
+import { buildStudyPlanPrompt, ManualAiValidationError, parseManualStudyPlan } from "../lib/manualAi";
 import { writeClipboardText } from "../lib/aiSource";
 import { AiModeSwitch, type AiMode, ManualSteps } from "./AiModeSwitch";
+import ManualAiProviderLinks from "./ManualAiProviderLinks";
 
 type PreviewCard = { id: string; front: string; back: string; sourcePage: number | null };
 type GeneratedFilePreview = { title: string; sourceDocumentId?: string; cards: PreviewCard[] };
@@ -189,7 +190,7 @@ export default function StudyPlanDialog({ owner, decks, quizzes = [], selectedDe
     const target = Math.max(1, Math.min(maxCards, sourceCards.length ? sourceCards.length : parsed.dailyTarget));
     const assignedCardIds = schedule.some(day => day.tasks.some(task => task.kind === "flashcards")) ? assignmentFor(sourceCards, target) : [];
     const todayTask = schedule[0]?.tasks.find(task => task.kind === "flashcards");
-    setPlanDraft({ mode: "manual", recommendation: { provider: "manual", model: "Gemini Web", dailyTarget: target, focus: parsed.focus, rationale: parsed.rationale }, sourceType: "decks", sourceDocumentId: null, deckIds: [...allowedDecks], target, dailyMinutes: parsed.dailyMinutes, schedule, assignedCardIds, taskCardIds: todayTask ? { [todayTask.id]: assignedCardIds } : {} });
+    setPlanDraft({ mode: "manual", recommendation: { provider: "manual", model: "Manual AI", dailyTarget: target, focus: parsed.focus, rationale: parsed.rationale }, sourceType: "decks", sourceDocumentId: null, deckIds: [...allowedDecks], target, dailyMinutes: parsed.dailyMinutes, schedule, assignedCardIds, taskCardIds: todayTask ? { [todayTask.id]: assignedCardIds } : {} });
   };
 
   const validateManualPlan = async () => {
@@ -267,7 +268,7 @@ export default function StudyPlanDialog({ owner, decks, quizzes = [], selectedDe
       <AiQualityControls options={aiOptions} onChange={setAiOptions}/>
       {aiMode === "manual" && <>
         <ManualSteps current={manualJson.trim() ? "result" : "prompt"}/>
-        <div className="ai-manual-plan-box"><p className="ai-manual-note">{t("aiManualPlanHint")}</p><label>{t("aiManualPrompt")}<textarea rows={9} readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void writeClipboardText(manualPrompt).catch(() => setError(t("clipboardWriteError")))}><ClipboardPaste size={15}/>{t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={() => { const opened = window.open(GEMINI_WEB_URL, "_blank", "noopener,noreferrer"); if (!opened) setError(t("popupBlocked")); }}><ExternalLink size={15}/>{t("openGemini")}</button></div><label>{t("aiManualJsonLabel")}<textarea rows={9} value={manualJson} onChange={event => setManualJson(event.target.value)} placeholder={t("aiManualStudyPlanPlaceholder")}/></label><label className="upload-drop"><span><FileUp size={18}/>{t("uploadJsonFile")}</span><input type="file" accept="application/json,.json" disabled={busy} onChange={event => { const selected = event.target.files?.[0]; event.target.value = ""; if (!selected) return; void selected.text().then(setManualJson).catch(() => setError(t("manualJsonFileError"))); }}/></label></div>
+        <div className="ai-manual-plan-box"><p className="ai-manual-note">{t("aiManualPlanHint")}</p><label>{t("aiManualPrompt")}<textarea rows={9} readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void writeClipboardText(manualPrompt).catch(() => setError(t("clipboardWriteError")))}><ClipboardPaste size={15}/>{t("copyPrompt")}</button></div><ManualAiProviderLinks onBlocked={() => setError(t("popupBlocked"))}/><label>{t("aiManualJsonLabel")}<textarea rows={9} value={manualJson} onChange={event => setManualJson(event.target.value)} placeholder={t("aiManualStudyPlanPlaceholder")}/></label><label className="upload-drop"><span><FileUp size={18}/>{t("uploadJsonFile")}</span><input type="file" accept="application/json,.json" disabled={busy} onChange={event => { const selected = event.target.files?.[0]; event.target.value = ""; if (!selected) return; void selected.text().then(setManualJson).catch(() => setError(t("manualJsonFileError"))); }}/></label></div>
       </>}
       <label className="upload-drop study-plan-upload"><span><FileUp size={20}/>{aiMode === "manual" ? t("manualFileSelected") : t("uploadMaterialForPlan")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} onChange={event => setFileAndReset(event.target.files?.[0] ?? null)}/><small>{aiMode === "manual" ? t("aiManualUploadHint") : t("planFileHint")}</small>{file && <small>{file.name}</small>}</label>
       {file && <label>{t("studyPlanTargetDeck")}<select value={targetDeckId} onChange={event => { const next = event.target.value; setTargetDeckId(next); setDeckIds(current => current.includes(next) ? current : [...current, next]); }}>{decks.map(deck => <option key={deck.id} value={deck.id}>{deck.name}</option>)}</select><small className="field-hint">{t("planFileCreatesCards")}</small></label>}

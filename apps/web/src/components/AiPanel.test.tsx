@@ -58,16 +58,14 @@ describe("AI Manual mind-map flow", () => {
     expect(beforeGenerate).not.toHaveBeenCalled();
   });
 
-  it("exposes the same quality controls in Auto and forwards them to generation", async () => {
+  it("exposes mind-map depth controls and forwards them to generation", async () => {
     vi.mocked(generateMindMap).mockResolvedValue({ provider: "gemini", graph: { title: "Map", nodes: [{ id: "root", label: "Root" }], edges: [] } });
     await act(async () => root.render(<LanguageProvider><AiPanel projectId="project" canUse={true} beforeGenerate={async () => true} onClose={() => undefined} onApply={() => undefined}/></LanguageProvider>));
 
     expect(host.querySelector(".ai-quality-controls")).not.toBeNull();
     const quality = host.querySelectorAll<HTMLSelectElement>(".ai-quality-controls select");
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(quality[0], "hard");
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(quality[0], "detailed");
     await act(async () => quality[0].dispatchEvent(new Event("change", { bubbles: true })));
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(quality[1], "detailed");
-    await act(async () => quality[1].dispatchEvent(new Event("change", { bubbles: true })));
     const detail = host.querySelector<HTMLSelectElement>(".ai-mindmap-detail-control select")!;
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(detail, "detailed");
     await act(async () => detail.dispatchEvent(new Event("change", { bubbles: true })));
@@ -79,7 +77,7 @@ describe("AI Manual mind-map flow", () => {
     await act(async () => source.dispatchEvent(new Event("input", { bubbles: true })));
     await act(async () => (host.querySelector(".actions .primary-button") as HTMLButtonElement).click());
 
-    expect(generateMindMap).toHaveBeenCalledWith("Source text", undefined, expect.any(AbortSignal), { difficulty: "hard", depth: "detailed" }, "detailed");
+    expect(generateMindMap).toHaveBeenCalledWith("Source text", undefined, expect.any(AbortSignal), { difficulty: "balanced", depth: "detailed" }, "detailed", false);
   });
 
   it("keeps an Auto request alive while minimized and notifies when it finishes", async () => {

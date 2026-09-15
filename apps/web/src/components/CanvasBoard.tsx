@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, X, MoreHorizontal, Timer } from "lucide-react";
-import type { BoardState, CanvasBackground as CanvasBackgroundType, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
-import { applySelectionAi, arrangeMindMap, arrangeMindMapTwoSided, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, type Selection } from "../lib/board";
+import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
+import { applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
@@ -9,7 +9,7 @@ import { addRelativeNode, alignSelection, distributeSelection, duplicateSelectio
 import LayerStack from "./LayerStack";
 import ElementsPanel from "./ElementsPanel";
 import CanvasNavigator from "./CanvasNavigator";
-import { nodeHeight, type MindMapLayoutSummary } from "../lib/mindMapLayout";
+import { nodeHeight, type MindMapLayoutMode, type MindMapLayoutSummary, type MindMapMultiLayoutSummary } from "../lib/mindMapLayout";
 import CanvasBackground, { BACKGROUND_OPTIONS } from "./CanvasBackground";
 import AiSelectionPanel from "./AiSelectionPanel";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
@@ -17,11 +17,12 @@ import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipb
 import { getDocumentSource } from "../lib/supabase";
 import type { SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
-import { normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
+import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
+import { CANVAS_TOOL_IDS } from "../lib/toolbarPreferences";
 import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; readOnly?: boolean };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -203,11 +204,11 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "rect", icon: Square, key: "R" }, { id: "ellipse", icon: Circle, key: "O" },
   { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, readOnly = false }: Props) {
+export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
-  const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
+  const mediaInput = useRef<HTMLInputElement>(null), backgroundInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), iosTouchActive = useRef(false), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
   const iosTouchFallback = isIOSDevice();
   const boardRef = useRef(board);
@@ -224,7 +225,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
   const selectionsRef = useRef(selections);
   selectionsRef.current = selections;
-  const [mindMapLayoutSummary, setMindMapLayoutSummary] = useState<MindMapLayoutSummary | null>(null);
+  const [mindMapLayoutSummary, setMindMapLayoutSummary] = useState<MindMapLayoutSummary | MindMapMultiLayoutSummary | null>(null);
+  const [mindMapLayoutOpen, setMindMapLayoutOpen] = useState(false), [mindMapLayoutSides, setMindMapLayoutSides] = useState(4), [mindMapLayoutMode, setMindMapLayoutMode] = useState<MindMapLayoutMode>("radial");
   const selected = selections.at(-1) ?? null;
   const setSelected = (s: Selection | null) => setSelections(s ? [s] : []);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -373,11 +375,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const edgePanDelta = (clientX: number, clientY: number, elapsedMs: number) => {
     const rect = svg.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
-    const edge = 64, maxSpeed = 22;
-    const speed = (distance: number) => distance < edge ? ((edge - Math.max(0, distance)) / edge) ** 2 * maxSpeed : 0;
-    const left = speed(clientX - rect.left), right = speed(rect.right - clientX), top = speed(clientY - rect.top), bottom = speed(rect.bottom - clientY);
-    const factor = Math.min(2.5, Math.max(0.5, elapsedMs / 16.67));
-    return { x: (right - left) * factor, y: (bottom - top) * factor };
+    return autoPanViewportDelta(clientX, clientY, rect, elapsedMs);
   };
   const updateMarquee = (g: Gesture, p: Vec2) => {
     const dx = p.x - g.start.x, dy = p.y - g.start.y;
@@ -507,6 +505,29 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     // Keep this synchronous with the user's tap. iOS WebViews may reject a
     // delayed or display:none file-input activation.
     input.click();
+  };
+  const openBackgroundPicker = () => {
+    if (!canUseCanvasBackground) { onRequestCanvasBackgroundUpgrade?.(); return; }
+    finishEdit();
+    setMediaError("");
+    const input = backgroundInput.current;
+    if (!input) return;
+    input.value = "";
+    input.click();
+  };
+  const addBackgroundFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!canUseCanvasBackground) { onRequestCanvasBackgroundUpgrade?.(); return; }
+    if (file.size > MAX_FILE_BYTES) { setMediaError(t("mediaFileTooLarge")); return; }
+    const kind = mediaKindFor(file.type, file.name, iosTouchFallback);
+    if (kind !== "image" && kind !== "video") { setMediaError(t("backgroundMediaUnsupported")); return; }
+    try {
+      const sourceBlob = file.type ? file : new Blob([file], { type: kind === "image" ? "image/png" : "video/mp4" });
+      const src = await readBlobAsDataUrl(sourceBlob);
+      const background: CanvasBackgroundMedia = { kind, src, name: file.name, mimeType: sourceBlob.type || undefined, opacity: .62, blur: 0, brightness: 1, fit: "cover", position: "center", overlay: "#000000" };
+      onChange({ ...board, background });
+      setMediaError("");
+    } catch { setMediaError(t("backgroundMediaUnsupported")); }
   };
   const addClipboardImage = async () => {
     const blob = await readClipboardImage();
@@ -908,16 +929,23 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const applyAi = (result: SelectionAiResult) => { onChange(applySelectionAi(board, selections, result, { ink: palette.ink, fill: palette.fill })); setAiOpen(false); };
   const openSource = async (documentId: string, page: number) => {
     setSourceError("");
-    try { const source = await getDocumentSource({ documentId }); setSourceView({ url: source.url, name: source.name, page }); }
+    try { const source = await getDocumentSource({ documentId }); setSourceView({ url: source.url, name: source.name, kind: source.kind, page }); }
     catch { setSourceError(t("sourceError")); }
   };
-  const zoom = (factor: number) => { commitWheelViewport(); onChange({ ...board, viewport: { ...board.viewport, scale: clamp(board.viewport.scale * factor, .2, 4) } }); };
+  const zoom = (factor: number) => { commitWheelViewport(); onChange({ ...board, viewport: { ...board.viewport, scale: clamp(board.viewport.scale * factor, MIN_CANVAS_SCALE, MAX_CANVAS_SCALE) } }); };
   const addNode = () => {
     const parent = selected?.kind === "nodes" ? board.nodes.find(n => n.id === selected.id) : undefined;
     const id = crypto.randomUUID(), p = parent ? { x: parent.x + parent.width + 90, y: parent.y + 20 } : point((svg.current?.getBoundingClientRect().left ?? 0) + 250, (svg.current?.getBoundingClientRect().top ?? 0) + 180);
     const next = { ...board, nodes: [...board.nodes.map(n => n.id === parent?.id ? { ...n, collapsed: false } : n), { id, parentId: parent?.id, label: parent ? t("newNode") : t("rootNode"), ...p, width: 190, height: 76, color: palette.fill }] };
     onChange(parent ? connect(next, parent.id, id) : next); setTool("select"); setSelected({ kind: "nodes", id });
   };
+  const selectedMindMapRootId = selected?.kind === "nodes" && selections.length === 1 ? selected.id : undefined;
+  const openMindMapLayout = () => { if (!board.nodes.length || editing) return; setMindMapLayoutOpen(true); setMobileMoreOpen(false); };
+  const applyMindMapLayout = () => {
+    const result = arrangeMindMapMultiSided(board, selectedMindMapRootId, mindMapLayoutSides, mindMapLayoutMode);
+    setMindMapLayoutSummary(result.summary); onChange(result.board); setMindMapLayoutOpen(false);
+  };
+  const mindMapLayoutPreview = mindMapLayoutOpen ? arrangeMindMapMultiSided(board, selectedMindMapRootId, mindMapLayoutSides, mindMapLayoutMode).summary : null;
 
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
@@ -979,7 +1007,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
 
   const editBounds = editing ? elementBounds(b, editing.selection) : null;
   const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", media: "media", embeds: "embed", edges: "connector" };
-  const backgroundLabel: Record<CanvasBackgroundType, MessageKey> = { dots: "backgroundDots", grid: "backgroundGrid", ruled: "backgroundRuled", graph: "backgroundGraph", isometric: "backgroundIsometric", plain: "backgroundPlain" };
+  const backgroundLabel: Record<CanvasBackgroundPattern, MessageKey> = { dots: "backgroundDots", grid: "backgroundGrid", ruled: "backgroundRuled", graph: "backgroundGraph", isometric: "backgroundIsometric", plain: "backgroundPlain" };
+  const backgroundPattern = typeof board.background === "string" ? board.background : "plain";
+  const backgroundMedia = typeof board.background === "object" ? board.background : null;
   const selectedColor = selectedEl && "color" in selectedEl ? selectedEl.color ?? palette.fill : palette.ink;
   const selectedMedia = selected?.kind === "media" && selectedEl && "name" in selectedEl ? selectedEl : null;
   const selectedRotation = selectedEl && "rotation" in selectedEl ? selectedEl.rotation ?? 0 : 0;
@@ -1012,6 +1042,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     patch({ [key]: value });
   };
   const activeTool = tools.find(item => item.id === tool) ?? tools[0];
+  const visibleToolbarTools = tools.filter(item => visibleToolIds.includes(item.id));
+  const hiddenToolbarTools = tools.filter(item => !visibleToolIds.includes(item.id));
   const ActiveToolIcon = activeTool.icon;
   const chooseTool = (id: ToolMode) => {
     finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
@@ -1034,7 +1066,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           if (!showToolbarSwipeHint) return;
           setShowToolbarSwipeHint(false);
           try { localStorage.setItem("mindcanvas:mobile-toolbar-swiped:v1", "true"); } catch {}
-        }}>{tools.map(({ id, icon: Icon, key }) =>
+        }}>{visibleToolbarTools.map(({ id, icon: Icon, key }) =>
           <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
@@ -1045,6 +1077,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <button className={`${snap ? "selected" : ""} mobile-extra-action`} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
         <button className="mobile-extra-action" aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>
+        <button className="mobile-extra-action" aria-label={t("arrangeMapSmart")} title={t("arrangeMapSmart")} disabled={!board.nodes.length || !!editing} onClick={openMindMapLayout}><Network size={20}/></button>
         <span className="toolbar-divider mobile-extra-action"/><button className="mobile-extra-action" aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button><button type="button" className="canvas-more-tools-trigger" aria-label={t("moreTools")} title={t("moreTools")} aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen(value => !value)}><MoreHorizontal size={20}/></button></span>
         {toolbarExpanded && toolbarOverflowing && showToolbarSwipeHint && <span className="toolbar-swipe-hint" role="status">{t("swipeForMore")}</span>}
       </div>}
@@ -1170,7 +1203,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       </div>}
       {mobileMoreOpen && !readOnly && <div className="canvas-tools-sheet-backdrop" onClick={() => setMobileMoreOpen(false)}><aside className="canvas-tools-sheet" aria-label={t("moreTools")} onClick={event => event.stopPropagation()}>
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
-        <div className="canvas-tools-sheet-grid">{tools.filter(item => ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id)).map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} onClick={() => chooseTool(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
+        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} onClick={() => chooseTool(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>
           <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
           <button onClick={() => { setEmbedOpen(true); setMobileMoreOpen(false); }}><Globe2 size={19}/><span>{t("embedWeb")}</span></button>
@@ -1178,6 +1211,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           {iosTouchFallback && <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} onClick={() => { if (isRecording) stopRecording(); else void startRecording(); setMobileMoreOpen(false); }}>{isRecording ? <Square size={19}/> : <Mic size={19}/>}<span>{t(isRecording ? "stopRecording" : "recordAudio")}</span></button>}
           {iosTouchFallback && <button disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); setMobileMoreOpen(false); }}><Network size={19}/><span>{t("arrangeMap")}</span></button>}
           {iosTouchFallback && <button disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); setMobileMoreOpen(false); }}><GitFork size={19}/><span>{t("arrangeMapTwoSided")}</span></button>}
+          <button disabled={!board.nodes.length || !!editing} onClick={openMindMapLayout}><Network size={19}/><span>{t("arrangeMapSmart")}</span></button>
           {iosTouchFallback && <button disabled={!selectedStudyText} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} onClick={() => { setAiOpen(true); setMobileMoreOpen(false); }}><Sparkles size={19}/><span>{t("askAiSelection")}</span></button>}
           <button className={snap ? "selected" : ""} onClick={() => setSnap(value => !value)}><Magnet size={19}/><span>{t("snap")}</span></button>
           {onToggleTimer && <button className={timerVisible ? "selected" : ""} aria-pressed={timerVisible} onClick={onToggleTimer}><Timer size={19}/><span>{t("showFocusTimer")}</span></button>}
@@ -1196,15 +1230,19 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       </div>
       {mindMapLayoutSummary && <aside className="mind-map-layout-report" aria-label={t("mindMapLayoutReport")}>
         <header><div><strong>{t("mindMapLayoutReport")}</strong><small>{t("mindMapRoot")}: {mindMapLayoutSummary.rootLabel}</small></div><button className="icon-button" aria-label={t("closeLayoutReport")} title={t("closeLayoutReport")} onClick={() => setMindMapLayoutSummary(null)}><X size={15}/></button></header>
-        <div className="mind-map-layout-columns">{(["left", "right"] as const).map(side => <section key={side} className={`mind-map-layout-side ${side}`}>
+        {"sides" in mindMapLayoutSummary ? <div className="mind-map-layout-columns mind-map-layout-multi">{mindMapLayoutSummary.sides.map(side => <section key={side.index} className="mind-map-layout-side">
+          <div className="mind-map-layout-side-heading"><strong>{t("mindMapSide")} {side.index + 1}</strong><small>{t("mindMapNodeCount", { count: side.branches.reduce((sum, branch) => sum + branch.nodeIds.length, 0) })}</small></div>
+          {side.branches.length ? side.branches.map(branch => <div className="mind-map-branch-group" key={branch.rootId}><strong>{branch.rootLabel}</strong><ul>{branch.nodeLabels.map((label, index) => <li key={`${branch.rootId}-${index}`} title={label}>{label}</li>)}</ul></div>) : <small className="mind-map-no-branch">{t("mindMapNoBranches")}</small>}
+        </section>)}</div> : <div className="mind-map-layout-columns">{(["left", "right"] as const).map(side => <section key={side} className={`mind-map-layout-side ${side}`}>
           <div className="mind-map-layout-side-heading"><strong>{t(side === "left" ? "mindMapLeft" : "mindMapRight")}</strong><small>{t("mindMapNodeCount", { count: mindMapLayoutSummary[side].reduce((sum, branch) => sum + branch.nodeIds.length, 0) })}</small></div>
           {mindMapLayoutSummary[side].length ? mindMapLayoutSummary[side].map(branch => <div className="mind-map-branch-group" key={branch.rootId}><strong>{branch.rootLabel}</strong><ul>{branch.nodeLabels.map((label, index) => <li key={`${branch.rootId}-${index}`} title={label}>{label}</li>)}</ul></div>) : <small className="mind-map-no-branch">{t("mindMapNoBranches")}</small>}
-        </section>)}</div>
+        </section>)}</div>}
       </aside>}
       <div className={`zoom-control ${showMobileZoomControls ? "mobile-zoom-visible" : "mobile-zoom-hidden"}`}><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
     {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
-      <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={(board.background ?? "dots") === option ? "active" : ""} aria-pressed={(board.background ?? "dots") === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div></section>
+      <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={backgroundPattern === option ? "active" : ""} aria-pressed={backgroundPattern === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div><input ref={backgroundInput} hidden type="file" accept="image/*,video/*,.mov,.m4v,.webm" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void addBackgroundFile(file); }}/><div className="canvas-background-media-control">{backgroundMedia ? <><div className="canvas-background-file"><span className={`background-media-icon ${backgroundMedia.kind}`}>{backgroundMedia.kind === "video" ? <Film size={14}/> : <ImagePlus size={14}/>}</span><span title={backgroundMedia.name}>{backgroundMedia.name || t(backgroundMedia.kind === "video" ? "video" : "image")}</span></div><button type="button" className="icon-button" aria-label={t("clearCanvasBackground")} title={t("clearCanvasBackground")} onClick={() => onChange({ ...board, background: "dots" })}><Trash2 size={15}/></button></> : <button type="button" className="secondary-button" onClick={openBackgroundPicker}><ImagePlus size={15}/>{t("uploadCanvasBackground")}</button>}{backgroundMedia && <button type="button" className="secondary-button" onClick={openBackgroundPicker}><ImagePlus size={15}/>{t("replace")}</button>}<small className="field-hint">{canUseCanvasBackground ? t("canvasBackgroundHint") : t("backgroundProOnly")}</small></div>{backgroundMedia && <div className="canvas-background-adjustments"><label>{t("backgroundMediaOpacity")}<input type="range" min=".1" max="1" step=".05" value={backgroundMedia.opacity ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, opacity: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBlur")}<input type="range" min="0" max="24" step="1" value={backgroundMedia.blur ?? 0} onChange={event => onChange({ ...board, background: { ...backgroundMedia, blur: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBrightness")}<input type="range" min=".5" max="1.5" step=".05" value={backgroundMedia.brightness ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, brightness: Number(event.target.value) } })}/></label><label>{t("backgroundMediaFit")}<select value={backgroundMedia.fit ?? "cover"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, fit: event.target.value as "cover" | "contain" } })}><option value="cover">{t("backgroundFitCover")}</option><option value="contain">{t("backgroundFitContain")}</option></select></label><label>{t("backgroundMediaPosition")}<select value={backgroundMedia.position ?? "center"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, position: event.target.value } })}><option value="center">{t("center")}</option><option value="top">{t("alignTop")}</option><option value="right">{t("alignRight")}</option><option value="bottom">{t("alignBottom")}</option><option value="left">{t("alignLeft")}</option></select></label></div>}</section>
+      {backgroundMedia && <section className="canvas-background-overlay-control"><label>{t("backgroundMediaOverlay")}<input type="color" value={backgroundMedia.overlay ?? "#000000"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, overlay: event.target.value } })}/></label></section>}
       {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}
       {selections.length > 0 && <div className="selection-actions"><strong>{selections.length} {t("selectedElements")}</strong><div className="property-grid">
         <button onClick={() => onChange(reorderSelection(board, selections, "front"))}>{t("bringFront")}</button><button onClick={() => onChange(reorderSelection(board, selections, "back"))}>{t("sendBack")}</button>
@@ -1246,7 +1284,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         </>}
         {selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="40" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
         {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
-        {selected?.kind === "nodes" && <button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button>}
+        {selected?.kind === "nodes" && <><button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button><button className="secondary-button" onClick={openMindMapLayout}>{t("arrangeMapSmart")}</button></>}
         <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>
       </>}
       <ElementsPanel board={b} selections={selections} hiddenElements={hiddenElements}
@@ -1256,6 +1294,14 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>
     </aside>}
     {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
+    {mindMapLayoutOpen && <Dialog title={t("arrangeMapSmart")} onClose={() => setMindMapLayoutOpen(false)}><form onSubmit={event => { event.preventDefault(); applyMindMapLayout(); }}>
+      <p className="dialog-hint">{t("mindMapLayoutPreviewHint")}</p>
+      {selectedMindMapRootId && <p className="mind-map-layout-selected-root">{t("mindMapLayoutSelectedRoot")}: <strong>{board.nodes.find(node => node.id === selectedMindMapRootId)?.label}</strong></p>}
+      <label>{t("mindMapLayoutSides")}<input type="number" min="2" max="12" step="1" list="mindmap-side-presets" value={mindMapLayoutSides} onChange={event => setMindMapLayoutSides(clamp(Math.round(event.target.valueAsNumber || 2), 2, 12))}/><datalist id="mindmap-side-presets"><option value="2"/><option value="3"/><option value="4"/><option value="6"/><option value="8"/></datalist></label>
+      <label>{t("mindMapLayoutMode")}<select value={mindMapLayoutMode} onChange={event => setMindMapLayoutMode(event.target.value as MindMapLayoutMode)}><option value="radial">{t("mindMapLayoutModeRadial")}</option><option value="fan">{t("mindMapLayoutModeFan")}</option><option value="symmetric">{t("mindMapLayoutModeSymmetric")}</option><option value="left-right">{t("mindMapLayoutModeLeftRight")}</option><option value="top-bottom">{t("mindMapLayoutModeTopBottom")}</option><option value="organic">{t("mindMapLayoutModeOrganic")}</option></select></label>
+      {mindMapLayoutPreview && <div className="mind-map-layout-preview"><strong>{t("mindMapLayoutPreview")}</strong><small>{mindMapLayoutPreview.sides.map(side => `${side.index + 1}: ${side.branches.reduce((sum, branch) => sum + branch.nodeIds.length, 0)}`).join(" · ")} · {mindMapLayoutPreview.sideCount} {t("mindMapSide").toLocaleLowerCase()}</small></div>}
+      <footer className="actions"><button type="button" className="secondary-button" onClick={() => setMindMapLayoutOpen(false)}>{t("cancel")}</button><button className="primary-button">{t("mindMapLayoutApply")}</button></footer>
+    </form></Dialog>}
     {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
     {embedOpen && <Dialog title={t("embedWeb")} onClose={() => setEmbedOpen(false)}><form onSubmit={event => { event.preventDefault(); insertEmbed(); }}>
       <label>{t("embedUrl")}<input autoFocus required type="url" placeholder={t("embedPlaceholder")} value={embedUrl} onChange={event => setEmbedUrl(event.target.value)}/></label>

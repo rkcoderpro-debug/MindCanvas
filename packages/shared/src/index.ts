@@ -128,8 +128,43 @@ export type CanvasEmbed = {
 
 export type Viewport = { x: number; y: number; scale: number };
 
-export type CanvasBackground = "dots" | "grid" | "ruled" | "graph" | "isometric" | "plain";
+export type CanvasBackgroundPattern = "dots" | "grid" | "ruled" | "graph" | "isometric" | "plain";
+export type CanvasBackgroundMedia = {
+  kind: "image" | "video";
+  /** Self-contained data URL for local/offline exports. Cloud deployments may replace this with an asset URL. */
+  src: string;
+  name?: string;
+  mimeType?: string;
+  opacity?: number;
+  blur?: number;
+  brightness?: number;
+  fit?: "cover" | "contain";
+  position?: string;
+  overlay?: string;
+};
+export type CanvasBackground = CanvasBackgroundPattern | CanvasBackgroundMedia;
 export type CanvasTextAlign = "left" | "center" | "right";
+
+export type CanvasThumbnailItem = {
+  kind: "node" | "text" | "shape" | "drawing" | "edge" | "media" | "embed";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+  label?: string;
+  points?: Vec2[];
+  source?: Vec2;
+  target?: Vec2;
+};
+
+/** Small, media-free snapshot used by the workspace project cards. */
+export type CanvasThumbnail = {
+  version: 1;
+  background: CanvasBackgroundPattern;
+  items: CanvasThumbnailItem[];
+  bounds: { x: number; y: number; width: number; height: number };
+};
 
 export type CanvasSourceDocument = {
   id: string;

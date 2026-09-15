@@ -4,8 +4,9 @@ import { consumeAiManualUsage, transformSelection, type SelectionAiAction, type 
 import { useLanguage } from "../lib/i18n";
 import Dialog from "./Dialog";
 import { AiModeSwitch, ManualSteps, type AiMode, type ManualStep } from "./AiModeSwitch";
+import ManualAiProviderLinks from "./ManualAiProviderLinks";
 import { aiErrorMessage } from "../lib/aiErrors";
-import { buildSelectionPrompt, GEMINI_WEB_URL, parseManualSelectionResult } from "../lib/manualAi";
+import { buildSelectionPrompt, parseManualSelectionResult } from "../lib/manualAi";
 import { writeClipboardText } from "../lib/aiSource";
 
 const actions: Array<{ id: SelectionAiAction; icon: typeof Sparkles; label: "aiSummarize" | "aiExplain" | "aiRewrite" | "aiExpand" }> = [
@@ -44,10 +45,6 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
     try { await writeClipboardText(manualPrompt); setManualCopied(true); setError(""); window.setTimeout(() => setManualCopied(false), 2200); }
     catch { setError(t("clipboardWriteError")); }
   };
-  const openGemini = () => {
-    const opened = window.open(GEMINI_WEB_URL, "_blank", "noopener,noreferrer");
-    if (!opened) setError(t("popupBlocked"));
-  };
   const validateManualResult = async () => {
     let next: SelectionAiResult | null = null;
     try { next = parseManualSelectionResult(manualJson, action); }
@@ -85,7 +82,7 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
     </div>
     <details className="ai-source-preview"><summary>{t("aiSelectedContent")}</summary><p>{sourceText.slice(0, 2500)}</p></details>
     {aiMode === "manual" && <section className="ai-manual-panel">
-      {manualPrompt && <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea value={manualPrompt} onChange={event => { setManualPrompt(event.target.value); setManualCopied(false); }} /></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={openGemini}><Sparkles size={16}/>{t("openGemini")}</button></div><small className="field-hint">{t("aiManualTextHint")}</small></div>}
+      {manualPrompt && <div className="ai-manual-prompt"><label>{t("aiManualPrompt")}<textarea value={manualPrompt} onChange={event => { setManualPrompt(event.target.value); setManualCopied(false); }} /></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyManualPrompt()}><ClipboardPaste size={16}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button></div><ManualAiProviderLinks onBlocked={() => setError(t("popupBlocked"))}/><small className="field-hint">{t("aiManualTextHint")}</small></div>}
       <label className="ai-manual-json"><span>{t("aiManualJsonLabel")}</span><textarea value={manualJson} onChange={event => { setManualJson(event.target.value); setResult(null); setError(""); }} placeholder={t("aiManualJsonPlaceholder")} /></label>
       <button type="button" className="secondary-button" disabled={!manualPrompt || !manualJson.trim() || busy} onClick={() => void validateManualResult()}>{t("validateResult")}</button>
     </section>}

@@ -1,7 +1,8 @@
 export type CanvasViewport = { x: number; y: number; scale: number };
 export type ViewportAnchor = { x: number; y: number };
 
-export const MIN_CANVAS_SCALE = 0.2;
+/** The editor deliberately allows a very wide map to be overviewed at 1%. */
+export const MIN_CANVAS_SCALE = 0.01;
 export const MAX_CANVAS_SCALE = 4;
 
 /** Convert line/page wheel units to a predictable pixel-like distance. */
@@ -25,6 +26,27 @@ export function wheelPanDelta(delta: { x: number; y: number }, altKey = false) {
 
 export function panViewport(viewport: CanvasViewport, dx: number, dy: number): CanvasViewport {
   return { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+}
+
+/**
+ * Return a viewport translation for marquee auto-pan. A positive screen-space
+ * edge pressure moves the viewport in the opposite direction so the user
+ * keeps revealing the world under the pointer (dragging toward the bottom
+ * reveals lower canvas content instead of reversing the selection).
+ */
+export function autoPanViewportDelta(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; right: number; top: number; bottom: number },
+  elapsedMs: number,
+  edge = 64,
+  maxSpeed = 22,
+) {
+  const speed = (distance: number) => distance < edge ? ((edge - Math.max(0, distance)) / edge) ** 2 * maxSpeed : 0;
+  const left = speed(clientX - rect.left), right = speed(rect.right - clientX);
+  const top = speed(clientY - rect.top), bottom = speed(rect.bottom - clientY);
+  const factor = Math.min(2.5, Math.max(0.5, elapsedMs / 16.67));
+  return { x: (left - right) * factor, y: (top - bottom) * factor };
 }
 
 /** Zoom around a screen-space point so the point under the cursor stays fixed. */
