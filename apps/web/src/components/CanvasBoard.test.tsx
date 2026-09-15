@@ -20,6 +20,15 @@ function pointer(target: Element, type: string, x: number, y: number, modifiers:
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...modifiers });
   Object.defineProperty(e, "pointerId", { value: modifiers.pointerId ?? 1 }); Object.defineProperty(e, "pointerType", { value: modifiers.pointerType ?? "mouse" }); target.dispatchEvent(e);
 }
+function touchPoint(identifier: number, clientX: number, clientY: number) {
+  return { identifier, clientX, clientY, pageX: clientX, pageY: clientY, screenX: clientX, screenY: clientY, radiusX: 1, radiusY: 1, rotationAngle: 0, force: 1 } as Touch;
+}
+function touch(target: EventTarget, type: string, touches: Touch[], changedTouches: Touch[] = touches) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "touches", { value: touches });
+  Object.defineProperty(event, "changedTouches", { value: changedTouches });
+  target.dispatchEvent(event);
+}
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   SVGElement.prototype.setPointerCapture = () => {}; SVGElement.prototype.hasPointerCapture = () => false;
@@ -325,6 +334,61 @@ describe("Canvas interactions", () => {
     expect(host.querySelector('[aria-label="Bút"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("uses the iOS native touch fallback when a stroke leaves the SVG", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
+      await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+      const svg = host.querySelector("svg.canvas-svg")!, start = touchPoint(91, 24, 32), end = touchPoint(91, 180, 210);
+      await act(async () => touch(svg, "touchstart", [start], [start]));
+      await act(async () => touch(document, "touchmove", [end], [end]));
+      await act(async () => touch(document, "touchend", [], [end]));
+      expect(current.drawings).toHaveLength(1);
+      expect(current.drawings[0].points.at(-1)).toMatchObject({ x: 180, y: 210 });
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(navigateCommit).not.toHaveBeenCalled();
+
+      const cancelStart = touchPoint(92, 40, 48), cancelEnd = touchPoint(92, 160, 180);
+      await act(async () => touch(svg, "touchstart", [cancelStart], [cancelStart]));
+      await act(async () => touch(document, "touchmove", [cancelEnd], [cancelEnd]));
+      await act(async () => touch(document, "touchcancel", [], [cancelEnd]));
+      expect(current.drawings).toHaveLength(2);
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+    }
+  });
+
+  it("keeps iOS native touch selection and dragging for existing elements", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      const initial = { ...blankBoard(), shapes: [{ id: "ios-shape", kind: "rect" as const, x: 40, y: 40, width: 100, height: 70, color: "#ffffff" }] };
+      await act(async () => root.render(<ViewportHarness initial={initial}/>));
+      const target = host.querySelector('[data-element="ios-shape"]')!, start = touchPoint(93, 40, 40), end = touchPoint(93, 60, 50);
+      await act(async () => touch(target, "touchstart", [start], [start]));
+      await act(async () => touch(document, "touchmove", [end], [end]));
+      await act(async () => touch(document, "touchend", [], [end]));
+      expect(current.shapes[0]).toMatchObject({ x: 60, y: 50 });
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(navigateCommit).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+    }
+  });
+
   it("finishes finger drawing safely when a second finger starts pinch, then draws again", async () => {
     localStorage.setItem("mindcanvas:canvas-touch:v1", JSON.stringify({ drawWithFinger: true, stylusDrawOnly: true, zoomSensitivity: 1, invertZoom: false }));
     await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
@@ -352,6 +416,7 @@ describe("Canvas interactions", () => {
   });
 
   it("keeps pinch available after repeated stylus strokes without creating pinch strokes", async () => {
+    localStorage.setItem("mindcanvas:canvas-touch:v2", JSON.stringify({ drawWithFinger: false, stylusDrawOnly: true, zoomSensitivity: 1, invertZoom: false }));
     await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
     await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
     const svg = host.querySelector("svg.canvas-svg")!;

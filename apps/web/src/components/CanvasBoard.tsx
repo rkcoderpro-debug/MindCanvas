@@ -19,12 +19,13 @@ import type { SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
 import { normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
-import { DEFAULT_CANVAS_TOUCH_SETTINGS, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
+import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
+type CanvasPointerInput = { pointerId: number; pointerType: string; button: number; clientX: number; clientY: number; shiftKey?: boolean; altKey?: boolean; preventDefault: () => void; stopPropagation?: () => void; capture?: boolean };
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const DEFAULT_CROP: CanvasCrop = { top: 0, right: 0, bottom: 0, left: 0 };
 const RESIZE_HANDLES: Array<{ id: ResizeHandle; x: "left" | "center" | "right"; y: "top" | "center" | "bottom" }> = [
@@ -131,7 +132,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
-  const touchPoints = useRef(new Map<number, Vec2>()), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
+  const touchPoints = useRef(new Map<number, Vec2>()), iosTouchActive = useRef(false), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
+  const iosTouchFallback = isIOSDevice();
   const boardRef = useRef(board);
   const onChange = (next: BoardState) => {
     const before = boardRef.current;
@@ -144,6 +146,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const onChangeRef = useRef(onChange);
   const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState<BoardState | null>(null), [selections, setSelections] = useState<Selection[]>([]);
+  const selectionsRef = useRef(selections);
+  selectionsRef.current = selections;
   const [mindMapLayoutSummary, setMindMapLayoutSummary] = useState<MindMapLayoutSummary | null>(null);
   const selected = selections.at(-1) ?? null;
   const setSelected = (s: Selection | null) => setSelections(s ? [s] : []);
@@ -392,12 +396,19 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         ...(kind === "nodes" && "width" in el ? { height: Math.max("height" in el ? el.height ?? 76 : 76, nodeHeight(e.value, el.width, "sourcePage" in el ? el.sourcePage : undefined)) } : {}) } : el) });
     }
   };
-  const selectElement = (e: ReactPointerEvent, s: Selection) => {
+  const isIOSCanvasTouchTarget = (target: EventTarget | null) => {
+    const element = target instanceof Element ? target : null;
+    if (!svg.current || !element || !svg.current.contains(element)) return false;
+    return !element.closest(".canvas-media video, .canvas-media audio, .canvas-embed-body, .inline-editor, .resize-handle, .rotation-handle, button, input, textarea, select, [contenteditable=true]");
+  };
+  const shouldUseIOSNativeTouch = (e: { pointerType: string; target: EventTarget | null }) =>
+    iosTouchFallback && e.pointerType === "touch" && (iosTouchActive.current || isIOSCanvasTouchTarget(e.target));
+  const selectElementAt = (input: CanvasPointerInput, s: Selection) => {
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
-    if (gesture.current || (e.button !== 0 && e.button !== 1)) return;
-    if (!interactive || space || e.button === 1) return;
-    e.stopPropagation(); e.preventDefault();
+    if (gesture.current || (input.button !== 0 && input.button !== 1)) return;
+    if (!interactive || space || input.button === 1) return;
+    input.stopPropagation?.(); input.preventDefault();
     svg.current?.focus();
     if (tool === "connector") {
       if (s.kind !== "nodes" && s.kind !== "shapes") return;
@@ -411,42 +422,48 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       return;
     }
     const expanded = expandGroups(interactionBoard, [s]);
-    if (e.shiftKey) {
+    if (input.shiftKey) {
       const ids = new Set(expanded.map(s => s.id));
-      setSelections(selections.some(item => item.id === s.id) ? selections.filter(item => !ids.has(item.id)) : [...selections, ...expanded.filter(item => !selections.some(s => s.id === item.id))]);
+      const currentSelections = selectionsRef.current;
+      setSelections(currentSelections.some(item => item.id === s.id) ? currentSelections.filter(item => !ids.has(item.id)) : [...currentSelections, ...expanded.filter(item => !currentSelections.some(s => s.id === item.id))]);
       return;
     }
-    const targets = selections.some(item => item.id === s.id) ? selections : expanded;
+    const currentSelections = selectionsRef.current;
+    const targets = currentSelections.some(item => item.id === s.id) ? currentSelections : expanded;
     setSelections(targets);
     if (isLocked(s)) return;
     if (s.kind === "edges") return;
-    svg.current?.focus(); svg.current?.setPointerCapture(e.pointerId);
-    const p = point(e.clientX, e.clientY, interactionBoard);
+    svg.current?.focus(); if (input.capture) svg.current?.setPointerCapture(input.pointerId);
+    const p = point(input.clientX, input.clientY, interactionBoard);
     setInputMode("transforming");
-    gesture.current = { mode: "move", start: p, screen: { x: e.clientX, y: e.clientY }, base: interactionBoard, selection: s, selections: targets, reparent: e.altKey && targets.length === 1 && s.kind === "nodes", pointer: e.pointerId, next: interactionBoard };
+    gesture.current = { mode: "move", start: p, screen: { x: input.clientX, y: input.clientY }, base: interactionBoard, selection: s, selections: targets, reparent: input.altKey && targets.length === 1 && s.kind === "nodes", pointer: input.pointerId, next: interactionBoard };
   };
-  const down = (e: ReactPointerEvent<SVGSVGElement>) => {
+  const selectElement = (e: ReactPointerEvent, s: Selection) => {
+    if (shouldUseIOSNativeTouch(e)) return;
+    selectElementAt({ pointerId: e.pointerId, pointerType: e.pointerType, button: e.button, clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, altKey: e.altKey, preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation(), capture: true }, s);
+  };
+  const begin = (input: CanvasPointerInput) => {
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
     if (gesture.current) return;
-    if (e.button !== 0 && e.button !== 1) return;
+    if (input.button !== 0 && input.button !== 1) return;
     if (editRef.current) { finishEdit(); return; }
-    e.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
-    const p = point(e.clientX, e.clientY, interactionBoard);
+    input.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
+    const p = point(input.clientX, input.clientY, interactionBoard);
     const base = interactionBoard;
     // Touch follows the active tool. Pen/highlighter only fall back to temporary pan
     // when finger drawing was explicitly disabled. Two-finger gestures are still
     // promoted to pinch/pan by the capture handlers below without changing `tool`.
-    const touchShouldPan = e.pointerType === "touch" && (tool === "select" || ((tool === "pen" || tool === "highlighter") && !touchSettings.drawWithFinger));
-    const stylusTool: ToolMode = e.pointerType === "pen" && touchSettings.stylusDrawOnly ? (tool === "highlighter" ? "highlighter" : "pen") : tool;
-    const effectiveTool = e.pointerType === "touch" ? tool : stylusTool;
-    if (readOnly || space || tool === "hand" || e.button === 1 || touchShouldPan) {
-      setSelected(null); setInputMode("panning"); gesture.current = { mode: "pan", start: p, screen: { x: e.clientX, y: e.clientY }, base, pointer: e.pointerId, next: base };
+    const touchShouldPan = input.pointerType === "touch" && (tool === "select" || ((tool === "pen" || tool === "highlighter") && !touchSettings.drawWithFinger));
+    const stylusTool: ToolMode = input.pointerType === "pen" && touchSettings.stylusDrawOnly ? (tool === "highlighter" ? "highlighter" : "pen") : tool;
+    const effectiveTool = input.pointerType === "touch" ? tool : stylusTool;
+    if (readOnly || space || tool === "hand" || input.button === 1 || touchShouldPan) {
+      setSelected(null); setInputMode("panning"); gesture.current = { mode: "pan", start: p, screen: { x: input.clientX, y: input.clientY }, base, pointer: input.pointerId, next: base };
     } else if (effectiveTool === "select") {
-      const initial = e.shiftKey ? selections : [];
+      const initial = input.shiftKey ? selections : [];
       setSelections(initial); setMarquee({ ...p, width: 0, height: 0 }); setInputMode("selecting");
-      gesture.current = { mode: "marquee", start: p, screen: p, base, selections: initial, pointer: e.pointerId, next: base };
-      autoPanPointer.current = { x: e.clientX, y: e.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
+      gesture.current = { mode: "marquee", start: p, screen: p, base, selections: initial, pointer: input.pointerId, next: base };
+      autoPanPointer.current = { x: input.clientX, y: input.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
     } else if (effectiveTool === "connector") {
       setConnectorSource(null); setSelected(null); return;
     } else if (effectiveTool === "text") {
@@ -455,22 +472,26 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       setTool("select"); return;
     } else if (effectiveTool === "pen" || effectiveTool === "highlighter") {
       const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: effectiveTool === "highlighter" ? palette.highlighter : ink, width: effectiveTool === "highlighter" ? 20 : strokeWidth, opacity: effectiveTool === "highlighter" ? .3 : 1 }] };
-      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: e.pointerId, next };
+      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: input.pointerId, next };
     } else if (effectiveTool === "rect" || effectiveTool === "ellipse") {
       const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: effectiveTool, x: p.x, y: p.y, width: 1, height: 1, color: palette.fill }] };
-      setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: e.pointerId, next };
+      setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: input.pointerId, next };
     }
-    svg.current?.setPointerCapture(e.pointerId);
+    if (input.capture) svg.current?.setPointerCapture(input.pointerId);
   };
-  const move = (e: ReactPointerEvent<SVGSVGElement>) => {
-    const g = gesture.current; if (!g || e.pointerId !== g.pointer) return;
-    e.preventDefault();
+  const down = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (shouldUseIOSNativeTouch(e)) return;
+    begin({ pointerId: e.pointerId, pointerType: e.pointerType, button: e.button, clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, altKey: e.altKey, preventDefault: () => e.preventDefault(), capture: true });
+  };
+  const moveAt = (pointerId: number, clientX: number, clientY: number, preventDefault: () => void) => {
+    const g = gesture.current; if (!g || pointerId !== g.pointer) return;
+    preventDefault();
     if (g.mode === "marquee") {
-      autoPanPointer.current = { x: e.clientX, y: e.clientY }; scheduleAutoPan();
-      updateMarquee(g, point(e.clientX, e.clientY, g.next));
+      autoPanPointer.current = { x: clientX, y: clientY }; scheduleAutoPan();
+      updateMarquee(g, point(clientX, clientY, g.next));
       return;
     }
-    const p = point(e.clientX, e.clientY, g.base), dx = p.x - g.start.x, dy = p.y - g.start.y;
+    const p = point(clientX, clientY, g.base), dx = p.x - g.start.x, dy = p.y - g.start.y;
     let next = g.next;
     if (g.mode === "move") {
       if (snap) {
@@ -491,7 +512,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       else { const r = selectionBounds(g.base, selections)!; next = resizeSelection(g.base, selections, r.width + dx, r.height + dy); }
     }
     if (g.mode === "rotate" && g.center !== undefined && g.startAngle !== undefined) { const angle = Math.atan2(p.y - g.center.y, p.x - g.center.x) * 180 / Math.PI; next = rotateSelection(g.base, g.selections ?? [g.selection!], angle - g.startAngle); }
-    if (g.mode === "pan") next = { ...g.base, viewport: { ...g.base.viewport, x: g.base.viewport.x + e.clientX - g.screen.x, y: g.base.viewport.y + e.clientY - g.screen.y } };
+    if (g.mode === "pan") next = { ...g.base, viewport: { ...g.base.viewport, x: g.base.viewport.x + clientX - g.screen.x, y: g.base.viewport.y + clientY - g.screen.y } };
     if (g.mode === "draw") {
       const path = g.next.drawings.at(-1)!;
       if (path.points.length >= 20000) return;
@@ -499,6 +520,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     }
     if (g.mode === "shape") next = { ...g.next, shapes: [...g.base.shapes, { ...g.next.shapes.at(-1)!, x: Math.min(p.x, g.start.x), y: Math.min(p.y, g.start.y), width: Math.max(1, Math.abs(dx)), height: Math.max(1, Math.abs(dy)) }] };
     g.next = next; setPreview(next);
+  };
+  const move = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (shouldUseIOSNativeTouch(e)) return;
+    moveAt(e.pointerId, e.clientX, e.clientY, () => e.preventDefault());
   };
   const finish = (cancel = false, releaseCapture = true) => {
     const g = gesture.current; if (!g) { setInputMode(pinch.current ? "pinching" : "idle"); return; }
@@ -513,43 +538,37 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (releaseCapture && svg.current?.hasPointerCapture(g.pointer)) svg.current.releasePointerCapture(g.pointer);
     setInputMode(pinch.current ? "pinching" : "idle");
   };
-  const touchDownCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (e.pointerType !== "touch") return;
-    const interactionBoard = wheelPending.current ?? boardRef.current;
-    commitWheelViewport();
-    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touchPoints.current.size !== 2) return;
+  const startPinch = (interactionBoard: BoardState, capturePointers: boolean) => {
+    if (pinch.current || !svg.current) return false;
     const activeGesture = gesture.current;
     const pinchBase = activeGesture?.next ?? interactionBoard;
     if (activeGesture) finish(activeGesture.mode !== "draw", false);
-    const entries = [...touchPoints.current.entries()] as [[number, Vec2], [number, Vec2]];
-    const [, first] = entries[0], [, second] = entries[1], rect = svg.current!.getBoundingClientRect();
+    const entries = [...touchPoints.current.entries()].slice(0, 2);
+    if (entries.length < 2) return false;
+    const first = entries[0][1], second = entries[1][1], rect = svg.current.getBoundingClientRect();
     const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
     const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
     pinch.current = { pointerIds: [entries[0][0], entries[1][0]], base: pinchBase, startDistance: distance,
       worldCenter: { x: (center.x - pinchBase.viewport.x) / pinchBase.viewport.scale, y: (center.y - pinchBase.viewport.y) / pinchBase.viewport.scale }, next: pinchBase };
     setInputMode("pinching");
-    for (const [pointerId] of entries) if (!svg.current?.hasPointerCapture(pointerId)) svg.current?.setPointerCapture(pointerId);
-    e.preventDefault(); e.stopPropagation();
+    if (capturePointers) for (const [pointerId] of entries) if (!svg.current.hasPointerCapture(pointerId)) svg.current.setPointerCapture(pointerId);
+    return true;
   };
-  const touchMoveCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (e.pointerType !== "touch") return;
-    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const updatePinch = (preventDefault: () => void, stopPropagation?: () => void) => {
     const active = pinch.current;
-    if (!active) return;
+    if (!active || !svg.current) return false;
     const first = touchPoints.current.get(active.pointerIds[0]), second = touchPoints.current.get(active.pointerIds[1]);
-    if (!first || !second) return;
-    const rect = svg.current!.getBoundingClientRect(), distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+    if (!first || !second) return false;
+    const rect = svg.current.getBoundingClientRect(), distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
     const scale = pinchScale(active.base.viewport.scale, distance / active.startDistance, touchSettings.zoomSensitivity, touchSettings.invertZoom);
     const center = { x: (first.x + second.x) / 2 - rect.left, y: (first.y + second.y) / 2 - rect.top };
     active.next = { ...active.base, viewport: { scale, x: center.x - active.worldCenter.x * scale, y: center.y - active.worldCenter.y * scale } };
-    setPreview(active.next); e.preventDefault(); e.stopPropagation();
+    setPreview(active.next); preventDefault(); stopPropagation?.();
+    return true;
   };
-  const touchEndCapture = (e: ReactPointerEvent<SVGSVGElement>, cancel = false) => {
-    if (e.pointerType !== "touch") return;
-    touchPoints.current.delete(e.pointerId);
+  const finishPinch = (cancel = false, preventDefault?: () => void, stopPropagation?: () => void) => {
     const active = pinch.current;
-    if (!active) return;
+    if (!active) return false;
     pinch.current = null; setPreview(null); setInputMode("idle");
     if (!cancel && JSON.stringify(active.base.viewport) !== JSON.stringify(active.next.viewport)) {
       if (onViewportChange) onViewportChange(active.next);
@@ -557,20 +576,119 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     }
     touchPoints.current.clear();
     for (const pointerId of active.pointerIds) if (svg.current?.hasPointerCapture(pointerId)) svg.current.releasePointerCapture(pointerId);
-    e.preventDefault(); e.stopPropagation();
+    preventDefault?.(); stopPropagation?.();
+    return true;
+  };
+  const touchDownCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (shouldUseIOSNativeTouch(e)) return;
+    if (e.pointerType !== "touch") return;
+    const interactionBoard = wheelPending.current ?? boardRef.current;
+    commitWheelViewport();
+    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPoints.current.size !== 2) return;
+    if (startPinch(interactionBoard, true)) { e.preventDefault(); e.stopPropagation(); }
+  };
+  const touchMoveCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (shouldUseIOSNativeTouch(e)) return;
+    if (e.pointerType !== "touch") return;
+    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    updatePinch(() => e.preventDefault(), () => e.stopPropagation());
+  };
+  const touchEndCapture = (e: ReactPointerEvent<SVGSVGElement>, cancel = false) => {
+    if (shouldUseIOSNativeTouch(e)) return;
+    if (e.pointerType !== "touch") return;
+    touchPoints.current.delete(e.pointerId);
+    finishPinch(cancel, () => e.preventDefault(), () => e.stopPropagation());
   };
   const cancelActiveInput = () => {
     stopAutoPan(); autoPanLastAt.current = null; autoPanPointer.current = null;
     const activeGesture = gesture.current;
-    gesture.current = null; pinch.current = null; touchPoints.current.clear();
+    gesture.current = null; pinch.current = null; touchPoints.current.clear(); iosTouchActive.current = false;
     setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]); setInputMode("idle");
     if (activeGesture && svg.current?.hasPointerCapture(activeGesture.pointer)) svg.current.releasePointerCapture(activeGesture.pointer);
   };
   const lostPointerCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (shouldUseIOSNativeTouch(e)) return;
     touchPoints.current.delete(e.pointerId);
     if (gesture.current?.pointer === e.pointerId) finish(true, false);
     if (pinch.current?.pointerIds.includes(e.pointerId)) { pinch.current = null; touchPoints.current.clear(); setPreview(null); setInputMode("idle"); }
   };
+  useEffect(() => {
+    if (!iosTouchFallback) return;
+    const options: AddEventListenerOptions = { capture: true, passive: false };
+    const updatePoints = (touches: TouchList) => {
+      for (const touch of Array.from(touches)) touchPoints.current.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
+    };
+    const isStylusTouch = (touch: Touch) => "touchType" in touch && touch.touchType === "stylus";
+    const handleTouchStart = (event: TouchEvent) => {
+      if (!iosTouchActive.current && !isIOSCanvasTouchTarget(event.target)) return;
+      if (!event.touches.length) return;
+      if (Array.from(event.touches).some(isStylusTouch)) return;
+      if (!iosTouchActive.current) { iosTouchActive.current = true; touchPoints.current.clear(); }
+      updatePoints(event.touches);
+      if (event.touches.length >= 2) {
+        if (!pinch.current) startPinch(boardRef.current, false);
+        event.preventDefault();
+        return;
+      }
+      const touch = event.touches[0];
+      const targetElement = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-element]") : null;
+      const targetId = targetElement?.getAttribute("data-element");
+      const targetSelection = targetId ? orderedElements(boardRef.current).find(selection => selection.id === targetId) : undefined;
+      if (targetSelection && interactive && !space) {
+        selectElementAt({ pointerId: touch.identifier, pointerType: "touch", button: 0, clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() }, targetSelection);
+        event.preventDefault();
+        return;
+      }
+      begin({ pointerId: touch.identifier, pointerType: "touch", button: 0, clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => event.preventDefault() });
+      event.preventDefault();
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!iosTouchActive.current) return;
+      updatePoints(event.changedTouches);
+      if (pinch.current) {
+        updatePinch(() => event.preventDefault());
+      } else {
+        const activeGesture = gesture.current;
+        for (const touch of Array.from(event.changedTouches)) {
+          if (activeGesture?.pointer === touch.identifier) moveAt(touch.identifier, touch.clientX, touch.clientY, () => event.preventDefault());
+        }
+        if (gesture.current) event.preventDefault();
+      }
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (!iosTouchActive.current) return;
+      const changed = Array.from(event.changedTouches), cancel = event.type === "touchcancel";
+      for (const touch of changed) touchPoints.current.delete(touch.identifier);
+      const activePinch = pinch.current;
+      if (activePinch) {
+        if (cancel || changed.some(touch => activePinch.pointerIds.includes(touch.identifier))) finishPinch(cancel, () => event.preventDefault());
+        else event.preventDefault();
+      } else if (gesture.current && changed.some(touch => gesture.current?.pointer === touch.identifier)) {
+        // WebKit can cancel a touch when it decides the finger is leaving the
+        // page. Preserve an in-progress drawing in that case; pan/select
+        // gestures should still be discarded as before.
+        const preserveDrawing = cancel && gesture.current.mode === "draw";
+        finish(cancel && !preserveDrawing);
+        event.preventDefault();
+      } else {
+        event.preventDefault();
+      }
+      if (cancel || event.touches.length === 0) { touchPoints.current.clear(); iosTouchActive.current = false; }
+    };
+    document.addEventListener("touchstart", handleTouchStart, options);
+    document.addEventListener("touchmove", handleTouchMove, options);
+    document.addEventListener("touchend", handleTouchEnd, options);
+    document.addEventListener("touchcancel", handleTouchEnd, options);
+    return () => {
+      document.removeEventListener("touchstart", handleTouchStart, options);
+      document.removeEventListener("touchmove", handleTouchMove, options);
+      document.removeEventListener("touchend", handleTouchEnd, options);
+      document.removeEventListener("touchcancel", handleTouchEnd, options);
+      if (iosTouchActive.current) cancelActiveInput();
+      iosTouchActive.current = false;
+    };
+  }, [iosTouchFallback, tool, touchSettings, snap, readOnly, space, palette.highlighter, palette.fill, ink, strokeWidth, board]);
   useEffect(() => {
     if (!gesture.current && !pinch.current) return;
     cancelActiveInput();
@@ -698,7 +816,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
     if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches) setToolbarExpanded(false);
   };
-  return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
+  return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -731,8 +849,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       </div>}
       <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
-        onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => touchEndCapture(e)} onPointerCancelCapture={e => touchEndCapture(e, true)}
-        onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (gesture.current?.pointer === e.pointerId) finish(true); }} onLostPointerCapture={lostPointerCapture}>
+        onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e); }} onPointerCancelCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e, true); }}
+        onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (!shouldUseIOSNativeTouch(e) && gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (!shouldUseIOSNativeTouch(e) && gesture.current?.pointer === e.pointerId) finish(true); }} onLostPointerCapture={lostPointerCapture}>
         <CanvasBackground board={b}/>
         <defs><marker id="canvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="var(--connector)"/></marker></defs>
         <g transform={`translate(${b.viewport.x} ${b.viewport.y}) scale(${b.viewport.scale})`}>

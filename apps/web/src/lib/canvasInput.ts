@@ -17,6 +17,17 @@ export const DEFAULT_CANVAS_TOUCH_SETTINGS: CanvasTouchSettings = {
 export const CANVAS_TOUCH_SETTINGS_KEY = "mindcanvas:canvas-touch:v2";
 const LEGACY_CANVAS_TOUCH_SETTINGS_KEY = "mindcanvas:canvas-touch:v1";
 
+/**
+ * Detect iOS/iPadOS without treating a desktop Mac as an iOS touch device.
+ * iPadOS can expose a MacIntel platform when "Request Desktop Website" is
+ * enabled, so maxTouchPoints is part of the detection as well.
+ */
+export function isIOSDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 export function normalizeCanvasTouchSettings(value: unknown): CanvasTouchSettings {
   const raw = value && typeof value === "object" ? value as Partial<CanvasTouchSettings> : {};
   const sensitivity = Number(raw.zoomSensitivity);

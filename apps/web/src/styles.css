@@ -2470,6 +2470,17 @@ body,
   .editor-layout .drawing-toolbar.toolbar-collapsed .toolbar-current-tool span { display: none; }
 }
 
+/* V4.5.5: iOS/iPadOS only. Native Touch Events keep an active stroke alive
+   when WebKit loses Pointer Capture during a page/edge gesture. */
+.ios-touch-fallback .canvas-svg {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+}
+.ios-touch-fallback .editor-frame {
+  overscroll-behavior: none;
+}
+
 /* V4.5.4: mobile canvas controls, swipe affordance and tool-state polish.
    Desktop canvas rules above remain untouched; all layout overrides are mobile-scoped. */
 .mobile-navigator-controls,
