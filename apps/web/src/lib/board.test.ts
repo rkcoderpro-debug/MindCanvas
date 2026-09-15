@@ -23,6 +23,12 @@ describe("Editable canvas model", () => {
     expect(() => parseBoard({ ...board(), background: "wallpaper" })).toThrow("Invalid canvas background");
     expect(() => parseBoard({ ...board(), shapes: [{ id: "shape", kind: "rect", x: 0, y: 0, width: 40, height: 40, color: "#ffffff", opacity: 1.1 }] })).toThrow("Invalid opacity");
   });
+  it("persists and exports triangle shapes", () => {
+    const triangle = { id: "triangle", kind: "triangle" as const, x: 10, y: 20, width: 120, height: 100, color: "#abcdef" };
+    const parsed = parseBoard({ ...blankBoard(), shapes: [triangle] });
+    expect(parsed.shapes[0]).toEqual(triangle);
+    expect(exportCanvasSvg(parsed)).toContain('<polygon points="70,20 130,120 10,120"');
+  });
   it("persists, moves, resizes and exports embedded media", () => {
     const media = { id: "image", kind: "image" as const, src: "data:image/png;base64,iVBORw0KGgo=", name: "diagram.png", mimeType: "image/png", x: 20, y: 30, width: 240, height: 160, crop: { top: 5, right: 10, bottom: 15, left: 20 } };
     const audio = { id: "audio", kind: "audio" as const, src: "data:audio/webm;base64,AA==", name: "voice.webm", x: 20, y: 220, width: 240, height: 100, trimStart: 2, trimEnd: 8 };

@@ -127,7 +127,12 @@ function readVersionCache(owner: string | null, projectId: string): ProjectVersi
 }
 function cacheVersion(owner: string | null, version: ProjectVersion) {
   const current = readVersionCache(owner, version.projectId);
-  localStorage.setItem(versionCacheKey(owner, version.projectId), JSON.stringify([version, ...current.filter(item => item.id !== version.id)].sort((a, b) => b.version - a.version).slice(0, MAX_PROJECT_VERSIONS)));
+  try {
+    localStorage.setItem(versionCacheKey(owner, version.projectId), JSON.stringify([version, ...current.filter(item => item.id !== version.id)].sort((a, b) => b.version - a.version).slice(0, MAX_PROJECT_VERSIONS)));
+  } catch {
+    // Recovery history must never block conflict resolution when a media-heavy
+    // project has exhausted localStorage. A cloud checkpoint remains separate.
+  }
 }
 function versionFromRow(row: any, source: "cloud" | "local"): ProjectVersion | null {
   try {

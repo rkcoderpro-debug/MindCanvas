@@ -81,6 +81,26 @@ describe("Canvas interactions", () => {
     expect(host.querySelector(".selection-box")).not.toBeNull();
     expect(host.textContent).toContain("image.png");
   });
+  it("uses native SVG image rendering on iOS instead of foreignObject layout", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      const b = { ...blankBoard(), media: [{ id: "ios-image", kind: "image" as const, src: "data:image/jpeg;base64,AA==", name: "IMG_9912.jpg", x: 20, y: 30, width: 260, height: 360 }] };
+      await act(async () => root.render(<Harness initial={b}/>));
+      const element = host.querySelector('[data-element="ios-image"]')!;
+      expect(element.querySelector('[data-ios-media-renderer="native"]')).not.toBeNull();
+      expect(element.querySelector('[data-ios-media-image]')?.getAttribute("href")).toBe("data:image/jpeg;base64,AA==");
+      expect(element.querySelector("foreignObject")).toBeNull();
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+    }
+  });
   it("renders a playable YouTube/web embed and exposes rotation reset", async () => {
     const b = { ...blankBoard(), embeds: [{ id: "yt", kind: "youtube" as const, url: "https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0", title: "Lesson", x: 0, y: 0, width: 480, height: 340, rotation: 24 }] };
     await act(async () => root.render(<Harness initial={b}/>));
@@ -334,6 +354,32 @@ describe("Canvas interactions", () => {
     expect(host.querySelector('[aria-label="Bút"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("lets a desktop XPen reported as touch draw while phone finger drawing is disabled", async () => {
+    localStorage.setItem("mindcanvas:canvas-touch:v2", JSON.stringify({ drawWithFinger: false, stylusDrawOnly: true, zoomSensitivity: 1, invertZoom: false }));
+    await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 25, 30, { pointerType: "touch", pointerId: 81 });
+      pointer(svg, "pointermove", 90, 95, { pointerType: "touch", pointerId: 81 });
+      pointer(svg, "pointerup", 90, 95, { pointerType: "touch", pointerId: 81 });
+    });
+    expect(current.drawings).toHaveLength(1);
+    expect(current.viewport).toEqual({ x: 0, y: 0, scale: 1 });
+  });
+
+  it("creates straight lines and triangle shapes", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => (host.querySelector('[aria-label="Đường thẳng"]') as HTMLButtonElement).click());
+    await act(async () => { pointer(svg, "pointerdown", 20, 30); pointer(svg, "pointermove", 140, 90); pointer(svg, "pointerup", 140, 90); });
+    expect(current.drawings[0].points).toEqual([{ x: 20, y: 30 }, { x: 140, y: 90 }]);
+    await act(async () => (host.querySelector('[aria-label="Tam giác"]') as HTMLButtonElement).click());
+    await act(async () => { pointer(svg, "pointerdown", 50, 60); pointer(svg, "pointermove", 170, 180); pointer(svg, "pointerup", 170, 180); });
+    expect(current.shapes[0]).toMatchObject({ kind: "triangle", x: 50, y: 60, width: 120, height: 120 });
+    expect(host.querySelector('[data-element] polygon')).not.toBeNull();
+  });
+
   it("uses the iOS native touch fallback when a stroke leaves the SVG", async () => {
     const originalUserAgent = navigator.userAgent;
     const originalPlatform = navigator.platform;
@@ -382,6 +428,32 @@ describe("Canvas interactions", () => {
       expect(current.shapes[0]).toMatchObject({ x: 60, y: 50 });
       expect(commit).toHaveBeenCalledTimes(1);
       expect(navigateCommit).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+    }
+  });
+
+  it("keeps an iOS image inside the same viewport transform while panning", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      const initial = { ...blankBoard(), media: [{ id: "ios-image-pan", kind: "image" as const, src: "data:image/jpeg;base64,AA==", name: "photo.jpg", x: 40, y: 50, width: 200, height: 160 }] };
+      await act(async () => root.render(<ViewportHarness initial={initial}/>));
+      await act(async () => (host.querySelector('[aria-label="Di chuyển canvas"]') as HTMLButtonElement).click());
+      const svg = host.querySelector("svg.canvas-svg")!, start = touchPoint(96, 20, 20), end = touchPoint(96, 90, 110);
+      await act(async () => touch(svg, "touchstart", [start], [start]));
+      await act(async () => touch(document, "touchmove", [end], [end]));
+      const viewportLayer = host.querySelector('[data-canvas-viewport="true"]')!;
+      expect(viewportLayer.getAttribute("transform")).toContain("translate(70 90)");
+      expect(host.querySelector('[data-element="ios-image-pan"]')?.closest('[data-canvas-viewport="true"]')).toBe(viewportLayer);
+      await act(async () => touch(document, "touchend", [], [end]));
+      expect(navigateCommit).toHaveBeenCalledTimes(1);
     } finally {
       Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
       Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });

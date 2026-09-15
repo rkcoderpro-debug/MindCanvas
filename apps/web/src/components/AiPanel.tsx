@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StructuredMindMap } from "@mindcanvas/shared";
-import { ClipboardPaste, FileText, Sparkles, Upload } from "lucide-react";
+import { BellRing, ClipboardPaste, FileText, Sparkles, Upload } from "lucide-react";
 import Dialog from "./Dialog";
 import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
 import AiQualityControls from "./AiQualityControls";
@@ -21,8 +21,8 @@ function pageText(text: string, from: number, to: number) {
 
 type SourceMode = "text" | "file";
 
-export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, onApply }: {
-  projectId: string; canUse: boolean; beforeGenerate: () => Promise<boolean>; onClose: () => void; onApply: (graph: StructuredMindMap, mode: "append" | "new") => void;
+export default function AiPanel({ projectId, canUse, beforeGenerate, minimized = false, onMinimize, onRestore, onClose, onApply }: {
+  projectId: string; canUse: boolean; beforeGenerate: () => Promise<boolean>; minimized?: boolean; onMinimize?: () => void; onRestore?: () => void; onClose: () => void; onApply: (graph: StructuredMindMap, mode: "append" | "new") => void;
 }) {
   const { t, language } = useLanguage();
   const [sourceMode, setSourceMode] = useState<SourceMode>("file");
@@ -124,7 +124,14 @@ export default function AiPanel({ projectId, canUse, beforeGenerate, onClose, on
   const sourceReady = sourceMode === "text" ? !!rawText.trim() : !!file;
   const currentManualPrompt = manualPrompt || buildMindMapPrompt({ detail: mindMapDetail, language, options: aiOptions });
   const autoControlsDisabled = busy || (aiMode === "auto" && !canUse);
-  return <Dialog title={t("aiMindMapTitle")} onClose={onClose}>
+  if (minimized) {
+    const status = busy ? "working" : error ? "error" : graph ? "ready" : "idle";
+    const label = t(status === "working" ? "aiTaskWorking" : status === "error" ? "aiTaskError" : status === "ready" ? "aiTaskReady" : "restoreAi");
+    return <button type="button" className={`ai-task-launcher ${status}`} aria-label={label} title={label} onClick={onRestore}>
+      {status === "ready" || status === "error" ? <BellRing size={19}/> : <Sparkles size={19}/>}<span>{label}</span>{status !== "idle" && <i aria-hidden="true"/>}<span className="sr-only" aria-live="polite">{label}</span>
+    </button>;
+  }
+  return <Dialog title={t("aiMindMapTitle")} onClose={onClose} onMinimize={onMinimize}>
     <p className="dialog-intro">{t("aiMindMapHint")}</p>
     <AiModeSwitch mode={aiMode} autoAvailable={canUse} onChange={changeAiMode} />
     {aiMode === "manual" ? <p className="ai-manual-note">{t("aiManualHint")} {t("aiManualUsageHint")} {t("manualNoLoginHint")}</p> : !canUse && <p role="alert">{t("loginRequired")}</p>}

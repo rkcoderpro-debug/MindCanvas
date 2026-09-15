@@ -1,6 +1,6 @@
 // The RPC/RLS follow-up changes the JS entrypoint.  A distinct cache key is
 // required so an installed PWA cannot keep serving the pre-fix bundle.
-const CACHE_NAME = "mindcanvas-shell-v4.5.6-ios-mobile-repair";
+const CACHE_NAME = "mindcanvas-shell-v4.5.8-input-cloud-ui-repair";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/mindcanvas-192.png", "/icons/mindcanvas-512.png", "/icons/mindcanvas-maskable-512.png"];
 
 async function cacheAppShell() {
@@ -37,19 +37,35 @@ self.addEventListener("fetch", event => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put("/", copy));
-      return response;
-    }).catch(() => caches.match("/").then(response => response || Response.error())));
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request);
+        const copy = response.clone();
+        try {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put("/", copy);
+        } catch { /* A full cache must not replace a valid network response. */ }
+        return response;
+      } catch {
+        return await caches.match("/") || Response.error();
+      }
+    })());
     return;
   }
 
-  event.respondWith(caches.match(request).then(cached => {
-    const network = fetch(request).then(response => {
-      if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
-      return response;
-    });
-    return cached || network;
-  }));
+  event.respondWith((async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok) {
+      // Clone before yielding to another promise. Once the browser starts
+      // consuming the original body, a delayed response.clone() throws.
+      const copy = response.clone();
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(request, copy);
+      } catch { /* Continue with the network response if cache storage is full. */ }
+    }
+    return response;
+  })());
 });

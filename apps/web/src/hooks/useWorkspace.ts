@@ -10,6 +10,13 @@ import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolde
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
 export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject };
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
+const CONFLICT_CHECKPOINT_WAIT_MS = 4000;
+function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
+  return new Promise<void>(resolve => {
+    const timeout = window.setTimeout(resolve, CONFLICT_CHECKPOINT_WAIT_MS);
+    void createProjectVersion(owner, board, label).catch(() => undefined).finally(() => { window.clearTimeout(timeout); resolve(); });
+  });
+}
 // Mount once per account (App keys this component by user.id).
 export function useWorkspace(owner: string | null) {
   const [board, setBoard] = useState<BoardState | null>(null);
@@ -23,7 +30,7 @@ export function useWorkspace(owner: string | null) {
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
-  const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), viewportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0);
@@ -107,7 +114,7 @@ export function useWorkspace(owner: string | null) {
     const hidden = () => { if (document.visibilityState === "hidden") void flush(); };
     window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("visibilitychange", hidden);
-    return () => { alive.current = false; clearTimeout(timer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
+    return () => { alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner]);
 
   // A shared project receives durable Postgres Changes while it is open. The
@@ -142,6 +149,7 @@ export function useWorkspace(owner: string | null) {
   }, [owner, board?.id]);
 
   const stage = (next: BoardState, delay = 750) => {
+    clearTimeout(viewportTimer.current);
     next = normalizeEditor(next, current.current ?? undefined);
     dirty.current = !!owner;
     current.current = next; setBoard(next);
@@ -257,8 +265,16 @@ export function useWorkspace(owner: string | null) {
     if (!currentBoard || currentBoard.id !== next.id) return;
     current.current = next;
     setBoard(next);
-    const cached = readCache(owner).find(item => item.id === next.id);
-    if (cached) cacheProject(owner, { ...cached, board: next });
+    // A media-heavy board can contain multi-megabyte data URLs. Persist the
+    // viewport only after navigation settles instead of serializing the whole
+    // project on every pan/zoom commit.
+    clearTimeout(viewportTimer.current);
+    viewportTimer.current = setTimeout(() => {
+      const active = current.current;
+      if (!active || active.id !== next.id) return;
+      const cached = readCache(owner).find(item => item.id === active.id);
+      if (cached) cacheProject(owner, { ...cached, board: active });
+    }, 500);
   };
   const manageProject = async (project: Project, patch: ProjectPatch) => {
     if (project.shared && project.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
@@ -286,11 +302,11 @@ export function useWorkspace(owner: string | null) {
       const latestLocal = readCache(owner).find(item => item.id === active.projectId) ?? active.local;
       let selected: CachedProject;
       if (resolution === "cloud") {
-        await createProjectVersion(owner, latestLocal.board, "Local conflict backup");
+        await createRecoveryCheckpoint(owner, latestLocal.board, "Local conflict backup");
         selected = latestRemote;
         cacheProject(owner, selected);
       } else if (resolution === "overwrite") {
-        await createProjectVersion(owner, latestRemote.board, "Before conflict overwrite");
+        await createRecoveryCheckpoint(owner, latestRemote.board, "Before conflict overwrite");
         const candidate = { ...latestLocal, revision: latestRemote.revision, pending: true };
         cacheProject(owner, candidate);
         const saved = await persistProject(owner, candidate);

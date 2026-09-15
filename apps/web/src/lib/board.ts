@@ -192,7 +192,11 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
       const title = item.title || (item.kind === "youtube" ? "YouTube" : item.kind === "video" ? "Video" : "Web page");
       return `<g${rotation}${opacity}><rect x="${bound.x}" y="${bound.y}" width="${bound.width}" height="${bound.height}" rx="10" fill="${palette.surface}" stroke="${palette.elementStroke}"/><text x="${bound.x + bound.width / 2}" y="${bound.y + bound.height / 2 - 4}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" fill="${palette.text}">${xml(title)}</text><text x="${bound.x + bound.width / 2}" y="${bound.y + bound.height / 2 + 22}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="12" fill="${palette.muted}">${xml(item.url)}</text></g>`;
     }
-    if (selection.kind === "shapes") return item.kind === "rect" ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>` : `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>`;
+    if (selection.kind === "shapes") {
+      if (item.kind === "rect") return `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>`;
+      if (item.kind === "ellipse") return `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>`;
+      return `<polygon points="${item.x + item.width / 2},${item.y} ${item.x + item.width},${item.y + item.height} ${item.x},${item.y + item.height}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}" stroke-linejoin="round"${opacity}${rotation}/>`;
+    }
     if (selection.kind === "drawings") return `<path d="${pathData(item.points)}" fill="none" stroke="${color(item.color, "#4562df")}" stroke-width="${item.width}" opacity="${item.opacity}" stroke-linecap="round" stroke-linejoin="round"${rotation}/>`;
     if (selection.kind === "texts") {
       const align = item.textAlign === "center" ? "middle" : item.textAlign === "right" ? "end" : "start";
@@ -430,7 +434,7 @@ export function parseBoard(value: unknown): BoardState {
         || (el.bold !== undefined && typeof el.bold !== "boolean") || (el.italic !== undefined && typeof el.italic !== "boolean")
         || (el.underline !== undefined && typeof el.underline !== "boolean") || (el.textAlign !== undefined && !["left", "center", "right"].includes(el.textAlign)))) throw new Error("Invalid text");
       if (kind === "nodes" && (!string(el.label) || (el.sourceDocumentId !== undefined && !string(el.sourceDocumentId, 200)))) throw new Error("Invalid label");
-      if (kind === "shapes" && !["rect", "ellipse"].includes(el.kind)) throw new Error("Invalid shape");
+      if (kind === "shapes" && !["rect", "ellipse", "triangle"].includes(el.kind)) throw new Error("Invalid shape");
     }
   }
   if (points > 200000 || b.edges.some((e: any) => !ids.has(e.source) || !ids.has(e.target))) throw new Error("Invalid graph");

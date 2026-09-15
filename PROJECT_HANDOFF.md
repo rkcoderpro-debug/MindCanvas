@@ -1,5 +1,35 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-15 — V4.5.8 Input, Cloud & Phone UI
+
+- Kept iOS media in the same SVG viewport transform as drawings and shapes, with a regression test for pan synchronization.
+- Extended compact phone navigation and safe responsive layouts through 480 CSS px, including iPhone Pro Max widths.
+- Hid the `− 100% +` control on phones by default and added a persistent Settings toggle; desktop zoom controls are unchanged.
+- Allowed Windows/XPen devices reported as either `pen` or desktop `touch` to use Pen and active shape tools; added straight-line and triangle tools.
+- Fixed the Service Worker response-clone race, delayed heavy viewport cache serialization until navigation settles, and made conflict recovery checkpoints non-blocking when local version storage is full.
+- AI Auto can now be minimized without aborting its request; the launcher shows working, ready, and error states and the task closes only on explicit close or canvas exit.
+- Bumped the frontend badge, API health release and PWA cache to `4.5.8`.
+
+See [V4.5.8_INPUT_CLOUD_UI_UPDATE_VI.md](./V4.5.8_INPUT_CLOUD_UI_UPDATE_VI.md) for validation and deployment notes.
+
+## Update 2026-09-15 — V4.5.7 iOS Safari Media Repair
+
+### Implemented
+
+- Replaced the iOS image card renderer with native SVG `<image>` output. This avoids the WebKit `foreignObject` relayout that made images blank, compressed to the top of the card, or leave a large white area after canvas pan.
+- Extended the iOS temporary Blob URL layer to persisted image data URLs as well as video/audio. The self-contained board format still stores the original data URL.
+- Preserved image crop geometry, card label, selection/dragging and read-only behavior on iOS. Android, Windows and desktop continue using the existing HTML media-card renderer.
+- Bumped the visible frontend badge, API health release and PWA shell cache to `4.5.7` so installed iOS clients do not keep the previous media bundle.
+
+### Evidence and verification
+
+- The supplied Safari iPhone capture shows two existing image cards rendered as blank white cards.
+- The supplied iOS screen recording shows the same image changing layout after pan: it first fills the card, then collapses upward while the card height remains.
+- iOS-targeted CanvasBoard/canvas-input tests passed: 40 tests. Web typecheck passed.
+- Physical Safari and in-app WebView testing remains required for real image formats, especially HEIC/HEIF and large camera photos.
+
+See [V4.5.7_IOS_SAFARI_MEDIA_REPAIR_VI.md](./V4.5.7_IOS_SAFARI_MEDIA_REPAIR_VI.md) for the release scope and QA checklist.
+
 ## Update 2026-09-15 — V4.5.6 iOS & Mobile Repair
 
 ### Implemented

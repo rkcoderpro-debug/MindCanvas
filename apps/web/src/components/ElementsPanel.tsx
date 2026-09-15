@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, AudioLines, Circle, Eye, EyeOff, Film, Globe2, GripVertical, Image, Lock, Network, PenLine, Search, Square, Type, Unlock } from "lucide-react";
+import { ArrowUpRight, AudioLines, Circle, Eye, EyeOff, Film, Globe2, GripVertical, Image, Lock, Network, PenLine, Search, Square, Triangle, Type, Unlock } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import { orderedElements } from "../lib/editorCommands";
 import type { Selection } from "../lib/board";
@@ -40,7 +40,7 @@ export default function ElementsPanel({ board, selections, hiddenElements, onSel
     <label className="element-search"><Search size={14}/><input aria-label={t("searchElements")} placeholder={t("searchElements")} value={query} onChange={event => setQuery(event.target.value)}/></label>
     <div className="layer-list" ref={list} role="listbox" aria-label={t("layers")}>
       {!entries.length ? <div className="element-list-empty">{normalized ? t("noElementsFound") : t("noElements")}</div> : entries.map(({ selection, element, name }) => {
-        const Icon = selection.kind === "shapes" && "kind" in element && element.kind === "ellipse" ? Circle : selection.kind === "media" && "kind" in element && element.kind === "video" ? Film : selection.kind === "media" && "kind" in element && element.kind === "audio" ? AudioLines : selection.kind === "embeds" && "kind" in element && element.kind === "video" ? Film : iconByKind[selection.kind];
+        const Icon = selection.kind === "shapes" && "kind" in element && element.kind === "ellipse" ? Circle : selection.kind === "shapes" && "kind" in element && element.kind === "triangle" ? Triangle : selection.kind === "media" && "kind" in element && element.kind === "video" ? Film : selection.kind === "media" && "kind" in element && element.kind === "audio" ? AudioLines : selection.kind === "embeds" && "kind" in element && element.kind === "video" ? Film : iconByKind[selection.kind];
         const selected = selections.some(item => item.id === selection.id);
         const hidden = hiddenElements.has(selection.id), directlyHidden = "hidden" in element && !!element.hidden;
         const locked = "locked" in element && !!element.locked;

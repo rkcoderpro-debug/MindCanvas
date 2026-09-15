@@ -2046,7 +2046,7 @@ html { -webkit-text-size-adjust: 100%; }
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   .sidebar:not(.mobile-open) { display: none; }
   .mobile-nav-swipe-hint { display: none; }
   .mobile-compact-nav {
@@ -2454,7 +2454,7 @@ body,
   .canvas-fullscreen-mode .editor-layout .drawing-toolbar.toolbar-collapsed { bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   .canvas-open-mode .main-area {
     padding-bottom: calc(66px + env(safe-area-inset-bottom));
   }
@@ -2815,7 +2815,7 @@ body,
   .ios-device .mobile-canvas-title strong { font-size: 13px; }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   /* The compact four-item navigation is fixed to the viewport. Keep the
      reserved bottom space from the shared mobile rules on small iPhones. */
   .ios-device .canvas-open-mode .main-area { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
@@ -2827,4 +2827,78 @@ body,
   .ios-device .canvas-open-mode .editor-layout { height: calc(100svh - 72px); min-height: 320px; }
   .ios-device .mobile-project-sheet,
   .ios-device .canvas-tools-sheet { max-height: calc(100svh - 16px); }
+}
+
+/* V4.5.8: phone families up to 480 CSS px (including iPhone Pro Max),
+   optional mobile zoom buttons and a non-blocking AI Auto task. */
+.dialog-header-actions { display: flex; align-items: center; gap: 6px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.ai-task-launcher {
+  position: fixed;
+  z-index: 105;
+  right: 22px;
+  bottom: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(310px, calc(100vw - 32px));
+  min-height: 46px;
+  padding: 9px 13px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  box-shadow: 0 14px 38px var(--shadow-strong);
+  backdrop-filter: blur(16px);
+}
+.ai-task-launcher span:not(.sr-only) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 800; }
+.ai-task-launcher i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.ai-task-launcher.working svg { animation: ai-task-pulse 1.2s ease-in-out infinite; }
+.ai-task-launcher.ready { color: #16845b; border-color: color-mix(in srgb, #16845b 45%, var(--line)); }
+.ai-task-launcher.ready i { background: #16845b; }
+.ai-task-launcher.error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.ai-task-launcher.error i { background: var(--danger); }
+@keyframes ai-task-pulse { 50% { opacity: .45; transform: scale(.9); } }
+
+@media (max-width: 620px) {
+  .editor-layout .zoom-control.mobile-zoom-hidden { display: none; }
+  .editor-layout .zoom-control.mobile-zoom-visible { display: flex; }
+  .ai-task-launcher {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: calc(130px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+  .canvas-tools-sheet-grid,
+  .mobile-project-sheet-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
+  .mobile-canvas-header {
+    grid-template-columns: 42px minmax(0, 1fr) minmax(38px, auto) 42px;
+    gap: 4px;
+    padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
+  }
+  .mobile-canvas-title { min-width: 0; }
+  .mobile-canvas-title strong,
+  .mobile-canvas-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-save-status { min-width: 38px; max-width: 104px; padding-inline: 8px; }
+  .mobile-save-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .canvas-tools-sheet-grid,
+  .mobile-project-sheet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .canvas-tools-sheet,
+  .mobile-project-sheet { width: 100%; max-width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-task-launcher.working svg { animation: none; }
 }

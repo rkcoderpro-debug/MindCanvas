@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AiPanel from "./AiPanel";
@@ -80,5 +80,24 @@ describe("AI Manual mind-map flow", () => {
     await act(async () => (host.querySelector(".actions .primary-button") as HTMLButtonElement).click());
 
     expect(generateMindMap).toHaveBeenCalledWith("Source text", undefined, expect.any(AbortSignal), { difficulty: "hard", depth: "detailed" }, "detailed");
+  });
+
+  it("keeps an Auto request alive while minimized and notifies when it finishes", async () => {
+    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateMindMap>>) => void;
+    vi.mocked(generateMindMap).mockReturnValue(new Promise(resolve => { resolveGeneration = resolve; }));
+    function MinimizeHarness() {
+      const [minimized, setMinimized] = useState(false);
+      return <LanguageProvider><AiPanel projectId="project" canUse beforeGenerate={async () => true} minimized={minimized} onMinimize={() => setMinimized(true)} onRestore={() => setMinimized(false)} onClose={() => undefined} onApply={() => undefined}/></LanguageProvider>;
+    }
+    await act(async () => root.render(<MinimizeHarness/>));
+    await act(async () => host.querySelector<HTMLButtonElement>('.ai-source-tabs button[role="tab"]')!.click());
+    const source = host.querySelector<HTMLTextAreaElement>(".ai-text-source textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(source, "Background source");
+    await act(async () => source.dispatchEvent(new Event("input", { bubbles: true })));
+    await act(async () => (host.querySelector(".actions .primary-button") as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[aria-label="Thu nhỏ AI Auto"]') as HTMLButtonElement).click());
+    expect(host.querySelector(".ai-task-launcher.working")?.textContent).toContain("AI Auto đang xử lý");
+    await act(async () => resolveGeneration({ provider: "gemini", graph: { title: "Done", nodes: [{ id: "root", label: "Ready" }], edges: [] } }));
+    expect(host.querySelector(".ai-task-launcher.ready")?.textContent).toContain("AI đã trả kết quả");
   });
 });

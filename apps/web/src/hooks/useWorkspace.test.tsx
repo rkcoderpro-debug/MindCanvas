@@ -94,7 +94,9 @@ describe("Workspace lifecycle", () => {
     const remote = { id: remoteBoard.id, title: remoteBoard.title, board: remoteBoard, folderId: null, updatedAt: remoteBoard.updatedAt, pending: false, revision: 1 };
     vi.spyOn(store, "fetchProjectSnapshot").mockResolvedValue(remote);
     save.mockRejectedValueOnce(new store.ProjectConflictError(remote.id)).mockResolvedValueOnce({ revision: 2 });
-    vi.spyOn(store, "createProjectVersion").mockResolvedValue({ id: "backup", projectId: remote.id, version: 1, createdAt: remote.updatedAt, board: remoteBoard, source: "cloud" });
+    // A recovery checkpoint can exceed localStorage for media-heavy projects;
+    // the explicit conflict choice must still complete.
+    vi.spyOn(store, "createProjectVersion").mockRejectedValue(new Error("Version cache quota exceeded"));
     await act(async () => api.change(local)); await act(async () => api.flush());
     expect(api.conflict?.remote.board.title).toBe("Desktop edit"); expect(api.status).toBe("saveError");
     await act(async () => api.resolveConflict("overwrite", "copy"));

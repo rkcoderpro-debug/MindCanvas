@@ -1,4 +1,4 @@
-export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "rect" | "ellipse" | "connector";
+export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "line" | "rect" | "ellipse" | "triangle" | "connector";
 
 export { LenientJsonError, parseLenientJson } from "./json.js";
 
@@ -45,7 +45,7 @@ export type DrawingPath = {
 
 export type CanvasShape = {
   id: string;
-  kind: "rect" | "ellipse";
+  kind: "rect" | "ellipse" | "triangle";
   x: number;
   y: number;
   width: number;

@@ -19,7 +19,7 @@ import { usePwaInstall } from "./lib/pwa";
 import { isToolbarPosition, TOOLBAR_POSITIONS, type ToolbarPosition } from "./lib/editorPreferences";
 import { SIDEBAR_DEFAULT_WIDTH, clampSidebarWidth } from "./lib/sidebarLayout";
 import { getAccountPlan, getAdminStatus } from "./lib/api";
-import { readFocusTimerVisibility, saveFocusTimerVisibility } from "./lib/uiPreferences";
+import { readFocusTimerVisibility, readMobileZoomControlsVisibility, saveFocusTimerVisibility, saveMobileZoomControlsVisibility } from "./lib/uiPreferences";
 import { FREE_ACCOUNT_PLAN, type AccountPlan } from "./lib/account";
 import { errorMessage } from "./lib/errors";
 import { isIOSDevice } from "./lib/canvasInput";
@@ -58,7 +58,7 @@ function AuthenticatedApp() {
 function Workspace({ user, authError }: { user: User | null; authError: string }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
   const iosDevice = isIOSDevice();
-  const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "ai" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
+  const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
@@ -70,6 +70,8 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     try { return localStorage.getItem("mindcanvas:focus-mode") === "true"; } catch { return false; }
   });
   const [timerVisible, setTimerVisible] = useState(readFocusTimerVisibility);
+  const [mobileZoomControlsVisible, setMobileZoomControlsVisible] = useState(readMobileZoomControlsVisibility);
+  const [aiPanelMode, setAiPanelMode] = useState<"closed" | "open" | "minimized">("closed");
   const [toolbarPosition, setToolbarPosition] = useState<ToolbarPosition>(() => {
     try {
       const saved = localStorage.getItem("mindcanvas:toolbar-position");
@@ -89,6 +91,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const message = ws.error || authError;
   const home = () => {
     setMobileProjectMenuOpen(false);
+    setAiPanelMode("closed");
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     void ws.home(); setFilter(null); setRecent(false); setCanvasFullscreen(false);
   };
@@ -134,6 +137,8 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   useEffect(() => { try { localStorage.setItem("mindcanvas:toolbar-position", toolbarPosition); } catch {} }, [toolbarPosition]);
   useEffect(() => { try { localStorage.setItem("mindcanvas:focus-mode", String(focusMode)); } catch {} }, [focusMode]);
   useEffect(() => { saveFocusTimerVisibility(timerVisible); }, [timerVisible]);
+  useEffect(() => { saveMobileZoomControlsVisibility(mobileZoomControlsVisible); }, [mobileZoomControlsVisible]);
+  useEffect(() => { setAiPanelMode("closed"); }, [ws.board?.id]);
   useEffect(() => {
     let alive = true;
     setAccountPlan(FREE_ACCOUNT_PLAN); setIsAdmin(false);
@@ -228,7 +233,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
         <div className="editor-heading canvas-editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} disabled={readOnly} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
           {!readOnly && <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>}
           {ws.projects.find(project => project.id === ws.board!.id)?.accessRole === "owner" && <button className="secondary-button" onClick={() => setModal("share")}><Share2 size={17}/>{t("shareProject")}</button>}<button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
-          {!readOnly && <button className="primary-button" onClick={() => setModal("ai")}><Sparkles size={17}/>{t("ai")}</button>}</div></div>
+          {!readOnly && <button className="primary-button" onClick={() => setAiPanelMode("open")}><Sparkles size={17}/>{t("ai")}</button>}</div></div>
         {readOnly && <div className="shared-readonly-banner">{t("viewerProject")}</div>}
         {mobileProjectMenuOpen && <div className="mobile-project-sheet-backdrop" role="presentation" onClick={() => setMobileProjectMenuOpen(false)}><aside className="mobile-project-sheet" role="dialog" aria-modal="true" aria-label={t("projectActions")} onClick={event => event.stopPropagation()}>
           <header><div><strong>{ws.board.title}</strong><small>{t(ws.status)}</small></div><button type="button" className="icon-button" aria-label={t("close")} onClick={() => setMobileProjectMenuOpen(false)}><X size={20}/></button></header>
@@ -243,10 +248,10 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
             <button type="button" onClick={() => { exportBoard(ws.board!); setMobileProjectMenuOpen(false); }}><Download size={19}/><span>{t("export")}</span></button>
             <button type="button" onClick={() => { exportCanvasSvgFile(ws.board!); setMobileProjectMenuOpen(false); }}><Download size={19}/><span>{t("exportSvg")}</span></button>
             <button type="button" onClick={() => { void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error")))); setMobileProjectMenuOpen(false); }}><Download size={19}/><span>{t("exportPng")}</span></button>
-            {!readOnly && <button type="button" className="mobile-project-ai-action" onClick={() => { setMobileProjectMenuOpen(false); setModal("ai"); }}><Sparkles size={19}/><span>{t("ai")}</span></button>}
+            {!readOnly && <button type="button" className="mobile-project-ai-action" onClick={() => { setMobileProjectMenuOpen(false); setAiPanelMode("open"); }}><Sparkles size={19}/><span>{t("ai")}</span></button>}
           </div>
         </aside></div>}
-        <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)}/>
+        <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible}/>
       </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
@@ -257,13 +262,31 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => setFolderAction(null)); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
     {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
-    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><div className="settings-layout"><section className="settings-section"><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("theme")}</strong><small>{t("themeChoose")}</small></div><ThemePicker theme={selectedTheme} onChange={setTheme}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("toolbarPosition")}</strong><small>{t("toolbarPositionHint")}</small></div><div className="toolbar-position-options" role="radiogroup" aria-label={t("toolbarPosition")}>{TOOLBAR_POSITIONS.map(position => <button type="button" key={position} className={toolbarPosition === position ? "selected" : ""} aria-pressed={toolbarPosition === position} onClick={() => setToolbarPosition(position)}><span className={`toolbar-position-preview ${position}`} aria-hidden="true"/><span>{t(TOOLBAR_LABELS[position])}</span></button>)}</div></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("focusTimerVisibility")}</strong><small>{t("focusTimerVisibilityHint")}</small></div><label className="settings-toggle"><input type="checkbox" checked={timerVisible} onChange={event => setTimerVisible(event.target.checked)}/><span>{t("showFocusTimer")}</span></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("installApp")}</strong><small>{t("pwaOfflineHint")}</small></div><button className="secondary-button" onClick={() => setModal("install")}><Smartphone size={17}/>{t(pwa.installed ? "appInstalled" : "installApp")}</button></section><section className="settings-section settings-help"><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></section></div></Dialog>}
+    {modal === "settings" && <Dialog title={t("settings")} onClose={() => setModal(null)}><div className="settings-layout"><section className="settings-section"><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("theme")}</strong><small>{t("themeChoose")}</small></div><ThemePicker theme={selectedTheme} onChange={setTheme}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("toolbarPosition")}</strong><small>{t("toolbarPositionHint")}</small></div><div className="toolbar-position-options" role="radiogroup" aria-label={t("toolbarPosition")}>{TOOLBAR_POSITIONS.map(position => <button type="button" key={position} className={toolbarPosition === position ? "selected" : ""} aria-pressed={toolbarPosition === position} onClick={() => setToolbarPosition(position)}><span className={`toolbar-position-preview ${position}`} aria-hidden="true"/><span>{t(TOOLBAR_LABELS[position])}</span></button>)}</div></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("mobileZoomControls")}</strong><small>{t("mobileZoomControlsHint")}</small></div><label className="settings-toggle"><input type="checkbox" checked={mobileZoomControlsVisible} onChange={event => setMobileZoomControlsVisible(event.target.checked)}/><span>{t("showMobileZoomControls")}</span></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("focusTimerVisibility")}</strong><small>{t("focusTimerVisibilityHint")}</small></div><label className="settings-toggle"><input type="checkbox" checked={timerVisible} onChange={event => setTimerVisible(event.target.checked)}/><span>{t("showFocusTimer")}</span></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("installApp")}</strong><small>{t("pwaOfflineHint")}</small></div><button className="secondary-button" onClick={() => setModal("install")}><Smartphone size={17}/>{t(pwa.installed ? "appInstalled" : "installApp")}</button></section><section className="settings-section settings-help"><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></section></div></Dialog>}
     <Suspense fallback={null}>
     {modal === "plans" && <PlanUpgradeDialog currentPlan={accountPlan} onClose={() => setModal(null)}/>}
     {modal === "install" && <Dialog title={t("installAppTitle")} onClose={() => setModal(null)}><div className="install-app-dialog"><Smartphone size={38}/><p>{t(pwa.installed ? "appInstalledHint" : "installAppHint")}</p>{pwa.ios && <p className="install-instruction">{t("iosInstallHint")}</p>}{!pwa.installed && !pwa.canInstall && !pwa.ios && <p className="install-instruction">{t("browserInstallHint")}</p>}<small>{t("pwaOfflineHint")}</small></div><footer className="actions"><button className="secondary-button" onClick={() => setModal(null)}>{t("close")}</button>{pwa.canInstall && <button className="primary-button" disabled={working} onClick={() => { setWorking(true); void pwa.install().then(installed => { if (installed) setModal(null); }).finally(() => setWorking(false)); }}><Download size={17}/>{t("installNow")}</button>}</footer></Dialog>}
     {modal === "sync" && <SyncCenter owner={user?.id ?? null} online={ws.online} status={ws.status} projects={ws.projects} working={working} onClose={() => setModal(null)} onRetry={async () => { setWorking(true); try { const saved = await ws.flush(); if (saved) await ws.refresh(); } finally { setWorking(false); } }}/>}
     {modal === "versions" && ws.board && <VersionHistory versions={ws.versions} loading={ws.versionLoading} working={working} onClose={() => { if (!working) setModal(null); }} onCheckpoint={async () => { setWorking(true); try { await ws.saveCheckpoint(t("saveCheckpoint")); } catch (err) { ws.setError(errorMessage(err, t("error"))); } finally { setWorking(false); } }} onRestore={async version => { setWorking(true); try { await ws.restoreVersion(version); setModal(null); } catch (err) { ws.setError(errorMessage(err, t("error"))); } finally { setWorking(false); } }}/>}
-    {modal === "ai" && ws.board && <AiPanel key={ws.board.id} projectId={ws.board.id} canUse={!!user} beforeGenerate={ws.flush} onClose={() => setModal(null)} onApply={(graph, mode) => { try { if (mode === "new") { const next = applyGraph(blankBoard(graph.title), graph); void ws.create(next.title, next).then(() => setModal(null)); } else { ws.change(applyGraph(ws.board!, graph)); setModal(null); } } catch { ws.setError(t("aiError")); setModal(null); } }}/>}
+    {aiPanelMode !== "closed" && ws.board && <AiPanel
+      key={ws.board.id}
+      projectId={ws.board.id}
+      canUse={!!user}
+      beforeGenerate={ws.flush}
+      minimized={aiPanelMode === "minimized"}
+      onMinimize={() => setAiPanelMode("minimized")}
+      onRestore={() => setAiPanelMode("open")}
+      onClose={() => setAiPanelMode("closed")}
+      onApply={(graph, mode) => {
+        try {
+          if (mode === "new") {
+            const next = applyGraph(blankBoard(graph.title), graph);
+            void ws.create(next.title, next).then(() => setAiPanelMode("closed"));
+          } else {
+            ws.change(applyGraph(ws.board!, graph)); setAiPanelMode("closed");
+          }
+        } catch { ws.setError(t("aiError")); setAiPanelMode("closed"); }
+      }}/>} {/* Keep this mounted while minimized so its request survives. */}
     {commandOpen && <CommandPalette projects={ws.projects} onClose={() => setCommandOpen(false)} onOpenProject={project => void ws.open(project)} onCreateProject={() => askName("project")} onOpenFlashcards={openFlashcards} onOpenSettings={() => setModal("settings")} onImport={() => fileInput.current?.click()}/>}
     {ws.conflict && <CloudConflictDialog conflict={ws.conflict} working={working} onResolve={async resolution => { setWorking(true); try { await ws.resolveConflict(resolution, t("copySuffix")); } finally { setWorking(false); } }}/>}
     </Suspense>
