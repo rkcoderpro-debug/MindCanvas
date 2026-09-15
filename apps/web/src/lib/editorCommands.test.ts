@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { blankBoard, parseBoard } from "./board";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection } from "./editorCommands";
+import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateMindMapSelection, rotateMindMapSubtree, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection } from "./editorCommands";
 const fixture = () => normalizeEditor({ ...blankBoard(), nodes: [{ id:"n",label:"Root",x:0,y:0,width:190,height:76 }], texts:[{ id:"t",text:"Text",x:300,y:30,width:200 }], shapes:[{ id:"s",kind:"rect" as const,x:0,y:0,width:400,height:200,color:"#ffffff" }] });
 describe("Editor commands", () => {
   it("pastes an independent group with new IDs and a new offset each time", () => {
@@ -70,6 +70,34 @@ describe("Editor commands", () => {
     expect(flagged.shapes[0]).toMatchObject({locked:true,hidden:true});
     expect(snapMoveSelection(b, [{kind:"shapes",id:"a"}], 7, 9).shapes[0]).toMatchObject({x:16,y:16});
     expect(parseBoard(flagged)).toBeTruthy();
+  });
+  it("rotates a mind-map branch around its root while keeping labels upright", () => {
+    const b = { ...blankBoard(), nodes: [
+      { id: "root", label: "Root", x: 100, y: 100, width: 100, height: 60 },
+      { id: "child", label: "Child", x: 300, y: 100, width: 100, height: 60, parentId: "root" },
+      { id: "grandchild", label: "Grandchild", x: 500, y: 100, width: 100, height: 60, parentId: "child" },
+      { id: "outside", label: "Outside", x: 900, y: 100, width: 100, height: 60 },
+    ], edges: [{ id: "a", source: "root", target: "child", kind: "branch" as const }, { id: "b", source: "child", target: "grandchild", kind: "branch" as const }] };
+    const next = rotateMindMapSubtree(b, "root", 90);
+    expect(next.nodes.find(node => node.id === "root")).toEqual(b.nodes[0]);
+    expect(next.nodes.find(node => node.id === "child")?.x).toBeCloseTo(100); expect(next.nodes.find(node => node.id === "child")?.y).toBeCloseTo(300);
+    expect(next.nodes.find(node => node.id === "grandchild")?.x).toBeCloseTo(100); expect(next.nodes.find(node => node.id === "grandchild")?.y).toBeCloseTo(500);
+    expect(next.nodes.find(node => node.id === "outside")).toEqual(b.nodes[3]);
+    expect(next.nodes.every(node => !node.rotation)).toBe(true);
+    const locked = { ...b, nodes: b.nodes.map(node => node.id === "child" ? { ...node, locked: true } : node) };
+    expect(rotateMindMapSubtree(locked, "root", 45)).toBe(locked);
+  });
+  it("rotates an explicit node selection around its own center without moving outside nodes", () => {
+    const b = { ...blankBoard(), nodes: [
+      { id: "a", label: "A", x: 0, y: 0, width: 100, height: 60 },
+      { id: "b", label: "B", x: 200, y: 0, width: 100, height: 60 },
+      { id: "outside", label: "Outside", x: 500, y: 500, width: 100, height: 60 },
+    ] };
+    const next = rotateMindMapSelection(b, [{ kind: "nodes", id: "a" }, { kind: "nodes", id: "b" }], 90);
+    expect(next.nodes.find(node => node.id === "a")).toMatchObject({ x: 100, y: -100 });
+    expect(next.nodes.find(node => node.id === "b")).toMatchObject({ x: 100, y: 100 });
+    expect(next.nodes.find(node => node.id === "outside")).toEqual(b.nodes[2]);
+    expect(rotateMindMapSelection(b, [{ kind: "nodes", id: "a" }, { kind: "nodes", id: "b" }], 360)).toBe(b);
   });
   it("resizes from each Figma-style edge without moving the opposite edge", () => {
     const b = { ...blankBoard(), shapes: [{ id:"shape", kind:"rect" as const, x:100, y:80, width:160, height:100, color:"#ffffff" }] };

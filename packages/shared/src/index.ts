@@ -22,10 +22,21 @@ export type MindMapNode = {
   locked?: boolean;
 };
 
+/**
+ * A branch edge participates in hierarchy operations such as layout,
+ * collapse and re-parenting. A relation edge is a visible cross-link only;
+ * it must never pull a second branch into a selected subtree.
+ *
+ * The field is optional for backwards compatibility with V4.5.x/V4.6 files.
+ * Legacy edges are deterministically inferred by the editor.
+ */
+export type MindMapEdgeKind = "branch" | "relation";
+
 export type MindMapEdge = {
   id: string;
   source: string;
   target: string;
+  kind?: MindMapEdgeKind;
   label?: string;
   opacity?: number;
   hidden?: boolean;
@@ -178,6 +189,7 @@ export type BoardState = {
   title: string;
   updatedAt: string;
   viewport: Viewport;
+  layoutMeta?: BoardLayoutMeta;
   background?: CanvasBackground;
   sourceDocuments?: CanvasSourceDocument[];
   texts: CanvasText[];
@@ -195,6 +207,19 @@ export type StructuredMindMap = {
   edges: MindMapEdge[];
   sourceDocumentId?: string;
   sourceDocumentName?: string;
+};
+
+export type MindMapAiOperation =
+  | { op: "add"; id: string; label: string; parentId?: string; color?: string }
+  | { op: "update"; id: string; label?: string; parentId?: string | null }
+  | { op: "remove"; id: string }
+  | { op: "link"; id?: string; source: string; target: string; label?: string };
+
+/** How a user wants future mind-map edits to interact with layout. */
+export type MindMapLayoutBehavior = "auto" | "assist" | "free";
+export type BoardLayoutMeta = {
+  /** Optional so V4.5.x/V4.6 boards keep their original free-placement behavior. */
+  mindMapBehavior?: MindMapLayoutBehavior;
 };
 
 export type AIProviderName = "experiential-labs" | "gemini" | "demo";

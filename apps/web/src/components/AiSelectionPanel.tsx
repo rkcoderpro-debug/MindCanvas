@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { BrainCircuit, ClipboardPaste, FilePenLine, ListTree, Sparkles, WandSparkles, X } from "lucide-react";
-import { consumeAiManualUsage, transformSelection, type SelectionAiAction, type SelectionAiResult } from "../lib/api";
+import { BrainCircuit, ClipboardPaste, FilePenLine, ListTree, Network, Sparkles, WandSparkles, X } from "lucide-react";
+import { consumeAiManualUsage, transformSelection, type SelectionAiAction, type SelectionAiResult, type SelectionMindMapScope } from "../lib/api";
 import { useLanguage } from "../lib/i18n";
 import Dialog from "./Dialog";
 import { AiModeSwitch, ManualSteps, type AiMode, type ManualStep } from "./AiModeSwitch";
@@ -9,21 +9,24 @@ import { aiErrorMessage } from "../lib/aiErrors";
 import { buildSelectionPrompt, parseManualSelectionResult } from "../lib/manualAi";
 import { writeClipboardText } from "../lib/aiSource";
 
-const actions: Array<{ id: SelectionAiAction; icon: typeof Sparkles; label: "aiSummarize" | "aiExplain" | "aiRewrite" | "aiExpand" }> = [
+const actions: Array<{ id: SelectionAiAction; icon: typeof Sparkles; label: "aiSummarize" | "aiExplain" | "aiRewrite" | "aiExpand" | "aiOrganize" }> = [
   { id: "summarize", icon: Sparkles, label: "aiSummarize" },
   { id: "explain", icon: BrainCircuit, label: "aiExplain" },
   { id: "rewrite", icon: FilePenLine, label: "aiRewrite" },
   { id: "expand", icon: ListTree, label: "aiExpand" },
+  { id: "organize", icon: Network, label: "aiOrganize" },
 ];
 
-export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply }: {
+export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sourceRevision, onClose, onApply }: {
   sourceText: string;
   canUse: boolean;
+  mindMapScope?: SelectionMindMapScope;
+  sourceRevision: string;
   onClose: () => void;
   onApply: (result: SelectionAiResult) => void;
 }) {
   const { t, language } = useLanguage();
-  const [action, setAction] = useState<SelectionAiAction>("summarize");
+  const [action, setAction] = useState<SelectionAiAction>(mindMapScope ? "organize" : "summarize");
   const [aiMode, setAiMode] = useState<AiMode>(canUse ? "auto" : "manual");
   const [result, setResult] = useState<SelectionAiResult | null>(null);
   const [manualPrompt, setManualPrompt] = useState(""), [manualJson, setManualJson] = useState(""), [manualCopied, setManualCopied] = useState(false), [manualUsageConsumed, setManualUsageConsumed] = useState(false);
@@ -37,7 +40,7 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
   const changeAction = (nextAction: SelectionAiAction) => { setAction(nextAction); setResult(null); setError(""); clearManual(); };
   const createManualPrompt = () => {
     if (!sourceText.trim()) return;
-    setManualPrompt(buildSelectionPrompt({ action, text: sourceText, language }));
+    setManualPrompt(buildSelectionPrompt({ action, text: sourceText, language, scope: mindMapScope }));
     setManualJson(""); setManualCopied(false); setResult(null); setError("");
   };
   const copyManualPrompt = async () => {
@@ -56,7 +59,7 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
       catch (error) { setResult(null); setError(aiErrorMessage(error, t, "aiManualQuotaError")); return; }
       finally { setBusy(false); }
     }
-    setResult(next); setError("");
+    setResult({ ...next, sourceRevision }); setError("");
   };
 
   const generate = async () => {
@@ -65,12 +68,22 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
     controller.current?.abort();
     const request = new AbortController(); controller.current = request;
     setBusy(true); setError(""); setResult(null);
-    try { setResult(await transformSelection(action, sourceText, language, request.signal)); }
+    try {
+      const generated = await transformSelection(action, sourceText, language, request.signal, mindMapScope);
+      setResult({ ...generated, sourceRevision });
+    }
     catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "aiSelectionError")); }
     finally { if (!request.signal.aborted) setBusy(false); }
   };
 
   const close = () => { if (busy) controller.current?.abort(); onClose(); };
+  const updateOperationLabel = (index: number, value: string) => setResult(current => current ? { ...current, operations: current.operations.map((operation, operationIndex) => operationIndex === index && "label" in operation ? { ...operation, label: value } : operation) } : current);
+  const removeOperation = (index: number) => setResult(current => current ? { ...current, operations: current.operations.filter((_, operationIndex) => operationIndex !== index) } : current);
+  const apply = () => {
+    if (!result) return;
+    if (result.sourceRevision !== sourceRevision) { setError(t("aiSelectionChanged")); return; }
+    onApply(result);
+  };
   const manualStep: ManualStep = result ? "preview" : manualJson.trim() ? "result" : manualPrompt ? "gemini" : "source";
   return <Dialog title={t("aiSelectionTitle")} onClose={close}>
     <p className="dialog-intro">{t("aiSelectionHint")}</p>
@@ -78,7 +91,7 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
     {aiMode === "manual" ? <p className="ai-manual-note">{t("aiManualHint")} {t("aiManualUsageHint")} {t("manualNoLoginHint")}</p> : !canUse && <p className="form-error" role="alert">{t("loginRequired")}</p>}
     {aiMode === "manual" && <ManualSteps current={manualStep} />}
     <div className="ai-action-grid" role="radiogroup" aria-label={t("aiSelectionAction")}>
-      {actions.map(({ id, icon: Icon, label }) => <button key={id} type="button" role="radio" aria-checked={action === id} className={action === id ? "active" : ""} disabled={busy} onClick={() => changeAction(id)}><Icon size={18}/><span>{t(label)}</span></button>)}
+      {actions.filter(item => item.id !== "organize" || !!mindMapScope).map(({ id, icon: Icon, label }) => <button key={id} type="button" role="radio" aria-checked={action === id} className={action === id ? "active" : ""} disabled={busy} onClick={() => changeAction(id)}><Icon size={18}/><span>{t(label)}</span></button>)}
     </div>
     <details className="ai-source-preview"><summary>{t("aiSelectedContent")}</summary><p>{sourceText.slice(0, 2500)}</p></details>
     {aiMode === "manual" && <section className="ai-manual-panel">
@@ -92,8 +105,9 @@ export default function AiSelectionPanel({ sourceText, canUse, onClose, onApply 
       <label>{t("title")}<input maxLength={200} value={result.title} onChange={event => setResult({ ...result, title: event.target.value })}/></label>
       <label>{t("aiResult")}<textarea rows={7} maxLength={20_000} value={result.text} onChange={event => setResult({ ...result, text: event.target.value })}/></label>
       {result.action === "expand" && <div className="ai-ideas"><strong>{t("aiChildIdeas")}</strong>{result.ideas.map((idea, index) => <div key={index}><input aria-label={`${t("aiChildIdea")} ${index + 1}`} maxLength={2000} value={idea} onChange={event => setResult({ ...result, ideas: result.ideas.map((value, i) => i === index ? event.target.value : value) })}/><button type="button" className="icon-button" aria-label={t("delete")} onClick={() => setResult({ ...result, ideas: result.ideas.filter((_, i) => i !== index) })}><X size={15}/></button></div>)}<button type="button" className="secondary-button" onClick={() => setResult({ ...result, ideas: [...result.ideas, ""] })}>{t("addChild")}</button></div>}
+      {result.action === "organize" && <div className="ai-operations"><strong>{t("aiMindMapOperations")}</strong><small>{t("aiOperationHint")}</small>{result.operations.length ? result.operations.map((operation, index) => <div className={`ai-operation ai-operation-${operation.op}`} key={`${operation.op}-${index}`}><span className="ai-operation-kind">{t(operation.op === "add" ? "aiOperationAdd" : operation.op === "update" ? "aiOperationUpdate" : operation.op === "remove" ? "aiOperationRemove" : "aiOperationLink")}</span>{"label" in operation && operation.label !== undefined && <input aria-label={`${t("label")} ${index + 1}`} maxLength={10_000} value={operation.label} onChange={event => updateOperationLabel(index, event.target.value)}/>}<small>{operation.op === "add" ? `${operation.id} → ${operation.parentId || mindMapScope?.rootId || "root"}` : operation.op === "link" ? `${operation.source} → ${operation.target}` : operation.id}</small><button type="button" className="icon-button" aria-label={t("delete")} onClick={() => removeOperation(index)}><X size={15}/></button></div>) : <small>{t("aiNoOperations")}</small>}</div>}
       <small>{result.provider === "manual" ? t("manualProvider") : result.provider} · {result.model} · {t("previewChanges")}</small>
     </div>}
-    <footer className="actions"><button type="button" className="secondary-button" onClick={close}>{t("cancel")}</button>{result ? <button type="button" className="primary-button" disabled={!result.text.trim() || (result.action === "expand" && !result.ideas.some(idea => idea.trim()))} onClick={() => onApply({ ...result, title: result.title.trim(), text: result.text.trim(), ideas: result.ideas.map(idea => idea.trim()).filter(Boolean) })}>{t("apply")}</button> : <button type="button" className="primary-button" disabled={busy || !sourceText.trim()} onClick={() => void generate()}><Sparkles size={16}/>{aiMode === "manual" ? t("createPrompt") : t("generatePreview")}</button>}</footer>
+    <footer className="actions"><button type="button" className="secondary-button" onClick={close}>{t("cancel")}</button>{result ? <button type="button" className="primary-button" disabled={!result.text.trim() || (result.action === "expand" && !result.ideas.some(idea => idea.trim())) || (result.action === "organize" && !result.operations.length)} onClick={() => apply()}>{t("apply")}</button> : <button type="button" className="primary-button" disabled={busy || !sourceText.trim()} onClick={() => void generate()}><Sparkles size={16}/>{aiMode === "manual" ? t("createPrompt") : t("generatePreview")}</button>}</footer>
   </Dialog>;
 }

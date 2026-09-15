@@ -57,11 +57,34 @@ describe("Mind-map hierarchy layout", () => {
     expect(result.nodes.every(item => Number.isFinite(item.x) && Number.isFinite(item.y))).toBe(true);
   });
 
+  it("honors top-bottom mode even when the map has two sides", () => {
+    const nodes = ["root", "top", "bottom"].map(node);
+    const edges = [{ id: "top-edge", source: "root", target: "top" }, { id: "bottom-edge", source: "root", target: "bottom" }];
+    const result = layoutMindMapMultiSided(nodes, edges, { x: 500, y: 300 }, 2, "top-bottom");
+    const root = result.nodes.find(item => item.id === "root")!;
+    const top = result.nodes.find(item => item.id === "top")!;
+    const bottom = result.nodes.find(item => item.id === "bottom")!;
+    expect(top.y + top.height).toBeLessThan(root.y);
+    expect(bottom.y).toBeGreaterThan(root.y + root.height);
+  });
+
   it("keeps unrelated elements in place when arranging a selected subtree", () => {
     const before = { ...blankBoard(), nodes: [node("root"), { ...node("child"), parentId: "root" }, node("other")], edges: [{ id: "e", source: "root", target: "child" }], texts: [{ id: "t", text: "keep", x: 20, y: 20, width: 100 }] };
     const next = arrangeMindMapMultiSided(before, "root", 3, "fan").board;
     expect(next.nodes.find(item => item.id === "root")!.x).toBe(before.nodes[0].x);
     expect(next.nodes.find(item => item.id === "other")).toEqual(before.nodes[2]);
     expect(next.texts).toBe(before.texts);
+  });
+
+  it("keeps locked nodes at their exact geometry while laying out around them", () => {
+    const nodes = [
+      { ...node("root"), x: 100, y: 120, locked: true },
+      { ...node("child"), x: 800, y: 420, locked: true, parentId: "root" },
+      { ...node("free"), x: 0, y: 0, parentId: "root" },
+    ];
+    const result = layoutMindMapMultiSided(nodes, [{ id: "edge", source: "root", target: "child", kind: "branch" }, { id: "edge-2", source: "root", target: "free", kind: "branch" }], { x: 900, y: 900 }, 4, "organic");
+    expect(result.nodes.find(item => item.id === "root")).toMatchObject({ x: 100, y: 120, width: 190, height: 76 });
+    expect(result.nodes.find(item => item.id === "child")).toMatchObject({ x: 800, y: 420, width: 190, height: 76 });
+    expect(result.nodes.every(item => [item.x, item.y, item.width, item.height].every(Number.isFinite))).toBe(true);
   });
 });

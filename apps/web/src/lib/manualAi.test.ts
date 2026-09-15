@@ -22,6 +22,7 @@ describe("manual AI exchange", () => {
     expect(qualityPrompt).toContain("Depth: detailed");
 
     expect(buildSelectionPrompt({ action: "expand", text: "A selected idea", language: "en" })).toContain('"action":"summarize|explain|rewrite|expand"');
+    expect(buildSelectionPrompt({ action: "organize", text: "NODE root: Root", language: "en", scope: { rootId: "root", nodeIds: ["root"], edges: [] } })).toContain('"operations":[]');
     const flashcardPrompt = buildFlashcardsPrompt({ fileName: "notes.pdf", maxCards: 12, language: "en" });
     expect(flashcardPrompt).toContain("notes.pdf");
     expect(flashcardPrompt).toContain("mindcanvas-flashcards.json");
@@ -37,11 +38,12 @@ describe("manual AI exchange", () => {
         { id: "root", label: "Life", parentId: null, sourcePage: null },
         { id: "cell", label: "Cell", parentId: "root", sourcePage: 2 },
       ],
-      edges: [{ id: "e1", source: "root", target: "cell", label: null }],
+      edges: [{ id: "e1", source: "root", target: "cell", kind: "branch", label: null }],
     })}\n\`\`\``);
     expect(graph.nodes[0].parentId).toBeUndefined();
     expect(graph.nodes[1].sourcePage).toBe(2);
     expect(graph.edges[0].label).toBeUndefined();
+    expect(graph.edges[0].kind).toBe("branch");
   });
 
   it("rejects unsafe or unusable graph relationships", () => {
@@ -56,6 +58,13 @@ describe("manual AI exchange", () => {
     const cards = parseManualFlashcards(JSON.stringify({ title: "Review", cards: [{ front: "Q", back: "A", sourcePage: null }] }), 3);
     expect(cards.cards[0].sourcePage).toBeNull();
     expect(() => parseManualFlashcards(JSON.stringify({ title: "Too many", cards: [{ front: "1", back: "1" }, { front: "2", back: "2" }] }), 1)).toThrowError(ManualAiValidationError);
+  });
+
+  it("validates manual organization operations before the preview can be applied", () => {
+    const result = parseManualSelectionResult(JSON.stringify({ action: "organize", title: "Layout", text: "Organized", ideas: [], operations: [{ op: "update", id: "child", label: "New label" }, { op: "link", source: "child", target: "root", label: "supports" }] }), "organize");
+    expect(result.operations).toHaveLength(2);
+    expect(() => parseManualSelectionResult(JSON.stringify({ action: "organize", title: "Bad", text: "x", ideas: [], operations: [{ op: "link", source: "root", target: "root" }] }), "organize")).toThrowError(ManualAiValidationError);
+    expect(() => parseManualSelectionResult(JSON.stringify({ action: "organize", title: "Bad", text: "x", ideas: [], operations: [{ op: "add", id: "new", label: "New", x: 100 }] }), "organize")).toThrowError(ManualAiValidationError);
   });
 
   it("repairs common Gemini quotes and accepts up to 500 manual cards", () => {

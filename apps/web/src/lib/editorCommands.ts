@@ -1,6 +1,7 @@
 import type { BoardState, Viewport } from "@mindcanvas/shared";
 import { elementBounds, moveElement, type Selection, type Bounds } from "./board";
 import { MIN_CANVAS_SCALE } from "./canvasViewport";
+import { collectMindMapSubtree, getMindMapHierarchy } from "./mindMapGraph";
 
 export function orderedElements(board: BoardState): Selection[] {
   const legacy = (["shapes", "drawings", "media", "embeds", "edges", "texts", "nodes"] as const).flatMap(kind => board[kind].map(e => ({ kind, id: e.id })));
@@ -129,6 +130,58 @@ export function rotateSelection(board: BoardState, selections: Selection[], degr
   return { ...board, nodes: rotate(board.nodes), texts: rotate(board.texts), shapes: rotate(board.shapes), drawings: rotate(board.drawings), media: rotate(board.media), embeds: rotate(board.embeds) };
 }
 
+/**
+ * Rotate the geometry of one mind-map branch around its root. Node rotation
+ * fields are intentionally untouched, so labels remain upright and readable.
+ * A locked node makes the operation a no-op: partial branch rotations are
+ * harder to understand and would make a locked relationship misleading.
+ */
+export function rotateMindMapSubtree(board: BoardState, rootId: string, degrees: number): BoardState {
+  const root = board.nodes.find(node => node.id === rootId);
+  if (!root || !Number.isFinite(degrees)) return board;
+  const hierarchy = getMindMapHierarchy(board.nodes, board.edges);
+  const ids = collectMindMapSubtree(hierarchy, rootId);
+  if ([...ids].some(id => board.nodes.find(node => node.id === id)?.locked)) return board;
+  const radians = degrees * Math.PI / 180;
+  const center = { x: root.x + root.width / 2, y: root.y + root.height / 2 };
+  const rotatePoint = (x: number, y: number) => ({
+    x: center.x + (x - center.x) * Math.cos(radians) - (y - center.y) * Math.sin(radians),
+    y: center.y + (x - center.x) * Math.sin(radians) + (y - center.y) * Math.cos(radians),
+  });
+  return { ...board, nodes: board.nodes.map(node => {
+    if (!ids.has(node.id) || node.id === rootId) return node;
+    const point = rotatePoint(node.x + node.width / 2, node.y + node.height / 2);
+    return { ...node, x: point.x - node.width / 2, y: point.y - node.height / 2 };
+  }) };
+}
+
+/** Rotate an explicitly selected set of nodes around its visual center. */
+export function rotateMindMapSelection(board: BoardState, selections: Selection[], degrees: number): BoardState {
+  const ids = new Set(selections.filter(selection => selection.kind === "nodes").map(selection => selection.id));
+  if (ids.size < 2 || !Number.isFinite(degrees) || [...ids].some(id => board.nodes.find(node => node.id === id)?.locked)) return board;
+  const selected = board.nodes.filter(node => ids.has(node.id));
+  if (selected.length !== ids.size) return board;
+  const normalized = ((degrees % 360) + 360) % 360;
+  if (normalized === 0) return board;
+  const bounds = {
+    x: Math.min(...selected.map(node => node.x)),
+    y: Math.min(...selected.map(node => node.y)),
+    right: Math.max(...selected.map(node => node.x + node.width)),
+    bottom: Math.max(...selected.map(node => node.y + node.height)),
+  };
+  const center = { x: (bounds.x + bounds.right) / 2, y: (bounds.y + bounds.bottom) / 2 };
+  const radians = degrees * Math.PI / 180;
+  const rotatePoint = (x: number, y: number) => ({
+    x: center.x + (x - center.x) * Math.cos(radians) - (y - center.y) * Math.sin(radians),
+    y: center.y + (x - center.x) * Math.sin(radians) + (y - center.y) * Math.cos(radians),
+  });
+  return { ...board, nodes: board.nodes.map(node => {
+    if (!ids.has(node.id)) return node;
+    const point = rotatePoint(node.x + node.width / 2, node.y + node.height / 2);
+    return { ...node, x: point.x - node.width / 2, y: point.y - node.height / 2 };
+  }) };
+}
+
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 const resizeHandleAxes: Record<ResizeHandle, { x: -1 | 0 | 1; y: -1 | 0 | 1 }> = {
   nw: { x: -1, y: -1 }, n: { x: 0, y: -1 }, ne: { x: 1, y: -1 }, e: { x: 1, y: 0 },
@@ -228,24 +281,23 @@ export function snapMoveSelection(board: BoardState, selections: Selection[], dx
   return moveSelection(board, selections, snap(box.x + dx) - box.x, snap(box.y + dy) - box.y);
 }
 export function parentOf(board: BoardState, id: string) {
-  return board.nodes.find(n => n.id === id)?.parentId ?? board.edges.find(e => e.target === id && board.nodes.some(n => n.id === e.source))?.source;
+  return getMindMapHierarchy(board.nodes, board.edges).parent.get(id);
 }
 export function reparentNode(board: BoardState, id: string, parentId: string): BoardState {
   if (id === parentId || !board.nodes.some(n => n.id === id) || !board.nodes.some(n => n.id === parentId)) return board;
+  const hierarchy = getMindMapHierarchy(board.nodes, board.edges);
   const visited = new Set<string>(); let cursor: string | undefined = parentId;
-  while (cursor && !visited.has(cursor)) { if (cursor === id) return board; visited.add(cursor); cursor = parentOf(board, cursor); }
-  const parent = parentOf(board, id);
-  const subtree = new Set([id]);
-  let expanded = true;
-  while (expanded) { expanded = false; for (const n of board.nodes) if (!subtree.has(n.id) && subtree.has(parentOf(board, n.id) ?? "")) { subtree.add(n.id); expanded = true; } }
+  while (cursor && !visited.has(cursor)) { if (cursor === id) return board; visited.add(cursor); cursor = hierarchy.parent.get(cursor); }
+  const parent = hierarchy.parent.get(id);
+  const subtree = collectMindMapSubtree(hierarchy, id);
   const root = board.nodes.find(n => n.id === id)!, target = board.nodes.find(n => n.id === parentId)!;
-  const siblings = board.nodes.filter(n => !subtree.has(n.id) && parentOf(board, n.id) === parentId);
+  const siblings = board.nodes.filter(n => !subtree.has(n.id) && hierarchy.parent.get(n.id) === parentId);
   const x = target.x + target.width + 100, y = Math.max(target.y, ...siblings.map(n => n.y + n.height + 36));
   return { ...board, nodes: board.nodes.map(n => {
     const positioned = subtree.has(n.id) ? { ...n, x: n.x + x - root.x, y: n.y + y - root.y } : n;
     return n.id === id ? { ...positioned, parentId } : n.id === parentId ? { ...positioned, collapsed: false } : positioned;
   }),
-    edges: [...board.edges.filter(e => !(e.target === id && (e.source === parent || e.source === parentId))), { id: crypto.randomUUID(), source: parentId, target: id }] };
+    edges: [...board.edges.filter(e => !(e.target === id && hierarchy.branchEdges.has(e.id))), { id: crypto.randomUUID(), source: parentId, target: id, kind: "branch" }] };
 }
 export function addRelativeNode(board: BoardState, id: string, sibling: boolean, label: string) {
   const selected = board.nodes.find(n => n.id === id); if (!selected) return null;
@@ -253,7 +305,7 @@ export function addRelativeNode(board: BoardState, id: string, sibling: boolean,
   const siblings = board.nodes.filter(n => parentOf(board, n.id) === parentId);
   const node = { id: crypto.randomUUID(), label, parentId, x: parent ? parent.x + parent.width + 100 : selected.x,
     y: Math.max(selected.y + (sibling ? selected.height + 36 : 0), ...siblings.map(n => n.y + n.height + 36)), width: 260, height: 76, color: "#e1e7ff" };
-  return { board: { ...board, nodes: [...board.nodes.map(n => n.id === parentId ? { ...n, collapsed: false } : n), node], edges: parent ? [...board.edges, { id: crypto.randomUUID(), source: parent.id, target: node.id }] : board.edges }, selection: { kind: "nodes" as const, id: node.id } };
+  return { board: { ...board, nodes: [...board.nodes.map(n => n.id === parentId ? { ...n, collapsed: false } : n), node], edges: parent ? [...board.edges, { id: crypto.randomUUID(), source: parent.id, target: node.id, kind: "branch" as const }] : board.edges }, selection: { kind: "nodes" as const, id: node.id } };
 }
 export function fittedViewport(bounds: Bounds, width: number, height: number): Viewport {
   const scale = Math.max(MIN_CANVAS_SCALE, Math.min(2, (width - 100) / Math.max(1, bounds.width), (height - 100) / Math.max(1, bounds.height)));

@@ -1,10 +1,11 @@
-import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
+import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, MindMapAiOperation, MindMapEdge, MindMapLayoutBehavior, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
 import { layoutMindMap, layoutMindMapMultiSided, layoutMindMapTwoSided, nodeHeight, type MindMapLayoutMode, type MindMapLayoutSummary, type MindMapMultiLayoutSummary } from "./mindMapLayout";
+import { collectMindMapSubtree, getMindMapHierarchy } from "./mindMapGraph";
 
 export type ElementKind = "nodes" | "texts" | "shapes" | "drawings" | "media" | "embeds" | "edges";
 export type Selection = { kind: ElementKind; id: string };
 export type Bounds = { x: number; y: number; width: number; height: number };
-export type ContextAiResult = { action: "summarize" | "explain" | "rewrite" | "expand"; title: string; text: string; ideas: string[] };
+export type ContextAiResult = { action: "summarize" | "explain" | "rewrite" | "expand" | "organize"; title: string; text: string; ideas: string[]; operations?: MindMapAiOperation[] };
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_IMPORT_FILE_BYTES = 40 * 1024 * 1024;
 export const MAX_MEDIA_DATA_URL_LENGTH = 20 * 1024 * 1024;
@@ -118,23 +119,44 @@ const exportOrder = (board: BoardState): Selection[] => {
   const byId = new Map(legacy.map(item => [item.id, item]));
   return [...new Set([...(board.layerOrder ?? []), ...legacy.map(item => item.id)])].flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
 };
-type ConnectorEdge = { source: string; target: string };
+export type ConnectorSide = "top" | "right" | "bottom" | "left";
+export type ConnectorEdge = Pick<MindMapEdge, "source" | "target"> & Partial<Pick<MindMapEdge, "kind">> & { sourceSide?: ConnectorSide; targetSide?: ConnectorSide };
 const endpoint = (board: BoardState, id: string) => [...board.nodes, ...board.shapes].find(item => item.id === id);
-function connectorGeometry(board: BoardState, edge: ConnectorEdge) {
+const centerOf = (rect: { x: number; y: number; width: number; height: number }) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+const sideNormal: Record<ConnectorSide, Vec2> = { top: { x: 0, y: -1 }, right: { x: 1, y: 0 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
+function connectorSide(source: { x: number; y: number; width: number; height: number }, target: { x: number; y: number; width: number; height: number }, preferred?: ConnectorSide): ConnectorSide {
+  if (preferred) return preferred;
+  const a = centerOf(source), b = centerOf(target), dx = b.x - a.x, dy = b.y - a.y;
+  if (Math.abs(dx) >= Math.abs(dy) * 1.08) return dx >= 0 ? "right" : "left";
+  return dy >= 0 ? "bottom" : "top";
+}
+function pointOnSide(rect: { x: number; y: number; width: number; height: number }, side: ConnectorSide) {
+  if (side === "top") return { x: rect.x + rect.width / 2, y: rect.y };
+  if (side === "right") return { x: rect.x + rect.width, y: rect.y + rect.height / 2 };
+  if (side === "bottom") return { x: rect.x + rect.width / 2, y: rect.y + rect.height };
+  return { x: rect.x, y: rect.y + rect.height / 2 };
+}
+function oppositeSide(side: ConnectorSide): ConnectorSide {
+  return side === "top" ? "bottom" : side === "right" ? "left" : side === "bottom" ? "top" : "right";
+}
+export function connectorGeometry(board: BoardState, edge: ConnectorEdge) {
   const source = endpoint(board, edge.source), target = endpoint(board, edge.target);
   if (!source || !target) return null;
-  const goesLeft = target.x + target.width < source.x, direction = goesLeft ? -1 : 1;
-  const x1 = goesLeft ? source.x : source.x + source.width, y1 = source.y + source.height / 2;
-  const x2 = goesLeft ? target.x + target.width : target.x, y2 = target.y + target.height / 2;
-  const curve = Math.max(40, Math.abs(x2 - x1) * .45);
-  const control1X = x1 + direction * curve, control2X = x2 - direction * curve;
-  const path = `M${x1},${y1} C${control1X},${y1} ${control2X},${y2} ${x2},${y2}`;
+  const sourceSide = connectorSide(source, target, edge.sourceSide);
+  const targetSide = edge.targetSide ?? oppositeSide(sourceSide);
+  const start = pointOnSide(source, sourceSide), end = pointOnSide(target, targetSide);
+  const normalStart = sideNormal[sourceSide], normalEnd = sideNormal[targetSide];
+  const distance = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+  const curve = Math.max(40, Math.min(220, distance * .45));
+  const control1 = { x: start.x + normalStart.x * curve, y: start.y + normalStart.y * curve };
+  const control2 = { x: end.x + normalEnd.x * curve, y: end.y + normalEnd.y * curve };
+  const path = `M${start.x},${start.y} C${control1.x},${control1.y} ${control2.x},${control2.y} ${end.x},${end.y}`;
   const strokePadding = 10;
-  const minX = Math.min(x1, x2, control1X, control2X) - strokePadding;
-  const maxX = Math.max(x1, x2, control1X, control2X) + strokePadding;
-  const minY = Math.min(y1, y2) - strokePadding;
-  const maxY = Math.max(y1, y2) + strokePadding;
-  return { path, x1, y1, x2, y2, bounds: { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) } };
+  const minX = Math.min(start.x, end.x, control1.x, control2.x) - strokePadding;
+  const maxX = Math.max(start.x, end.x, control1.x, control2.x) + strokePadding;
+  const minY = Math.min(start.y, end.y, control1.y, control2.y) - strokePadding;
+  const maxY = Math.max(start.y, end.y, control1.y, control2.y) + strokePadding;
+  return { path, x1: start.x, y1: start.y, x2: end.x, y2: end.y, sourceSide, targetSide, midpoint: { x: (start.x + 3 * control1.x + 3 * control2.x + end.x) / 8, y: (start.y + 3 * control1.y + 3 * control2.y + end.y) / 8 }, bounds: { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) } };
 }
 export function connectorPath(board: BoardState, edge: ConnectorEdge) {
   return connectorGeometry(board, edge)?.path ?? "";
@@ -176,7 +198,8 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
       const labelHeight = labelLines.length * 18 + 6;
       const label = labelLines.length ? `<g class="connector-label"><rect x="${labelX - labelWidth / 2}" y="${labelY - 15}" width="${labelWidth}" height="${labelHeight}" rx="7" fill="${palette.canvas}" fill-opacity=".94"/>${svgText({ lines: labelLines, x: labelX, y: labelY, fontSize: 13, lineHeight: 18, anchor: "middle", fill: palette.muted })}</g>` : "";
       const opacity = edge.opacity === undefined ? "" : ` opacity="${clamp(edge.opacity, 0, 1)}"`;
-      return `<g${opacity}><path d="${path}" fill="none" stroke="${palette.connector}" stroke-width="2" marker-end="url(#mindcanvas-arrow)"/>${label}</g>`;
+      const dash = edge.kind === "relation" ? ` stroke-dasharray="7 5"` : "";
+      return `<g${opacity}><path d="${path}" fill="none" stroke="${palette.connector}" stroke-width="2"${dash} marker-end="url(#mindcanvas-arrow)"/>${label}</g>`;
     }
     const item = board[selection.kind].find(entry => entry.id === selection.id) as any, bound = elementBounds(board, selection);
     if (!item || !bound) return "";
@@ -245,7 +268,7 @@ export async function exportCanvasPngFile(board: BoardState, palette = readCanva
   const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png")); if (!blob) throw new Error("Could not create PNG export."); downloadBlob(blob, `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.png`);
 }
 export function blankBoard(title = "Untitled canvas"): BoardState {
-  return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, background: "dots", nodes: [], edges: [], texts: [], shapes: [], drawings: [], media: [], embeds: [] };
+  return { id: crypto.randomUUID(), title, updatedAt: new Date().toISOString(), viewport: { x: 0, y: 0, scale: 1 }, layoutMeta: { mindMapBehavior: "assist" }, background: "dots", nodes: [], edges: [], texts: [], shapes: [], drawings: [], media: [], embeds: [] };
 }
 export function elementBounds(board: BoardState, selection: Selection): Bounds | null {
   if (selection.kind === "edges") return null;
@@ -271,6 +294,22 @@ export function moveElement(board: BoardState, s: Selection, dx: number, dy: num
 
 export function selectionToStudyText(board: BoardState, selections: Selection[]) {
   const selected = new Set(selections.map(selection => selection.id));
+  const nodeSelection = selections.filter(selection => selection.kind === "nodes");
+  if (nodeSelection.length === 1) {
+    const scope = mindMapSelectionScope(board, selections);
+    if (scope) {
+      const nodeById = new Map(board.nodes.map(node => [node.id, node]));
+      const hierarchy = getMindMapHierarchy(board.nodes, board.edges);
+      const lines = scope.nodeIds.map(id => {
+        const node = nodeById.get(id)!;
+        const parent = hierarchy.parent.get(id);
+        return `NODE ${id}${parent ? ` (parent: ${parent})` : ""}: ${node.label}${node.sourcePage ? ` [PAGE ${node.sourcePage}]` : ""}`;
+      });
+      const relations = scope.edges.filter(edge => edge.kind === "relation" || board.edges.some(item => item.source === edge.source && item.target === edge.target && hierarchy.relationEdges.has(item.id)));
+      for (const edge of relations) lines.push(`RELATION ${edge.source} -> ${edge.target}${edge.label ? `: ${edge.label}` : ""}`);
+      return lines.join("\n").slice(0, 30_000);
+    }
+  }
   const lines = selections.flatMap(selection => {
     if (selection.kind === "texts") return board.texts.filter(item => item.id === selection.id).map(item => item.text);
     if (selection.kind === "nodes") return board.nodes.filter(item => item.id === selection.id).map(item => `${item.label}${item.sourcePage ? ` [PAGE ${item.sourcePage}]` : ""}`);
@@ -283,7 +322,26 @@ export function selectionToStudyText(board: BoardState, selections: Selection[])
   return [...new Set(lines.map(line => line.trim()).filter(Boolean))].join("\n\n").slice(0, 30_000);
 }
 
+export type MindMapSelectionScope = {
+  rootId: string;
+  nodeIds: string[];
+  edges: Array<Pick<MindMapEdge, "source" | "target" | "label" | "kind">>;
+};
+
+export function mindMapSelectionScope(board: BoardState, selections: Selection[]): MindMapSelectionScope | undefined {
+  const roots = selections.filter(selection => selection.kind === "nodes");
+  if (roots.length !== 1) return undefined;
+  const rootId = roots[0].id;
+  if (!board.nodes.some(node => node.id === rootId)) return undefined;
+  const hierarchy = getMindMapHierarchy(board.nodes, board.edges);
+  const nodeIds = [...collectMindMapSubtree(hierarchy, rootId)];
+  const included = new Set(nodeIds);
+  const edges = board.edges.filter(edge => included.has(edge.source) && included.has(edge.target)).map(edge => ({ source: edge.source, target: edge.target, label: edge.label, kind: edge.kind }));
+  return { rootId, nodeIds, edges };
+}
+
 export function applySelectionAi(board: BoardState, selections: Selection[], result: ContextAiResult, colors = { ink: "#18213b", fill: "#ffffff" }) {
+  if (result.action === "organize") return board;
   if (result.action === "rewrite" && selections.length === 1) {
     const selection = selections[0];
     if (selection.kind === "texts") return { ...board, texts: board.texts.map(item => item.id === selection.id ? { ...item, text: result.text } : item) };
@@ -297,7 +355,7 @@ export function applySelectionAi(board: BoardState, selections: Selection[], res
     const root = parent ?? { id: crypto.randomUUID(), label: result.title || result.text.slice(0, 120), x: right, y: top, width: 220, height: 84, color: colors.fill };
     const childX = root.x + root.width + 100;
     const ideas = result.ideas.slice(0, 12).map((idea, index) => ({ id: crypto.randomUUID(), label: idea, parentId: root.id, x: childX, y: root.y + index * 112, width: 240, height: nodeHeight(idea, 240), color: colors.fill }));
-    const edges = ideas.map(node => ({ id: crypto.randomUUID(), source: root.id, target: node.id }));
+    const edges = ideas.map(node => ({ id: crypto.randomUUID(), source: root.id, target: node.id, kind: "branch" as const }));
     return { ...board, nodes: [...board.nodes.map(node => node.id === root.id ? { ...node, collapsed: false } : node), ...(parent ? [] : [root]), ...ideas], edges: [...board.edges, ...edges] };
   }
   const id = crypto.randomUUID();
@@ -323,18 +381,20 @@ export function duplicateElement(board: BoardState, s: Selection): { board: Boar
   const next = { ...board, [s.kind]: [...board[s.kind], { ...el, id: selection.id }] };
   return { board: moveElement(next, selection, 24, 24), selection };
 }
-export function connect(board: BoardState, source: string, target: string): BoardState {
+export function connect(board: BoardState, source: string, target: string, kind?: MindMapEdge["kind"]): BoardState {
   if (source === target || board.edges.some(e => e.source === source && e.target === target)) return board;
-  return { ...board, edges: [...board.edges, { id: crypto.randomUUID(), source, target }] };
+  const edge = { id: crypto.randomUUID(), source, target, ...(kind ? { kind } : {}) };
+  return { ...board, edges: [...board.edges, edge] };
 }
 export function hiddenNodes(board: BoardState): Set<string> {
   const hidden = new Set<string>();
+  const hierarchy = getMindMapHierarchy(board.nodes, board.edges);
   for (const root of board.nodes.filter(n => n.collapsed)) {
     const visited = new Set([root.id]), stack = [root.id];
     while (stack.length) {
       const current = stack.pop();
-      for (const e of board.edges.filter(e => e.source === current && (!board.nodes.find(n => n.id === e.target)?.parentId || board.nodes.find(n => n.id === e.target)?.parentId === current))) if (!visited.has(e.target)) {
-        visited.add(e.target); hidden.add(e.target); stack.push(e.target);
+      for (const child of hierarchy.children.get(current!) ?? []) if (!visited.has(child)) {
+        visited.add(child); hidden.add(child); stack.push(child);
       }
     }
     hidden.delete(root.id);
@@ -348,7 +408,24 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
     if (typeof n.id !== "string" || typeof n.label !== "string" || n.label.length > 10000 || ids.has(n.id)) throw new Error("Invalid AI node");
     ids.set(n.id, crypto.randomUUID());
   });
-  if (graph.edges.length > 400 || graph.edges.some(e => !ids.has(e.source) || !ids.has(e.target))) throw new Error("Invalid AI edge");
+  if (graph.nodes.some(node => node.parentId !== undefined && (!ids.has(node.parentId) || node.parentId === node.id))) throw new Error("Invalid AI parent");
+  const parents = new Map(graph.nodes.map(node => [node.id, node.parentId]));
+  for (const node of graph.nodes) {
+    const seen = new Set<string>(); let current: string | undefined = node.id;
+    while (current) { if (seen.has(current)) throw new Error("Invalid AI parent cycle"); seen.add(current); current = parents.get(current); }
+  }
+  if (graph.edges.length > 400) throw new Error("Invalid AI edge");
+  const edgeIds = new Set<string>();
+  const edgePairs = new Set<string>();
+  for (const edge of graph.edges) {
+    const pair = `${edge.source}\u0000${edge.target}`;
+    if (typeof edge.id !== "string" || edge.id.length > 120 || edgeIds.has(edge.id)
+      || !ids.has(edge.source) || !ids.has(edge.target) || edge.source === edge.target
+      || (edge.kind !== undefined && edge.kind !== "branch" && edge.kind !== "relation")
+      || edgePairs.has(pair) || edge.label !== undefined && (typeof edge.label !== "string" || edge.label.length > 10_000)) throw new Error("Invalid AI edge");
+    edgeIds.add(edge.id);
+    edgePairs.add(pair);
+  }
   const bounds = (["nodes", "shapes", "texts", "drawings", "media", "embeds"] as const).flatMap(kind => board[kind].map(e => elementBounds(board, { kind, id: e.id })!));
   const x = bounds.length ? Math.max(...bounds.map(b => b.x + b.width)) + 100 : 100;
   const nodes = graph.nodes.map((n, i) => ({
@@ -356,12 +433,11 @@ export function applyGraph(board: BoardState, graph: StructuredMindMap): BoardSt
     sourceDocumentId: n.sourceDocumentId ?? graph.sourceDocumentId,
     x: x + (i % 3) * 250, y: 100 + Math.floor(i / 3) * 130, width: 190, height: 76, color: i === 0 ? "#e1e7ff" : "#ffffff",
   }));
-  const edges = graph.edges.map(e => ({ id: crypto.randomUUID(), source: ids.get(e.source)!, target: ids.get(e.target)!, label: e.label }));
+  const edges = graph.edges.map(e => ({ id: crypto.randomUUID(), source: ids.get(e.source)!, target: ids.get(e.target)!, label: e.label, ...(e.kind ? { kind: e.kind } : {}) }));
   // Prefer explicit hierarchy for placement, retain the provider's cross-links.
-  const hierarchy = graph.nodes.filter(n => n.parentId && ids.has(n.parentId) && n.parentId !== n.id).map(n => ({ id: crypto.randomUUID(), source: ids.get(n.parentId!)!, target: ids.get(n.id)! }));
-  for (const edge of hierarchy) if (!edges.some(e => e.source === edge.source && e.target === edge.target)) edges.push({ ...edge, label: undefined });
-  const explicitChildren = new Set(hierarchy.map(e => e.target));
-  const layoutEdges = [...hierarchy, ...edges.filter(e => !explicitChildren.has(e.target))];
+  const hierarchy = graph.nodes.filter(n => n.parentId && ids.has(n.parentId) && n.parentId !== n.id).map(n => ({ id: crypto.randomUUID(), source: ids.get(n.parentId!)!, target: ids.get(n.id)!, kind: "branch" as const }));
+  for (const edge of hierarchy) if (!edges.some(e => e.source === edge.source && e.target === edge.target && e.kind !== "relation")) edges.push({ ...edge, label: undefined });
+  const layoutEdges = [...hierarchy, ...edges];
   const sourceDocuments = graph.sourceDocumentId ? [...(board.sourceDocuments ?? []).filter(document => document.id !== graph.sourceDocumentId), { id: graph.sourceDocumentId, name: graph.sourceDocumentName ?? "PDF" }] : board.sourceDocuments;
   return { ...board, sourceDocuments, nodes: [...board.nodes, ...layoutMindMap(nodes, layoutEdges, { x, y: 100 })], edges: [...board.edges, ...edges] };
 }
@@ -388,16 +464,8 @@ export function arrangeMindMapMultiSided(board: BoardState, rootId?: string, sid
   const selectedRoot = rootId ? board.nodes.find(node => node.id === rootId) : undefined;
   const included = new Set<string>();
   if (selectedRoot) {
-    const outgoing = new Map(board.nodes.map(node => [node.id, [] as string[]]));
-    for (const node of board.nodes) if (node.parentId && outgoing.has(node.parentId)) outgoing.get(node.parentId)!.push(node.id);
-    for (const edge of board.edges) if (outgoing.has(edge.source) && outgoing.get(edge.source)!.length < board.nodes.length) outgoing.get(edge.source)!.push(edge.target);
-    const stack = [selectedRoot.id];
-    while (stack.length) {
-      const id = stack.pop()!;
-      if (included.has(id)) continue;
-      included.add(id);
-      for (const child of outgoing.get(id) ?? []) if (child !== id && board.nodes.some(node => node.id === child)) stack.push(child);
-    }
+    const hierarchy = getMindMapHierarchy(board.nodes, board.edges);
+    for (const id of collectMindMapSubtree(hierarchy, selectedRoot.id)) included.add(id);
   } else board.nodes.forEach(node => included.add(node.id));
   const nodes = board.nodes.filter(node => included.has(node.id));
   const edges = board.edges.filter(edge => included.has(edge.source) && included.has(edge.target));
@@ -408,6 +476,96 @@ export function arrangeMindMapMultiSided(board: BoardState, rootId?: string, sid
   const result = layoutMindMapMultiSided(nodes, edges, origin, sideCount, mode, selectedRoot?.id);
   const positioned = new Map(result.nodes.map(node => [node.id, node]));
   return { board: { ...board, nodes: board.nodes.map(node => positioned.get(node.id) ?? node) }, summary: result.summary };
+}
+
+/** Missing metadata means an older project: keep its original free-placement behavior. */
+export function mindMapLayoutBehavior(board: BoardState): MindMapLayoutBehavior {
+  return board.layoutMeta?.mindMapBehavior ?? "free";
+}
+
+function validAiLabel(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 10_000;
+}
+
+/**
+ * Apply an AI-proposed branch patch atomically. The AI can edit only the
+ * selected hierarchy subtree; coordinates are never accepted from the model.
+ * After the content/relationship patch, the deterministic layout engine owns
+ * all positions and keeps the selected root fixed.
+ */
+export function applyMindMapAiOperations(board: BoardState, rootId: string, operations: MindMapAiOperation[], colors = { fill: "#ffffff" }): BoardState {
+  if (!board.nodes.some(node => node.id === rootId) || !Array.isArray(operations) || operations.length < 1 || operations.length > 100) return board;
+  const initialHierarchy = getMindMapHierarchy(board.nodes, board.edges);
+  const allowed = collectMindMapSubtree(initialHierarchy, rootId);
+  const tempIds = new Map<string, string>();
+  const addedIds = new Set<string>();
+  const resolveId = (value: string | undefined) => value ? tempIds.get(value) ?? value : undefined;
+  let next: BoardState = { ...board, nodes: [...board.nodes], edges: [...board.edges] };
+  const fail = () => board;
+  const isAllowed = (id: string | undefined): id is string => !!id && (allowed.has(id) || addedIds.has(id));
+  const colorFor = (value: unknown) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : colors.fill;
+
+  for (const operation of operations) {
+    if (!operation || typeof operation !== "object" || typeof operation.op !== "string") return fail();
+    if (operation.op === "add") {
+      if (!validAiLabel(operation.label) || !operation.id || operation.id.length > 120 || tempIds.has(operation.id) || next.nodes.some(node => node.id === operation.id)) return fail();
+      const parentId = resolveId(operation.parentId) ?? rootId;
+      if (!isAllowed(parentId)) return fail();
+      const id = crypto.randomUUID();
+      tempIds.set(operation.id, id);
+      addedIds.add(id);
+      const parent = next.nodes.find(node => node.id === parentId)!;
+      if (!parent) return fail();
+      const node = { id, label: operation.label.trim(), parentId, x: parent.x + parent.width + 120, y: parent.y, width: 240, height: nodeHeight(operation.label, 240), color: colorFor(operation.color) };
+      next = { ...next, nodes: [...next.nodes, node], edges: [...next.edges, { id: crypto.randomUUID(), source: parentId, target: id, kind: "branch" as const }] };
+      continue;
+    }
+    if (operation.op === "update") {
+      const id = resolveId(operation.id);
+      if (!isAllowed(id) || !next.nodes.some(node => node.id === id)) return fail();
+      if (operation.label !== undefined && !validAiLabel(operation.label)) return fail();
+      // The selected root defines the scope boundary. Its parent may live
+      // outside that scope, so an AI patch must not detach or reparent it.
+      if (id === rootId && operation.parentId !== undefined) return fail();
+      const requestedParent = operation.parentId === undefined ? undefined : resolveId(operation.parentId ?? undefined);
+      if (operation.parentId !== undefined && requestedParent !== undefined && !isAllowed(requestedParent)) return fail();
+      if (requestedParent === id) return fail();
+      const beforeHierarchy = getMindMapHierarchy(next.nodes, next.edges);
+      if (requestedParent && collectMindMapSubtree(beforeHierarchy, id).has(requestedParent)) return fail();
+      const oldParent = beforeHierarchy.parent.get(id);
+      next = { ...next, nodes: next.nodes.map(node => node.id !== id ? node : {
+        ...node,
+        ...(operation.label !== undefined ? { label: operation.label.trim(), height: Math.max(node.height, nodeHeight(operation.label, node.width, node.sourcePage, node.collapsed)) } : {}),
+        ...(operation.parentId !== undefined ? { parentId: requestedParent } : {}),
+      }) };
+      if (operation.parentId !== undefined && oldParent !== requestedParent) {
+        const branchIds = beforeHierarchy.branchEdges;
+        const edges = next.edges.filter(edge => !(edge.target === id && branchIds.has(edge.id)));
+        next = { ...next, edges: requestedParent ? [...edges, { id: crypto.randomUUID(), source: requestedParent, target: id, kind: "branch" as const }] : edges };
+        // Re-check parent metadata after the change so an AI patch cannot
+        // introduce a cycle through a sequence of updates.
+        const after = getMindMapHierarchy(next.nodes, next.edges);
+        if (after.parent.get(id) !== requestedParent) return fail();
+      }
+      continue;
+    }
+    if (operation.op === "remove") {
+      const id = resolveId(operation.id);
+      if (!isAllowed(id) || id === rootId || !next.nodes.some(node => node.id === id)) return fail();
+      const removeIds = collectMindMapSubtree(getMindMapHierarchy(next.nodes, next.edges), id);
+      removeIds.delete(rootId);
+      next = { ...next, nodes: next.nodes.filter(node => !removeIds.has(node.id)), edges: next.edges.filter(edge => !removeIds.has(edge.source) && !removeIds.has(edge.target)) };
+      removeIds.forEach(removedId => addedIds.delete(removedId));
+      continue;
+    }
+    if (operation.op === "link") {
+      const source = resolveId(operation.source), target = resolveId(operation.target);
+      if (!isAllowed(source) || !isAllowed(target) || source === target || !next.nodes.some(node => node.id === source) || !next.nodes.some(node => node.id === target) || !validAiLabel(operation.label ?? "relation")) return fail();
+      if (next.edges.some(edge => edge.source === source && edge.target === target)) continue;
+      next = { ...next, edges: [...next.edges, { id: crypto.randomUUID(), source, target, label: operation.label?.trim() || undefined, kind: "relation" as const }] };
+    }
+  }
+  return arrangeMindMapMultiSided(next, rootId, 4, "organic").board;
 }
 
 const obj = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -434,6 +592,7 @@ export function parseBoard(value: unknown): BoardState {
   const b = Object.assign({}, value, { media: value.media === undefined ? [] : value.media, embeds: value.embeds === undefined ? [] : value.embeds }) as Record<string, any>;
   if (!string(b.id, 200) || !string(b.title, 500) || !string(b.updatedAt, 100) || !Number.isFinite(Date.parse(b.updatedAt))
     || !obj(b.viewport) || !number(b.viewport.x) || !number(b.viewport.y) || !number(b.viewport.scale) || b.viewport.scale < .01 || b.viewport.scale > 10) throw new Error("Invalid board metadata");
+  if (b.layoutMeta !== undefined && (!obj(b.layoutMeta) || b.layoutMeta.mindMapBehavior !== undefined && !["auto", "assist", "free"].includes(b.layoutMeta.mindMapBehavior))) throw new Error("Invalid layout metadata");
   if (b.background !== undefined && !(typeof b.background === "string" ? CANVAS_BACKGROUNDS.includes(b.background as CanvasBackgroundPattern) : isCanvasBackgroundMedia(b.background))) throw new Error("Invalid canvas background");
   if (b.sourceDocuments !== undefined) {
     if (!Array.isArray(b.sourceDocuments) || b.sourceDocuments.length > 100) throw new Error("Invalid source documents");
@@ -453,7 +612,10 @@ export function parseBoard(value: unknown): BoardState {
       if (el.rotation !== undefined && (!number(el.rotation) || el.rotation < -3600 || el.rotation > 3600) || el.hidden !== undefined && typeof el.hidden !== "boolean" || el.locked !== undefined && typeof el.locked !== "boolean") throw new Error("Invalid element flags");
       if (el.opacity !== undefined && (!number(el.opacity) || el.opacity < 0 || el.opacity > 1)) throw new Error("Invalid opacity");
       if (el.color !== undefined && (typeof el.color !== "string" || !/^#[0-9a-f]{6}$/i.test(el.color))) throw new Error("Invalid color");
-      if (kind === "edges") { if (!string(el.source, 200) || !string(el.target, 200)) throw new Error("Invalid connection"); continue; }
+      if (kind === "edges") {
+        if (!string(el.source, 200) || !string(el.target, 200) || (el.kind !== undefined && !["branch", "relation"].includes(el.kind))) throw new Error("Invalid connection");
+        continue;
+      }
       if (kind === "drawings") {
         if (!Array.isArray(el.points) || !el.points.length || el.points.length > 20000 || !el.points.every(p => obj(p) && number(p.x) && number(p.y))
           || !number(el.opacity) || el.opacity < 0 || el.opacity > 1 || !number(el.width) || el.width <= 0) throw new Error("Invalid stroke");

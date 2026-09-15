@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGraph, applySelectionAi, blankBoard, connect, connectorPath, duplicateElement, elementBounds, exportCanvasSvg, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement, selectionToStudyText } from "./board";
+import { applyGraph, applyMindMapAiOperations, applySelectionAi, arrangeMindMapMultiSided, blankBoard, connect, connectorGeometry, connectorPath, duplicateElement, elementBounds, exportCanvasSvg, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement, selectionToStudyText } from "./board";
 import { en, vi } from "./i18n";
 const board = () => ({ ...blankBoard(), nodes: [{ id: "a", label: "A", x: 0, y: 0, width: 150, height: 60 }, { id: "b", label: "B", x: 250, y: 0, width: 150, height: 60 }] });
 describe("Editable canvas model", () => {
@@ -59,6 +59,23 @@ describe("Editable canvas model", () => {
     expect(() => parseBoard({ ...b, embeds: [{ ...embed, url: "javascript:alert(1)" }] })).toThrow("Invalid embed");
   });
   it("collapses descendants safely even with cycles", () => { const b = connect(connect(board(), "a", "b"), "b", "a"); b.nodes[0] = { ...b.nodes[0], collapsed: true } as typeof b.nodes[0]; expect([...hiddenNodes(b)]).toEqual(["b"]); });
+  it("keeps relation edges out of collapse and selected-branch layout", () => {
+    const before = { ...blankBoard(), nodes: [
+      { id: "root", label: "Root", x: 100, y: 100, width: 190, height: 76 },
+      { id: "child", label: "Child", x: 500, y: 100, width: 190, height: 76, parentId: "root" },
+      { id: "other", label: "Other", x: 900, y: 100, width: 190, height: 76 },
+      { id: "other-child", label: "Other child", x: 1200, y: 100, width: 190, height: 76, parentId: "other" },
+    ], edges: [
+      { id: "branch", source: "root", target: "child", kind: "branch" as const },
+      { id: "other-branch", source: "other", target: "other-child", kind: "branch" as const },
+      { id: "relation", source: "child", target: "other-child", kind: "relation" as const },
+    ] };
+    const collapsed = { ...before, nodes: before.nodes.map(node => node.id === "root" ? { ...node, collapsed: true } : node) };
+    expect(hiddenNodes(collapsed)).toEqual(new Set(["child"]));
+    const arranged = arrangeMindMapMultiSided(before, "root", 4, "organic").board;
+    expect(arranged.nodes.find(node => node.id === "other")!.x).toBe(before.nodes[2].x);
+    expect(arranged.nodes.find(node => node.id === "other-child")!.x).toBe(before.nodes[3].x);
+  });
   it("has full parity between Vietnamese and English UI dictionaries", () => { expect(Object.keys(vi).sort()).toEqual(Object.keys(en).sort()); expect(Object.values(vi).every(Boolean)).toBe(true); });
   it("exports an editable board as a bounded SVG with labels and escaped text", () => {
     const b = { ...board(), texts: [{ id: "t", text: "A & B", x: 20, y: 100, width: 160 }], edges: [{ id: "e", source: "a", target: "b", label: "leads to" }] };
@@ -110,5 +127,36 @@ describe("Editable canvas model", () => {
     expect(rewritten.texts[0].text).toBe("Cell division");
     const expanded = applySelectionAi(b, [{ kind: "nodes", id: "n" }], { action: "expand", title: "Cycle", text: "Overview", ideas: ["G1", "S", "G2"] });
     expect(expanded.nodes).toHaveLength(4); expect(expanded.edges).toHaveLength(3); expect(expanded.nodes.slice(1).every(node => node.parentId === "n")).toBe(true);
+  });
+  it("routes vertical connectors from the closest compatible sides", () => {
+    const b = { ...blankBoard(), nodes: [
+      { id: "top", label: "Top", x: 100, y: 100, width: 260, height: 76 },
+      { id: "bottom", label: "Bottom", x: 100, y: 360, width: 260, height: 76 },
+    ] };
+    const geometry = connectorGeometry(b, { source: "top", target: "bottom" });
+    expect(geometry?.sourceSide).toBe("bottom"); expect(geometry?.targetSide).toBe("top"); expect(geometry?.path).toContain("M230,176"); expect(geometry?.path).toContain("230,360");
+  });
+  it("keeps cross-links visually distinct in SVG export", () => {
+    const b = { ...blankBoard(), nodes: [
+      { id: "a", label: "A", x: 0, y: 0, width: 190, height: 76 },
+      { id: "b", label: "B", x: 320, y: 180, width: 190, height: 76 },
+    ], edges: [{ id: "relation", source: "a", target: "b", kind: "relation" as const }] };
+    expect(exportCanvasSvg(b)).toContain('stroke-dasharray="7 5"');
+  });
+  it("applies only safe AI operations inside the selected branch and relays layout to the engine", () => {
+    const b = { ...blankBoard(), nodes: [
+      { id: "root", label: "Root", x: 100, y: 100, width: 190, height: 76 },
+      { id: "child", label: "Child", x: 400, y: 100, width: 190, height: 76, parentId: "root" },
+      { id: "outside", label: "Outside", x: 900, y: 100, width: 190, height: 76 },
+    ], edges: [{ id: "branch", source: "root", target: "child", kind: "branch" as const }] };
+    const next = applyMindMapAiOperations(b, "root", [
+      { op: "update", id: "child", label: "Updated child" },
+      { op: "add", id: "new", label: "New detail", parentId: "child" },
+      { op: "link", source: "new", target: "child", label: "supports" },
+    ]);
+    expect(next).not.toBe(b); expect(next.nodes.find(node => node.id === "child")?.label).toBe("Updated child"); expect(next.nodes.some(node => node.label === "New detail")).toBe(true);
+    expect(next.edges.some(edge => edge.kind === "relation" && edge.label === "supports")).toBe(true); expect(next.nodes.find(node => node.id === "outside")).toEqual(b.nodes[2]);
+    expect(applyMindMapAiOperations(b, "root", [{ op: "update", id: "outside", label: "No" }])).toBe(b);
+    expect(applyMindMapAiOperations(b, "root", [{ op: "update", id: "root", parentId: null }])).toBe(b);
   });
 });

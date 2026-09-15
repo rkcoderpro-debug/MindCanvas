@@ -1,4 +1,4 @@
-import type { StructuredMindMap } from "@mindcanvas/shared";
+import type { MindMapAiOperation, MindMapEdge, StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
 import type { AccountPlan, PlanId, SubscriptionHistoryRecord } from "./account";
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions, type MindMapDetail } from "./aiOptions";
@@ -150,8 +150,19 @@ export function generateMindMapFromFile(file: File, signal?: AbortSignal, option
 export type GeneratedFlashcard = { front: string; back: string; sourcePage?: number };
 export type GeneratedFlashcards = { provider: string; model: string; title: string; cards: GeneratedFlashcard[]; sourceDocumentId?: string };
 export type GeneratedFlashcardsFromFile = GeneratedFlashcards & { source: AiFileSource };
-export type SelectionAiAction = "summarize" | "explain" | "rewrite" | "expand";
-export type SelectionAiResult = { provider: string; model: string; action: SelectionAiAction; title: string; text: string; ideas: string[] };
+export type SelectionAiAction = "summarize" | "explain" | "rewrite" | "expand" | "organize";
+export type SelectionMindMapScope = { rootId: string; nodeIds: string[]; edges: Array<Pick<MindMapEdge, "source" | "target" | "label" | "kind">> };
+/** Small deterministic revision for guarding an AI preview against stale edits. */
+export function selectionRevision(text: string, scope?: SelectionMindMapScope) {
+  const input = JSON.stringify({ text, scope });
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+export type SelectionAiResult = { provider: string; model: string; action: SelectionAiAction; title: string; text: string; ideas: string[]; operations: MindMapAiOperation[]; sourceRevision?: string };
 
 export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
   const response = await fetch(`${apiBase}/api/ai/flashcards`, {
@@ -187,12 +198,12 @@ export function recommendStudyPlan(cards: StudyPlanCardSignal[], dailyMinutes: n
   return accountRequest<StudyPlanRecommendation>("/api/ai/study-plan", { method: "POST", body: JSON.stringify({ cards, dailyMinutes, language, ...options }), signal });
 }
 
-export async function transformSelection(action: SelectionAiAction, text: string, language: "vi" | "en", signal?: AbortSignal) {
+export async function transformSelection(action: SelectionAiAction, text: string, language: "vi" | "en", signal?: AbortSignal, scope?: SelectionMindMapScope) {
   const response = await fetch(`${apiBase}/api/ai/selection`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ action, text, language }),
+    body: JSON.stringify({ action, text, language, scope }),
   });
   if (!response.ok) await responseError(response, `AI HTTP ${response.status}`);
   return response.json() as Promise<SelectionAiResult>;

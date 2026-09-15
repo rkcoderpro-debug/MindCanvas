@@ -10,7 +10,7 @@ import { generateWithFallback } from "./providers.js";
 import { AIError } from "./gemini.js";
 import { generateFlashcardsWithGemini, MAX_FLASHCARDS } from "./flashcards.js";
 import { generateQuizWithGemini, MAX_QUIZ_QUESTIONS } from "./quiz.js";
-import { generateSelectionWithGemini, selectionActions } from "./selection.js";
+import { generateSelectionWithGemini, selectionActions, selectionScopeSchema } from "./selection.js";
 import { recommendStudyPlanWithGemini } from "./studyPlan.js";
 import { aiOptionsSchema, mindMapDetailSchema, mindMapOptionsSchema } from "./aiOptions.js";
 import { aiScheduler } from "./aiScheduler.js";
@@ -21,7 +21,7 @@ app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
   mode: "server",
-  release: "4.6.0",
+  release: "4.7.0",
   ai: "gemini",
   aiConfigured: Boolean(config.GEMINI_API_KEY),
   aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,
@@ -231,6 +231,7 @@ const selectionInput = z.object({
   action: z.enum(selectionActions),
   text: z.string().trim().min(1).max(30000),
   language: z.enum(["vi", "en"]).default("vi"),
+  scope: selectionScopeSchema.optional(),
 });
 app.post("/api/ai/selection", requireUser, async (req, res) => {
   const parsed = selectionInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid selection input." });

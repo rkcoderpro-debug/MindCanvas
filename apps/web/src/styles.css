@@ -706,6 +706,21 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .ai-selection-preview > small { color: var(--muted); }
 .ai-ideas { display: grid; gap: 7px; }
 .ai-ideas > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+.ai-operations { display: grid; gap: 7px; padding-top: 2px; }
+.ai-operations > strong { color: var(--accent); font-size: 12px; }
+.ai-operations > small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.ai-operation { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.ai-operation > input { min-width: 0; width: 100%; padding: 6px 7px; }
+.ai-operation > small { grid-column: 2 / -1; overflow: hidden; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-operation-kind { padding: 4px 6px; border-radius: 6px; color: var(--accent); background: var(--accent-soft); font-size: 10px; font-weight: 750; white-space: nowrap; }
+.ai-operation-remove .ai-operation-kind { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.connector-relation path:first-child { opacity: .78; }
+.mind-map-branch-tools { display: grid; gap: 6px; margin-top: 4px; padding: 9px; border: 1px solid var(--accent-border); border-radius: 9px; background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface)); }
+.mind-map-branch-tools strong { color: var(--accent); font-size: 12px; }
+.mind-map-branch-tools small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.mind-map-branch-tools > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.mind-map-branch-tools button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: 11px; }
+.mind-map-branch-tools button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
 .source-document-viewer { overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: var(--canvas); }
 .source-document-viewer iframe { display: block; width: 100%; min-height: min(62dvh, 650px); border: 0; }
 .source-document-fallback { display: grid; justify-items: center; gap: 14px; padding: 42px 24px; text-align: center; border: 1px solid var(--line); border-radius: 11px; background: var(--canvas); color: var(--muted); }

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, X, MoreHorizontal, Timer } from "lucide-react";
-import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, ToolMode, Vec2 } from "@mindcanvas/shared";
-import { applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, elementBounds, hiddenNodes, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, X, MoreHorizontal, Timer } from "lucide-react";
+import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
+import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveLayer, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateSelection, selectionBounds, setElementFlags, smartSnapMoveSelection, ungroupSelection, type ResizeHandle, type SnapGuide } from "../lib/editorCommands";
+import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, groupSelection, moveLayer, moveSelection, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateMindMapSelection, rotateMindMapSubtree, rotateSelection, selectionBounds, setElementFlags, smartSnapMoveSelection, ungroupSelection, type ResizeHandle, type SnapGuide } from "../lib/editorCommands";
 import LayerStack from "./LayerStack";
 import ElementsPanel from "./ElementsPanel";
 import CanvasNavigator from "./CanvasNavigator";
@@ -15,12 +15,13 @@ import AiSelectionPanel from "./AiSelectionPanel";
 import SourceDocumentPanel, { type SourceDocumentView } from "./SourceDocumentPanel";
 import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipboardImage } from "../lib/canvasClipboard";
 import { getDocumentSource } from "../lib/supabase";
-import type { SelectionAiResult } from "../lib/api";
+import { selectionRevision, type SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
 import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
 import { CANVAS_TOOL_IDS } from "../lib/toolbarPreferences";
 import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
+import { getMindMapHierarchy } from "../lib/mindMapGraph";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
@@ -226,7 +227,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const selectionsRef = useRef(selections);
   selectionsRef.current = selections;
   const [mindMapLayoutSummary, setMindMapLayoutSummary] = useState<MindMapLayoutSummary | MindMapMultiLayoutSummary | null>(null);
-  const [mindMapLayoutOpen, setMindMapLayoutOpen] = useState(false), [mindMapLayoutSides, setMindMapLayoutSides] = useState(4), [mindMapLayoutMode, setMindMapLayoutMode] = useState<MindMapLayoutMode>("radial");
+  const [mindMapLayoutOpen, setMindMapLayoutOpen] = useState(false), [mindMapLayoutSides, setMindMapLayoutSides] = useState(4), [mindMapLayoutMode, setMindMapLayoutMode] = useState<MindMapLayoutMode>("radial"), [mindMapLayoutBehaviorChoice, setMindMapLayoutBehaviorChoice] = useState<MindMapLayoutBehavior>("assist"), [mindMapRotationAngle, setMindMapRotationAngle] = useState(45);
   const selected = selections.at(-1) ?? null;
   const setSelected = (s: Selection | null) => setSelections(s ? [s] : []);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -358,6 +359,12 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const bounds = selectionBounds(b, selections);
   const selectedEl = selected && selections.length === 1 ? b[selected.kind].find(el => el.id === selected.id) : null;
   const selectedStudyText = selectionToStudyText(b, selections);
+  const selectedMindMapRootId = selected?.kind === "nodes" && selections.length === 1 ? selected.id : undefined;
+  const selectedMindMapScope = selectedMindMapRootId ? mindMapSelectionScope(b, selections) : undefined;
+  const selectedMindMapHasLocked = !!selectedMindMapScope?.nodeIds.some(id => b.nodes.find(node => node.id === id)?.locked);
+  const selectedMindMapNodes = selections.filter(selection => selection.kind === "nodes");
+  const selectedMindMapSelectionHasLocked = selectedMindMapNodes.some(selection => b.nodes.find(node => node.id === selection.id)?.locked);
+  const selectedMindMapHierarchy = getMindMapHierarchy(b.nodes, b.edges);
   const hidden = hiddenNodes(b);
   const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.media.filter(e => e.hidden).map(e => e.id), ...b.embeds.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
   const connectorPulseIds = new Set(connectorPulse);
@@ -584,13 +591,19 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (connectorPulseTimer.current !== null) window.clearTimeout(connectorPulseTimer.current);
     connectorPulseTimer.current = window.setTimeout(() => { connectorPulseTimer.current = null; setConnectorPulse([]); }, 720);
   };
+  const autoLayoutMindMap = (next: BoardState, rootId?: string) => {
+    if (!rootId || mindMapLayoutBehavior(next) !== "auto" || !next.nodes.some(node => node.id === rootId)) return next;
+    return arrangeMindMapMultiSided(next, rootId, 4, "organic").board;
+  };
   const finishEdit = (cancel = false) => {
     const e = editRef.current; if (!e) return;
     editRef.current = null; setEditing(null);
     if (!cancel) {
       const base = e.fresh ?? board, kind = e.selection.kind;
-      onChange({ ...base, [kind]: base[kind].map(el => el.id === e.selection.id ? { ...el, [kind === "texts" ? "text" : "label"]: e.value,
-        ...(kind === "nodes" && "width" in el ? { height: Math.max("height" in el ? el.height ?? 76 : 76, nodeHeight(e.value, el.width, "sourcePage" in el ? el.sourcePage : undefined)) } : {}) } : el) });
+      const changed = { ...base, [kind]: base[kind].map(el => el.id === e.selection.id ? { ...el, [kind === "texts" ? "text" : "label"]: e.value,
+        ...(kind === "nodes" && "width" in el ? { height: Math.max("height" in el ? el.height ?? 76 : 76, nodeHeight(e.value, el.width, "sourcePage" in el ? el.sourcePage : undefined)) } : {}) } : el) };
+      const changedRoot = kind === "nodes" ? getMindMapHierarchy(changed.nodes, changed.edges).parent.get(e.selection.id) ?? e.selection.id : undefined;
+      onChange(kind === "nodes" ? autoLayoutMindMap(changed, changedRoot) : changed);
     }
   };
   const isIOSCanvasTouchTarget = (target: EventTarget | null) => {
@@ -611,7 +624,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       if (s.kind !== "nodes" && s.kind !== "shapes") return;
       if (!connectorSource) { setConnectorSource(s); setSelected(s); return; }
       if (connectorSource.id === s.id) { setConnectorSource(null); setSelected(null); return; }
-      const next = connect(interactionBoard, connectorSource.id, s.id);
+      const next = connect(interactionBoard, connectorSource.id, s.id, "relation");
       if (next !== interactionBoard) onChange(next);
       pulseConnection([connectorSource.id, s.id]);
       setConnectorSource(null);
@@ -738,7 +751,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     stopAutoPan(); autoPanLastAt.current = null;
     gesture.current = null; setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]);
     if (g.mode === "marquee") { if (cancel) setSelections(g.selections ?? []); }
-    if (!cancel && g.reparent && g.target) g.next = reparentNode(g.next, g.selection!.id, g.target);
+    if (!cancel && g.reparent && g.target) {
+      g.next = reparentNode(g.next, g.selection!.id, g.target);
+      g.next = autoLayoutMindMap(g.next, g.target);
+    }
     if (!cancel && JSON.stringify(g.base) !== JSON.stringify(g.next)) {
       if (g.mode === "pan" && onViewportChange) onViewportChange({ ...boardRef.current, viewport: g.next.viewport });
       else onChange(g.next);
@@ -926,7 +942,13 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const lines = selectedEl.text.split("\n"), enabled = lines.filter(Boolean).every(line => line.startsWith(prefix));
     patch({ text: lines.map(line => !line ? line : enabled ? line.slice(prefix.length) : `${prefix}${line.replace(/^(?:• |☐ )/, "")}`).join("\n") });
   };
-  const applyAi = (result: SelectionAiResult) => { onChange(applySelectionAi(board, selections, result, { ink: palette.ink, fill: palette.fill })); setAiOpen(false); };
+  const applyAi = (result: SelectionAiResult) => {
+    const next = result.action === "organize" && selectedMindMapRootId
+      ? applyMindMapAiOperations(board, selectedMindMapRootId, result.operations, { fill: palette.fill })
+      : applySelectionAi(board, selections, result, { ink: palette.ink, fill: palette.fill });
+    if (next !== board) onChange(next);
+    setAiOpen(false);
+  };
   const openSource = async (documentId: string, page: number) => {
     setSourceError("");
     try { const source = await getDocumentSource({ documentId }); setSourceView({ url: source.url, name: source.name, kind: source.kind, page }); }
@@ -937,12 +959,13 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const parent = selected?.kind === "nodes" ? board.nodes.find(n => n.id === selected.id) : undefined;
     const id = crypto.randomUUID(), p = parent ? { x: parent.x + parent.width + 90, y: parent.y + 20 } : point((svg.current?.getBoundingClientRect().left ?? 0) + 250, (svg.current?.getBoundingClientRect().top ?? 0) + 180);
     const next = { ...board, nodes: [...board.nodes.map(n => n.id === parent?.id ? { ...n, collapsed: false } : n), { id, parentId: parent?.id, label: parent ? t("newNode") : t("rootNode"), ...p, width: 190, height: 76, color: palette.fill }] };
-    onChange(parent ? connect(next, parent.id, id) : next); setTool("select"); setSelected({ kind: "nodes", id });
+    const connected = parent ? connect(next, parent.id, id, "branch") : next;
+    onChange(parent ? autoLayoutMindMap(connected, parent.id) : connected); setTool("select"); setSelected({ kind: "nodes", id });
   };
-  const selectedMindMapRootId = selected?.kind === "nodes" && selections.length === 1 ? selected.id : undefined;
-  const openMindMapLayout = () => { if (!board.nodes.length || editing) return; setMindMapLayoutOpen(true); setMobileMoreOpen(false); };
+  const openMindMapLayout = () => { if (!board.nodes.length || editing) return; setMindMapLayoutBehaviorChoice(mindMapLayoutBehavior(board)); setMindMapLayoutOpen(true); setMobileMoreOpen(false); };
   const applyMindMapLayout = () => {
-    const result = arrangeMindMapMultiSided(board, selectedMindMapRootId, mindMapLayoutSides, mindMapLayoutMode);
+    const configured = { ...board, layoutMeta: { ...board.layoutMeta, mindMapBehavior: mindMapLayoutBehaviorChoice } };
+    const result = arrangeMindMapMultiSided(configured, selectedMindMapRootId, mindMapLayoutSides, mindMapLayoutMode);
     setMindMapLayoutSummary(result.summary); onChange(result.board); setMindMapLayoutOpen(false);
   };
   const mindMapLayoutPreview = mindMapLayoutOpen ? arrangeMindMapMultiSided(board, selectedMindMapRootId, mindMapLayoutSides, mindMapLayoutMode).summary : null;
@@ -1146,11 +1169,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           {b.edges.map(e => {
             if (hiddenElements.has(e.id) || hiddenElements.has(e.source) || hiddenElements.has(e.target)) return null;
             const s = [...b.nodes, ...b.shapes].find(n => n.id === e.source), d = [...b.nodes, ...b.shapes].find(n => n.id === e.target); if (!s || !d) return null;
-            const goesLeft = d.x + d.width < s.x, direction = goesLeft ? -1 : 1;
-            const x1 = goesLeft ? s.x : s.x + s.width, y1 = s.y + s.height / 2, x2 = goesLeft ? d.x + d.width : d.x, y2 = d.y + d.height / 2, c = Math.max(40, Math.abs(x2 - x1) * .45);
-            const path = `M${x1},${y1} C${x1 + direction * c},${y1} ${x2 - direction * c},${y2} ${x2},${y2}`;
+            const geometry = connectorGeometry(b, e); if (!geometry) return null;
+            const { path, midpoint } = geometry;
             const connectionPulse = connectorPulseIds.has(e.source) && connectorPulseIds.has(e.target);
-            return <g key={e.id} data-element={e.id} className={connectionPulse ? "connector-edge-pulse" : undefined} opacity={e.opacity ?? 1} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
+            return <g key={e.id} data-element={e.id} className={`${connectionPulse ? "connector-edge-pulse" : ""} ${e.kind === "relation" ? "connector-relation" : "connector-branch"}`} opacity={e.opacity ?? 1} onPointerDown={ev => selectElement(ev, { kind: "edges", id: e.id })}><path d={path} fill="none" stroke={selected?.id === e.id ? "var(--accent)" : "var(--connector)"} strokeWidth="2" strokeDasharray={e.kind === "relation" ? "7 5" : undefined} markerEnd="url(#canvas-arrow)"/><path d={path} fill="none" stroke="transparent" strokeWidth="14" pointerEvents={interactive && !space ? "stroke" : "none"}/>{e.label && <text x={midpoint.x} y={midpoint.y - 8} textAnchor="middle" fontSize="13" fill="var(--muted)" pointerEvents="none">{e.label}</text>}</g>;
           })}
           {b.texts.filter(text => !hiddenElements.has(text.id)).map(text => { const r = elementBounds(b, { kind: "texts", id: text.id })!; const textSelection = { kind: "texts" as const, id: text.id }; return <g key={text.id} data-element={text.id} data-text-editable="true" opacity={text.opacity ?? 1} transform={`rotate(${text.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, textSelection)}
             onDoubleClick={e => openInlineEditor(e, textSelection)}>
@@ -1160,7 +1182,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
             onDoubleClick={e => openInlineEditor(e, nodeSelection)}>
             <rect x={n.x} y={n.y} width={n.width} height={n.height} rx="12" fill={n.color ?? "var(--node-fill)"} stroke={dropTarget === n.id ? "var(--accent)" : "var(--element-stroke)"} strokeWidth={dropTarget === n.id ? 3 : 1}/>
             <foreignObject x={n.x + 12} y={n.y + 10} width={Math.max(12, n.width - 24)} height={Math.max(12, n.height - 20)} data-text-editable="true" onDoubleClick={e => openInlineEditor(e, nodeSelection)}><div className="node-copy" data-text-editable="true" onDoubleClick={e => openInlineEditor(e, nodeSelection)} style={{ color: readableTextColor(n.color) }}>{editing?.selection.id === n.id ? "" : n.label}{n.sourcePage && (n.sourceDocumentId ? <button className="source-page-link" title={t("openSource")} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void openSource(n.sourceDocumentId!, n.sourcePage!); }}><FileText size={12}/>{t("page")} {n.sourcePage}</button> : <small>{t("page")} {n.sourcePage}</small>)}{n.collapsed && <small>…</small>}</div></foreignObject>
-            {b.edges.some(e => e.source === n.id && b.nodes.some(child => child.id === e.target)) && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
+            {(selectedMindMapHierarchy.children.get(n.id)?.length ?? 0) > 0 && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
           </g>; })}
           </LayerStack>
           {guides.map((guide, index) => guide.axis === "x"
@@ -1252,6 +1274,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "horizontal"))}>{t("distributeHorizontal")}</button><button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "vertical"))}>{t("distributeVertical")}</button>
         <button disabled={selections.length < 2} onClick={() => onChange(groupSelection(board, selections))}>{t("group")}</button><button disabled={!board.groups?.some(g => g.elementIds.some(id => selections.some(s => s.id === id)))} onClick={() => onChange(ungroupSelection(board, selections))}>{t("ungroup")}</button>
         <button onClick={() => void copy()}>{t("copyElements")}</button><button onClick={duplicate}>{t("duplicate")}</button><button onClick={() => onChange(setElementFlags(board, selections, { locked: !selections.some(s => isLocked(s)) }))}>{selections.some(s => isLocked(s)) ? t("unlock") : t("lock")}</button><button onClick={() => onChange(setElementFlags(board, selections, { hidden: !selections.every(s => hiddenElements.has(s.id)) }))}>{selections.every(s => hiddenElements.has(s.id)) ? t("show") : t("hide")}</button><button onClick={remove}>{t("delete")}</button></div>
+        {selectedMindMapNodes.length > 1 && selectedMindMapNodes.length === selections.length && <section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapSelectionHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapSelectionHasLocked} onClick={() => onChange(rotateMindMapSelection(board, selections, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateSelectionLeft")}</button><button type="button" disabled={selectedMindMapSelectionHasLocked} onClick={() => onChange(rotateMindMapSelection(board, selections, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateSelectionRight")}</button></div></section>}
         {selectedStudyText && <button className="ai-selection-button" title={!canUseAi ? t("aiManualHint") : t("askAiSelection")} onClick={() => setAiOpen(true)}><Sparkles size={15}/>{t("askAiSelection")}</button>}
         {selected?.kind === "nodes" && selections.length === 1 && <><button onClick={() => relative(false)}>{t("addChild")} · Tab</button><button onClick={() => relative(true)}>{t("addSibling")} · Enter</button><small>{t("reparentHint")}</small></>}
       </div>}
@@ -1284,7 +1307,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         </>}
         {selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="40" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
         {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
-        {selected?.kind === "nodes" && <><button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button><button className="secondary-button" onClick={openMindMapLayout}>{t("arrangeMapSmart")}</button></>}
+        {selected?.kind === "nodes" && <><button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button><button className="secondary-button" onClick={openMindMapLayout}>{t("arrangeMapSmart")}</button><section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateByAngle", { angle: -mindMapRotationAngle })}</button><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateByAngle", { angle: mindMapRotationAngle })}</button></div></section></>}
         <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>
       </>}
       <ElementsPanel board={b} selections={selections} hiddenElements={hiddenElements}
@@ -1293,10 +1316,11 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         onToggleHidden={(selection, value) => onChange(setElementFlags(board, [selection], { hidden: value }))}
         onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>
     </aside>}
-    {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
+    {aiOpen && <AiSelectionPanel sourceText={selectedStudyText} canUse={canUseAi} mindMapScope={selectedMindMapScope} sourceRevision={selectionRevision(selectedStudyText, selectedMindMapScope)} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
     {mindMapLayoutOpen && <Dialog title={t("arrangeMapSmart")} onClose={() => setMindMapLayoutOpen(false)}><form onSubmit={event => { event.preventDefault(); applyMindMapLayout(); }}>
       <p className="dialog-hint">{t("mindMapLayoutPreviewHint")}</p>
       {selectedMindMapRootId && <p className="mind-map-layout-selected-root">{t("mindMapLayoutSelectedRoot")}: <strong>{board.nodes.find(node => node.id === selectedMindMapRootId)?.label}</strong></p>}
+      <label>{t("mindMapLayoutBehavior")}<select value={mindMapLayoutBehaviorChoice} onChange={event => setMindMapLayoutBehaviorChoice(event.target.value as MindMapLayoutBehavior)}><option value="auto">{t("mindMapLayoutBehaviorAuto")}</option><option value="assist">{t("mindMapLayoutBehaviorAssist")}</option><option value="free">{t("mindMapLayoutBehaviorFree")}</option></select><small className="field-hint">{t("mindMapLayoutBehaviorHint")}</small></label>
       <label>{t("mindMapLayoutSides")}<input type="number" min="2" max="12" step="1" list="mindmap-side-presets" value={mindMapLayoutSides} onChange={event => setMindMapLayoutSides(clamp(Math.round(event.target.valueAsNumber || 2), 2, 12))}/><datalist id="mindmap-side-presets"><option value="2"/><option value="3"/><option value="4"/><option value="6"/><option value="8"/></datalist></label>
       <label>{t("mindMapLayoutMode")}<select value={mindMapLayoutMode} onChange={event => setMindMapLayoutMode(event.target.value as MindMapLayoutMode)}><option value="radial">{t("mindMapLayoutModeRadial")}</option><option value="fan">{t("mindMapLayoutModeFan")}</option><option value="symmetric">{t("mindMapLayoutModeSymmetric")}</option><option value="left-right">{t("mindMapLayoutModeLeftRight")}</option><option value="top-bottom">{t("mindMapLayoutModeTopBottom")}</option><option value="organic">{t("mindMapLayoutModeOrganic")}</option></select></label>
       {mindMapLayoutPreview && <div className="mind-map-layout-preview"><strong>{t("mindMapLayoutPreview")}</strong><small>{mindMapLayoutPreview.sides.map(side => `${side.index + 1}: ${side.branches.reduce((sum, branch) => sum + branch.nodeIds.length, 0)}`).join(" · ")} · {mindMapLayoutPreview.sideCount} {t("mindMapSide").toLocaleLowerCase()}</small></div>}
