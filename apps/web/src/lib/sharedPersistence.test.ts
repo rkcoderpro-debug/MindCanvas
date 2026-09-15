@@ -13,6 +13,14 @@ it("does not insert a shared draft with no base revision", async () => {
   await expect(persistProject("editor", draft())).rejects.toBeInstanceOf(ProjectConflictError);
   expect(mocks.from).not.toHaveBeenCalled();
 });
+it("inserts a new owned project without a RETURNING select", async () => {
+  const board = blankBoard("New project");
+  const chain: any = { insert: vi.fn(() => chain), abortSignal: vi.fn().mockResolvedValue({ data: null, error: null }) };
+  mocks.from.mockReturnValue(chain);
+  await expect(persistProject("editor", { id: board.id, title: board.title, board, updatedAt: board.updatedAt, folderId: null, pending: true, ownerId: "editor", accessRole: "owner", shared: false })).resolves.toEqual({ revision: 0 });
+  expect(chain.insert).toHaveBeenCalledWith(expect.objectContaining({ user_id: "editor", revision: 0 }));
+  expect(chain.select).toBeUndefined();
+});
 it("updates an editor's snapshot with a revision guard, without changing owner", async () => {
   const chain: any = {};
   for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);

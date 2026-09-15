@@ -286,8 +286,12 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // editor/update policy (or attempt to change ownership) even for a fresh
     // local UUID.  Existing legacy rows are handled only after a duplicate
     // key response below.
-    const modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
-    if (!modern.error) return { revision: Number(modern.data?.revision ?? 0) };
+    // Do not request RETURNING for a new row. PostgreSQL applies the SELECT
+    // policy to INSERT ... RETURNING; a shared-project SELECT policy can
+    // reject a just-created row even when its INSERT WITH CHECK is valid.
+    // The initial revision is known locally, so no returned column is needed.
+    const modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
+    if (!modern.error) return { revision: 0 };
     const modernMessage = String(modern.error.message ?? "");
     const modernCode = String((modern.error as { code?: unknown }).code ?? "");
     const duplicate = modernCode === "23505" || /duplicate key|already exists/i.test(modernMessage);
