@@ -110,7 +110,9 @@ export async function assignProjectToFolder(projectId: string, folderId: string 
 
 export async function signOut() {
   if (!supabase) return;
-  const { error } = await supabase.auth.signOut();
+  // The account menu represents this browser session. Do not revoke the
+  // user's other devices when a local canvas save is being recovered.
+  const { error } = await supabase.auth.signOut({ scope: "local" });
   if (error) throw error;
 }
 

@@ -106,8 +106,17 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const auth = async () => {
     setWorking(true);
     try {
+      // Logging out must remain available when the current canvas cannot be
+      // uploaded (for example because Supabase rejected its RLS policy). A
+      // failed flush keeps the draft in the account-scoped local cache; it
+      // must not trap the user in the current session.
+      if (user) {
+        await signOut();
+        return;
+      }
       if (!await ws.flush()) return;
-      if (user) await signOut(); else { const result = await signInWithGoogle(); if (result.error) throw result.error; }
+      const result = await signInWithGoogle();
+      if (result.error) throw result.error;
     } catch (err) { ws.setError(errorMessage(err, t("error"))); }
     finally { setWorking(false); }
   };
