@@ -281,7 +281,7 @@ begin
 
   insert into public.project_members(project_id, user_id, role)
   values (invitation.project_id, auth.uid(), invitation.role)
-  on conflict (project_id, user_id)
+  on conflict on constraint project_members_pkey
   do update set role = excluded.role, updated_at = now();
 
   update public.project_invitations as candidate

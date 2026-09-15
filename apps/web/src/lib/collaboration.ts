@@ -44,9 +44,9 @@ export type ProjectPresence = {
 };
 
 const COLLABORATION_RPC_MIGRATION_HINT =
-  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy lần lượt supabase/migrations/0011_v4_4_collaboration.sql, 0012_v4_5_1_share_rpc_repair.sql, 0013_v4_5_1_runtime_repairs.sql và 0014_v4_5_9_share_inbox_pricing.sql trên đúng project Supabase của Render, sau đó tải lại ứng dụng.";
+  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy lần lượt supabase/migrations/0011_v4_4_collaboration.sql, 0012_v4_5_1_share_rpc_repair.sql, 0013_v4_5_1_runtime_repairs.sql, 0014_v4_5_9_share_inbox_pricing.sql và 0016_v4_5_9_share_rpc_ambiguity_repair.sql trên đúng project Supabase của Render, sau đó tải lại ứng dụng.";
 const COLLABORATION_RPC_RUNTIME_HINT =
-  "RPC chia sẻ đang chạy phiên bản cũ và bị tham chiếu project_id mơ hồ (42702). Hãy chạy supabase/migrations/0013_v4_5_1_runtime_repairs.sql trên đúng project Supabase của Render, rồi tải lại ứng dụng.";
+  "RPC chia sẻ đang bị tham chiếu project_id mơ hồ (42702). Hãy chạy supabase/migrations/0016_v4_5_9_share_rpc_ambiguity_repair.sql trên đúng project Supabase của Render, rồi tải lại ứng dụng.";
 
 /** Convert PostgREST's opaque missing-function error into an actionable message. */
 export function collaborationRpcError(error: unknown): Error {

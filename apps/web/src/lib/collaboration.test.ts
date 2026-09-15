@@ -44,7 +44,7 @@ describe("V4.5.1 collaboration helpers", () => {
       code: "42702",
       message: 'column reference "project_id" is ambiguous',
     });
-    expect(error.message).toContain("0013_v4_5_1_runtime_repairs.sql");
+    expect(error.message).toContain("0016_v4_5_9_share_rpc_ambiguity_repair.sql");
   });
 
   it("preserves non-sharing Supabase errors", () => {
