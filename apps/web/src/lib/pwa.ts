@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { isIOSDevice } from "./canvasInput";
 
 type InstallPrompt = Event & {
   prompt: () => Promise<void>;
@@ -6,7 +7,7 @@ type InstallPrompt = Event & {
 };
 
 const isStandalone = () => (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches) || !!(navigator as Navigator & { standalone?: boolean }).standalone;
-const isIos = () => typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isIos = isIOSDevice;
 
 export function registerMindCanvasServiceWorker() {
   if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return;

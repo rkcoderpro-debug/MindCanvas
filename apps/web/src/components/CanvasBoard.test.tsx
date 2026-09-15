@@ -389,6 +389,32 @@ describe("Canvas interactions", () => {
     }
   });
 
+  it("exposes the missing mobile actions in the iOS tools sheet", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      await act(async () => root.render(<Harness initial={blankBoard()} />));
+      await act(async () => (host.querySelector(".canvas-more-tools-trigger") as HTMLButtonElement).click());
+      const sheet = host.querySelector(".canvas-tools-sheet")!;
+      expect(sheet.textContent).toContain("Dán ảnh chụp màn hình");
+      expect(sheet.textContent).toContain("Ghi âm");
+      expect(sheet.textContent).toContain("Sắp xếp mind map");
+      expect(sheet.textContent).toContain("Sắp xếp mind map hai phía");
+      expect(sheet.textContent).toContain("Dùng AI cho vùng chọn");
+      const input = host.querySelector<HTMLInputElement>(".media-file-input")!;
+      expect(input.hasAttribute("hidden")).toBe(false);
+      expect(input.accept).toContain(".heic");
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+    }
+  });
+
   it("finishes finger drawing safely when a second finger starts pinch, then draws again", async () => {
     localStorage.setItem("mindcanvas:canvas-touch:v1", JSON.stringify({ drawWithFinger: true, stylusDrawOnly: true, zoomSensitivity: 1, invertZoom: false }));
     await act(async () => root.render(<ViewportHarness initial={blankBoard()}/>));

@@ -109,11 +109,11 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V4.5.1 quick search and finds text stored inside a canvas", async () => {
+  it("opens V4.5.6 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.5.1");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.5.6");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
@@ -153,7 +153,7 @@ describe("Workspace UI", () => {
     await act(async () => profile.click());
     expect(host.querySelector(".topbar-profile-menu")?.textContent).toContain("Đăng nhập Google");
   });
-  it("toggles and persists the V4.5.1 focus mode without losing the topbar exit control", async () => {
+  it("toggles and persists the V4.5.6 focus mode without losing the topbar exit control", async () => {
     await act(async () => root.render(<App/>));
     const toggle = host.querySelector('[aria-label="Chế độ tập trung"]') as HTMLButtonElement;
     await act(async () => toggle.click());
@@ -192,7 +192,29 @@ describe("Workspace UI", () => {
     expect(host.querySelector('input[type="checkbox"][aria-label="Tự focus canvas khi rê chuột"]')).toBeNull();
     expect(localStorage.getItem("mindcanvas:canvas-hover-focus")).toBeNull();
   });
+  it("keeps Share reachable from the iOS project menu for a local project", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      const board = blankBoard("iOS share");
+      cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
+      await import("./components/CanvasBoard");
+      await act(async () => root.render(<App />));
+      await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());
+      await act(async () => (host.querySelector(".mobile-project-menu-trigger") as HTMLButtonElement).click());
+      expect([...host.querySelectorAll<HTMLButtonElement>(".mobile-project-sheet-grid button")].some(button => button.textContent?.includes("Chia sẻ project"))).toBe(true);
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+    }
+  });
   it("keeps the floating timer available across the workspace and supports minimize/hide", async () => {
+    localStorage.setItem("mindcanvas:show-focus-timer:v1", "true");
     await act(async () => root.render(<App/>));
     expect(host.querySelector(".floating-timer")).not.toBeNull();
     await act(async () => (host.querySelector('[aria-label="Thu nhỏ"]') as HTMLButtonElement).click());

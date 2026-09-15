@@ -28,21 +28,39 @@ type Editing = { selection: Selection; value: string; fresh?: BoardState };
 type CanvasPointerInput = { pointerId: number; pointerType: string; button: number; clientX: number; clientY: number; shiftKey?: boolean; altKey?: boolean; preventDefault: () => void; stopPropagation?: () => void; capture?: boolean };
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const DEFAULT_CROP: CanvasCrop = { top: 0, right: 0, bottom: 0, left: 0 };
+const IOS_MEDIA_PROBE_TIMEOUT_MS = 4500;
 const RESIZE_HANDLES: Array<{ id: ResizeHandle; x: "left" | "center" | "right"; y: "top" | "center" | "bottom" }> = [
   { id: "nw", x: "left", y: "top" }, { id: "n", x: "center", y: "top" }, { id: "ne", x: "right", y: "top" },
   { id: "e", x: "right", y: "center" }, { id: "se", x: "right", y: "bottom" }, { id: "s", x: "center", y: "bottom" },
   { id: "sw", x: "left", y: "bottom" }, { id: "w", x: "left", y: "center" },
 ];
 
-function mediaKindFor(type: string, name: string): CanvasMediaKind | null {
+function mediaKindFor(type: string, name: string, iosCompatibility = false): CanvasMediaKind | null {
   if (type.startsWith("image/")) return "image";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";
   const extension = name.toLocaleLowerCase().split(".").at(-1) ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes(extension)) return "image";
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", ...(iosCompatibility ? ["heic", "heif"] : [])].includes(extension)) return "image";
   if (["mp4", "webm", "mov", "m4v", "ogv", "avi"].includes(extension)) return "video";
-  if (["mp3", "wav", "ogg", "oga", "m4a", "aac", "webm"].includes(extension)) return "audio";
+  if (["mp3", "wav", "ogg", "oga", "m4a", "aac"].includes(extension)) return "audio";
   return null;
+}
+
+function fallbackMimeFor(kind: CanvasMediaKind, name: string) {
+  const extension = name.toLocaleLowerCase().split(".").at(-1) ?? "";
+  const byExtension: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", avif: "image/avif", heic: "image/heic", heif: "image/heif",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", m4v: "video/mp4", ogv: "video/ogg", avi: "video/x-msvideo",
+    mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", m4a: "audio/mp4", aac: "audio/aac",
+  };
+  return byExtension[extension] ?? (kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/webm");
+}
+
+function recordingExtension(mimeType: string) {
+  const normalized = mimeType.toLocaleLowerCase();
+  if (normalized.includes("mp4")) return "m4a";
+  if (normalized.includes("ogg")) return "ogg";
+  return "webm";
 }
 
 function readBlobAsDataUrl(blob: Blob): Promise<string> {
@@ -54,22 +72,33 @@ function readBlobAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-function intrinsicMediaSize(kind: CanvasMediaKind, src: string): Promise<{ width: number; height: number }> {
+type IntrinsicMediaResult = { width: number; height: number; status: "loaded" | "timeout" | "error" };
+
+function intrinsicMediaSize(kind: CanvasMediaKind, src: string, probeSrc = src, timeoutMs?: number): Promise<IntrinsicMediaResult> {
   const fallback = kind === "audio" ? { width: 360, height: 86 } : { width: 16, height: 9 };
-  if (kind === "audio") return Promise.resolve(fallback);
+  if (kind === "audio") return Promise.resolve({ ...fallback, status: "loaded" });
   return new Promise(resolve => {
+    let settled = false;
+    let timeout = 0;
+    const finish = (size: { width: number; height: number }, status: IntrinsicMediaResult["status"]) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve({ ...size, status });
+    };
+    if (timeoutMs !== undefined) timeout = window.setTimeout(() => finish(fallback, "timeout"), timeoutMs);
     if (kind === "image") {
       const image = new Image();
-      image.onload = () => resolve({ width: image.naturalWidth || fallback.width, height: image.naturalHeight || fallback.height });
-      image.onerror = () => resolve(fallback);
-      image.src = src;
+      image.onload = () => finish({ width: image.naturalWidth || fallback.width, height: image.naturalHeight || fallback.height }, "loaded");
+      image.onerror = () => finish(fallback, "error");
+      image.src = probeSrc;
       return;
     }
     const video = document.createElement("video");
     video.preload = "metadata";
-    video.onloadedmetadata = () => resolve({ width: video.videoWidth || fallback.width, height: video.videoHeight || fallback.height });
-    video.onerror = () => resolve(fallback);
-    video.src = src;
+    video.onloadedmetadata = () => finish({ width: video.videoWidth || fallback.width, height: video.videoHeight || fallback.height }, "loaded");
+    video.onerror = () => finish(fallback, "error");
+    video.src = probeSrc;
     video.load();
   });
 }
@@ -167,11 +196,44 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const [inputMode, setInputMode] = useState<CanvasInputMode>("idle");
   const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
   const [mediaError, setMediaError] = useState(""), [isRecording, setIsRecording] = useState(false), [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [iosMediaSources, setIOSMediaSources] = useState<Record<string, string>>({});
   const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChangeProp, readOnly]);
+  const iosMedia = board.media.filter(media => (media.kind === "video" || media.kind === "audio") && media.src.startsWith("data:"));
+  const iosMediaSignature = iosTouchFallback ? JSON.stringify(iosMedia.map(media => [media.id, media.src])) : "";
+  useEffect(() => {
+    if (!iosTouchFallback || !iosMediaSignature || typeof fetch !== "function" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+      setIOSMediaSources(current => Object.keys(current).length ? {} : current);
+      return;
+    }
+    let alive = true;
+    const createdUrls: string[] = [];
+    const hydrate = async () => {
+      const entries = await Promise.all(iosMedia.map(async media => {
+        try {
+          const response = await fetch(media.src);
+          if (!response.ok) return null;
+          const url = URL.createObjectURL(await response.blob());
+          return [media.id, url] as const;
+        } catch { return null; }
+      }));
+      const valid = entries.filter((entry): entry is readonly [string, string] => !!entry);
+      if (!alive) {
+        valid.forEach(([, url]) => { try { URL.revokeObjectURL(url); } catch {} });
+        return;
+      }
+      createdUrls.push(...valid.map(([, url]) => url));
+      setIOSMediaSources(Object.fromEntries(valid));
+    };
+    void hydrate();
+    return () => {
+      alive = false;
+      createdUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch {} });
+    };
+  }, [iosTouchFallback, iosMediaSignature]);
   useEffect(() => saveCanvasTouchSettings(touchSettings), [touchSettings]);
   useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
@@ -318,21 +380,41 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const center = rect ? point(rect.left + rect.width / 2, rect.top + rect.height / 2) : { x: 240, y: 180 };
     for (const [index, item] of items.entries()) {
       if (item.blob.size > MAX_MEDIA_BYTES) { setMediaError(t("mediaFileTooLarge")); continue; }
-      const kind = item.kind ?? mediaKindFor(item.blob.type, item.name);
+      const kind = item.kind ?? mediaKindFor(item.blob.type, item.name, iosTouchFallback);
       if (!kind) continue;
-      const fallbackMime = kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/webm";
+      const fallbackMime = iosTouchFallback ? fallbackMimeFor(kind, item.name) : kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/webm";
       const sourceBlob = item.blob.type ? item.blob : new Blob([item.blob], { type: fallbackMime });
+      let probeUrl = "";
       try {
-        const src = await readBlobAsDataUrl(sourceBlob), intrinsic = await intrinsicMediaSize(kind, src), size = mediaFrameSize(kind, intrinsic);
+        const src = await readBlobAsDataUrl(sourceBlob);
+        try {
+          if (iosTouchFallback && typeof URL !== "undefined" && typeof URL.createObjectURL === "function") probeUrl = URL.createObjectURL(sourceBlob);
+        } catch { /* Data URLs remain the portable persistence format. */ }
+        const intrinsic = await intrinsicMediaSize(kind, src, probeUrl || src, iosTouchFallback ? IOS_MEDIA_PROBE_TIMEOUT_MS : undefined);
+        if (iosTouchFallback && intrinsic.status === "error") { setMediaError(t("mediaFormatUnsupported")); continue; }
+        const size = mediaFrameSize(kind, intrinsic);
         additions.push({ id: crypto.randomUUID(), kind, src, name: item.name || t(kind), mimeType: sourceBlob.type || fallbackMime,
           x: center.x - size.width / 2 + index * 28, y: center.y - size.height / 2 + index * 28, width: size.width, height: size.height });
-      } catch { setMediaError(t("error")); }
+      } catch { setMediaError(t("mediaFormatUnsupported")); }
+      finally {
+        if (probeUrl) { try { URL.revokeObjectURL(probeUrl); } catch {} }
+      }
     }
     if (!additions.length) return;
     onChange({ ...board, media: [...board.media, ...additions] });
     setTool("select"); setSelections(additions.map(media => ({ kind: "media" as const, id: media.id })));
   };
   const addMediaFiles = (files: File[]) => { void addMediaBlobs(files.map(file => ({ blob: file, name: file.name }))); };
+  const openMediaPicker = () => {
+    finishEdit();
+    setMediaError("");
+    const input = mediaInput.current;
+    if (!input) return;
+    input.value = "";
+    // Keep this synchronous with the user's tap. iOS WebViews may reject a
+    // delayed or display:none file-input activation.
+    input.click();
+  };
   const addClipboardImage = async () => {
     const blob = await readClipboardImage();
     if (!blob) { setMediaError(t("clipboardImageUnavailable")); return; }
@@ -362,9 +444,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       nextRecorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
       nextRecorder.onerror = () => { setMediaError(t("error")); setIsRecording(false); };
       nextRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: nextRecorder.mimeType || mimeType || "audio/webm" });
+        const outputMimeType = nextRecorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type: outputMimeType });
         stream.getTracks().forEach(track => track.stop()); recorder.current = null; recorderStream.current = null;
-        if (blob.size) void addMediaBlobs([{ blob, name: `${t("audio")}-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`, kind: "audio" }]);
+        if (blob.size) void addMediaBlobs([{ blob, name: `${t("audio")}-${new Date().toISOString().replace(/[:.]/g, "-")}.${iosTouchFallback ? recordingExtension(outputMimeType) : "webm"}`, kind: "audio" }]);
       };
       nextRecorder.start(); setRecordingSeconds(0); setIsRecording(true);
     } catch (error) {
@@ -836,7 +919,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         }}>{tools.map(({ id, icon: Icon, key }) =>
           <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
-        <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={() => { finishEdit(); mediaInput.current?.click(); }}><ImagePlus size={19}/></button>
+        <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("pasteImage")} title={t("pasteImageHint")} onClick={() => void addClipboardImage()}><ClipboardPaste size={18}/></button>
         <button className={`${isRecording ? "selected recording-button" : ""} mobile-extra-action`} aria-pressed={isRecording} aria-label={t(isRecording ? "stopRecording" : "recordAudio")} title={t(isRecording ? "stopRecording" : "recordAudio")} onClick={() => isRecording ? stopRecording() : void startRecording()}>{isRecording ? <Square size={17}/> : <Mic size={19}/>}</button>
@@ -847,7 +930,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <span className="toolbar-divider mobile-extra-action"/><button className="mobile-extra-action" aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button><button type="button" className="canvas-more-tools-trigger" aria-label={t("moreTools")} title={t("moreTools")} aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen(value => !value)}><MoreHorizontal size={20}/></button></span>
         {toolbarExpanded && toolbarOverflowing && showToolbarSwipeHint && <span className="toolbar-swipe-hint" role="status">{t("swipeForMore")}</span>}
       </div>}
-      <input ref={mediaInput} hidden type="file" accept="image/*,video/*,audio/*" multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
+      <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e); }} onPointerCancelCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e, true); }}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (!shouldUseIOSNativeTouch(e) && gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (!shouldUseIOSNativeTouch(e) && gesture.current?.pointer === e.pointerId) finish(true); }} onLostPointerCapture={lostPointerCapture}>
@@ -874,6 +957,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           })}
           {b.media.filter(media => !hiddenElements.has(media.id)).map(media => {
             const mediaSelection = { kind: "media" as const, id: media.id };
+            const renderedMediaSrc = iosMediaSources[media.id] ?? media.src;
             const selectMedia = (event: ReactPointerEvent) => {
               if (event.target instanceof HTMLMediaElement) { event.stopPropagation(); return; }
               selectElement(event, mediaSelection);
@@ -882,9 +966,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
               <foreignObject x={media.x} y={media.y} width={media.width} height={media.height} pointerEvents={interactive && !space ? "auto" : "none"} onPointerDown={selectMedia}>
                 <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-media ${media.kind}`} aria-label={`${t(media.kind)}: ${media.name}`}>
                   <div className="canvas-media-frame">
-                    {media.kind === "image" && <div className="canvas-media-visual"><img src={media.src} alt={media.name} draggable={false} style={cropStyle(media.crop)}/></div>} 
-                    {media.kind === "video" && <div className="canvas-media-visual"><video src={media.src} controls preload="metadata" playsInline onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name} style={cropStyle(media.crop)}/></div>} 
-                    {media.kind === "audio" && <><AudioLines size={26} aria-hidden="true"/><audio src={media.src} controls preload="metadata" onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name}/></>}
+                    {media.kind === "image" && <div className="canvas-media-visual"><img src={media.src} alt={media.name} draggable={false} onError={iosTouchFallback ? () => setMediaError(t("mediaFormatUnsupported")) : undefined} style={cropStyle(media.crop)}/></div>}
+                    {media.kind === "video" && <div className="canvas-media-visual"><video src={renderedMediaSrc} controls preload="metadata" playsInline onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onError={iosTouchFallback ? () => setMediaError(t("mediaFormatUnsupported")) : undefined} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name} style={cropStyle(media.crop)}/></div>}
+                    {media.kind === "audio" && <><AudioLines size={26} aria-hidden="true"/><audio src={renderedMediaSrc} controls preload="metadata" onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onError={iosTouchFallback ? () => setMediaError(t("mediaFormatUnsupported")) : undefined} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name}/></>}
                   </div>
                   <div className="canvas-media-name" title={media.name}>{media.name}</div>
                 </div>
@@ -943,8 +1027,13 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
         <div className="canvas-tools-sheet-grid">{tools.filter(item => ["rect", "ellipse", "connector"].includes(item.id)).map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} onClick={() => chooseTool(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>
-          <button onClick={() => { mediaInput.current?.click(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
+          <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
           <button onClick={() => { setEmbedOpen(true); setMobileMoreOpen(false); }}><Globe2 size={19}/><span>{t("embedWeb")}</span></button>
+          {iosTouchFallback && <button onClick={() => { void paste(); setMobileMoreOpen(false); }}><ClipboardPaste size={19}/><span>{t("pasteImage")}</span></button>}
+          {iosTouchFallback && <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} onClick={() => { if (isRecording) stopRecording(); else void startRecording(); setMobileMoreOpen(false); }}>{isRecording ? <Square size={19}/> : <Mic size={19}/>}<span>{t(isRecording ? "stopRecording" : "recordAudio")}</span></button>}
+          {iosTouchFallback && <button disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); setMobileMoreOpen(false); }}><Network size={19}/><span>{t("arrangeMap")}</span></button>}
+          {iosTouchFallback && <button disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); setMobileMoreOpen(false); }}><GitFork size={19}/><span>{t("arrangeMapTwoSided")}</span></button>}
+          {iosTouchFallback && <button disabled={!selectedStudyText} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} onClick={() => { setAiOpen(true); setMobileMoreOpen(false); }}><Sparkles size={19}/><span>{t("askAiSelection")}</span></button>}
           <button className={snap ? "selected" : ""} onClick={() => setSnap(value => !value)}><Magnet size={19}/><span>{t("snap")}</span></button>
           {onToggleTimer && <button className={timerVisible ? "selected" : ""} aria-pressed={timerVisible} onClick={onToggleTimer}><Timer size={19}/><span>{t("showFocusTimer")}</span></button>}
         </div>

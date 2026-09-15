@@ -1,5 +1,23 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-15 — V4.5.6 iOS & Mobile Repair
+
+### Implemented
+
+- Added an iOS-only native touch fallback so drawing survives WebKit Pointer Capture loss when a stroke reaches the canvas edge; normal desktop/Windows/Android pointer paths remain unchanged.
+- Restored the mobile project Share entry for iOS local projects with a sign-in path, native Share Sheet support for invite links and a visible manual-copy fallback when iOS Clipboard API access is unavailable.
+- Repaired iOS media insertion/playback paths: synchronous non-hidden file picker activation, HEIC/HEIF/MOV/M4A recognition, MIME-aware recording names, bounded metadata probing and iOS Blob URLs for persisted video/audio data URLs.
+- Added iOS-only access to mobile actions that were otherwise missing or difficult to reach: paste image, record audio, two mind-map layouts, selection AI and save checkpoint.
+- Added iOS viewport/safe-area rules for narrow portrait and short landscape screens; bumped the frontend badge, API health release and PWA shell cache to `4.5.6`.
+
+### Verification
+
+- Web typecheck passed; web suite passed with 29 files / 191 tests.
+- Server typecheck passed; frontend production build passed; `git diff --check` passed.
+- Physical Safari and Messenger WebView testing remains required for the iOS touch, Share Sheet, HEIC and media decoder paths.
+
+See [V4.5.6_IOS_MOBILE_REPAIR_VI.md](./V4.5.6_IOS_MOBILE_REPAIR_VI.md) for the feature parity table, deployment notes and device QA checklist.
+
 ## Update 2026-09-14 — V4.5.1 Share, Wheel & Mobile Canvas Repair
 
 ### Implemented

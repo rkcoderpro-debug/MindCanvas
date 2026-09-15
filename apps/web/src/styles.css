@@ -310,6 +310,12 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .share-link-box > div { display: grid; gap: 3px; grid-column: 1 / -1; }
 .share-link-box input { width: 100%; min-width: 0; }
 .share-link-box .secondary-button { min-width: 0; white-space: nowrap; }
+.share-link-actions { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: 8px; }
+.share-link-actions .secondary-button { flex: 1 1 180px; }
+.share-auth-box { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--accent-border); border-radius: 12px; background: var(--accent-soft); }
+.share-auth-box p { margin: 0; color: var(--muted); }
+.share-auth-box .primary-button { justify-self: start; }
+.media-file-input { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; opacity: 0; pointer-events: none; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .share-list-section { display: grid; gap: 9px; }
 .share-list-section h2 { margin: 0; font-size: 18px; }
 .share-list { display: grid; gap: 6px; padding: 0; margin: 0; list-style: none; }
@@ -1713,6 +1719,8 @@ html { -webkit-text-size-adjust: 100%; }
   .share-invite-form .primary-button { grid-column: auto; width: 100%; justify-content: center; }
   .share-link-box { grid-template-columns: 1fr; }
   .share-link-box button { width: 100%; justify-content: center; }
+  .share-link-actions { display: grid; grid-template-columns: 1fr; }
+  .share-auth-box .primary-button { width: 100%; justify-content: center; }
   .share-list li { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
   .share-list li > select { grid-column: 2; width: 100%; }
   .share-list li > .share-role { grid-column: 2; }
@@ -2774,4 +2782,49 @@ body,
 @media (prefers-reduced-motion: reduce) and (max-width: 620px) {
   .editor-layout .drawing-toolbar.toolbar-expanded .drawing-toolbar-tools,
   .learning-hub-nav { scroll-behavior: auto; }
+}
+
+/* V4.5.6: iOS-only viewport and safe-area corrections. Android and desktop
+   keep the existing mobile/desktop layout rules. */
+@media (max-width: 620px) {
+  .ios-device .canvas-open-mode .main-area {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  .ios-device .mobile-canvas-header {
+    min-height: calc(56px + env(safe-area-inset-top));
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+  .ios-device .canvas-open-mode .editor-layout {
+    height: clamp(380px, calc(100svh - 156px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 760px);
+  }
+  .ios-device .mobile-project-sheet,
+  .ios-device .canvas-tools-sheet {
+    max-height: min(82svh, 720px);
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  .ios-device .mobile-project-sheet-backdrop,
+  .ios-device .canvas-tools-sheet-backdrop {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 390px) {
+  .ios-device .mobile-canvas-header { grid-template-columns: 42px minmax(0, 1fr) 38px 42px; gap: 2px; }
+  .ios-device .mobile-project-sheet-grid,
+  .ios-device .canvas-tools-sheet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ios-device .mobile-canvas-title strong { font-size: 13px; }
+}
+
+@media (max-width: 420px) {
+  /* The compact four-item navigation is fixed to the viewport. Keep the
+     reserved bottom space from the shared mobile rules on small iPhones. */
+  .ios-device .canvas-open-mode .main-area { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+  .ios-device .canvas-open-mode.canvas-fullscreen-mode .main-area { padding-bottom: 0 !important; }
+  .ios-device .canvas-tools-sheet-backdrop { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+}
+
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 620px) {
+  .ios-device .canvas-open-mode .editor-layout { height: calc(100svh - 72px); min-height: 320px; }
+  .ios-device .mobile-project-sheet,
+  .ios-device .canvas-tools-sheet { max-height: calc(100svh - 16px); }
 }
