@@ -23,6 +23,7 @@ import { readFocusTimerVisibility, readMobileZoomControlsVisibility, saveFocusTi
 import { FREE_ACCOUNT_PLAN, type AccountPlan } from "./lib/account";
 import { errorMessage } from "./lib/errors";
 import { isIOSDevice } from "./lib/canvasInput";
+import ShareInbox from "./components/ShareInbox";
 const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 const CanvasBoard = lazy(() => import("./components/CanvasBoard"));
 const FolderManager = lazy(() => import("./components/FolderManager"));
@@ -120,11 +121,11 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : filter === "__shared" ? p.shared : !filter || p.folderId === filter));
   const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter === "__shared" ? t("sharedWithMe") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
   const currentProject = ws.board ? ws.projects.find(project => project.id === ws.board!.id) : undefined;
-  const readOnly = currentProject?.accessRole === "viewer";
-  // iOS also exposes Share for role-less/local projects so the user receives
-  // a sign-in path instead of an apparently missing feature. Desktop and
-  // Android ownership rules remain unchanged.
-  const mobileShareVisible = !readOnly && (currentProject?.accessRole === "owner" || (iosDevice && !currentProject?.accessRole));
+  const readOnly = currentProject?.accessRole === "viewer" || !!currentProject?.cloudOffline;
+  // The mobile project sheet also needs to expose Share for local/guest
+  // projects so the feature is not missing on Android. Authenticated cloud
+  // projects still remain owner-only; guests receive the sign-in path.
+  const mobileShareVisible = !readOnly && (currentProject?.accessRole === "owner" || !currentProject?.accessRole);
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") { event.preventDefault(); setCommandOpen(value => !value); }
@@ -211,7 +212,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
 
   return <div className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""}`}>
     <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
-    <main className="main-area">
+    <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`}>
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="breadcrumbs"><button onClick={home}>{ws.board ? <ArrowLeft size={17}/> : <LayoutGrid size={17}/>} {t("workspace")}</button>{ws.board && <span>/ {ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
@@ -219,7 +220,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       </header>
       {ws.board && <header className="mobile-canvas-header">
         <button type="button" className="icon-button mobile-canvas-back" aria-label={t("workspace")} title={t("workspace")} onClick={home}><ArrowLeft size={20}/></button>
-        <div className="mobile-canvas-title" title={ws.board.title}><strong>{ws.board.title}</strong><small>{readOnly ? t("viewerProject") : "Canvas"}</small></div>
+        <div className="mobile-canvas-title" title={ws.board.title}><strong>{ws.board.title}</strong><small>{currentProject?.cloudOffline ? t("sharedOffline") : readOnly ? t("viewerProject") : "Canvas"}</small></div>
         <button type="button" role="status" className={`mobile-save-status ${ws.status}`} aria-label={t(ws.status)} title={t(ws.status)} onClick={() => setModal("sync")}><Cloud size={19}/><span>{t(ws.status)}</span></button>
         <button type="button" className="icon-button mobile-project-menu-trigger" aria-label={t("projectActions")} aria-expanded={mobileProjectMenuOpen} title={t("projectActions")} onClick={() => setMobileProjectMenuOpen(value => !value)}><MoreHorizontal size={21}/></button>
       </header>}
@@ -229,12 +230,13 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       {inviteState === "accepting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("acceptInviteLoading")}</small></span></div>}
       {inviteState === "accepted" && <div className="invite-banner success" role="status"><span><strong>{t("inviteAccepted")}</strong></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}
       {inviteState === "error" && inviteError && <div className="invite-banner error" role="alert"><span><strong>{t("error")}</strong><small>{inviteError}</small></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}
+      {user && <ShareInbox onAccepted={(projectId, title, role) => { setFilter("__shared"); setRecent(false); void ws.refresh(); void ws.open({ id: projectId, title, folderId: null, updatedAt: new Date().toISOString(), shared: true, accessRole: role }); }} />}
       <Suspense fallback={<RouteLoading/>}>{modal === "share" && ws.board ? <ShareDialog projectId={ws.board.id} title={ws.board.title} isAuthenticated={!!user} onSignIn={isSupabaseConfigured ? () => void auth() : undefined} onClose={() => setModal(null)}/> : ws.board ? <>
         <div className="editor-heading canvas-editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} disabled={readOnly} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
           {!readOnly && <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>}
           {ws.projects.find(project => project.id === ws.board!.id)?.accessRole === "owner" && <button className="secondary-button" onClick={() => setModal("share")}><Share2 size={17}/>{t("shareProject")}</button>}<button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
           {!readOnly && <button className="primary-button" onClick={() => setAiPanelMode("open")}><Sparkles size={17}/>{t("ai")}</button>}</div></div>
-        {readOnly && <div className="shared-readonly-banner">{t("viewerProject")}</div>}
+        {readOnly && <div className="shared-readonly-banner">{currentProject?.cloudOffline ? t("sharedOffline") : t("viewerProject")}</div>}
         {mobileProjectMenuOpen && <div className="mobile-project-sheet-backdrop" role="presentation" onClick={() => setMobileProjectMenuOpen(false)}><aside className="mobile-project-sheet" role="dialog" aria-modal="true" aria-label={t("projectActions")} onClick={event => event.stopPropagation()}>
           <header><div><strong>{ws.board.title}</strong><small>{t(ws.status)}</small></div><button type="button" className="icon-button" aria-label={t("close")} onClick={() => setMobileProjectMenuOpen(false)}><X size={20}/></button></header>
           {!readOnly && <TitleInput key={`mobile-${ws.board.id}`} value={ws.board.title} label={t("rename")} onCommit={title => ws.change({ ...ws.board!, title })}/>}

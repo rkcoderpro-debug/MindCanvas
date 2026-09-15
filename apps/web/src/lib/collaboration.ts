@@ -17,9 +17,14 @@ export type ProjectInvitation = {
   projectId: string;
   email: string;
   role: Exclude<CollaborationRole, "owner">;
-  status: "pending" | "accepted" | "revoked" | "expired";
+  status: "pending" | "accepted" | "declined" | "revoked" | "expired";
   expiresAt: string;
   createdAt: string;
+};
+export type IncomingProjectInvitation = ProjectInvitation & {
+  projectTitle: string;
+  inviterId: string;
+  inviterName: string;
 };
 export type CollaborationUpdate = {
   projectId: string;
@@ -39,7 +44,7 @@ export type ProjectPresence = {
 };
 
 const COLLABORATION_RPC_MIGRATION_HINT =
-  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy lần lượt supabase/migrations/0011_v4_4_collaboration.sql, 0012_v4_5_1_share_rpc_repair.sql và 0013_v4_5_1_runtime_repairs.sql trên đúng project Supabase của Render, sau đó tải lại ứng dụng.";
+  "Không tìm thấy RPC chia sẻ trên Supabase (PGRST202). Hãy chạy lần lượt supabase/migrations/0011_v4_4_collaboration.sql, 0012_v4_5_1_share_rpc_repair.sql, 0013_v4_5_1_runtime_repairs.sql và 0014_v4_5_9_share_inbox_pricing.sql trên đúng project Supabase của Render, sau đó tải lại ứng dụng.";
 const COLLABORATION_RPC_RUNTIME_HINT =
   "RPC chia sẻ đang chạy phiên bản cũ và bị tham chiếu project_id mơ hồ (42702). Hãy chạy supabase/migrations/0013_v4_5_1_runtime_repairs.sql trên đúng project Supabase của Render, rồi tải lại ứng dụng.";
 
@@ -116,7 +121,7 @@ function invitationFromRow(row: any): ProjectInvitation {
     projectId: String(row.project_id),
     email: String(row.email),
     role: row.role === "editor" ? "editor" : "viewer",
-    status: ["accepted", "revoked", "expired"].includes(row.status) ? row.status : "pending",
+    status: ["accepted", "declined", "revoked", "expired"].includes(row.status) ? row.status : "pending",
     expiresAt: String(row.expires_at),
     createdAt: String(row.created_at),
   };
@@ -182,6 +187,42 @@ export async function acceptProjectInvitation(token: string) {
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.project_id) throw new Error("Lời mời không trả về project.");
   return { projectId: String(row.project_id), role: (row.role === "editor" ? "editor" : "viewer") as "editor" | "viewer", title: String(row.title ?? "") };
+}
+
+function incomingInvitationFromRow(row: any): IncomingProjectInvitation {
+  return {
+    ...invitationFromRow(row),
+    projectTitle: String(row.project_title ?? "MindCanvas project"),
+    inviterId: String(row.inviter_id),
+    inviterName: typeof row.inviter_name === "string" && row.inviter_name ? row.inviter_name : "MindCanvas",
+  };
+}
+
+/** Lists only invitations addressed to the currently authenticated email. */
+export async function listMyPendingProjectInvitations() {
+  const client = requireClient();
+  await requireSession();
+  const { data, error } = await client.rpc("list_my_pending_project_invitations");
+  if (error) throw collaborationRpcError(error);
+  return (data ?? []).map(incomingInvitationFromRow);
+}
+
+export async function acceptProjectInvitationById(invitationId: string) {
+  const client = requireClient();
+  await requireSession();
+  const { data, error } = await client.rpc("accept_project_invitation_by_id", { p_invitation_id: invitationId });
+  if (error) throw collaborationRpcError(error);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.project_id) throw new Error("Lời mời không trả về project.");
+  return { projectId: String(row.project_id), role: (row.role === "editor" ? "editor" : "viewer") as "editor" | "viewer", title: String(row.title ?? "") };
+}
+
+export async function declineProjectInvitation(invitationId: string) {
+  const client = requireClient();
+  await requireSession();
+  const { data, error } = await client.rpc("decline_project_invitation", { p_invitation_id: invitationId });
+  if (error) throw collaborationRpcError(error);
+  if (!data) throw new Error("Lời mời đã được xử lý hoặc không còn tồn tại.");
 }
 
 export function subscribeToProject(projectId: string, onUpdate: (update: CollaborationUpdate) => void, onStatus?: (status: string) => void) {

@@ -2,7 +2,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { blankBoard } from "./board";
 const mocks = vi.hoisted(() => ({ from: vi.fn() }));
-vi.mock("./supabase", () => ({ getCurrentSession: async () => ({ user: { id: "editor" } }), supabase: { from: mocks.from } }));
+vi.mock("./supabase", () => ({ getCurrentSession: async () => ({ user: { id: "editor" } }), requestTimeoutSignal: () => new AbortController().signal, supabase: { from: mocks.from } }));
 import { persistProject, ProjectConflictError, type CachedProject } from "./projectStore";
 const draft = (): CachedProject => {
   const board = blankBoard("Shared");

@@ -36,6 +36,7 @@ describe("V4.5.1 collaboration helpers", () => {
       message: "Could not find the function public.list_project_members(p_project_id) in the schema cache",
     });
     expect(error.message).toContain("0013_v4_5_1_runtime_repairs.sql");
+    expect(error.message).toContain("0014_v4_5_9_share_inbox_pricing.sql");
   });
 
   it("turns the runtime project_id ambiguity into a repair hint", () => {

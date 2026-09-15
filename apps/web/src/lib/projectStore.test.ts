@@ -17,6 +17,13 @@ describe("Project isolation and save queue", () => {
   it("keeps a newer edit pending while advancing its saved base revision", () => { const old = { ...cached(), revision: 3 }; cacheProject("A", old); cacheProject("A", { ...old, board: { ...old.board, title: "Changed while saving" } }); acknowledge("A", old, 4); expect(readCache("A")[0].pending).toBe(true); expect(readCache("A")[0].revision).toBe(4); });
   it("acknowledges only the exact saved snapshot", () => { const p = cached(); cacheProject("A", p); acknowledge("A", p); expect(readCache("A")[0].pending).toBe(false); });
   it("keeps pending drafts when a remote list is empty", () => { const p = cached(); expect(mergeProjects([], [p], "A")).toEqual([p]); expect(mergeProjects([], [{ ...p, pending: false }], "A")).toEqual([]); });
+  it("never lets a pending shared cache replace cloud metadata", () => {
+    const local = { ...cached(), title: "Old phone copy", ownerId: "owner", accessRole: "editor" as const, shared: true };
+    const remote = { id: local.id, title: "Cloud version", folderId: "folder", updatedAt: "2099-01-02T00:00:00.000Z", ownerId: "owner", accessRole: "editor" as const, shared: true, pending: false };
+    const merged = mergeProjects([remote], [local], "member");
+    expect(merged[0]).toMatchObject({ id: local.id, title: "Cloud version", folderId: "folder", updatedAt: remote.updatedAt, ownerId: "owner", accessRole: "editor", shared: true, pending: false, cloudOffline: false });
+    expect(merged[0].board).toBe(local.board);
+  });
   it("serializes requests and recovers after a failure", async () => {
     const queue = new SaveQueue(), order: number[] = [];
     const first = queue.run(async () => { order.push(1); await Promise.resolve(); order.push(2); throw new Error("Offline"); });

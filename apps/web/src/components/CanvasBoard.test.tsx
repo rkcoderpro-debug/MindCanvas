@@ -380,6 +380,45 @@ describe("Canvas interactions", () => {
     expect(host.querySelector('[data-element] polygon')).not.toBeNull();
   });
 
+  it("lets XPen use shape tools even when a barrel button is reported", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => (host.querySelector('[aria-label="Đường thẳng"]') as HTMLButtonElement).click());
+    await act(async () => { pointer(svg, "pointerdown", 12, 18, { pointerType: "xpen", pointerId: 401, button: 5 }); pointer(svg, "pointermove", 92, 58, { pointerType: "xpen", pointerId: 401, button: 5 }); pointer(svg, "pointerup", 92, 58, { pointerType: "xpen", pointerId: 401, button: 5 }); });
+    expect(current.drawings[0].points).toEqual([{ x: 12, y: 18 }, { x: 92, y: 58 }]);
+    await act(async () => (host.querySelector('[aria-label="Tam giác"]') as HTMLButtonElement).click());
+    await act(async () => { pointer(svg, "pointerdown", 40, 50, { pointerType: "xpen", pointerId: 402, button: 5 }); pointer(svg, "pointermove", 160, 170, { pointerType: "xpen", pointerId: 402, button: 5 }); pointer(svg, "pointerup", 160, 170, { pointerType: "xpen", pointerId: 402, button: 5 }); });
+    expect(current.shapes[0]).toMatchObject({ kind: "triangle", x: 40, y: 50, width: 120, height: 120 });
+  });
+
+  it("renders iOS video, audio and embeds in a viewport-linked HTML overlay", async () => {
+    const originalUserAgent = navigator.userAgent;
+    const originalPlatform = navigator.platform;
+    const originalMaxTouchPoints = navigator.maxTouchPoints;
+    const originalPoint = (SVGSVGElement.prototype as any).createSVGPoint;
+    const originalMatrix = (SVGSVGElement.prototype as any).getScreenCTM;
+    try {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      Object.defineProperty(SVGSVGElement.prototype, "createSVGPoint", { configurable: true, value() { return { x: 0, y: 0, matrixTransform(this: { x: number; y: number }) { return { x: this.x, y: this.y }; } }; } });
+      Object.defineProperty(SVGSVGElement.prototype, "getScreenCTM", { configurable: true, value() { return {}; } });
+      const initial = { ...blankBoard(), media: [{ id: "ios-video", kind: "video" as const, src: "data:video/mp4;base64,AA==", name: "clip.mp4", x: 30, y: 40, width: 220, height: 150 }, { id: "ios-audio", kind: "audio" as const, src: "data:audio/mp4;base64,AA==", name: "voice.m4a", x: 280, y: 40, width: 220, height: 112 }], embeds: [{ id: "ios-web", kind: "web" as const, url: "https://example.com", title: "Example", x: 30, y: 230, width: 320, height: 220 }] };
+      await act(async () => root.render(<Harness initial={initial}/>));
+      expect(host.querySelectorAll('[data-ios-overlay-item]')).toHaveLength(3);
+      expect(host.querySelector('[data-ios-embed-renderer="overlay"]')).not.toBeNull();
+      expect(host.querySelector('[data-ios-media-renderer="overlay"]')).not.toBeNull();
+      expect(host.querySelector('[data-ios-media-overlay] foreignObject')).toBeNull();
+      expect(host.querySelector('[data-ios-overlay-item="ios-web"] iframe')?.getAttribute("src")).toBe("https://example.com");
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+      Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: originalMaxTouchPoints });
+      if (originalPoint) Object.defineProperty(SVGSVGElement.prototype, "createSVGPoint", { configurable: true, value: originalPoint });
+      if (originalMatrix) Object.defineProperty(SVGSVGElement.prototype, "getScreenCTM", { configurable: true, value: originalMatrix });
+    }
+  });
+
   it("uses the iOS native touch fallback when a stroke leaves the SVG", async () => {
     const originalUserAgent = navigator.userAgent;
     const originalPlatform = navigator.platform;

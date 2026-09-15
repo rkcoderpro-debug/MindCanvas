@@ -23,7 +23,7 @@ export const PLAN_CATALOG: Record<PlanId, PlanDefinition> = {
   free: { id: "free", name: "Free", priceVnd: 0, storageLimitBytes: 20 * 1024 * 1024, aiAutoMonthlyLimit: 30, aiAutoDailyLimit: 1, aiManualDailyLimit: 3, aiManualIncluded: false, maxCards: 50, description: "Bắt đầu học và làm việc", sortOrder: 1 },
   plus: { id: "plus", name: "Plus", priceVnd: 79000, storageLimitBytes: 500 * 1024 * 1024, aiAutoMonthlyLimit: 600, aiAutoDailyLimit: 20, aiManualDailyLimit: 0, aiManualIncluded: true, maxCards: 100, description: "Cho nhu cầu học tập thường xuyên", sortOrder: 2 },
   pro: { id: "pro", name: "Pro", priceVnd: 159000, storageLimitBytes: 2 * 1024 * 1024 * 1024, aiAutoMonthlyLimit: 1800, aiAutoDailyLimit: 60, aiManualDailyLimit: 0, aiManualIncluded: true, maxCards: 200, description: "Cho người dùng chuyên sâu", sortOrder: 3 },
-  max: { id: "max", name: "Max", priceVnd: 299000, storageLimitBytes: 10 * 1024 * 1024 * 1024, aiAutoMonthlyLimit: 4500, aiAutoDailyLimit: 150, aiManualDailyLimit: 0, aiManualIncluded: true, maxCards: 500, description: "Toàn bộ giới hạn mở rộng", sortOrder: 4 },
+  max: { id: "max", name: "Max", priceVnd: 499000, storageLimitBytes: 10 * 1024 * 1024 * 1024, aiAutoMonthlyLimit: 4500, aiAutoDailyLimit: 150, aiManualDailyLimit: 0, aiManualIncluded: true, maxCards: 500, description: "Toàn bộ giới hạn mở rộng", sortOrder: 4 },
 };
 
 export type UsageSnapshot = {

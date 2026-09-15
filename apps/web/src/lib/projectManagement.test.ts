@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { blankBoard } from "./board";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), from: vi.fn() }));
-vi.mock("./supabase", () => ({ getCurrentSession: mocks.session, supabase: { from: mocks.from } }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), from: vi.fn(), requestTimeoutSignal: vi.fn(() => new AbortController().signal) }));
+vi.mock("./supabase", () => ({ getCurrentSession: mocks.session, requestTimeoutSignal: mocks.requestTimeoutSignal, supabase: { from: mocks.from } }));
 import { cacheProject, readCache, updateProject, mergeProjects } from "./projectStore";
 const record = () => { const board=blankBoard("Original"); return {id:board.id,title:board.title,folderId:null,updatedAt:board.updatedAt,board,pending:false}; };
 beforeEach(()=>{localStorage.clear();vi.clearAllMocks();mocks.session.mockResolvedValue({user:{id:"owner"}});});

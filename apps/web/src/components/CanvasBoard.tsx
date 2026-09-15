@@ -26,6 +26,34 @@ type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "line" | 
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
 type CanvasPointerInput = { pointerId: number; pointerType: string; button: number; clientX: number; clientY: number; shiftKey?: boolean; altKey?: boolean; preventDefault: () => void; stopPropagation?: () => void; capture?: boolean };
+type IOSOverlayItem = { id: string; source: "media" | "embed"; x: number; y: number; width: number; height: number; rotation: number; opacity: number };
+
+function isStylusPointer(pointerType: string) {
+  return ["pen", "stylus", "xpen"].includes(pointerType.toLocaleLowerCase());
+}
+
+function iosOverlayRect(svg: SVGSVGElement, frame: HTMLDivElement, viewport: BoardState["viewport"], item: Pick<IOSOverlayItem, "x" | "y" | "width" | "height">) {
+  if (typeof svg.getScreenCTM !== "function" || typeof svg.createSVGPoint !== "function") return null;
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  const frameRect = frame.getBoundingClientRect();
+  const project = (x: number, y: number) => {
+    const point = svg.createSVGPoint();
+    point.x = viewport.x + x * viewport.scale;
+    point.y = viewport.y + y * viewport.scale;
+    return point.matrixTransform(matrix);
+  };
+  const topLeft = project(item.x, item.y);
+  const topRight = project(item.x + item.width, item.y);
+  const bottomLeft = project(item.x, item.y + item.height);
+  const left = topLeft.x - frameRect.left;
+  const top = topLeft.y - frameRect.top;
+  const width = Math.hypot(topRight.x - topLeft.x, topRight.y - topLeft.y);
+  const height = Math.hypot(bottomLeft.x - topLeft.x, bottomLeft.y - topLeft.y);
+  if (![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+  return { left, top, width, height };
+}
+
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const DEFAULT_CROP: CanvasCrop = { top: 0, right: 0, bottom: 0, left: 0 };
 const IOS_MEDIA_PROBE_TIMEOUT_MS = 4500;
@@ -216,6 +244,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const [aiOpen, setAiOpen] = useState(false), [sourceView, setSourceView] = useState<SourceDocumentView | null>(null), [sourceError, setSourceError] = useState("");
   const [mediaError, setMediaError] = useState(""), [isRecording, setIsRecording] = useState(false), [recordingSeconds, setRecordingSeconds] = useState(0);
   const [iosMediaSources, setIOSMediaSources] = useState<Record<string, string>>({});
+  const [iosOverlayItems, setIOSOverlayItems] = useState<Array<IOSOverlayItem & { left: number; top: number; screenWidth: number; screenHeight: number }>>([]);
   const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
@@ -223,6 +252,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChangeProp, readOnly]);
   const iosMedia = board.media.filter(media => media.src.startsWith("data:") && ["image", "video", "audio"].includes(media.kind));
   const iosMediaSignature = iosTouchFallback ? JSON.stringify(iosMedia.map(media => [media.id, media.src])) : "";
+  const b = preview ?? editing?.fresh ?? board;
   useEffect(() => {
     if (!iosTouchFallback || !iosMediaSignature || typeof fetch !== "function" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
       setIOSMediaSources(current => Object.keys(current).length ? {} : current);
@@ -253,6 +283,51 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       createdUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch {} });
     };
   }, [iosTouchFallback, iosMediaSignature]);
+  const iosOverlaySignature = iosTouchFallback ? JSON.stringify([
+    b.viewport,
+    ...b.media.filter(media => !media.hidden && media.kind !== "image").map(media => ["media", media.id, media.x, media.y, media.width, media.height, media.rotation ?? 0, media.opacity ?? 1]),
+    ...b.embeds.filter(embed => !embed.hidden).map(embed => ["embed", embed.id, embed.x, embed.y, embed.width, embed.height, embed.rotation ?? 0, embed.opacity ?? 1]),
+  ]) : "";
+  useEffect(() => {
+    if (!iosTouchFallback) {
+      setIOSOverlayItems(current => current.length ? [] : current);
+      return;
+    }
+    const svgElement = svg.current;
+    const frameElement = frame.current;
+    if (!svgElement || !frameElement) return;
+    let frameRequest = 0;
+    const update = () => {
+      frameRequest = 0;
+      const next = [
+        ...b.media.filter(media => !media.hidden && media.kind !== "image").map(media => ({ id: media.id, source: "media" as const, x: media.x, y: media.y, width: media.width, height: media.height, rotation: media.rotation ?? 0, opacity: media.opacity ?? 1 })),
+        ...b.embeds.filter(embed => !embed.hidden).map(embed => ({ id: embed.id, source: "embed" as const, x: embed.x, y: embed.y, width: embed.width, height: embed.height, rotation: embed.rotation ?? 0, opacity: embed.opacity ?? 1 })),
+      ].flatMap(item => {
+        const rect = iosOverlayRect(svgElement, frameElement, b.viewport, item);
+        return rect ? [{ ...item, left: rect.left, top: rect.top, screenWidth: rect.width, screenHeight: rect.height }] : [];
+      });
+      setIOSOverlayItems(next);
+    };
+    const schedule = () => {
+      if (frameRequest) return;
+      if (typeof window.requestAnimationFrame === "function") frameRequest = window.requestAnimationFrame(update);
+      else frameRequest = window.setTimeout(update, 16);
+    };
+    update();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
+    observer?.observe(frameElement);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
+      if (frameRequest) {
+        if (typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(frameRequest);
+        else window.clearTimeout(frameRequest);
+      }
+    };
+  }, [iosTouchFallback, iosOverlaySignature]);
   useEffect(() => saveCanvasTouchSettings(touchSettings), [touchSettings]);
   useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
@@ -278,7 +353,6 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (wheelIdle.current !== null) window.clearTimeout(wheelIdle.current);
     wheelIdle.current = window.setTimeout(commitWheelViewport, 120);
   };
-  const b = preview ?? editing?.fresh ?? board;
   const bounds = selectionBounds(b, selections);
   const selectedEl = selected && selections.length === 1 ? b[selected.kind].find(el => el.id === selected.id) : null;
   const selectedStudyText = selectionToStudyText(b, selections);
@@ -508,7 +582,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const selectElementAt = (input: CanvasPointerInput, s: Selection) => {
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
-    if (gesture.current || (input.button !== 0 && input.button !== 1)) return;
+    if (gesture.current || (input.button !== 0 && input.button !== 1 && !isStylusPointer(input.pointerType))) return;
     if (!interactive || space || input.button === 1) return;
     input.stopPropagation?.(); input.preventDefault();
     svg.current?.focus();
@@ -548,7 +622,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
     if (gesture.current || pinch.current) return;
-    if (input.button !== 0 && input.button !== 1) return;
+    if (input.button !== 0 && input.button !== 1 && !isStylusPointer(input.pointerType)) return;
     if (editRef.current) { finishEdit(); return; }
     input.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
     const p = point(input.clientX, input.clientY, interactionBoard);
@@ -561,8 +635,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     // still follow the active drawing tool.
     const phoneLayout = typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches;
     const touchShouldPan = input.pointerType === "touch" && (tool === "select" || (phoneLayout && (tool === "pen" || tool === "highlighter") && !touchSettings.drawWithFinger));
-    const stylusTool: ToolMode = input.pointerType === "pen" && touchSettings.stylusDrawOnly && ["select", "text", "connector"].includes(tool) ? "pen" : tool;
-    const effectiveTool = input.pointerType === "touch" ? tool : stylusTool;
+    const stylusTool: ToolMode = isStylusPointer(input.pointerType) && touchSettings.stylusDrawOnly && ["select", "text", "connector"].includes(tool) ? "pen" : tool;
+    const effectiveTool = input.pointerType === "touch" && !isStylusPointer(input.pointerType) ? tool : stylusTool;
     if (readOnly || space || tool === "hand" || input.button === 1 || touchShouldPan) {
       setSelected(null); setInputMode("panning"); gesture.current = { mode: "pan", start: p, screen: { x: input.clientX, y: input.clientY }, base, pointer: input.pointerId, next: base };
     } else if (effectiveTool === "select") {
@@ -911,6 +985,18 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const selectedRotation = selectedEl && "rotation" in selectedEl ? selectedEl.rotation ?? 0 : 0;
   const selectedOpacity = selectedEl && "opacity" in selectedEl && typeof selectedEl.opacity === "number" ? clamp(selectedEl.opacity, 0, 1) : 1;
   const selectedLabelKey = selected?.kind === "shapes" && selectedEl && "kind" in selectedEl ? selectedEl.kind as MessageKey : selected ? labelKey[selected.kind] : "rect";
+  const renderCanvasMedia = (media: CanvasMedia, renderedMediaSrc: string) => <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-media ${media.kind}`} aria-label={`${t(media.kind)}: ${media.name}`}>
+    <div className="canvas-media-frame">
+      {media.kind === "image" && <div className="canvas-media-visual"><img src={renderedMediaSrc} alt={media.name} draggable={false} onError={iosTouchFallback ? () => setMediaError(t("mediaFormatUnsupported")) : undefined} style={cropStyle(media.crop)}/></div>}
+      {media.kind === "video" && <div className="canvas-media-visual"><video src={renderedMediaSrc} controls preload="metadata" playsInline onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onError={iosTouchFallback ? () => setMediaError(t("mediaFormatUnsupported")) : undefined} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name} style={cropStyle(media.crop)}/></div>}
+      {media.kind === "audio" && <><AudioLines size={26} aria-hidden="true"/><audio src={renderedMediaSrc} controls preload="metadata" onLoadedMetadata={event => applyTrimStart(event.currentTarget, media)} onError={iosTouchFallback ? () => setMediaError(t("mediaFormatUnsupported")) : undefined} onTimeUpdate={event => enforceTrimEnd(event.currentTarget, media)} onPlay={event => { if (event.currentTarget.currentTime < mediaTrimStart(media)) event.currentTarget.currentTime = mediaTrimStart(media); }} onPointerDown={event => event.stopPropagation()} aria-label={media.name}/></>}
+    </div>
+    <div className="canvas-media-name" title={media.name}>{media.name}</div>
+  </div>;
+  const selectIOSOverlayElement = (event: ReactPointerEvent, selection: Selection) => {
+    if (event.target instanceof HTMLMediaElement || event.target instanceof HTMLIFrameElement) { event.stopPropagation(); return; }
+    selectElement(event, selection);
+  };
   const updateCrop = (edge: keyof CanvasCrop, raw: number) => {
     if (!selectedMedia || !Number.isFinite(raw)) return;
     const crop = { ...DEFAULT_CROP, ...selectedMedia.crop, [edge]: clamp(raw, 0, 90) };
@@ -976,15 +1062,15 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
               if (event.target instanceof HTMLIFrameElement || event.target instanceof HTMLMediaElement) { event.stopPropagation(); return; }
               selectElement(event, embedSelection);
             };
-            return <g key={embed.id} data-element={embed.id} opacity={embed.opacity ?? 1} transform={`rotate(${embed.rotation ?? 0} ${embed.x + embed.width / 2} ${embed.y + embed.height / 2})`} onPointerDown={selectEmbed}>
-              <foreignObject x={embed.x} y={embed.y} width={embed.width} height={embed.height} pointerEvents={interactive && !space ? "auto" : "none"} onPointerDown={selectEmbed}>
+            return <g key={embed.id} data-element={embed.id} data-ios-embed-renderer={iosTouchFallback ? "overlay" : undefined} opacity={embed.opacity ?? 1} transform={`rotate(${embed.rotation ?? 0} ${embed.x + embed.width / 2} ${embed.y + embed.height / 2})`} onPointerDown={selectEmbed}>
+              {iosTouchFallback ? <rect x={embed.x} y={embed.y} width={embed.width} height={embed.height} rx="10" fill="var(--surface-raised)" stroke="var(--line)" pointerEvents={interactive && !space ? "auto" : "none"}/> : <foreignObject x={embed.x} y={embed.y} width={embed.width} height={embed.height} pointerEvents={interactive && !space ? "auto" : "none"} onPointerDown={selectEmbed}>
                 <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-embed ${embed.kind}`} aria-label={`${t("embed")}: ${embed.title || embed.url}`}>
                   <div className="canvas-embed-header" onPointerDown={selectEmbed}><Globe2 size={14}/><span title={embed.url}>{embed.title || (embed.kind === "youtube" ? t("youtube") : embed.kind === "video" ? t("video") : t("webPage"))}</span></div>
                   <div className="canvas-embed-body" onPointerDown={event => event.stopPropagation()}>
                     {embed.kind === "video" ? <video src={embed.url} controls playsInline preload="metadata" aria-label={embed.title || embed.url}/> : <iframe src={embed.url} title={embed.title || embed.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
                   </div>
                 </div>
-              </foreignObject>
+              </foreignObject>}
             </g>;
           })}
           {b.media.filter(media => !hiddenElements.has(media.id)).map(media => {
@@ -1004,6 +1090,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
                 <line x1={media.x} y1={media.y + nativeIOSImage.visualHeight} x2={media.x + media.width} y2={media.y + nativeIOSImage.visualHeight} stroke="var(--line)"/>
                 <rect x={media.x} y={media.y} width={media.width} height={media.height} rx="10" fill="none" stroke="var(--line)"/>
                 <text x={media.x + 8} y={media.y + nativeIOSImage.visualHeight + nativeIOSImage.labelHeight / 2} fontSize="11" fill="var(--muted)" dominantBaseline="middle" pointerEvents="none">{media.name}</text>
+              </g> : iosTouchFallback ? <g data-ios-media-renderer="overlay" pointerEvents={interactive && !space ? "auto" : "none"}>
+                <rect x={media.x} y={media.y} width={media.width} height={media.height} rx="10" fill="var(--surface-raised)" stroke="var(--line)"/>
+                <text x={media.x + 8} y={media.y + media.height / 2} fontSize="11" fill="var(--muted)" dominantBaseline="middle" pointerEvents="none">{media.name}</text>
               </g> : <foreignObject x={media.x} y={media.y} width={media.width} height={media.height} pointerEvents={interactive && !space ? "auto" : "none"} onPointerDown={selectMedia}>
                 <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-media ${media.kind}`} aria-label={`${t(media.kind)}: ${media.name}`}>
                   <div className="canvas-media-frame">
@@ -1064,6 +1153,21 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
               onKeyDown={e => { e.stopPropagation(); if (e.nativeEvent.isComposing) return; if (e.key === "Escape") { e.preventDefault(); finishEdit(true); } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); finishEdit(); } }}/></foreignObject>}
         </g>
       </svg>
+      {iosTouchFallback && iosOverlayItems.length > 0 && <div className="ios-media-overlay" data-ios-media-overlay="true" aria-label={t("media")}>
+        {iosOverlayItems.map(item => {
+          const element = item.source === "media" ? b.media.find(media => media.id === item.id) : b.embeds.find(embed => embed.id === item.id);
+          if (!element) return null;
+          const selection = item.source === "media" ? { kind: "media" as const, id: item.id } : { kind: "embeds" as const, id: item.id };
+          return <div key={`${item.source}-${item.id}`} className="ios-media-overlay-item" data-ios-overlay-item={item.id} style={{ left: item.left, top: item.top, width: item.screenWidth, height: item.screenHeight, opacity: item.opacity, transform: `rotate(${item.rotation}deg)`, transformOrigin: "center center", pointerEvents: space ? "none" : "auto" }} onPointerDown={event => selectIOSOverlayElement(event, selection)}>
+            {item.source === "media" && "src" in element ? renderCanvasMedia(element, iosMediaSources[element.id] ?? element.src) : "url" in element ? <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-embed ${element.kind}`} aria-label={`${t("embed")}: ${element.title || element.url}`}>
+              <div className="canvas-embed-header" onPointerDown={event => selectIOSOverlayElement(event, selection)}><Globe2 size={14}/><span title={element.url}>{element.title || (element.kind === "youtube" ? t("youtube") : element.kind === "video" ? t("video") : t("webPage"))}</span></div>
+              <div className="canvas-embed-body" onPointerDown={event => event.stopPropagation()}>
+                {element.kind === "video" ? <video src={element.url} controls playsInline preload="metadata" aria-label={element.title || element.url}/> : <iframe src={element.url} title={element.title || element.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
+              </div>
+            </div> : null}
+          </div>;
+        })}
+      </div>}
       {mobileMoreOpen && !readOnly && <div className="canvas-tools-sheet-backdrop" onClick={() => setMobileMoreOpen(false)}><aside className="canvas-tools-sheet" aria-label={t("moreTools")} onClick={event => event.stopPropagation()}>
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
         <div className="canvas-tools-sheet-grid">{tools.filter(item => ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id)).map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} onClick={() => chooseTool(id)}><Icon size={19}/><span>{t(id)}</span></button>)}

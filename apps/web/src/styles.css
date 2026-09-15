@@ -257,6 +257,19 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .error-banner, .flashcards-error { animation: notice-in .22s cubic-bezier(.2, .8, .2, 1); }
 .error-banner span { flex: 1; overflow-wrap: anywhere; }
 .error-banner button { color: inherit; background: transparent; }
+.share-inbox { display: grid; gap: 12px; width: min(760px, 100%); margin: 14px auto 0; padding: 14px; border: 1px solid var(--accent-border); border-radius: 14px; background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface)); box-shadow: 0 12px 30px var(--shadow); animation: notice-in .22s var(--ease-standard); }
+.share-inbox > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.share-inbox > header > div { display: grid; gap: 4px; min-width: 0; }
+.share-inbox .eyebrow { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
+.share-inbox h2 { margin: 0; font-size: 18px; }
+.share-inbox-list { display: grid; gap: 8px; }
+.share-inbox-list article { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-raised); }
+.share-inbox-copy { display: grid; gap: 3px; min-width: 0; }
+.share-inbox-copy strong { overflow-wrap: anywhere; }
+.share-inbox-copy small { overflow-wrap: anywhere; }
+.share-inbox-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.share-inbox-actions button { min-height: 40px; padding: 8px 11px; font-size: 12px; }
+.canvas-open-mode .share-inbox { position: fixed; z-index: 101; top: 80px; right: 24px; width: min(440px, calc(100vw - 48px)); max-height: min(70vh, 620px); margin: 0; overflow: auto; box-shadow: 0 20px 60px var(--shadow-strong); }
 .update-banner { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--accent-border); border-radius: 8px; color: var(--accent); background: var(--accent-soft); font-size: 13px; animation: notice-in .22s cubic-bezier(.2, .8, .2, 1); }
 .update-banner button { padding: 4px 8px; border-radius: 6px; color: var(--accent-contrast); background: var(--accent); font-weight: 650; }
 .workspace-home { width: min(var(--content-max-width), 100%); margin-inline: auto; padding: 32px 8px; }
@@ -359,6 +372,10 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .canvas-media-visual img, .canvas-media-visual video { position: absolute; inset: 0; }
 .canvas-media audio { display: block; width: 100%; max-width: 100%; height: 40px; }
 .canvas-media-name { flex: 0 0 auto; min-width: 0; padding: 5px 8px; overflow: hidden; color: var(--muted); background: var(--surface-raised); border-top: 1px solid var(--line); font-size: 11px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.ios-media-overlay { position: absolute; z-index: 2; inset: 0; overflow: hidden; pointer-events: none; }
+.ios-media-overlay-item { position: absolute; display: block; min-width: 1px; min-height: 1px; transform-origin: center center; }
+.ios-media-overlay-item > .canvas-media, .ios-media-overlay-item > .canvas-embed { width: 100%; height: 100%; }
+.ios-media-overlay-item .canvas-media video, .ios-media-overlay-item .canvas-media audio, .ios-media-overlay-item .canvas-embed iframe, .ios-media-overlay-item .canvas-embed video { touch-action: auto; }
 .media-inspector-card { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); overflow: hidden; }
 .media-inspector-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .media-editor-fieldset { display: grid; gap: 9px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
@@ -1709,7 +1726,7 @@ html { -webkit-text-size-adjust: 100%; }
   .admin-plan-summary { align-items: flex-start; flex-direction: column; }
   .admin-search { grid-template-columns: auto minmax(0, 1fr); }
   .admin-search .secondary-button { grid-column: 1 / -1; width: 100%; }
-  .share-page { padding: 18px 0 32px; }
+  .share-page { min-height: 100%; padding: 18px 0 calc(112px + env(safe-area-inset-bottom)); overflow-x: hidden; }
   .share-page-header { align-items: stretch; flex-direction: column; gap: 12px; margin-bottom: 16px; }
   .share-page-title-group { gap: 10px; flex-direction: column; }
   .share-page-title-group h1 { font-size: 26px; }
@@ -1727,6 +1744,11 @@ html { -webkit-text-size-adjust: 100%; }
   .share-list li > .icon-button { grid-column: 3; grid-row: 1 / span 2; }
   .share-page-actions { justify-content: stretch; }
   .share-page-actions > button { width: 100%; justify-content: center; }
+  .share-inbox { width: 100%; margin-top: 10px; padding: 12px; }
+  .share-inbox-list article { align-items: stretch; flex-direction: column; }
+  .share-inbox-actions { justify-content: stretch; }
+  .share-inbox-actions button { flex: 1 1 0; }
+  .canvas-open-mode .share-inbox { top: calc(68px + env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); width: calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)); max-height: min(70svh, 560px); }
 }
 
 /* V4.5.1: keep the mobile canvas controls in separate, touch-sized zones. */
@@ -2901,4 +2923,18 @@ body,
 
 @media (prefers-reduced-motion: reduce) {
   .ai-task-launcher.working svg { animation: none; }
+}
+
+/* V4.5.9: Share is rendered while a canvas is still selected, so the
+   canvas-open mobile shell must temporarily become a scroll container. */
+@media (max-width: 620px) {
+  .canvas-open-mode .main-area.share-open-mode {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+  .canvas-open-mode .main-area.share-open-mode .share-page {
+    min-height: auto;
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
 }

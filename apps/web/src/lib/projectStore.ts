@@ -1,10 +1,10 @@
 import type { BoardState } from "@mindcanvas/shared";
-import { getCurrentSession, supabase } from "./supabase";
+import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
 
-export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean };
+export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export class ProjectConflictError extends Error {
@@ -149,7 +149,7 @@ export async function fetchProjectVersions(owner: string | null, projectId: stri
   if (!owner) return readVersionCache(null, projectId);
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("note_versions").select("id,note_id,version,label,content,created_at").eq("user_id", owner).eq("note_id", projectId).order("version", { ascending: false }).limit(MAX_PROJECT_VERSIONS).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("note_versions").select("id,note_id,version,label,content,created_at").eq("user_id", owner).eq("note_id", projectId).order("version", { ascending: false }).limit(MAX_PROJECT_VERSIONS).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const remote = (data ?? []).map(row => versionFromRow(row, "cloud")).filter((row): row is ProjectVersion => !!row);
     remote.forEach(version => cacheVersion(owner, version));
@@ -170,11 +170,11 @@ export async function createProjectVersion(owner: string | null, board: BoardSta
   if (!owner) return createLocalVersion(null, board, label);
   try {
     const client = await clientFor(owner), local = readVersionCache(owner, board.id);
-    const latest = await client.from("note_versions").select("version").eq("user_id", owner).eq("note_id", board.id).order("version", { ascending: false }).limit(1).abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    const latest = await client.from("note_versions").select("version").eq("user_id", owner).eq("note_id", board.id).order("version", { ascending: false }).limit(1).abortSignal(requestTimeoutSignal(20000)).maybeSingle();
     if (latest.error) throw latest.error;
     const version = Math.max(Number(latest.data?.version ?? 0), local[0]?.version ?? 0) + 1;
     const row = { id: crypto.randomUUID(), note_id: board.id, user_id: owner, version, label: label ?? null, content: { type: "mindcanvas-board", version: 1, board }, created_at: new Date().toISOString() };
-    const result = await client.from("note_versions").insert(row).select("id,note_id,version,label,content,created_at").abortSignal(AbortSignal.timeout(20000)).single();
+    const result = await client.from("note_versions").insert(row).select("id,note_id,version,label,content,created_at").abortSignal(requestTimeoutSignal(20000)).single();
     if (result.error) throw result.error;
     const saved = versionFromRow(result.data, "cloud");
     if (!saved) throw new Error("Invalid version returned by Supabase.");
@@ -188,7 +188,17 @@ export function mergeProjects(remote: Project[], cache: CachedProject[], owner: 
   if (!owner) return cache;
   const result = new Map(remote.map(p => [p.id, p]));
   for (const p of cache) {
-    if (p.pending) result.set(p.id, p);
+    const shared = p.shared || (!!p.ownerId && p.ownerId !== owner);
+    if (shared) {
+      // A collaborator's device cache is a read-through cache only. Once the
+      // remote list is available, never let a pending/stale shared snapshot
+      // replace the cloud metadata shown in the workspace. A shared entry
+      // missing from that list is no longer accessible and must not linger as
+      // a false project; offline refreshes do not call this merge function.
+      const remoteProject = result.get(p.id);
+      if (remoteProject) result.set(p.id, { ...p, ...remoteProject, board: p.board, pending: false, cloudOffline: false });
+      else result.delete(p.id);
+    } else if (p.pending) result.set(p.id, p);
     else if (result.has(p.id) && result.get(p.id)!.updatedAt === p.updatedAt) result.set(p.id, { ...p, ...result.get(p.id)!, board: p.board });
   }
   return [...result.values()];
@@ -221,8 +231,8 @@ async function clientFor(owner: string) {
 }
 export async function fetchProjects(owner: string): Promise<Project[]> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision").order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
-  if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision").order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
+  if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
   if (result.error) throw result.error;
   const data = result.data as any[] | null;
   let memberships: Record<string, "editor" | "viewer"> = {};
@@ -238,9 +248,9 @@ export async function fetchProjects(owner: string): Promise<Project[]> {
 }
 export async function fetchProjectSnapshot(owner: string, id: string): Promise<CachedProject> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,content").eq("id", id).abortSignal(AbortSignal.timeout(20000)).single();
+  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,content").eq("id", id).abortSignal(requestTimeoutSignal(20000)).single();
   if (result.error && /revision|column/i.test(result.error.message)) {
-    result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,content").eq("user_id", owner).eq("id", id).abortSignal(AbortSignal.timeout(20000)).single();
+    result = await client.from("notes").select("id,title,folder_id,updated_at,is_favorite,deleted_at,content").eq("user_id", owner).eq("id", id).abortSignal(requestTimeoutSignal(20000)).single();
   }
   if (result.error) throw result.error;
   const data = result.data as any;
@@ -262,6 +272,7 @@ export async function fetchBoard(owner: string, id: string): Promise<BoardState>
 }
 export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number }> {
   if (project.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
+  if (project.cloudOffline) throw new Error("Project chia sẻ đang ở chế độ chỉ xem khi ngoại tuyến.");
   // An existing shared draft without a base revision must be reconciled,
   // never inserted under the collaborator's identity.
   if (project.revision === undefined && (project.shared || (project.ownerId && project.ownerId !== owner))) {
@@ -275,7 +286,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // editor/update policy (or attempt to change ownership) even for a fresh
     // local UUID.  Existing legacy rows are handled only after a duplicate
     // key response below.
-    const modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+    const modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
     if (!modern.error) return { revision: Number(modern.data?.revision ?? 0) };
     const modernMessage = String(modern.error.message ?? "");
     const modernCode = String((modern.error as { code?: unknown }).code ?? "");
@@ -286,7 +297,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // retry a 42501/RLS failure with a broader write; surface that exact
     // problem so the UI can point to the Supabase project/session mismatch.
     if (!duplicate && /revision|column/i.test(modernMessage)) {
-      const legacy = await client.from("notes").insert({ ...payload, user_id: owner }).abortSignal(AbortSignal.timeout(20000));
+      const legacy = await client.from("notes").insert({ ...payload, user_id: owner }).abortSignal(requestTimeoutSignal(20000));
       if (!legacy.error) return {};
       const legacyMessage = String(legacy.error.message ?? "");
       const legacyCode = String((legacy.error as { code?: unknown }).code ?? "");
@@ -298,7 +309,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     throw new ProjectConflictError(project.id);
   }
   const nextRevision = project.revision + 1;
-  const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(AbortSignal.timeout(20000)).maybeSingle();
+  const result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
   if (result.error) throw result.error;
   if (!result.data) throw new ProjectConflictError(project.id);
   return { revision: Number(result.data.revision ?? nextRevision) };
@@ -306,7 +317,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
 export async function fetchFolders(owner: string | null): Promise<ProjectFolder[]> {
   if (!owner) return JSON.parse(localStorage.getItem(cacheKey(null) + ":folders") ?? "[]");
   const client = await clientFor(owner);
-  const { data, error } = await client.from("folders").select("id,name").eq("user_id", owner).order("created_at").abortSignal(AbortSignal.timeout(20000));
+  const { data, error } = await client.from("folders").select("id,name").eq("user_id", owner).order("created_at").abortSignal(requestTimeoutSignal(20000));
   if (error) throw error;
   return data ?? [];
 }
@@ -326,7 +337,7 @@ export async function updateProject(owner: string | null, project: Project, patc
     // identify the owner through the RLS policy and must not filter by their
     // own user id.
     if (!project.shared && (!project.ownerId || project.ownerId === owner)) metadataQuery = metadataQuery.eq("user_id", owner);
-    const { error } = await metadataQuery.select("id").abortSignal(AbortSignal.timeout(20000)).single();
+    const { error } = await metadataQuery.select("id").abortSignal(requestTimeoutSignal(20000)).single();
     if (error) throw error;
   }
   const cached = readCache(owner).find(p => p.id === project.id);
@@ -337,7 +348,7 @@ export async function addFolder(owner: string | null, name: string): Promise<Pro
   const folder = { id: crypto.randomUUID(), name };
   if (!owner) { localStorage.setItem(cacheKey(null) + ":folders", JSON.stringify([...(await fetchFolders(null)), folder])); return folder; }
   const client = await clientFor(owner);
-  const { error } = await client.from("folders").insert({ ...folder, user_id: owner }).abortSignal(AbortSignal.timeout(20000));
+  const { error } = await client.from("folders").insert({ ...folder, user_id: owner }).abortSignal(requestTimeoutSignal(20000));
   if (error) throw error;
   return folder;
 }
@@ -420,7 +431,7 @@ export async function fetchFlashcardDecks(owner: string | null): Promise<Flashca
   if (!owner) return { items: localDecks(null), source: "local" };
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("flashcard_decks").select("id,name,project_id,folder_id,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("flashcard_decks").select("id,name,project_id,folder_id,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => deckFromRow(row, "cloud")).filter((item): item is FlashcardDeck => !!item);
     writeLocalList(flashcardDeckCacheKey(owner), items);
@@ -434,7 +445,7 @@ export async function fetchFlashcards(owner: string | null, deckId: string): Pro
   if (!owner) return { items: localCards(null, deckId), source: "local" };
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("flashcards").select("id,deck_id,project_id,front,back,source_page,due_at,interval_days,ease,repetitions,lapses,created_at,updated_at").eq("user_id", owner).eq("deck_id", deckId).order("created_at", { ascending: true }).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("flashcards").select("id,deck_id,project_id,front,back,source_page,due_at,interval_days,ease,repetitions,lapses,created_at,updated_at").eq("user_id", owner).eq("deck_id", deckId).order("created_at", { ascending: true }).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => cardFromRow(row, "cloud")).filter((item): item is Flashcard => !!item);
     writeLocalList(flashcardCacheKey(owner, deckId), items);
@@ -448,7 +459,7 @@ export async function upsertFlashcardDeck(owner: string | null, deck: FlashcardD
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("flashcard_decks").upsert({ id: deck.id, user_id: owner, name: deck.name, project_id: deck.projectId, folder_id: deck.folderId, created_at: deck.createdAt, updated_at: deck.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("flashcard_decks").upsert({ id: deck.id, user_id: owner, name: deck.name, project_id: deck.projectId, folder_id: deck.folderId, created_at: deck.createdAt, updated_at: deck.updatedAt }).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
       cacheDeck(owner, { ...deck, source: "cloud" });
       return "cloud";
@@ -464,7 +475,7 @@ export async function deleteFlashcardDeck(owner: string | null, deckId: string):
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("flashcard_decks").delete().eq("user_id", owner).eq("id", deckId).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("flashcard_decks").delete().eq("user_id", owner).eq("id", deckId).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
       writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
       localStorage.removeItem(flashcardCacheKey(owner, deckId));
@@ -482,7 +493,7 @@ export async function upsertFlashcard(owner: string | null, card: Flashcard): Pr
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("flashcards").upsert({ id: card.id, deck_id: card.deckId, user_id: owner, project_id: card.projectId, front: card.front, back: card.back, source_page: card.sourcePage, due_at: card.dueAt, interval_days: card.intervalDays, ease: card.ease, repetitions: card.repetitions, lapses: card.lapses, created_at: card.createdAt, updated_at: card.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("flashcards").upsert({ id: card.id, deck_id: card.deckId, user_id: owner, project_id: card.projectId, front: card.front, back: card.back, source_page: card.sourcePage, due_at: card.dueAt, interval_days: card.intervalDays, ease: card.ease, repetitions: card.repetitions, lapses: card.lapses, created_at: card.createdAt, updated_at: card.updatedAt }).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
       cacheCard(owner, { ...card, source: "cloud" });
       return "cloud";
@@ -503,7 +514,7 @@ export async function upsertFlashcards(owner: string | null, cards: Flashcard[])
       const rows = cards.map(card => ({ id: card.id, deck_id: card.deckId, user_id: owner, project_id: card.projectId, front: card.front, back: card.back, source_page: card.sourcePage, due_at: card.dueAt, interval_days: card.intervalDays, ease: card.ease, repetitions: card.repetitions, lapses: card.lapses, created_at: card.createdAt, updated_at: card.updatedAt }));
       // PostgREST executes a multi-row upsert in one database transaction, so
       // an AI preview is never partially applied to the cloud deck.
-      const { error } = await client.from("flashcards").upsert(rows).abortSignal(AbortSignal.timeout(30000));
+      const { error } = await client.from("flashcards").upsert(rows).abortSignal(requestTimeoutSignal(30000));
       if (error) throw error;
       const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
       writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "cloud" as const }))].slice(0, 1000));
@@ -521,7 +532,7 @@ export async function deleteFlashcard(owner: string | null, card: Flashcard): Pr
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("flashcards").delete().eq("user_id", owner).eq("id", card.id).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("flashcards").delete().eq("user_id", owner).eq("id", card.id).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
       writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
       return "cloud";
@@ -685,7 +696,7 @@ export async function fetchStudyPlans(owner: string | null): Promise<FlashcardRe
   if (!owner) return { items: localStudyPlans(null), source: "local" };
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("flashcard_study_plans").select("id,name,source_type,deck_ids,source_document_id,daily_target,daily_minutes,timezone,start_date,status,plan_mode,schedule,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("flashcard_study_plans").select("id,name,source_type,deck_ids,source_document_id,daily_target,daily_minutes,timezone,start_date,status,plan_mode,schedule,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => planFromRow(row, "cloud")).filter((item): item is StudyPlan => !!item);
     writeLocalList(flashcardStudyPlanCacheKey(owner), items);
@@ -699,7 +710,7 @@ export async function upsertStudyPlan(owner: string | null, plan: StudyPlan): Pr
   if (owner) {
     try {
       const client = await clientFor(owner);
-      const { error } = await client.from("flashcard_study_plans").upsert({ id: plan.id, user_id: owner, name: plan.name, source_type: plan.sourceType, deck_ids: plan.deckIds, source_document_id: plan.sourceDocumentId, daily_target: plan.dailyTarget, daily_minutes: plan.dailyMinutes, timezone: plan.timezone, start_date: plan.startDate, status: plan.status, plan_mode: plan.mode ?? "ai", schedule: plan.schedule ?? [], created_at: plan.createdAt, updated_at: plan.updatedAt }).abortSignal(AbortSignal.timeout(20000));
+      const { error } = await client.from("flashcard_study_plans").upsert({ id: plan.id, user_id: owner, name: plan.name, source_type: plan.sourceType, deck_ids: plan.deckIds, source_document_id: plan.sourceDocumentId, daily_target: plan.dailyTarget, daily_minutes: plan.dailyMinutes, timezone: plan.timezone, start_date: plan.startDate, status: plan.status, plan_mode: plan.mode ?? "ai", schedule: plan.schedule ?? [], created_at: plan.createdAt, updated_at: plan.updatedAt }).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
       cacheStudyPlan(owner, { ...plan, source: "cloud" });
       return "cloud";
@@ -717,7 +728,7 @@ export async function fetchStudyDays(owner: string | null): Promise<FlashcardRep
   await flushStudyEvents(owner);
   try {
     const client = await clientFor(owner);
-    const { data, error } = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).order("study_date", { ascending: false }).limit(730).abortSignal(AbortSignal.timeout(20000));
+    const { data, error } = await client.from("flashcard_study_days").select("study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at").eq("user_id", owner).order("study_date", { ascending: false }).limit(730).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const remote = (data ?? []).map(row => studyDayFromRow(row, "cloud")).filter((item): item is StudyDayProgress => !!item);
     const merged = new Map(remote.map(day => [studyDayKey(day), day]));
@@ -739,9 +750,9 @@ export async function upsertStudyDay(owner: string | null, day: StudyDayProgress
       const client = await clientFor(owner);
       const row = { user_id: owner, study_date: day.studyDate, context_key: day.contextKey, plan_id: day.planId, target_count: day.targetCount, reviewed_count: day.reviewedCount, retry_count: day.retryCount, assigned_card_ids: day.assignedCardIds, reviewed_card_ids: day.reviewedCardIds, forgotten_card_ids: day.forgottenCardIds, completed: day.completed, task_ids: day.taskIds ?? [], completed_task_ids: day.completedTaskIds ?? [], task_card_ids: day.taskCardIds ?? {}, task_count: day.taskCount ?? day.taskIds?.length ?? 0, completed_task_count: day.completedTaskCount ?? day.completedTaskIds?.length ?? 0, rest_day: day.restDay ?? false, first_review_at: day.firstReviewAt, last_review_at: day.lastReviewAt, created_at: day.createdAt, updated_at: day.updatedAt };
       const select = "study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at";
-      let result: any = await client.from("flashcard_study_days").insert(row).select(select).abortSignal(AbortSignal.timeout(20000)).single();
+      let result: any = await client.from("flashcard_study_days").insert(row).select(select).abortSignal(requestTimeoutSignal(20000)).single();
       if (result.error?.code === "23505") {
-        result = await client.from("flashcard_study_days").select(select).eq("user_id", owner).eq("study_date", day.studyDate).eq("context_key", day.contextKey).abortSignal(AbortSignal.timeout(20000)).single();
+        result = await client.from("flashcard_study_days").select(select).eq("user_id", owner).eq("study_date", day.studyDate).eq("context_key", day.contextKey).abortSignal(requestTimeoutSignal(20000)).single();
       }
       const { data, error } = result;
       if (error) throw error;
@@ -765,7 +776,7 @@ export async function saveStudyDay(owner: string | null, day: StudyDayProgress):
       const client = await clientFor(owner);
       const row = { user_id: owner, study_date: day.studyDate, context_key: day.contextKey, plan_id: day.planId, target_count: day.targetCount, reviewed_count: day.reviewedCount, retry_count: day.retryCount, assigned_card_ids: day.assignedCardIds, reviewed_card_ids: day.reviewedCardIds, forgotten_card_ids: day.forgottenCardIds, completed: day.completed, task_ids: day.taskIds ?? [], completed_task_ids: day.completedTaskIds ?? [], task_card_ids: day.taskCardIds ?? {}, task_count: day.taskCount ?? day.taskIds?.length ?? 0, completed_task_count: day.completedTaskCount ?? day.completedTaskIds?.length ?? 0, rest_day: day.restDay ?? false, first_review_at: day.firstReviewAt, last_review_at: day.lastReviewAt, created_at: day.createdAt, updated_at: day.updatedAt };
       const select = "study_date,context_key,plan_id,target_count,reviewed_count,retry_count,assigned_card_ids,reviewed_card_ids,forgotten_card_ids,completed,task_ids,completed_task_ids,task_card_ids,task_count,completed_task_count,rest_day,first_review_at,last_review_at,created_at,updated_at";
-      const { data, error } = await client.from("flashcard_study_days").upsert(row, { onConflict: "user_id,study_date,context_key" }).select(select).abortSignal(AbortSignal.timeout(20000)).single();
+      const { data, error } = await client.from("flashcard_study_days").upsert(row, { onConflict: "user_id,study_date,context_key" }).select(select).abortSignal(requestTimeoutSignal(20000)).single();
       if (error) throw error;
       const saved = studyDayFromRow(data, "cloud");
       if (!saved) throw new Error("Invalid study day returned by Supabase.");
@@ -841,7 +852,7 @@ async function recordCloudStudyEvent(owner: string, event: StudyEvent) {
     p_rating: event.rating,
     p_goal_unit: event.goalUnit,
     p_target_count: event.targetCount,
-  }).abortSignal(AbortSignal.timeout(20000));
+  }).abortSignal(requestTimeoutSignal(20000));
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
   const saved = studyDayFromRow(row, "cloud");
@@ -876,12 +887,15 @@ export async function recordFlashcardStudy(owner: string | null, event: StudyEve
   return { item: localApplyStudyEvent(null, event, false), source: "local" };
 }
 
-// A rejected save must not poison subsequent saves. Requests remain ordered.
+// A rejected save must not poison subsequent saves. Requests for the same
+// project remain ordered, while different projects can progress independently
+// so one stalled cloud request cannot freeze a newly opened canvas.
 export class SaveQueue {
-  private tail: Promise<unknown> = Promise.resolve();
-  run<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.tail.then(task, task);
-    this.tail = result.catch(() => undefined);
+  private tails = new Map<string, Promise<unknown>>();
+  run<T>(task: () => Promise<T>, key = "__default__"): Promise<T> {
+    const tail = this.tails.get(key) ?? Promise.resolve();
+    const result = tail.then(task, task);
+    this.tails.set(key, result.catch(() => undefined));
     return result;
   }
 }

@@ -1,5 +1,27 @@
 # MindCanvas — project handoff
 
+## Update 2026-09-15 — V4.5.9 Shared, AI Manual & iOS
+
+### Implemented
+
+- Shared projects now use the cloud snapshot as the online source of truth. Pending/stale shared device cache is read-only and is never replayed into another user's cloud project; offline shared snapshots are explicitly viewer-only.
+- Added an authenticated Share Inbox with Accept/Decline RPCs. Accepting creates the project membership and refreshes **Shared with me**; the existing invite-link flow remains available.
+- Connected AI Manual to Study Plan with strict pasted-JSON validation, deck/quiz ID filtering and quota consumption only after validation. Max pricing is synchronized to `499,000₫/month`.
+- Fixed mobile Share page bottom safe-area/scroll behavior and kept iOS-only media overlay rendering for video/audio/web embeds. iOS images remain in the native SVG viewport layer; Android and Windows paths are unchanged.
+- Extended XPen/stylus recognition to `pen`/`stylus`/`xpen` pointer types and barrel-button events for line and triangle tools. Bumped the frontend badge, API health release and PWA cache to `4.5.9`.
+
+### Supabase action required
+
+Run `supabase/migrations/0014_v4_5_9_share_inbox_pricing.sql` after migrations 0011–0013. It adds the invitation inbox RPCs, `declined` state and Max price update, then reloads PostgREST schema metadata.
+
+### Verification
+
+- Web/server typecheck passed.
+- Targeted regression suites passed for Canvas/iOS, App, Workspace, project store, share fallback, UI preferences and AI Manual.
+- Physical iOS Safari/WebView, PWA update, Supabase RLS/RPC and Windows/XPen QA remain required after deployment.
+
+See [V4.5.9_SHARED_AI_IOS_UPDATE_VI.md](./V4.5.9_SHARED_AI_IOS_UPDATE_VI.md) for the migration, scope and device checklist.
+
 ## Update 2026-09-15 — V4.5.8 Input, Cloud & Phone UI
 
 - Kept iOS media in the same SVG viewport transform as drawings and shapes, with a regression test for pan synchronization.

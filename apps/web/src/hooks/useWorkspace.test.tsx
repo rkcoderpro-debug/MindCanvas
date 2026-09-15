@@ -74,6 +74,23 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
     save.mockResolvedValue({}); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
   });
+  it("opens a new canvas while the previous cloud save is still stalled", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    let stalledId = "";
+    const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => snapshot.id === stalledId ? new Promise(() => undefined) : {});
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Stalled"));
+    await act(async () => api.change({ ...api.board!, title: "Stalled edit" }));
+    const previousId = api.board!.id;
+    stalledId = previousId;
+    await act(async () => api.create("Next canvas"));
+    const nextId = api.board!.id;
+    expect(api.board?.title).toBe("Next canvas");
+    await act(async () => api.flush(nextId));
+    expect(save.mock.calls.some(call => call[1].id === previousId)).toBe(true);
+    expect(save.mock.calls.some(call => call[1].id === nextId)).toBe(true);
+    expect(store.readCache("A").find(project => project.board.title === "Next canvas")?.pending).toBe(false);
+  });
   it("uses the acknowledged revision for consecutive cloud saves", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
     const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => ({ revision: (snapshot.revision ?? -1) + 1 }));

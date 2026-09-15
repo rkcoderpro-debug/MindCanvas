@@ -8,6 +8,22 @@ export const supabase: SupabaseClient | null = url && anonKey ? createClient(url
 }) : null;
 export const isSupabaseConfigured = Boolean(supabase);
 
+/**
+ * Safari/WebViews that predate AbortSignal.timeout throw before a Supabase
+ * request is created. Keep the same timeout contract with an AbortController
+ * fallback so cloud reads/writes fail visibly instead of hanging or silently
+ * switching to an incomplete local state.
+ */
+export function requestTimeoutSignal(milliseconds: number): AbortSignal {
+  const nativeTimeout = (AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  if (typeof nativeTimeout === "function") return nativeTimeout(milliseconds);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), milliseconds);
+  // Do not keep a Node-based test process alive solely for the browser fallback.
+  if (typeof timer === "object" && timer !== null && "unref" in timer && typeof timer.unref === "function") timer.unref();
+  return controller.signal;
+}
+
 export async function signInWithGoogle() {
   if (!supabase) return { error: new Error("Supabase chưa được cấu hình; ứng dụng đang ở chế độ local.") };
   // Preserve an invitation query through the OAuth round trip. A normal login

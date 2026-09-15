@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, FileUp, Sparkles, Trash2 } from "lucide-react";
+import { Check, ClipboardPaste, ExternalLink, FileUp, Sparkles, Trash2 } from "lucide-react";
 import type { Flashcard, FlashcardDeck, StudyPlan, StudyPlanDay, StudyPlanMode, StudyPlanTask } from "../lib/flashcards";
 import { dueCards, recommendDailyTarget, vietnamStudyDate } from "../lib/flashcards";
 import { useLanguage } from "../lib/i18n";
 import type { StudyPlanRecommendation } from "../lib/api";
+import { consumeAiManualUsage } from "../lib/api";
 import Dialog from "./Dialog";
 import AiQualityControls from "./AiQualityControls";
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
+import { buildStudyPlanPrompt, GEMINI_WEB_URL, ManualAiValidationError, parseManualStudyPlan } from "../lib/manualAi";
+import { writeClipboardText } from "../lib/aiSource";
+import { AiModeSwitch, type AiMode, ManualSteps } from "./AiModeSwitch";
 
 type PreviewCard = { id: string; front: string; back: string; sourcePage: number | null };
 type GeneratedFilePreview = { title: string; sourceDocumentId?: string; cards: PreviewCard[] };
 type PlanActivity = "flashcards" | "quiz" | "focus";
 type QuizChoice = { id: string; title: string };
 type AiPlanDraft = {
+  mode: "ai" | "manual";
   recommendation: StudyPlanRecommendation;
   sourceType: StudyPlan["sourceType"];
   sourceDocumentId: string | null;
@@ -25,6 +30,7 @@ type AiPlanDraft = {
 };
 
 type Props = {
+  owner: string | null;
   decks: FlashcardDeck[];
   quizzes?: QuizChoice[];
   selectedDeckId: string | null;
@@ -88,7 +94,7 @@ function buildSchedule(input: {
   return schedule;
 }
 
-export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, maxCards, onClose, onLoadCards, onGenerateFile, onCreateCards, onRecommend, onSavePlan }: Props) {
+export default function StudyPlanDialog({ owner, decks, quizzes = [], selectedDeckId, maxCards, onClose, onLoadCards, onGenerateFile, onCreateCards, onRecommend, onSavePlan }: Props) {
   const { t, language } = useLanguage();
   const initialDeck = selectedDeckId && decks.some(deck => deck.id === selectedDeckId) ? selectedDeckId : decks[0]?.id ?? "";
   const [deckIds, setDeckIds] = useState<string[]>(initialDeck ? [initialDeck] : []);
@@ -101,6 +107,9 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
   const [selectedQuizId, setSelectedQuizId] = useState(quizzes[0]?.id ?? "");
   const [focusMinutes, setFocusMinutes] = useState("25");
   const [aiOptions, setAiOptions] = useState<AiGenerationOptions>(DEFAULT_AI_OPTIONS);
+  const [aiMode, setAiMode] = useState<AiMode>("auto");
+  const [manualJson, setManualJson] = useState("");
+  const [manualUsageConsumed, setManualUsageConsumed] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sourceCards, setSourceCards] = useState<Flashcard[]>([]);
   const [preview, setPreview] = useState<GeneratedFilePreview | null>(null);
@@ -114,6 +123,17 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
   const focusValue = Math.max(5, Math.min(240, Number(focusMinutes) || 25));
   const recommended = useMemo(() => recommendDailyTarget(sourceCards, minutesValue), [minutesValue, sourceCards]);
   const chosenDeckNames = decks.filter(deck => deckIds.includes(deck.id)).map(deck => deck.name).join(", ");
+  const manualPrompt = useMemo(() => buildStudyPlanPrompt({
+    deckNames: decks.filter(deck => deckIds.includes(deck.id)).map(deck => ({ id: deck.id, name: deck.name, cardCount: sourceCards.filter(card => card.deckId === deck.id).length })),
+    quizNames: quizzes,
+    language,
+    dailyMinutes: minutesValue,
+    durationDays: durationValue,
+    daysPerWeek: cadenceValue,
+    activities,
+    fileName: file?.name,
+    options: aiOptions,
+  }), [aiOptions, activities, cadenceValue, deckIds.join(","), decks, durationValue, file?.name, language, minutesValue, quizzes, sourceCards]);
 
   useEffect(() => {
     let alive = true;
@@ -130,6 +150,7 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
   const toggleDeck = (deckId: string) => setDeckIds(current => current.includes(deckId) ? current.filter(id => id !== deckId) : [...current, deckId]);
   const toggleActivity = (activity: PlanActivity) => setActivities(current => current.includes(activity) ? current.filter(item => item !== activity) : [...current, activity]);
   const setFileAndReset = (next: File | null) => { setFile(next); setPreview(null); setPlanDraft(null); setError(""); };
+  const switchAiMode = (next: AiMode) => { setAiMode(next); setPreview(null); setPlanDraft(null); setManualJson(""); setManualUsageConsumed(false); setError(""); };
   const updatePreviewCard = (id: string, patch: Partial<PreviewCard>) => setPreview(current => current ? { ...current, cards: current.cards.map(card => card.id === id ? { ...card, ...patch } : card) } : current);
   const removePreviewCard = (id: string) => setPreview(current => current ? { ...current, cards: current.cards.filter(card => card.id !== id) } : current);
 
@@ -142,14 +163,52 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
     const schedule = buildSchedule({ startDate: vietnamStudyDate(), durationDays: durationValue, daysPerWeek: cadenceValue, activities, target, deckIds: planDeckIds, quizId: selectedQuizId, focusMinutes: focusValue, titles: { flashcards: t("taskFlashcards"), quiz: quizzes.find(quiz => quiz.id === selectedQuizId)?.title ?? t("taskQuiz"), focus: t("taskFocus") } });
     const assignedCardIds = activities.includes("flashcards") ? assignmentFor(cards, target) : [];
     const todayTask = schedule[0]?.tasks.find(task => task.kind === "flashcards");
-    setPlanDraft({ recommendation, sourceType: file ? (sourceCards.length ? "mixed" : "document") : "decks", sourceDocumentId: sourceDocumentId ?? null, deckIds: [...new Set(planDeckIds)], target, dailyMinutes: minutesValue, schedule, assignedCardIds, taskCardIds: todayTask ? { [todayTask.id]: assignedCardIds } : {} });
+    setPlanDraft({ mode: "ai", recommendation, sourceType: file ? (sourceCards.length ? "mixed" : "document") : "decks", sourceDocumentId: sourceDocumentId ?? null, deckIds: [...new Set(planDeckIds)], target, dailyMinutes: minutesValue, schedule, assignedCardIds, taskCardIds: todayTask ? { [todayTask.id]: assignedCardIds } : {} });
+  };
+
+  const createManualPlanDraft = () => {
+    const parsed = parseManualStudyPlan(manualJson, durationValue);
+    const allowedDecks = new Set(deckIds);
+    const allowedQuizzes = new Set(quizzes.map(quiz => quiz.id));
+    const schedule: StudyPlanDay[] = parsed.schedule.map(day => ({
+      studyDate: day.studyDate,
+      restDay: day.restDay,
+      tasks: day.tasks.map(task => {
+        if (task.kind === "flashcards") {
+          const validDeckIds = (task.deckIds ?? []).filter(id => allowedDecks.has(id));
+          if (!validDeckIds.length) throw new Error(t("manualPlanUnknownDeck"));
+          return { ...task, deckIds: validDeckIds, targetCount: Math.max(1, Math.min(maxCards, task.targetCount ?? parsed.dailyTarget)) };
+        }
+        if (task.kind === "quiz") {
+          if (!task.quizId || !allowedQuizzes.has(task.quizId)) throw new Error(t("manualPlanUnknownQuiz"));
+          return task;
+        }
+        return task;
+      }),
+    }));
+    const target = Math.max(1, Math.min(maxCards, sourceCards.length ? sourceCards.length : parsed.dailyTarget));
+    const assignedCardIds = schedule.some(day => day.tasks.some(task => task.kind === "flashcards")) ? assignmentFor(sourceCards, target) : [];
+    const todayTask = schedule[0]?.tasks.find(task => task.kind === "flashcards");
+    setPlanDraft({ mode: "manual", recommendation: { provider: "manual", model: "Gemini Web", dailyTarget: target, focus: parsed.focus, rationale: parsed.rationale }, sourceType: "decks", sourceDocumentId: null, deckIds: [...allowedDecks], target, dailyMinutes: parsed.dailyMinutes, schedule, assignedCardIds, taskCardIds: todayTask ? { [todayTask.id]: assignedCardIds } : {} });
+  };
+
+  const validateManualPlan = async () => {
+    if (!owner) { setError(t("manualRequiresLogin")); return; }
+    setBusy(true); setError("");
+    try {
+      createManualPlanDraft();
+      if (!manualUsageConsumed) { await consumeAiManualUsage(); setManualUsageConsumed(true); }
+    } catch (err) {
+      setPlanDraft(null);
+      setError(err instanceof ManualAiValidationError ? t("manualInvalidStudyPlan") : err instanceof Error ? err.message : t("aiManualQuotaError"));
+    } finally { setBusy(false); }
   };
 
   const saveDraft = async () => {
     if (!planDraft) return;
     setBusy(true); setError("");
     try {
-      await onSavePlan({ name: name.trim() || t("aiStudyPlan"), sourceType: planDraft.sourceType, deckIds: planDraft.deckIds, sourceDocumentId: planDraft.sourceDocumentId, dailyTarget: planDraft.target, dailyMinutes: planDraft.dailyMinutes, assignedCardIds: planDraft.assignedCardIds, mode: "ai", schedule: planDraft.schedule, taskCardIds: planDraft.taskCardIds });
+      await onSavePlan({ name: name.trim() || t("aiStudyPlan"), sourceType: planDraft.sourceType, deckIds: planDraft.deckIds, sourceDocumentId: planDraft.sourceDocumentId, dailyTarget: planDraft.target, dailyMinutes: planDraft.dailyMinutes, assignedCardIds: planDraft.assignedCardIds, mode: planDraft.mode, schedule: planDraft.schedule, taskCardIds: planDraft.taskCardIds });
       onClose();
     } catch (err) { setError(err instanceof Error ? err.message : t("studyPlanCreateError")); }
     finally { setBusy(false); }
@@ -162,6 +221,7 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
     if (!activities.length) { setError(t("aiPlanChooseActivity")); return; }
     if (activities.includes("quiz") && !selectedQuizId) { setError(t("aiPlanNoQuiz")); return; }
     if (file && !targetDeckId) { setError(t("studyPlanTargetDeck")); return; }
+    if (aiMode === "manual") { await validateManualPlan(); return; }
     setBusy(true); setError("");
     try {
       if (file && !preview) {
@@ -187,6 +247,7 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
 
   return <Dialog title={t("aiStudyPlan")} onClose={() => { if (!busy) onClose(); }}>
     <div className="study-plan-intro"><div className="study-plan-icon"><Sparkles size={20}/></div><div><strong>{t("planSetupRequired")}</strong><p>{t("aiPlanHint")}</p></div></div>
+    <AiModeSwitch mode={aiMode} autoAvailable={!!owner} onChange={switchAiMode}/>
     {planDraft ? <div className="study-plan-generated">
       <div className="study-plan-generated-heading"><div><span className="eyebrow">{planDraft.recommendation.provider}</span><h3>{t("aiPlanSchedule")}</h3><p>{t("aiPlanPreviewHint")}</p></div><strong>{planDraft.target} {t("targetCards").toLocaleLowerCase()}</strong></div>
       <div className="study-plan-recommendation"><strong>{t("aiPlanRecommendation")}</strong><span>{planDraft.recommendation.focus} · {planDraft.recommendation.model}</span><p>{planDraft.recommendation.rationale || t("aiPlanRationale")}</p></div>
@@ -204,11 +265,15 @@ export default function StudyPlanDialog({ decks, quizzes = [], selectedDeckId, m
       {activities.includes("quiz") && quizzes.length > 0 && <label>{t("aiPlanSelectedQuiz")}<select value={selectedQuizId} onChange={event => setSelectedQuizId(event.target.value)}>{quizzes.map(quiz => <option key={quiz.id} value={quiz.id}>{quiz.title}</option>)}</select></label>}
       {activities.includes("focus") && <label>{t("aiPlanFocusMinutes")}<input type="number" min="5" max="240" step="5" value={focusMinutes} onChange={event => setFocusMinutes(event.target.value)}/></label>}
       <AiQualityControls options={aiOptions} onChange={setAiOptions}/>
-      <label className="upload-drop study-plan-upload"><span><FileUp size={20}/>{t("uploadMaterialForPlan")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} onChange={event => setFileAndReset(event.target.files?.[0] ?? null)}/><small>{t("planFileHint")}</small>{file && <small>{file.name}</small>}</label>
+      {aiMode === "manual" && <>
+        <ManualSteps current={manualJson.trim() ? "result" : "prompt"}/>
+        <div className="ai-manual-plan-box"><p className="ai-manual-note">{t("aiManualPlanHint")}</p><label>{t("aiManualPrompt")}<textarea rows={9} readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void writeClipboardText(manualPrompt).catch(() => setError(t("clipboardWriteError")))}><ClipboardPaste size={15}/>{t("copyPrompt")}</button><button type="button" className="secondary-button" onClick={() => { const opened = window.open(GEMINI_WEB_URL, "_blank", "noopener,noreferrer"); if (!opened) setError(t("popupBlocked")); }}><ExternalLink size={15}/>{t("openGemini")}</button></div><label>{t("aiManualJsonLabel")}<textarea rows={9} value={manualJson} onChange={event => setManualJson(event.target.value)} placeholder={t("aiManualStudyPlanPlaceholder")}/></label><label className="upload-drop"><span><FileUp size={18}/>{t("uploadJsonFile")}</span><input type="file" accept="application/json,.json" disabled={busy} onChange={event => { const selected = event.target.files?.[0]; event.target.value = ""; if (!selected) return; void selected.text().then(setManualJson).catch(() => setError(t("manualJsonFileError"))); }}/></label></div>
+      </>}
+      <label className="upload-drop study-plan-upload"><span><FileUp size={20}/>{aiMode === "manual" ? t("manualFileSelected") : t("uploadMaterialForPlan")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} onChange={event => setFileAndReset(event.target.files?.[0] ?? null)}/><small>{aiMode === "manual" ? t("aiManualUploadHint") : t("planFileHint")}</small>{file && <small>{file.name}</small>}</label>
       {file && <label>{t("studyPlanTargetDeck")}<select value={targetDeckId} onChange={event => { const next = event.target.value; setTargetDeckId(next); setDeckIds(current => current.includes(next) ? current : [...current, next]); }}>{decks.map(deck => <option key={deck.id} value={deck.id}>{deck.name}</option>)}</select><small className="field-hint">{t("planFileCreatesCards")}</small></label>}
       {chosenDeckNames && <div className="study-plan-selection"><Check size={15}/><span>{chosenDeckNames}</span></div>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <footer className="actions"><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>{t("cancel")}</button><button className="primary-button" disabled={busy || !deckIds.length}>{busy ? t("aiPlanGenerating") : file ? t("generateAndPlan") : t("aiPlanSchedule")}</button></footer>
+      <footer className="actions"><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>{t("cancel")}</button><button className="primary-button" disabled={busy || !deckIds.length || (aiMode === "manual" && !manualJson.trim())}>{busy ? t("aiPlanGenerating") : aiMode === "manual" ? t("validateResult") : file ? t("generateAndPlan") : t("aiPlanSchedule")}</button></footer>
     </form> : <form className="study-plan-preview" onSubmit={event => void submit(event)}>
       <div className="study-plan-preview-heading"><div><strong>{preview.title || t("flashcardSetTitle")}</strong><small>{t("planPreviewHint")}</small></div><span>{preview.cards.length} / {maxCards}</span></div>
       <p className="field-hint">{t("aiPreviewHint")}</p>
