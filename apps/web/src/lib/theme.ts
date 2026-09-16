@@ -1,26 +1,27 @@
 export const THEME_OPTIONS = [
-  { id: "light", tone: "light", access: "free", labelKey: "themeLight", descriptionKey: "themeLightHint", browserColor: "#f8f4ff" },
-  { id: "ocean", tone: "light", access: "free", labelKey: "themeOcean", descriptionKey: "themeOceanHint", browserColor: "#eff9ff" },
-  { id: "mint", tone: "light", access: "free", labelKey: "themeMint", descriptionKey: "themeMintHint", browserColor: "#effcf8" },
-  { id: "sunset", tone: "light", access: "free", labelKey: "themeSunset", descriptionKey: "themeSunsetHint", browserColor: "#fff5e9" },
-  { id: "berry", tone: "light", access: "free", labelKey: "themeBerry", descriptionKey: "themeBerryHint", browserColor: "#fff4f8" },
-  { id: "sakura", tone: "light", access: "plus", labelKey: "themeSakura", descriptionKey: "themeSakuraHint", browserColor: "#fff0f5" },
-  { id: "lavender", tone: "light", access: "plus", labelKey: "themeLavender", descriptionKey: "themeLavenderHint", browserColor: "#f4f0ff" },
-  { id: "auroraDream", tone: "light", access: "plus", labelKey: "themeAuroraDream", descriptionKey: "themeAuroraDreamHint", browserColor: "#eefbf8" },
-  { id: "sandstone", tone: "light", access: "plus", labelKey: "themeSandstone", descriptionKey: "themeSandstoneHint", browserColor: "#fbf4e8" },
-  { id: "dark", tone: "dark", access: "free", labelKey: "themeDark", descriptionKey: "themeDarkHint", browserColor: "#15101f" },
-  { id: "cobalt", tone: "dark", access: "free", labelKey: "themeCobalt", descriptionKey: "themeCobaltHint", browserColor: "#080f2a" },
-  { id: "cyber", tone: "dark", access: "free", labelKey: "themeCyber", descriptionKey: "themeCyberHint", browserColor: "#061d24" },
-  { id: "forest", tone: "dark", access: "free", labelKey: "themeForest", descriptionKey: "themeForestHint", browserColor: "#0d211d" },
-  { id: "slate", tone: "dark", access: "free", labelKey: "themeSlate", descriptionKey: "themeSlateHint", browserColor: "#111827" },
-  { id: "solarFlare", tone: "dark", access: "plus", labelKey: "themeSolarFlare", descriptionKey: "themeSolarFlareHint", browserColor: "#24150d" },
-  { id: "plumNoir", tone: "dark", access: "plus", labelKey: "themePlumNoir", descriptionKey: "themePlumNoirHint", browserColor: "#1e1022" },
-  { id: "arcticBlue", tone: "dark", access: "plus", labelKey: "themeArcticBlue", descriptionKey: "themeArcticBlueHint", browserColor: "#0b1d31" },
-  { id: "emeraldNight", tone: "dark", access: "plus", labelKey: "themeEmeraldNight", descriptionKey: "themeEmeraldNightHint", browserColor: "#071c19" },
+  { id: "light", tone: "light", access: "free", labelKey: "themeLight", descriptionKey: "themeLightHint", browserColor: "#f8f4ff", gradient: ["#7c3aed", "#f43f5e"] },
+  { id: "ocean", tone: "light", access: "free", labelKey: "themeOcean", descriptionKey: "themeOceanHint", browserColor: "#eff9ff", gradient: ["#0369a1", "#06b6d4"] },
+  { id: "mint", tone: "light", access: "free", labelKey: "themeMint", descriptionKey: "themeMintHint", browserColor: "#effcf8", gradient: ["#0f766e", "#22c55e"] },
+  { id: "sunset", tone: "light", access: "free", labelKey: "themeSunset", descriptionKey: "themeSunsetHint", browserColor: "#fff5e9", gradient: ["#c2410c", "#db2777"] },
+  { id: "berry", tone: "light", access: "free", labelKey: "themeBerry", descriptionKey: "themeBerryHint", browserColor: "#fff4f8", gradient: ["#be185d", "#7c3aed"] },
+  { id: "sakura", tone: "light", access: "plus", labelKey: "themeSakura", descriptionKey: "themeSakuraHint", browserColor: "#fff0f5", gradient: ["#ec4899", "#f59e0b"] },
+  { id: "lavender", tone: "light", access: "plus", labelKey: "themeLavender", descriptionKey: "themeLavenderHint", browserColor: "#f4f0ff", gradient: ["#8b5cf6", "#ec4899"] },
+  { id: "auroraDream", tone: "light", access: "plus", labelKey: "themeAuroraDream", descriptionKey: "themeAuroraDreamHint", browserColor: "#eefbf8", gradient: ["#10b981", "#38bdf8"] },
+  { id: "sandstone", tone: "light", access: "plus", labelKey: "themeSandstone", descriptionKey: "themeSandstoneHint", browserColor: "#fbf4e8", gradient: ["#f59e0b", "#f97316"] },
+  { id: "dark", tone: "dark", access: "free", labelKey: "themeDark", descriptionKey: "themeDarkHint", browserColor: "#15101f", gradient: ["#d29bff", "#ff6f9c"] },
+  { id: "cobalt", tone: "dark", access: "free", labelKey: "themeCobalt", descriptionKey: "themeCobaltHint", browserColor: "#080f2a", gradient: ["#60a5fa", "#22d3ee"] },
+  { id: "cyber", tone: "dark", access: "free", labelKey: "themeCyber", descriptionKey: "themeCyberHint", browserColor: "#061d24", gradient: ["#22d3ee", "#a3e635"] },
+  { id: "forest", tone: "dark", access: "free", labelKey: "themeForest", descriptionKey: "themeForestHint", browserColor: "#0d211d", gradient: ["#5ee2ae", "#fbbf24"] },
+  { id: "slate", tone: "dark", access: "free", labelKey: "themeSlate", descriptionKey: "themeSlateHint", browserColor: "#111827", gradient: ["#a5b4fc", "#38bdf8"] },
+  { id: "solarFlare", tone: "dark", access: "plus", labelKey: "themeSolarFlare", descriptionKey: "themeSolarFlareHint", browserColor: "#24150d", gradient: ["#f97316", "#facc15"] },
+  { id: "plumNoir", tone: "dark", access: "plus", labelKey: "themePlumNoir", descriptionKey: "themePlumNoirHint", browserColor: "#1e1022", gradient: ["#a855f7", "#ec4899"] },
+  { id: "arcticBlue", tone: "dark", access: "plus", labelKey: "themeArcticBlue", descriptionKey: "themeArcticBlueHint", browserColor: "#0b1d31", gradient: ["#38bdf8", "#818cf8"] },
+  { id: "emeraldNight", tone: "dark", access: "plus", labelKey: "themeEmeraldNight", descriptionKey: "themeEmeraldNightHint", browserColor: "#071c19", gradient: ["#10b981", "#14b8a6"] },
 ] as const;
 
 export type Theme = (typeof THEME_OPTIONS)[number]["id"];
 export type ThemeAccess = (typeof THEME_OPTIONS)[number]["access"];
+export type ThemeGradient = readonly [string, string];
 
 export const DEFAULT_THEME: Theme = "light";
 
@@ -53,6 +54,10 @@ export function isTheme(value: unknown): value is Theme {
 
 export function themeBrowserColor(theme: Theme): string {
   return THEME_OPTIONS.find(option => option.id === theme)?.browserColor ?? THEME_OPTIONS[0].browserColor;
+}
+
+export function themeGradient(theme: Theme): ThemeGradient {
+  return THEME_OPTIONS.find(option => option.id === theme)?.gradient ?? THEME_OPTIONS[0].gradient;
 }
 
 export function themeAccess(theme: Theme): ThemeAccess {

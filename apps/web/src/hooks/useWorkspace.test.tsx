@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorkspace } from "./useWorkspace";
 import * as store from "../lib/projectStore";
+import { arrangeMindMapMultiSided } from "../lib/board";
+import { rotateMindMapSubtree } from "../lib/editorCommands";
 let root: Root, api: ReturnType<typeof useWorkspace>, host: HTMLDivElement;
 function Harness({ owner = null }: { owner?: string | null }) { api = useWorkspace(owner); return <span>{api.board?.title ?? "Workspace"}</span>; }
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
@@ -39,6 +41,31 @@ describe("Workspace lifecycle", () => {
     expect(api.canRedo).toBe(true);
     await act(async () => api.redo());
     expect(api.board!.texts[0].text).toBe("edit"); expect(api.board!.viewport.x).toBe(999);
+  });
+  it("makes each applied mind-map layout or rotation one undoable transaction", async () => {
+    await act(async () => root.render(<Harness/>)); await act(async () => api.create("Mind map"));
+    const map = { ...api.board!, nodes: [
+      { id: "root", label: "Root", x: 0, y: 0, width: 190, height: 76 },
+      { id: "left", label: "Left", parentId: "root", x: 0, y: 0, width: 190, height: 76 },
+      { id: "right", label: "Right", parentId: "root", x: 0, y: 0, width: 190, height: 76 },
+    ], edges: [{ id: "root-left", source: "root", target: "left", kind: "branch" as const }, { id: "root-right", source: "root", target: "right", kind: "branch" as const }] };
+    await act(async () => api.change(map));
+    const beforeLayout = api.board!;
+    const laidOut = arrangeMindMapMultiSided(beforeLayout, "root", 4, "radial").board;
+    await act(async () => api.change(laidOut));
+    expect(api.canUndo).toBe(true);
+    await act(async () => api.undo());
+    expect(api.board!.nodes).toEqual(beforeLayout.nodes);
+    await act(async () => api.redo());
+    expect(api.board!.nodes).toEqual(laidOut.nodes);
+
+    const beforeRotation = api.board!;
+    const rotated = rotateMindMapSubtree(beforeRotation, "root", 45);
+    await act(async () => api.change(rotated));
+    await act(async () => api.undo());
+    expect(api.board!.nodes).toEqual(beforeRotation.nodes);
+    await act(async () => api.redo());
+    expect(api.board!.nodes).toEqual(rotated.nodes);
   });
   it("navigation on a blank canvas creates no undo entry", async () => {
     await act(async () => root.render(<Harness/>)); await act(async () => api.create("Blank"));

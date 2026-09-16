@@ -31,10 +31,27 @@ export function useWorkspace(owner: string | null) {
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
+  // Keep the history stack in refs as well as state. Applying a layout can
+  // update the board and request Undo in the same React batch; refs make the
+  // transaction boundary synchronous instead of waiting for a re-render.
+  const pastRef = useRef<BoardState[]>([]), futureRef = useRef<BoardState[]>([]);
   const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), viewportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
+  const clearHistory = () => {
+    pastRef.current = [];
+    futureRef.current = [];
+    setPast([]);
+    setFuture([]);
+  };
+  const recordHistory = (snapshot: BoardState) => {
+    const nextPast = [...pastRef.current, snapshot].slice(-50);
+    pastRef.current = nextPast;
+    futureRef.current = [];
+    setPast(nextPast);
+    setFuture([]);
+  };
   const report = useCallback((err: unknown) => { if (alive.current) setError(errorMessage(err, "Could not save this project.")); }, []);
   const refresh = useCallback(async () => {
     try {
@@ -213,8 +230,7 @@ export function useWorkspace(owner: string | null) {
       const next = normalizeEditor({ ...update.board, viewport: local.viewport });
       current.current = next;
       setBoard(next);
-      setPast([]);
-      setFuture([]);
+      clearHistory();
       const cached = readCache(owner).find(item => item.id === projectId);
       const thumbnail = createCanvasThumbnail(next);
       if (cached) cacheProject(owner, { ...cached, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail, revision: update.revision ?? cached.revision, pending: false });
@@ -262,11 +278,29 @@ export function useWorkspace(owner: string | null) {
         return;
       }
     }
-    setPast(p => previous ? [...p.slice(-49), previous] : p); setFuture([]);
+    if (previous) recordHistory(previous);
     stage({ ...next, updatedAt: new Date().toISOString() });
   };
-  const undo = () => { const previous = past.at(-1), now = current.current, active = now && readCache(owner).find(item => item.id === now.id); if (!previous || !now || active?.accessRole === "viewer" || active?.cloudOffline) return; setPast(p => p.slice(0, -1)); setFuture(f => [now, ...f]); stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
-  const redo = () => { const next = future[0], now = current.current, active = now && readCache(owner).find(item => item.id === now.id); if (!next || !now || active?.accessRole === "viewer" || active?.cloudOffline) return; setFuture(f => f.slice(1)); setPast(p => [...p, now]); stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() }); };
+  const undo = () => {
+    const previous = pastRef.current.at(-1), now = current.current, active = now && readCache(owner).find(item => item.id === now.id);
+    if (!previous || !now || active?.accessRole === "viewer" || active?.cloudOffline) return;
+    const nextPast = pastRef.current.slice(0, -1), nextFuture = [now, ...futureRef.current].slice(0, 50);
+    pastRef.current = nextPast;
+    futureRef.current = nextFuture;
+    setPast(nextPast);
+    setFuture(nextFuture);
+    stage({ ...previous, viewport: now.viewport, updatedAt: new Date().toISOString() });
+  };
+  const redo = () => {
+    const next = futureRef.current[0], now = current.current, active = now && readCache(owner).find(item => item.id === now.id);
+    if (!next || !now || active?.accessRole === "viewer" || active?.cloudOffline) return;
+    const nextPast = [...pastRef.current, now].slice(-50), nextFuture = futureRef.current.slice(1);
+    pastRef.current = nextPast;
+    futureRef.current = nextFuture;
+    setPast(nextPast);
+    setFuture(nextFuture);
+    stage({ ...next, viewport: now.viewport, updatedAt: new Date().toISOString() });
+  };
   const loadVersions = async () => {
     const projectId = current.current?.id;
     if (!projectId) { setVersions([]); return []; }
@@ -313,7 +347,7 @@ export function useWorkspace(owner: string | null) {
       const next = local ? cached.board : snapshot?.board ?? cached?.board;
       if (!next) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
-      current.current = normalizeEditor(next); folderId.current = metadata.folderId; setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
+      current.current = normalizeEditor(next); folderId.current = metadata.folderId; setBoard(current.current); clearHistory(); setVersions([]);
       cacheProject(owner, { ...metadata, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
       // Publish the access metadata immediately so a newly accepted viewer
       // cannot get one editable render while the background refresh completes.
@@ -330,7 +364,7 @@ export function useWorkspace(owner: string | null) {
     // can be retried later; it must not block a new canvas.
     const previousProjectId = current.current?.id;
     if (!alive.current) return;
-    folderId.current = targetFolderId; setPast([]); setFuture([]); setVersions([]);
+    folderId.current = targetFolderId; clearHistory(); setVersions([]);
     stage(imported ?? blankBoard(title));
     // Save only the project that was open before this action. This keeps a
     // stalled cloud request from blocking the new canvas, while preserving
@@ -338,7 +372,7 @@ export function useWorkspace(owner: string | null) {
     // debounce timer.
     if (previousProjectId) void flush(previousProjectId);
   };
-  const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); setPast([]); setFuture([]); setVersions([]); await refresh(); };
+  const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); clearHistory(); setVersions([]); await refresh(); };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
   const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
   const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };
@@ -416,7 +450,7 @@ export function useWorkspace(owner: string | null) {
       dirty.current = readCache(owner).some(item => item.pending);
       if (current.current?.id === active.projectId) {
         current.current = normalizeEditor(selected.board); folderId.current = selected.folderId;
-        setBoard(current.current); setPast([]); setFuture([]); setVersions([]);
+        setBoard(current.current); clearHistory(); setVersions([]);
       }
       setProjects(items => resolution === "copy"
         ? [selected, latestRemote, ...items.filter(item => item.id !== selected.id && item.id !== latestRemote.id)]

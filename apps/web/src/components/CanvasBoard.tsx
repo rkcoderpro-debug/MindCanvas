@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, X, MoreHorizontal, Timer } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
@@ -23,7 +23,7 @@ import { CANVAS_TOOL_IDS } from "../lib/toolbarPreferences";
 import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
 import { getMindMapHierarchy } from "../lib/mindMapGraph";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -205,7 +205,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "rect", icon: Square, key: "R" }, { id: "ellipse", icon: Circle, key: "O" },
   { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
+export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, canUndo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
@@ -218,8 +218,20 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const { viewport: _nextViewport, updatedAt: _nextUpdatedAt, ...nextContent } = next;
     const { viewport: _beforeViewport, updatedAt: _beforeUpdatedAt, ...beforeContent } = before;
     const viewportOnly = JSON.stringify(nextContent) === JSON.stringify(beforeContent);
-    if (viewportOnly && onViewportChange) { onViewportChange({ ...before, viewport: next.viewport }); return; }
-    if (!readOnly) onChangeProp(next);
+    if (viewportOnly && onViewportChange) {
+      const navigated = { ...before, viewport: next.viewport };
+      boardRef.current = navigated;
+      onViewportChange(navigated);
+      return;
+    }
+    if (!readOnly) {
+      // Keep the interaction baseline current even before the parent render
+      // commits. This is important when Apply/rotate and a follow-up shortcut
+      // happen in the same React batch: the second operation must build on the
+      // first, while the workspace records each committed operation once.
+      boardRef.current = next;
+      onChangeProp(next);
+    }
   };
   const onChangeRef = useRef(onChange);
   const wheelPending = useRef<BoardState | null>(null), wheelIdle = useRef<number | null>(null), wheelFrameCancel = useRef<(() => void) | null>(null);
@@ -1251,7 +1263,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
       </div>
       {mindMapLayoutSummary && <aside className="mind-map-layout-report" aria-label={t("mindMapLayoutReport")}>
-        <header><div><strong>{t("mindMapLayoutReport")}</strong><small>{t("mindMapRoot")}: {mindMapLayoutSummary.rootLabel}</small></div><button className="icon-button" aria-label={t("closeLayoutReport")} title={t("closeLayoutReport")} onClick={() => setMindMapLayoutSummary(null)}><X size={15}/></button></header>
+        <header><div><strong>{t("mindMapLayoutReport")}</strong><small>{t("mindMapRoot")}: {mindMapLayoutSummary.rootLabel}</small></div><div className="mind-map-layout-report-actions"><button type="button" className="secondary-button" disabled={!canUndo || readOnly} onClick={onUndo}><Undo2 size={14}/>{t("undo")}</button><button className="icon-button" aria-label={t("closeLayoutReport")} title={t("closeLayoutReport")} onClick={() => setMindMapLayoutSummary(null)}><X size={15}/></button></div></header>
         {"sides" in mindMapLayoutSummary ? <div className="mind-map-layout-columns mind-map-layout-multi">{mindMapLayoutSummary.sides.map(side => <section key={side.index} className="mind-map-layout-side">
           <div className="mind-map-layout-side-heading"><strong>{t("mindMapSide")} {side.index + 1}</strong><small>{t("mindMapNodeCount", { count: side.branches.reduce((sum, branch) => sum + branch.nodeIds.length, 0) })}</small></div>
           {side.branches.length ? side.branches.map(branch => <div className="mind-map-branch-group" key={branch.rootId}><strong>{branch.rootLabel}</strong><ul>{branch.nodeLabels.map((label, index) => <li key={`${branch.rootId}-${index}`} title={label}>{label}</li>)}</ul></div>) : <small className="mind-map-no-branch">{t("mindMapNoBranches")}</small>}

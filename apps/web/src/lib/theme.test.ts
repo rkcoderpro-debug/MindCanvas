@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUseTheme, DEFAULT_THEME, isTheme, THEME_CANVAS_PALETTES, THEME_OPTIONS, themeAccess, themeBrowserColor } from "./theme";
+import { canUseTheme, DEFAULT_THEME, isTheme, THEME_CANVAS_PALETTES, THEME_OPTIONS, themeAccess, themeBrowserColor, themeGradient } from "./theme";
 
 describe("theme configuration", () => {
   it("exposes free and Plus themes with complete canvas palettes", () => {
@@ -14,7 +14,18 @@ describe("theme configuration", () => {
       expect(THEME_CANVAS_PALETTES[option.id].fill).toMatch(/^#[\da-f]{6}$/i);
       expect(THEME_CANVAS_PALETTES[option.id].highlighter).toMatch(/^#[\da-f]{6}$/i);
       expect(themeBrowserColor(option.id)).toBe(option.browserColor);
+      expect(themeGradient(option.id)).toHaveLength(2);
+      expect(themeGradient(option.id)[0]).toMatch(/^#[\da-f]{6}$/i);
+      expect(themeGradient(option.id)[1]).toMatch(/^#[\da-f]{6}$/i);
+      expect(themeGradient(option.id)[0]).not.toBe(themeGradient(option.id)[1]);
     }
+  });
+
+  it("gives every Plus theme a visibly distinct two-color gradient", () => {
+    const plus = THEME_OPTIONS.filter(option => option.access === "plus");
+    expect(plus.every(option => themeGradient(option.id)[0] !== themeGradient(option.id)[1])).toBe(true);
+    expect(themeGradient("lavender")).toEqual(["#8b5cf6", "#ec4899"]);
+    expect(themeGradient("emeraldNight")).toEqual(["#10b981", "#14b8a6"]);
   });
 
   it("rejects stale or unknown persisted theme values", () => {

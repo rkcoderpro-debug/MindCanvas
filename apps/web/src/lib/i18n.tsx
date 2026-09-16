@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { DEFAULT_THEME, isTheme, themeBrowserColor, type Theme } from "./theme";
+import { DEFAULT_THEME, isTheme, themeBrowserColor, themeGradient, type Theme } from "./theme";
 export type { Theme } from "./theme";
 
 export const en = {
@@ -166,6 +166,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => { document.documentElement.lang = language; try { localStorage.setItem("mindcanvas:language", language); } catch {} }, [language]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    const [gradientStart, gradientEnd] = themeGradient(theme);
+    document.documentElement.style.setProperty("--theme-gradient-start", gradientStart);
+    document.documentElement.style.setProperty("--theme-gradient-end", gradientEnd);
     document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", themeBrowserColor(theme));
   }, [theme]);
   useEffect(() => { try { localStorage.setItem("mindcanvas:theme", selectedTheme); } catch {} }, [selectedTheme]);
