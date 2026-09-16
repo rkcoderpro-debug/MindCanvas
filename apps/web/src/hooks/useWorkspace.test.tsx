@@ -191,6 +191,9 @@ describe("Workspace lifecycle", () => {
     const echoed = { ...api.board!, viewport: { x: 240, y: -80, scale: 1.27 }, updatedAt: "2099-01-01T00:00:00.000Z" };
     await act(async () => collaborationHarness.callback?.({ projectId: echoed.id, board: echoed, revision: 1, updatedAt: echoed.updatedAt }));
     expect(api.status).toBe("saved"); expect(api.canUndo).toBe(true);
+    const serverCanonicalized = { ...api.board!, title: "cloud edit (canonical)", updatedAt: "2099-01-01T00:00:01.000Z" };
+    await act(async () => collaborationHarness.callback?.({ projectId: serverCanonicalized.id, board: serverCanonicalized, revision: 1, updatedAt: serverCanonicalized.updatedAt }));
+    expect(api.board!.title).toBe("Cloud history"); expect(api.canUndo).toBe(true);
     await act(async () => api.undo());
     expect(api.board!.texts).toHaveLength(0); expect(api.canRedo).toBe(true);
   });

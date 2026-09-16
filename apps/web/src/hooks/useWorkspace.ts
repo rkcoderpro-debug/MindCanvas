@@ -45,6 +45,18 @@ export function useWorkspace(owner: string | null) {
   // the short-lived save snapshots so the echo of this device's own save is
   // not mistaken for a collaborator edit that should reset Undo/Redo.
   const localSaveMarkers = useRef<LocalSaveMarker[]>([]);
+  // A realtime event can arrive after the save queue has already consumed its
+  // marker. Keep acknowledged snapshots separately so a server-normalized
+  // echo (same revision, slightly different payload) still cannot clear the
+  // local transaction history.
+  const acknowledgedSaveMarkers = useRef<LocalSaveMarker[]>([]);
+  const rememberAcknowledged = (marker: LocalSaveMarker) => {
+    const cutoff = Date.now() - LOCAL_SAVE_MATCH_WINDOW_MS;
+    acknowledgedSaveMarkers.current = [
+      ...acknowledgedSaveMarkers.current.filter(item => item.createdAt >= cutoff && item !== marker),
+      marker,
+    ].slice(-64);
+  };
   const clearHistory = () => {
     pastRef.current = [];
     futureRef.current = [];
@@ -164,6 +176,7 @@ export function useWorkspace(owner: string | null) {
             try {
               const saved = await persistProject(owner, candidate);
               marker.expectedRevision = saved?.revision;
+              rememberAcknowledged(marker);
               acknowledge(owner, candidate, saved?.revision);
               const cached = readCache(owner).find(item => item.id === candidate.id);
               if (alive.current && cached) setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
@@ -237,6 +250,7 @@ export function useWorkspace(owner: string | null) {
       if (!local) return;
       const now = Date.now();
       localSaveMarkers.current = localSaveMarkers.current.filter(marker => now - marker.createdAt < LOCAL_SAVE_MATCH_WINDOW_MS);
+      acknowledgedSaveMarkers.current = acknowledgedSaveMarkers.current.filter(marker => now - marker.createdAt < LOCAL_SAVE_MATCH_WINDOW_MS);
       const markerIndex = localSaveMarkers.current.findIndex(marker => {
         if (marker.projectId !== projectId || !sameBoardContent(marker.snapshot.board, update.board)) return false;
         if (marker.expectedRevision !== undefined) return update.revision === undefined || update.revision === marker.expectedRevision;
@@ -250,6 +264,27 @@ export function useWorkspace(owner: string | null) {
         if (alive.current && cached) {
           setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
           if (!cached.pending) setStatus("saved");
+        }
+        return;
+      }
+      // The save response may have already removed the in-flight marker before
+      // Postgres Changes delivers the echo. Revision is the server's durable
+      // identity for that write, so it is safe to acknowledge the event even
+      // when the server canonicalized timestamps or other metadata. Preserve
+      // the current board and both history stacks in this branch.
+      const acknowledged = acknowledgedSaveMarkers.current.find(marker => {
+        if (marker.projectId !== projectId) return false;
+        if (marker.expectedRevision !== undefined && update.revision !== undefined) return update.revision === marker.expectedRevision;
+        return marker.expectedRevision === undefined && sameBoardContent(marker.snapshot.board, update.board);
+      });
+      if (acknowledged) {
+        acknowledge(owner, acknowledged.snapshot, update.revision ?? acknowledged.expectedRevision);
+        const cached = readCache(owner).find(item => item.id === projectId);
+        if (cached && update.revision !== undefined) cacheProject(owner, { ...cached, revision: update.revision, pending: cached.pending });
+        const latest = readCache(owner).find(item => item.id === projectId);
+        if (alive.current && latest) {
+          setProjects(items => [latest, ...items.filter(item => item.id !== latest.id)]);
+          if (!latest.pending) setStatus("saved");
         }
         return;
       }

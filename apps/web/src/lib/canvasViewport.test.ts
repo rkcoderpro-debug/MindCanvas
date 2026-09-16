@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "./canvasViewport";
+import { MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, readWheelDelta, wheelPanDelta, zoomViewportAtPoint } from "./canvasViewport";
 
 describe("canvas viewport wheel helpers", () => {
   it("normalizes line and page wheel units", () => {
     expect(normalizeWheelDelta(2, -3, 0)).toEqual({ x: 2, y: -3 });
     expect(normalizeWheelDelta(1, -2, 1)).toEqual({ x: 16, y: -32 });
     expect(normalizeWheelDelta(1, -1, 2)).toEqual({ x: 800, y: -800 });
+  });
+
+  it("keeps legacy horizontal touchpad deltas when a browser omits deltaX", () => {
+    expect(readWheelDelta({ deltaX: 0, deltaY: 0, deltaMode: 0, wheelDeltaX: -18, wheelDelta: -7 })).toEqual({ x: 18, y: 7 });
   });
 
   it("keeps both touchpad axes and maps Alt wheel input horizontally", () => {

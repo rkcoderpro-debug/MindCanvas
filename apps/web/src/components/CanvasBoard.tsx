@@ -17,7 +17,7 @@ import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipb
 import { getDocumentSource } from "../lib/supabase";
 import { selectionRevision, type SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
-import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
+import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE, autoPanViewportDelta, panViewport, readWheelDelta, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
 import { CANVAS_TOOL_IDS } from "../lib/toolbarPreferences";
 import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
@@ -1040,10 +1040,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       if (editRef.current || gesture.current || pinch.current) return;
       const target = e.target instanceof Element ? e.target : null;
       if (target?.closest(".drawing-toolbar, .drawing-size-control, .mobile-quick-actions, .canvas-navigator, .zoom-control, .inspector-toggle, .canvas-fullscreen-toggle, .canvas-media video, .canvas-media audio, .canvas-embed-body")) return;
-      const rawX = Number.isFinite(e.deltaX) ? e.deltaX : 0, rawY = Number.isFinite(e.deltaY) ? e.deltaY : 0;
-      if (rawX === 0 && rawY === 0) return;
+      const normalized = readWheelDelta(e);
+      if (normalized.x === 0 && normalized.y === 0) return;
       e.preventDefault();
-      const normalized = normalizeWheelDelta(rawX, rawY, e.deltaMode);
       const source = boardRef.current;
       const currentViewport = wheelPending.current?.viewport ?? source.viewport;
       const rect = el.getBoundingClientRect();

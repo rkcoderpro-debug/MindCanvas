@@ -12,6 +12,20 @@ export function normalizeWheelDelta(deltaX: number, deltaY: number, deltaMode: n
 }
 
 /**
+ * Read both modern and legacy wheel fields. A few laptop/browser combinations
+ * expose a precision touchpad gesture through wheelDeltaX/wheelDelta while
+ * leaving one of deltaX/deltaY at zero. Keeping the fallback here prevents
+ * the canvas from losing a horizontal or diagonal part of the gesture.
+ */
+export function readWheelDelta(event: Pick<WheelEvent, "deltaX" | "deltaY" | "deltaMode"> & { wheelDelta?: number; wheelDeltaX?: number }) {
+  const legacyX = Number.isFinite(event.wheelDeltaX) ? -(event.wheelDeltaX ?? 0) : 0;
+  const legacyY = Number.isFinite(event.wheelDelta) ? -(event.wheelDelta ?? 0) : 0;
+  const deltaX = Number.isFinite(event.deltaX) && event.deltaX !== 0 ? event.deltaX : legacyX;
+  const deltaY = Number.isFinite(event.deltaY) && event.deltaY !== 0 ? event.deltaY : legacyY;
+  return normalizeWheelDelta(deltaX, deltaY, event.deltaMode);
+}
+
+/**
  * Keep the canvas wheel contract predictable across mouse wheels and
  * touchpads. A traditional wheel normally reports only deltaY, while a
  * touchpad reports both axes for a free two-finger pan. Preserve both values
