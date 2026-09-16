@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Beaker, BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
@@ -96,7 +96,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.8.1</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V4.8.2</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
@@ -106,7 +106,6 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
         <button className={!boardOpen && filter === "__trash" ? "active" : ""} title={t("trash")} onClick={() => goView("__trash")}><Trash2 size={18}/><span className="nav-label">{t("trash")}</span></button>
         <button className={!boardOpen && filter === "__shared" ? "active" : ""} title={t("sharedWithMe")} onClick={() => goView("__shared")}><Users size={18}/><span className="nav-label">{t("sharedWithMe")}</span><span className="nav-count">{projects.filter(project => project.shared && !project.deletedAt).length}</span></button>
         <button className={`nav-learning ${!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""}`} aria-current={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "page" : undefined} title={t("learningHub")} onClick={() => goView("__learning")}><BookOpen size={18}/><span className="nav-label">{t("learningHub")}</span></button>
-        <button className={`nav-lab ${!boardOpen && filter === "__lab" ? "active" : ""}`} aria-current={!boardOpen && filter === "__lab" ? "page" : undefined} title={t("labNav")} onClick={() => goView("__lab")}><Beaker size={18}/><span className="nav-label">{t("labNav")}</span></button>
       </nav>
       {isMobile && showSwipeHint && <div className="mobile-nav-swipe-hint" role="status">{t("swipeForMore")}</div>}
       <div className="section-label"><span>{t("folders")}</span><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>
@@ -138,7 +137,6 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
       <button className={!boardOpen && !recent && !filter ? "active" : ""} onClick={goHome}><LayoutGrid size={20}/><span>{t("workspace")}</span></button>
       <button className={boardOpen ? "active" : ""} onClick={() => { if (!boardOpen) goView("recent"); else closeMobile(); }}><FileText size={20}/><span>Canvas</span></button>
       <button className={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""} onClick={() => goView("__learning")}><BookOpen size={20}/><span>{t("learningHub")}</span></button>
-      <button className={!boardOpen && filter === "__lab" ? "active" : ""} onClick={() => goView("__lab")}><Beaker size={20}/><span>{t("labNav")}</span></button>
       <button aria-expanded={mobileOpen} className={mobileOpen ? "active" : ""} onClick={() => setMobileOpen(value => !value)}><MoreHorizontal size={20}/><span>{t("moreTools")}</span></button>
     </nav>}
     {mobileOpen && <button className="sidebar-backdrop" aria-label={t("close")} onClick={closeMobile}/>} 

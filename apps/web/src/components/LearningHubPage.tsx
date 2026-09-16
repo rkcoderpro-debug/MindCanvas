@@ -8,13 +8,14 @@ import { useFlashcards, type FlashcardStore } from "../hooks/useFlashcards";
 import { useQuizzes, type QuizStore } from "../hooks/useQuizzes";
 import FlashcardsPage from "./FlashcardsPage";
 import QuizPage from "./QuizPage";
+import LabPage from "./LabPage";
 import StudyPlanDialog from "./StudyPlanDialog";
 import { generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcardsFromFile, type StudyPlanRecommendation } from "../lib/api";
 import { MAX_FILE_BYTES } from "../lib/board";
 import { saveDocumentToStorage } from "../lib/supabase";
 import type { AiGenerationOptions } from "../lib/aiOptions";
 
-type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress";
+type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -35,17 +36,21 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-export default function LearningHubPage({ owner, projects, accountPlan, onOpenLab }: { owner: string | null; projects: Project[]; accountPlan?: AccountPlan; onOpenLab?: () => void }) {
+export default function LearningHubPage({ owner, projects, accountPlan, initialTab }: { owner: string | null; projects: Project[]; accountPlan?: AccountPlan; initialTab?: HubTab }) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
-  const [tab, setTab] = useState<HubTab>("overview");
+  const [tab, setTab] = useState<HubTab>(initialTab ?? "overview");
   const [openAiPlan, setOpenAiPlan] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const [showNavSwipeHint, setShowNavSwipeHint] = useState(() => {
     try { return localStorage.getItem("mindcanvas:learning-nav-swiped:v1") !== "true"; } catch { return true; }
   });
   const today = vietnamStudyDate();
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     const plan = flashcards.activeStudyPlan;
@@ -84,20 +89,22 @@ export default function LearningHubPage({ owner, projects, accountPlan, onOpenLa
     { id: "quiz", label: t("quiz"), icon: ClipboardList },
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
+    { id: "lab", label: t("labNav"), icon: Beaker },
   ];
 
   return <section className="learning-hub-page">
     <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></header>
-    <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={17}/><span>{label}</span>{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
-    {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} onOpenLab={onOpenLab} t={t} language={language}/>}
+    <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""}`} onClick={() => setTab(id)}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
+    {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
     {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}
     {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}
     {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
+    {tab === "lab" && <LabPage owner={owner} embedded/>}
   </section>;
 }
 
-function HubOverview({ flashcards, quizzes, onTab, onOpenAiPlan, onOpenLab, t, language }: { flashcards: FlashcardStore; quizzes: QuizStore; onTab: (tab: HubTab) => void; onOpenAiPlan: () => void; onOpenLab?: () => void; t: ReturnType<typeof useLanguage>["t"]; language: string }) {
+function HubOverview({ flashcards, quizzes, onTab, onOpenAiPlan, t, language }: { flashcards: FlashcardStore; quizzes: QuizStore; onTab: (tab: HubTab) => void; onOpenAiPlan: () => void; t: ReturnType<typeof useLanguage>["t"]; language: string }) {
   const plan = flashcards.activeStudyPlan;
   const today = vietnamStudyDate();
   const planDay = plan ? studyPlanDayFor(plan, today) : null;
@@ -106,7 +113,7 @@ function HubOverview({ flashcards, quizzes, onTab, onOpenAiPlan, onOpenLab, t, l
   return <div className="learning-hub-overview">
     <div className="learning-hero"><div className="learning-hero-copy"><span className="eyebrow">{plan ? t("todayPlan") : t("quickStart")}</span><h2>{plan ? plan.name : t("continueLearning")}</h2><p>{plan ? t("manualPlanStreakHint") : t("noPlanFallbackHint")}</p><div className="learning-hero-actions"><button className="primary-button" onClick={() => onTab(plan ? "plan" : "flashcards")}><Sparkles size={17}/>{plan ? t("openTodayPlan") : t("startLearning")}</button><button className="secondary-button learning-hub-ai-action" onClick={onOpenAiPlan}><WandSparkles size={16}/>{t("aiStudyPlan")}</button></div></div><div className="learning-hero-orbit"><Trophy size={32}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div>
     <div className="learning-stats-grid"><article><span><Flame size={16}/>{t("streak")}</span><strong>{flashcards.streak.current}</strong><small>{t("bestStreak")}: {flashcards.streak.best}</small></article><article><span><Target size={16}/>{t("todayGoal")}</span><strong>{flashcards.streak.todayProgress} / {flashcards.streak.todayTarget}</strong><small>{flashcards.streak.todayCompleted ? t("streakEarned") : t("streakLocked")}</small></article><article><span><BookOpen size={16}/>{t("flashcards")}</span><strong>{flashcards.cards.length}</strong><small>{t("dueCount", { count: flashcards.due.length })}</small></article><article><span><ClipboardList size={16}/>{t("quiz")}</span><strong>{quizzes.quizzes.length}</strong><small>{t("quizTestsSaved")}</small></article></div>
-    <div className="learning-overview-columns"><section className="learning-card learning-today-card"><div className="learning-card-heading"><div><span className="eyebrow">{t("today")}</span><h3>{plan ? t("dailyTasks") : t("quickStart")}</h3></div><button className="text-button" onClick={() => onTab(plan ? "plan" : "flashcards")}>{t("viewDetails")}</button></div>{plan && tasks.length ? <div className="task-checklist">{tasks.map(task => { const done = !!day?.completedTaskIds?.includes(task.id); return <div className={`task-check-row ${done ? "done" : ""}`} key={task.id}><span className="task-check-icon">{done ? <CheckCircle2 size={18}/> : taskIcon(task.kind)}</span><span><strong>{task.title}</strong><small>{task.kind === "flashcards" && task.targetCount ? `${task.targetCount} ${t("targetCards").toLocaleLowerCase()}` : task.minutes ? `${task.minutes} ${t("minutes")}` : t("taskPending")}</small></span>{done && <Check size={16}/>}</div>; })}</div> : <div className="learning-empty-state"><WandSparkles size={26}/><p>{t("noTasksToday")}</p><button className="secondary-button" onClick={() => onTab("plan")}><Plus size={15}/>{t("createManualPlan")}</button></div>}</section><section className="learning-card learning-quick-actions"><div className="learning-card-heading"><div><span className="eyebrow">{t("studyTools")}</span><h3>{t("chooseStudyMode")}</h3></div></div><button onClick={() => onTab("flashcards")}><span className="quick-action-icon purple"><BookOpen size={20}/></span><span><strong>{t("flashcards")}</strong><small>{t("flashcardQuickHint")}</small></span></button><button onClick={() => onTab("quiz")}><span className="quick-action-icon blue"><ClipboardList size={20}/></span><span><strong>{t("quiz")}</strong><small>{t("quizQuickHint")}</small></span></button><button onClick={() => onTab("plan")}><span className="quick-action-icon orange"><CalendarDays size={20}/></span><span><strong>{t("studyPlan")}</strong><small>{t("planQuickHint")}</small></span></button>{onOpenLab && <button onClick={onOpenLab}><span className="quick-action-icon green"><Beaker size={20}/></span><span><strong>{t("labNav")}</strong><small>{t("labQuickHint")}</small></span></button>}</section></div>
+    <div className="learning-overview-columns"><section className="learning-card learning-today-card"><div className="learning-card-heading"><div><span className="eyebrow">{t("today")}</span><h3>{plan ? t("dailyTasks") : t("quickStart")}</h3></div><button className="text-button" onClick={() => onTab(plan ? "plan" : "flashcards")}>{t("viewDetails")}</button></div>{plan && tasks.length ? <div className="task-checklist">{tasks.map(task => { const done = !!day?.completedTaskIds?.includes(task.id); return <div className={`task-check-row ${done ? "done" : ""}`} key={task.id}><span className="task-check-icon">{done ? <CheckCircle2 size={18}/> : taskIcon(task.kind)}</span><span><strong>{task.title}</strong><small>{task.kind === "flashcards" && task.targetCount ? `${task.targetCount} ${t("targetCards").toLocaleLowerCase()}` : task.minutes ? `${task.minutes} ${t("minutes")}` : t("taskPending")}</small></span>{done && <Check size={16}/>}</div>; })}</div> : <div className="learning-empty-state"><WandSparkles size={26}/><p>{t("noTasksToday")}</p><button className="secondary-button" onClick={() => onTab("plan")}><Plus size={15}/>{t("createManualPlan")}</button></div>}</section><section className="learning-card learning-quick-actions"><div className="learning-card-heading"><div><span className="eyebrow">{t("studyTools")}</span><h3>{t("chooseStudyMode")}</h3></div></div><button onClick={() => onTab("flashcards")}><span className="quick-action-icon purple"><BookOpen size={20}/></span><span><strong>{t("flashcards")}</strong><small>{t("flashcardQuickHint")}</small></span></button><button onClick={() => onTab("quiz")}><span className="quick-action-icon blue"><ClipboardList size={20}/></span><span><strong>{t("quiz")}</strong><small>{t("quizQuickHint")}</small></span></button><button onClick={() => onTab("plan")}><span className="quick-action-icon orange"><CalendarDays size={20}/></span><span><strong>{t("studyPlan")}</strong><small>{t("planQuickHint")}</small></span></button><button className="learning-lab-quick-action" onClick={() => onTab("lab")}><span className="quick-action-icon green"><Beaker size={20}/></span><span><strong>{t("labNav")}</strong><small>{t("labQuickHint")}</small></span><small className="learning-tab-badge">{t("labFeatured")}</small></button></section></div>
   </div>;
 }
 

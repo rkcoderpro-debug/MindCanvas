@@ -19,11 +19,12 @@ const design: LabDesign = {
 beforeEach(() => localStorage.clear());
 
 describe("interactive lab helpers", () => {
-  it("builds the planning prompt that an external AI can turn into an implementation prompt", () => {
+  it("builds one direct prompt that asks an external AI for the finished HTML", () => {
     const prompt = buildLabPlanPrompt({ language: "vi", subject: "physics", learnerLevel: "lớp 10", request: "Cho đổi góc bắn và vận tốc rồi xem quỹ đạo.", sourceFileName: "chapter.pdf" });
     expect(prompt).toContain("chapter.pdf");
     expect(prompt).toContain("Cho đổi góc bắn");
-    expect(prompt).toContain("PROMPT FOR THE HTML IMPLEMENTATION AI");
+    expect(prompt).toContain("Return exactly one complete HTML document only");
+    expect(prompt).toContain("save it as an .html file");
     expect(prompt).toContain("deterministic test plan");
     expect(prompt).toContain("in-page validation/test panel");
     const program = buildLabProgramPrompt({ language: "vi", design });
@@ -47,6 +48,7 @@ describe("interactive lab helpers", () => {
 
   it("blocks network and parent access while allowing self-contained HTML", () => {
     expect(validateLabHtml("<html><body><canvas></canvas><script>document.body.dataset.ready='yes'</script></body></html>")).toMatchObject({ ok: true });
+    expect(validateLabHtml("<html><body><svg xmlns=\"http://www.w3.org/2000/svg\"></svg><script>document.createElementNS('http://www.w3.org/2000/svg', 'svg')</script></body></html>")).toMatchObject({ ok: true });
     expect(validateLabHtml("<script src=\"https://example.com/app.js\"></script>")).toMatchObject({ ok: false, code: "unsafeHtml" });
     expect(validateLabHtml("<iframe src=\"https://example.com\"></iframe>")).toMatchObject({ ok: false, code: "unsafeHtml" });
     expect(validateLabHtml("<script>fetch('/data')</script>")).toMatchObject({ ok: false, code: "unsafeHtml" });
