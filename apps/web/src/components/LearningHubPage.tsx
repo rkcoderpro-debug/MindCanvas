@@ -1,3 +1,5 @@
+import { MusicPage } from "./MusicPlayer";
+import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
@@ -16,7 +18,7 @@ import { MAX_FILE_BYTES } from "../lib/board";
 import { saveDocumentToStorage } from "../lib/supabase";
 import type { AiGenerationOptions } from "../lib/aiOptions";
 
-type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared";
+type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "music";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -91,6 +93,7 @@ export default function LearningHubPage({ owner, projects, accountPlan, initialT
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
+    { id: "music", label: "Nhạc", icon: Music2 },
     { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
   ];
 
@@ -103,6 +106,7 @@ export default function LearningHubPage({ owner, projects, accountPlan, initialT
     {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
+    {tab === "music" && <MusicPage/>}
     {tab === "shared" && <SharedLearningPage owner={owner}/>}
   </section>;
 }

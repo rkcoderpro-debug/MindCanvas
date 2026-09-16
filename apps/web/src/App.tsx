@@ -1,3 +1,4 @@
+import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
@@ -60,7 +61,7 @@ function AuthenticatedApp() {
   }, []);
   if (loading) return <main className="auth-loading" role="status"><Sparkles/>{t("checking")}</main>;
   // Keying by identity prevents account A's boards/history from appearing for account B.
-  return <Workspace key={user?.id ?? "guest"} user={user} authError={error}/>;
+  return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user} authError={error}/></MusicProvider>;
 }
 function Workspace({ user, authError }: { user: User | null; authError: string }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
@@ -296,6 +297,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>
+    <MusicIsland/>
     <PetCompanion owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
     {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
       <label>{t("name")}<input autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>

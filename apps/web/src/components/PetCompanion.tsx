@@ -1,3 +1,4 @@
+import InteractivePet from "./InteractivePet";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Heart, Sparkles, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
@@ -161,6 +162,6 @@ export default function PetCompanion({ owner, active, activityType = "workspace"
       <label>{copy.name}<input value={nameDraft} maxLength={40} onChange={event => setNameDraft(event.target.value)} onBlur={saveName} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); saveName(); } }}/></label>
       <button type="button" className="secondary-button pet-minimize-button" onClick={() => setExpanded(false)}>{copy.minimize}</button>
     </section>}
-    <button type="button" className="pet-companion-avatar" aria-label={expanded ? copy.close : copy.expand} aria-expanded={expanded} data-mood={mood} onClick={() => setExpanded(value => !value)}><span aria-hidden="true">{PET_EMOJI[pet.kind]}</span><small>{pet.name}</small></button>
+    <div className="pet-interaction-area"><InteractivePet kind={pet.kind} mood={mood} name={pet.name}/><button type="button" className="pet-info-button" aria-label={expanded ? copy.close : copy.expand} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{pet.name} · ⓘ</button></div>
   </aside>;
 }

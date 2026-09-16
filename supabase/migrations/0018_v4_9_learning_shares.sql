@@ -28,6 +28,7 @@ create table if not exists public.lab_projects (
   content_version integer not null default 1,
   created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
+alter table public.lab_projects add column if not exists content_version integer not null default 1;
 
 -- Bound private HTML storage even when a client bypasses frontend limits.
 create or replace function public.guard_learning_lab_storage() returns trigger
