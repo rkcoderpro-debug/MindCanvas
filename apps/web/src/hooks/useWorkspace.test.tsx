@@ -6,6 +6,7 @@ import { useWorkspace } from "./useWorkspace";
 import * as store from "../lib/projectStore";
 import { arrangeMindMapMultiSided } from "../lib/board";
 import { rotateMindMapSubtree } from "../lib/editorCommands";
+import CanvasBoard from "../components/CanvasBoard";
 const collaborationHarness = vi.hoisted(() => ({ callback: null as ((update: any) => void) | null }));
 vi.mock("../lib/collaboration", () => ({
   subscribeToProject: vi.fn((_projectId: string, callback: (update: any) => void) => {
@@ -15,7 +16,25 @@ vi.mock("../lib/collaboration", () => ({
 }));
 let root: Root, api: ReturnType<typeof useWorkspace>, host: HTMLDivElement;
 function Harness({ owner = null }: { owner?: string | null }) { api = useWorkspace(owner); return <span>{api.board?.title ?? "Workspace"}</span>; }
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
+function CanvasHarness() {
+  api = useWorkspace(null);
+  return api.board
+    ? <CanvasBoard board={api.board} onChange={api.change} onViewportChange={api.navigate} onUndo={api.undo} onRedo={api.redo} canUndo={api.canUndo} canRedo={api.canRedo} onSave={() => undefined}/>
+    : <span>Workspace</span>;
+}
+function pointer(target: Element, type: string, x: number, y: number) {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
+  Object.defineProperty(event, "pointerId", { value: 1 });
+  Object.defineProperty(event, "pointerType", { value: "mouse" });
+  target.dispatchEvent(event);
+}
+beforeEach(() => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  SVGElement.prototype.setPointerCapture = () => {};
+  SVGElement.prototype.hasPointerCapture = () => false;
+  SVGElement.prototype.releasePointerCapture = () => {};
+  localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+});
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); collaborationHarness.callback = null; vi.restoreAllMocks(); });
 describe("Workspace lifecycle", () => {
   it("keeps the remote revision and owner when opening an invitation", async () => {
@@ -89,6 +108,29 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.redo()); expect(api.board!.texts[0].text).toBe("saved");
     await act(async () => api.home()); expect(api.board).toBeNull();
     await act(async () => api.open(api.projects.find(p => p.id === id)!)); expect(api.board!.texts[0].text).toBe("saved");
+  });
+  it("records newly created canvas text and shapes as undoable edits", async () => {
+    await act(async () => root.render(<CanvasHarness/>));
+    await act(async () => api.create("Canvas history"));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => (host.querySelector('[aria-label="Chữ"]') as HTMLButtonElement).click());
+    await act(async () => pointer(svg, "pointerdown", 120, 140));
+    const editor = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    valueSetter.call(editor, "Undoable text");
+    await act(async () => editor.dispatchEvent(new Event("input", { bubbles: true })));
+    await act(async () => editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true })));
+    expect(api.board?.texts).toHaveLength(1);
+    expect(api.canUndo).toBe(true);
+    await act(async () => api.undo());
+    expect(api.board?.texts).toHaveLength(0);
+
+    await act(async () => (host.querySelector('[aria-label="Chữ nhật"]') as HTMLButtonElement).click());
+    await act(async () => { pointer(svg, "pointerdown", 40, 50); pointer(svg, "pointermove", 180, 150); pointer(svg, "pointerup", 180, 150); });
+    expect(api.board?.shapes).toHaveLength(1);
+    expect(api.canUndo).toBe(true);
+    await act(async () => api.undo());
+    expect(api.board?.shapes).toHaveLength(0);
   });
   it("flushes before switching projects without mixing ids", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);

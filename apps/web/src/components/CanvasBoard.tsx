@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
@@ -1100,6 +1100,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const drawingTool: DrawingToolName | null = tool === "pen" || tool === "highlighter" || tool === "eraser" ? tool : null;
   const drawingSize = drawingTool ? drawingSizes[drawingTool] : 0;
   const drawingSizeRange = drawingTool ? DRAWING_SIZE_RANGES[drawingTool] : null;
+  const drawingSizeProgress = drawingTool && drawingSizeRange ? `${((drawingSize - drawingSizeRange.min) / Math.max(1, drawingSizeRange.max - drawingSizeRange.min)) * 100}%` : "0%";
   const visibleToolbarTools = tools.filter(item => visibleToolIds.includes(item.id));
   const hiddenToolbarTools = tools.filter(item => !visibleToolIds.includes(item.id));
   const ActiveToolIcon = activeTool.icon;
@@ -1107,7 +1108,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
     if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches) setToolbarExpanded(false);
   };
-  return <div className={`editor-layout toolbar-${toolbarPosition} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
+  return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addMediaFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -1141,7 +1142,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         {toolbarExpanded && toolbarOverflowing && showToolbarSwipeHint && <span className="toolbar-swipe-hint" role="status">{t("swipeForMore")}</span>}
       </div>}
       {!readOnly && drawingTool && drawingSizeRange && <div className={`drawing-size-control drawing-size-${drawingTool}`} role="group" aria-label={t(drawingSizeLabelKey[drawingTool])}>
-        <ActiveToolIcon size={15}/><label><span>{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/></label><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(34, Math.max(8, drawingSize / 2))}px`, height: `${Math.min(34, Math.max(8, drawingSize / 2))}px` }}/>
+        <ActiveToolIcon size={14}/><span className="drawing-size-label">{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} style={{ "--range-progress": drawingSizeProgress } as CSSProperties} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(18, Math.max(6, drawingSize / 3))}px`, height: `${Math.min(18, Math.max(6, drawingSize / 3))}px` }}/>
       </div>}
       <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}

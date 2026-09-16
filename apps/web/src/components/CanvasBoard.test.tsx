@@ -229,6 +229,18 @@ describe("Canvas interactions", () => {
     expect(current.drawings[0].id).toBe("stroke");
   });
 
+  it("keeps the Eraser size control compact and separate from the toolbar", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const penControl = host.querySelector<HTMLElement>(".drawing-size-control")!;
+    expect(penControl.closest(".drawing-toolbar")).toBeNull();
+    expect(penControl.querySelector<HTMLInputElement>('input[type="range"]')).toMatchObject({ min: "1", max: "40" });
+    await act(async () => (host.querySelector('[aria-label="Tẩy"]') as HTMLButtonElement).click());
+    const eraserControl = host.querySelector<HTMLElement>(".drawing-size-control")!;
+    expect(eraserControl.classList.contains("drawing-size-eraser")).toBe(true);
+    expect(eraserControl.querySelector<HTMLInputElement>('input[type="range"]')).toMatchObject({ min: "4", max: "120" });
+  });
+
   it("expands mobile quick actions and duplicates the current selection", async () => {
     const b = { ...blankBoard(), texts: [{ id: "text", text: "Quick", x: 20, y: 40, width: 160 }] };
     await act(async () => root.render(<Harness initial={b}/>));

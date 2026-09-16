@@ -497,5 +497,9 @@ export function useWorkspace(owner: string | null) {
       setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false;
     }
   });
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, navigate, undo, redo, canUndo: !!past.length, canRedo: !!future.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
+  // The refs are updated before the React render that follows a canvas commit.
+  // Reading them here keeps the toolbar state aligned with the transaction
+  // that was just created, including a create-text/shape commit followed
+  // immediately by Undo while a cloud save is still settling.
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { CANVAS_TOOL_IDS, normalizeVisibleToolIds, readToolbarToolVisibility, saveToolbarToolVisibility } from "./toolbarPreferences";
+import { CANVAS_TOOL_IDS, LEGACY_TOOLBAR_VISIBILITY_KEY, normalizeVisibleToolIds, readToolbarToolVisibility, saveToolbarToolVisibility, TOOLBAR_VISIBILITY_KEY } from "./toolbarPreferences";
 
 describe("toolbar visibility preferences", () => {
   beforeEach(() => localStorage.clear());
@@ -16,5 +16,11 @@ describe("toolbar visibility preferences", () => {
   it("persists a hidden-tool configuration", () => {
     saveToolbarToolVisibility(["select", "hand", "text"]);
     expect(readToolbarToolVisibility()).toEqual(["select", "hand", "text"]);
+  });
+
+  it("migrates an old toolbar preference so the Eraser becomes visible", () => {
+    localStorage.setItem(LEGACY_TOOLBAR_VISIBILITY_KEY, JSON.stringify(["select", "pen", "highlighter", "rect"]));
+    expect(readToolbarToolVisibility()).toEqual(["select", "pen", "highlighter", "eraser", "rect"]);
+    expect(localStorage.getItem(TOOLBAR_VISIBILITY_KEY)).toContain("eraser");
   });
 });
