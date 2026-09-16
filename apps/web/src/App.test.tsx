@@ -145,6 +145,45 @@ describe("Workspace UI", () => {
     expect(frame).not.toBeNull();
     expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame.getAttribute("srcdoc")).toContain("dataset.ready");
+    const shell = host.querySelector(".lab-runner-shell") as HTMLDivElement;
+    const requestFullscreen = vi.fn(async () => {
+      Object.defineProperty(document, "fullscreenElement", { configurable: true, value: shell });
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    const exitFullscreen = vi.fn(async () => {
+      Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    Object.defineProperty(shell, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+    expect((shell as HTMLDivElement & { requestFullscreen?: unknown }).requestFullscreen).toBe(requestFullscreen);
+    expect(document.fullscreenElement).toBeNull();
+    expect((document as Document & { webkitFullscreenElement?: Element | null }).webkitFullscreenElement).toBeFalsy();
+    const fullscreenButton = shell.querySelector(".lab-runner-toolbar button") as HTMLButtonElement;
+    expect(fullscreenButton?.outerHTML).toContain("aria-label");
+    expect(fullscreenButton.disabled).toBe(false);
+    expect(fullscreenButton.getAttribute("aria-label")).toBe("Mở mô phỏng toàn màn hình");
+    await act(async () => fullscreenButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(shell.querySelector(".lab-runner-toolbar button")?.getAttribute("aria-label")).toBe("Thoát toàn màn hình");
+    await act(async () => fullscreenButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(shell.querySelector(".lab-runner-toolbar button")?.getAttribute("aria-label")).toBe("Mở mô phỏng toàn màn hình");
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(request, ""); request.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Lưu Lab")!.click());
+    expect(host.textContent).toContain("Đã lưu Lab trên trình duyệt.");
+  });
+  it("saves an HTML-only Lab before the source/request section is completed", async () => {
+    await import("./components/LabPage");
+    await act(async () => root.render(<App/>));
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Trung tâm học tập") as HTMLButtonElement).click());
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(button => button.textContent?.includes("Lab")) as HTMLButtonElement).click());
+    const html = [...host.querySelectorAll<HTMLTextAreaElement>(".lab-step-card")][1].querySelector("textarea")!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(html, "<html><body><h1>Lab</h1></body></html>"); html.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Lưu Lab") as HTMLButtonElement).click());
+    expect(host.textContent).toContain("Đã lưu Lab trên trình duyệt.");
+    expect(host.textContent).not.toContain("Hãy mô tả mô phỏng trước khi tạo prompt.");
   });
   it("opens V4.8.2 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };

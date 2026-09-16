@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Beaker, Clipboard, Download, FileText, Maximize2, Play, Plus, RefreshCw, Save, Trash2, Upload, WandSparkles } from "lucide-react";
+import { Beaker, Clipboard, Download, FileText, Maximize2, Minimize2, Play, Plus, RefreshCw, Save, Trash2, Upload, WandSparkles } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { buildLabPlanPrompt, createLab, deleteLab, readLabs, saveLab, validateLabHtml, LAB_LIMITS, type LabProject, type LabSubject, type LabValidationCode } from "../lib/lab";
 
@@ -10,6 +10,15 @@ type Draft = {
   sourceFileName: string;
   sourceText: string;
   request: string;
+};
+
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type FullscreenTarget = HTMLDivElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
 const EMPTY_DRAFT: Draft = { title: "", subject: "physics", learnerLevel: "", sourceFileName: "", sourceText: "", request: "" };
@@ -40,6 +49,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
   const [htmlFileName, setHtmlFileName] = useState("");
   const [runnerHtml, setRunnerHtml] = useState("");
   const [runnerKey, setRunnerKey] = useState(0);
+  const [isRunnerFullscreen, setIsRunnerFullscreen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState<"prompt" | "html" | null>(null);
@@ -55,6 +65,18 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner]);
 
+  useEffect(() => {
+    const documentWithWebkit = document as FullscreenDocument;
+    const syncFullscreenState = () => setIsRunnerFullscreen((document.fullscreenElement ?? documentWithWebkit.webkitFullscreenElement ?? null) === runnerRef.current);
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    document.addEventListener("webkitfullscreenchange", syncFullscreenState as EventListener);
+    syncFullscreenState();
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreenState as EventListener);
+    };
+  }, []);
+
   const selectedLab = useMemo(() => labs.find(item => item.id === selectedId) ?? null, [labs, selectedId]);
 
   function resetDraft() {
@@ -65,6 +87,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
     setProgramHtml("");
     setHtmlFileName("");
     setRunnerHtml("");
+    setIsRunnerFullscreen(false);
     setError("");
     setNotice("");
     setRunnerKey(value => value + 1);
@@ -78,6 +101,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
     setProgramHtml(lab.programHtml);
     setHtmlFileName("");
     setRunnerHtml("");
+    setIsRunnerFullscreen(false);
     setError("");
     setNotice("");
     setRunnerKey(value => value + 1);
@@ -134,7 +158,6 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
 
   const saveCurrent = () => {
     setError("");
-    if (!draft.request.trim()) { setError(t("labRequestRequired")); return; }
     const input = {
       title: draft.title.trim() || legacyDesign?.title || t("labUntitled"),
       subject: draft.subject,
@@ -191,7 +214,32 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
     anchor.click(); URL.revokeObjectURL(url);
   };
 
-  const fullscreenRunner = () => { if (runnerRef.current?.requestFullscreen) void runnerRef.current.requestFullscreen().catch(() => {}); };
+  const toggleRunnerFullscreen = async () => {
+    const target = runnerRef.current as FullscreenTarget | null;
+    const documentWithWebkit = document as FullscreenDocument;
+    if (!target) return;
+    try {
+      const active = document.fullscreenElement ?? documentWithWebkit.webkitFullscreenElement ?? null;
+      if (active === target) {
+        const exit = document.exitFullscreen ?? documentWithWebkit.webkitExitFullscreen;
+        if (!exit) { setIsRunnerFullscreen(false); return; }
+        await exit.call(document);
+        setIsRunnerFullscreen(false);
+        return;
+      }
+      const request = target.requestFullscreen ?? target.webkitRequestFullscreen;
+      if (!request) { setError(t("labFullscreenError")); return; }
+      await request.call(target);
+      // The fullscreenchange event remains the source of truth for Escape or
+      // another browser-level exit. Updating after the promise resolves makes
+      // the control respond immediately in browsers that dispatch the event
+      // on a later task.
+      setIsRunnerFullscreen(true);
+    } catch {
+      setIsRunnerFullscreen(false);
+      setError(t("labFullscreenError"));
+    }
+  };
 
   return <section className={`lab-page ${embedded ? "lab-page-embedded" : ""}`}>
     <header className="lab-header">
@@ -203,7 +251,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false }: { o
       <main className="lab-main">
         <section className="lab-card lab-step-card"><div className="lab-step-heading"><span className="lab-step-number">1</span><div><span className="eyebrow">AI MANUAL</span><h2>{t("labStepSource")}</h2><p>{t("labStepSourceHint")}</p></div></div><div className="lab-form-grid"><label>{t("labName")}<input value={draft.title} maxLength={200} onChange={event => updateDraft("title", event.target.value)} placeholder={t("labNamePlaceholder")}/></label><label>{t("labSubject")}<select value={draft.subject} onChange={event => updateDraft("subject", event.target.value as LabSubject)}><option value="physics">{t("labPhysics")}</option><option value="chemistry">{t("labChemistry")}</option><option value="other">{t("labOther")}</option></select></label><label>{t("labLearnerLevel")}<input value={draft.learnerLevel} maxLength={120} onChange={event => updateDraft("learnerLevel", event.target.value)} placeholder={t("labLearnerLevelPlaceholder")}/></label><label className="lab-upload-field"><span>{t("labSourceFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{sourceBusy ? t("labReading") : draft.sourceFileName || t("labChooseFile")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.markdown,.json,.csv" onChange={event => void chooseSource(event.target.files?.[0])}/></span><small>{t("labSourceFileHint")}</small></label></div><label>{t("labSourceText")}<textarea rows={5} value={draft.sourceText} onChange={event => updateDraft("sourceText", event.target.value)} placeholder={t("labSourceTextPlaceholder")}/></label><label>{t("labRequest")}<textarea rows={4} value={draft.request} onChange={event => updateDraft("request", event.target.value)} placeholder={t("labRequestPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={createDesignPrompt}><WandSparkles size={16}/>{t("labCreateHtmlPrompt")}</button>{designPrompt && <button className="secondary-button" type="button" onClick={() => void copy(designPrompt, "prompt")}><Clipboard size={15}/>{copied === "prompt" ? t("copiedPrompt") : t("copyPrompt")}</button>}</div>{designPrompt && <label className="lab-output-field"><span>{t("labHtmlPromptLabel")}</span><textarea rows={11} readOnly value={designPrompt}/></label>}</section>
 
-        <section className="lab-card lab-step-card lab-run-card"><div className="lab-step-heading"><span className="lab-step-number">2</span><div><span className="eyebrow">SANDBOX RUNNER</span><h2>{t("labStepRun")}</h2><p>{t("labStepRunHint")}</p></div></div><label className="lab-upload-field"><span>{t("labHtmlFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{htmlFileName || t("labHtmlFileHint")}</span><input type="file" accept=".html,.htm,text/html" onChange={event => void chooseHtmlFile(event.target.files?.[0])}/></span><small>{t("labHtmlUploadHint")}</small></label><label>{t("labHtmlInput")}<textarea rows={14} value={programHtml} onChange={event => { setProgramHtml(event.target.value); setHtmlFileName(""); setRunnerHtml(""); }} placeholder={t("labHtmlPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={runProgram}><Play size={16}/>{t("labRun")}</button><button className="secondary-button" type="button" onClick={() => { setProgramHtml(""); setHtmlFileName(""); setRunnerHtml(""); }}><RefreshCw size={15}/>{t("labClearHtml")}</button>{programHtml && <button className="secondary-button" type="button" onClick={() => void copy(programHtml, "html")}><Clipboard size={15}/>{copied === "html" ? t("copiedPrompt") : t("copyPrompt")}</button>}{programHtml && <button className="secondary-button" type="button" onClick={downloadHtml}><Download size={15}/>{t("labDownloadHtml")}</button>}</div><div className="lab-runner-shell" ref={runnerRef}><div className="lab-runner-toolbar"><span><span className="lab-live-dot"/> {runnerHtml ? t("labReady") : t("labWaiting")}</span>{runnerHtml && <button type="button" className="icon-button" aria-label={t("labFullscreen")} title={t("labFullscreen")} onClick={fullscreenRunner}><Maximize2 size={16}/></button>}</div>{runnerHtml ? <iframe key={runnerKey} className="lab-runner-frame" title={draft.title || t("labTitle")} sandbox="allow-scripts" srcDoc={runnerHtml}/> : <div className="lab-runner-empty"><Beaker size={32}/><p>{t("labRunnerEmpty")}</p></div>}</div></section>
+        <section className="lab-card lab-step-card lab-run-card"><div className="lab-step-heading"><span className="lab-step-number">2</span><div><span className="eyebrow">SANDBOX RUNNER</span><h2>{t("labStepRun")}</h2><p>{t("labStepRunHint")}</p></div></div><label className="lab-upload-field"><span>{t("labHtmlFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{htmlFileName || t("labHtmlFileHint")}</span><input type="file" accept=".html,.htm,text/html" onChange={event => void chooseHtmlFile(event.target.files?.[0])}/></span><small>{t("labHtmlUploadHint")}</small></label><label>{t("labHtmlInput")}<textarea rows={14} value={programHtml} onChange={event => { setProgramHtml(event.target.value); setHtmlFileName(""); setRunnerHtml(""); }} placeholder={t("labHtmlPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={runProgram}><Play size={16}/>{t("labRun")}</button><button className="secondary-button" type="button" onClick={() => { setProgramHtml(""); setHtmlFileName(""); setRunnerHtml(""); setIsRunnerFullscreen(false); }}><RefreshCw size={15}/>{t("labClearHtml")}</button>{programHtml && <button className="secondary-button" type="button" onClick={() => void copy(programHtml, "html")}><Clipboard size={15}/>{copied === "html" ? t("copiedPrompt") : t("copyPrompt")}</button>}{programHtml && <button className="secondary-button" type="button" onClick={downloadHtml}><Download size={15}/>{t("labDownloadHtml")}</button>}</div><div className="lab-runner-shell" ref={runnerRef}><div className="lab-runner-toolbar"><span><span className="lab-live-dot"/> {runnerHtml ? t("labReady") : t("labWaiting")}</span>{runnerHtml && <button type="button" className="icon-button" aria-label={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} title={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} onClick={() => void toggleRunnerFullscreen()}>{isRunnerFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}</button>}</div>{runnerHtml ? <iframe key={runnerKey} className="lab-runner-frame" title={draft.title || t("labTitle")} sandbox="allow-scripts" srcDoc={runnerHtml}/> : <div className="lab-runner-empty"><Beaker size={32}/><p>{t("labRunnerEmpty")}</p></div>}</div></section>
         {error && <p className="form-error lab-message" role="alert">{error}</p>}{notice && !error && <p className="lab-notice" role="status">{notice}</p>}
         <footer className="lab-footer-actions"><button className="primary-button" type="button" onClick={saveCurrent}><Save size={16}/>{t("labSave")}</button>{selectedLab && <button className="secondary-button" type="button" onClick={() => loadLab(selectedLab)}><RefreshCw size={15}/>{t("labDiscardChanges")}</button>}</footer>
       </main>

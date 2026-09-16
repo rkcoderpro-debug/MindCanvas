@@ -18,7 +18,7 @@ V4.7.4 keeps newly created Text and Shape elements in the same undoable workspac
 
 V4.8.1 keeps Undo/Redo after the current browser's cloud save is acknowledged, including when the cloud response canonicalizes document metadata. It also changes Learning Hub Lab to the intended Manual flow: source and request generate a copyable planning prompt, the external AI returns a detailed HTML implementation prompt with a deterministic test plan, and the user then pastes or uploads the resulting self-contained HTML into the sandbox runner. See [V4.8.1_UNDO_LAB_VI.md](./V4.8.1_UNDO_LAB_VI.md) for scope and QA.
 
-V4.8.2 simplifies Lab to two steps: create one direct prompt that asks the external AI to return the finished HTML file, then upload or paste and run that file. It accepts standard inline SVG namespaces without mistaking them for network resources, moves Lab into a highlighted Learning Hub tab and keeps the old Lab route compatible. See [V4.8.2_LAB_HTML_HUB_VI.md](./V4.8.2_LAB_HTML_HUB_VI.md) for scope and QA.
+V4.8.2 simplifies Lab to two steps: create one direct prompt that asks the external AI to return the finished HTML file, then upload or paste and run that file. It accepts standard inline SVG namespaces without mistaking them for network resources, moves Lab into a highlighted Learning Hub tab and keeps the old Lab route compatible. The runner now has a longer responsive iframe, a real shell-level fullscreen toggle with Escape synchronization, and can save an HTML-only Lab before the source/request section is complete. See [V4.8.2_LAB_HTML_HUB_VI.md](./V4.8.2_LAB_HTML_HUB_VI.md) for scope and QA.
 
 V4.8.0 added Learning Hub Lab with a sandboxed HTML runner. Existing saved Labs remain readable through compatibility fields.
 
