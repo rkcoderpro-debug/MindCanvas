@@ -24,4 +24,9 @@ describe("study companion state", () => {
     expect(getPetMood(state, now)).toBe("sad");
     expect(getPetLevel({ ...state, xp: 900 })).toBe(4);
   });
+
+  it("keeps the pointer-following preference in the local profile", () => {
+    expect(normalizePet({ follow_pointer: false }, now)?.followPointer).toBe(false);
+    expect(normalizePet({}, now)?.followPointer).toBe(true);
+  });
 });

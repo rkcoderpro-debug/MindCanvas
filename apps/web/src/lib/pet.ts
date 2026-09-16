@@ -18,6 +18,8 @@ export type PetState = {
   updatedAt: string;
   /** Local bookkeeping prevents applying the same absence decay repeatedly. */
   lastDecayAt?: string | null;
+  /** UI preference: when false the companion uses its idle animation. */
+  followPointer?: boolean;
 };
 
 const STORAGE_PREFIX = "mindcanvas:pet:v1:";
@@ -66,6 +68,7 @@ function newPet(now = new Date()): PetState {
     dailyVitalityGain: 0,
     updatedAt: now.toISOString(),
     lastDecayAt: null,
+    followPointer: true,
   };
 }
 
@@ -87,6 +90,7 @@ export function normalizePet(input: unknown, now = new Date()): PetState | null 
     dailyVitalityGain: Math.max(0, Math.floor(numeric(row.dailyVitalityGain ?? row.daily_vitality_gain, base.dailyVitalityGain))),
     updatedAt: asDate(row.updatedAt ?? row.updated_at) ?? base.updatedAt,
     lastDecayAt: asDate(row.lastDecayAt ?? row.last_decay_at),
+    followPointer: row.followPointer !== undefined ? row.followPointer !== false : row.follow_pointer !== false,
   };
 }
 
@@ -195,22 +199,23 @@ export async function fetchPetProfile(owner: string | null): Promise<PetState> {
     if (error) return local;
     const remote = normalizePet(data);
     if (!remote) return local;
-    writePet(owner, remote);
-    return remote;
+    const merged = { ...remote, followPointer: local.followPointer };
+    writePet(owner, merged);
+    return merged;
   } catch {
     return local;
   }
 }
 
-export async function updatePetProfile(owner: string | null, patch: { kind?: PetKind; name?: string }): Promise<PetState> {
+export async function updatePetProfile(owner: string | null, patch: { kind?: PetKind; name?: string; followPointer?: boolean }): Promise<PetState> {
   const current = readPet(owner);
-  const next = normalizePet({ ...current, kind: patch.kind ?? current.kind, name: patch.name ?? current.name }, new Date()) ?? current;
+  const next = normalizePet({ ...current, kind: patch.kind ?? current.kind, name: patch.name ?? current.name, followPointer: patch.followPointer ?? current.followPointer }, new Date()) ?? current;
   writePet(owner, next);
   if (!owner || !(await sessionBelongsTo(owner))) return next;
   try {
     const { data, error } = await supabase!.rpc("update_my_pet", { p_kind: next.kind, p_name: next.name });
     const remote = !error ? normalizePet(data) : null;
-    if (remote) { writePet(owner, remote); return remote; }
+    if (remote) { const merged = { ...remote, followPointer: next.followPointer }; writePet(owner, merged); return merged; }
   } catch { /* the local pet remains usable if the network is unavailable */ }
   return next;
 }
@@ -228,7 +233,7 @@ export async function recordPetActivity(owner: string | null, seconds: number, a
       p_activity_type: activityType,
     });
     const remote = !error ? normalizePet(data) : null;
-    if (remote) { writePet(owner, remote); return remote; }
+    if (remote) { const merged = { ...remote, followPointer: local.followPointer }; writePet(owner, merged); return merged; }
   } catch { /* preserve local progress until the next successful sync */ }
   return local;
 }

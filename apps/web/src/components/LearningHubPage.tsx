@@ -93,12 +93,11 @@ export default function LearningHubPage({ owner, projects, accountPlan, initialT
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
-    { id: "music", label: "Nhạc", icon: Music2 },
     { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
   ];
 
   return <section className="learning-hub-page">
-    <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></header>
+    <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-actions"><button type="button" className={`learning-music-launcher ${tab === "music" ? "active" : ""}`} onClick={() => setTab("music")}><Music2 size={17}/><span>Nhạc</span></button><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div></header>
     <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""}`} onClick={() => setTab(id)}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
     {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
     {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}

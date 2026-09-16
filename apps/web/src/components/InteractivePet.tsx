@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PetKind, PetMood } from '../lib/pet';
 
-export default function InteractivePet({ kind, mood, name }: { kind: PetKind; mood: PetMood; name: string }) {
+export default function InteractivePet({ kind, mood, name, followPointer = true }: { kind: PetKind; mood: PetMood; name: string; followPointer?: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const [bow, setBow] = useState(false), [petting, setPetting] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -11,7 +11,7 @@ export default function InteractivePet({ kind, mood, name }: { kind: PetKind; mo
     const preference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     let frame = 0;
     const move = (event: PointerEvent) => {
-      if (event.pointerType === 'touch' || preference?.matches) return;
+      if (event.pointerType === 'touch' || preference?.matches || !followPointer) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const box = el.getBoundingClientRect();
@@ -20,13 +20,17 @@ export default function InteractivePet({ kind, mood, name }: { kind: PetKind; mo
         el.style.setProperty('--pet-x', `${x * 4}px`); el.style.setProperty('--pet-y', `${y * 3}px`); el.style.setProperty('--pet-turn', `${x * 7}deg`);
       });
     };
+    const element = root.current;
+    if (!followPointer && element) {
+      element.style.setProperty('--pet-x', '0px'); element.style.setProperty('--pet-y', '0px'); element.style.setProperty('--pet-turn', '0deg');
+    }
     window.addEventListener('pointermove', move, { passive: true });
     return () => { window.removeEventListener('pointermove', move); cancelAnimationFrame(frame); if (timer.current) clearTimeout(timer.current); };
-  }, []);
+  }, [followPointer]);
   const stroke = () => { setPetting(true); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setPetting(false), 1100); };
   const release = () => { setBow(false); setPetting(false); movement.current.distance = 0; if (timer.current) clearTimeout(timer.current); };
   const fur = kind === 'fox' ? '#ee995e' : kind === 'dog' ? '#c5a383' : kind === 'rabbit' ? '#e4d8ee' : '#eec797';
-  return <div ref={root} className={`interactive-pet ${bow ? 'bowing' : ''} ${petting ? 'petted' : ''}`} data-mood={mood}>
+  return <div ref={root} className={`interactive-pet ${bow ? 'bowing' : ''} ${petting ? 'petted' : ''} ${followPointer ? '' : 'idle'}`} data-mood={mood} data-follow={followPointer ? 'true' : 'false'}>
     <svg viewBox="0 0 140 150" aria-hidden="true"><ellipse cx="70" cy="138" rx="46" ry="7" fill="#000" opacity=".1"/>
       <path className="pet-tail" d="M97 123 Q139 130 119 94" fill="none" stroke={fur} strokeWidth="15" strokeLinecap="round"/>
       <ellipse cx="70" cy="111" rx="32" ry="27" fill={fur}/><ellipse cx="70" cy="117" rx="19" ry="21" fill="#fff3e6"/>
