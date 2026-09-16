@@ -1,5 +1,5 @@
 import type { BoardState, Viewport } from "@mindcanvas/shared";
-import { elementBounds, moveElement, type Selection, type Bounds } from "./board";
+import { connectorGeometry, elementBounds, hiddenNodes, moveElement, type Selection, type Bounds } from "./board";
 import { MIN_CANVAS_SCALE } from "./canvasViewport";
 import { collectMindMapSubtree, getMindMapHierarchy } from "./mindMapGraph";
 
@@ -22,6 +22,58 @@ export function expandGroups(board: BoardState, selection: Selection[]): Selecti
   for (const group of board.groups ?? []) if (group.elementIds.some(id => ids.has(id))) for (const id of group.elementIds) ids.add(id);
   return orderedElements(board).filter(s => ids.has(s.id));
 }
+
+const canvasElementKinds = ["nodes", "texts", "shapes", "drawings", "media", "embeds", "edges"] as const;
+
+/** Return the elements that are actually visible on the canvas right now. */
+export function visibleCanvasElements(board: BoardState): Selection[] {
+  const collapsed = hiddenNodes(board);
+  const explicitlyHidden = new Set(canvasElementKinds.flatMap(kind => board[kind].filter(element => "hidden" in element && element.hidden).map(element => element.id)));
+  const hidden = new Set([...collapsed, ...explicitlyHidden]);
+  return orderedElements(board).filter(selection => {
+    if (hidden.has(selection.id)) return false;
+    if (selection.kind !== "edges") return true;
+    const edge = board.edges.find(item => item.id === selection.id);
+    return !!edge && !hidden.has(edge.source) && !hidden.has(edge.target);
+  });
+}
+
+function rotatedBounds(bounds: Bounds, rotation = 0): Bounds {
+  if (!Number.isFinite(rotation) || Math.abs(rotation % 360) < .0001) return bounds;
+  const radians = rotation * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians);
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const corners = [{ x: bounds.x, y: bounds.y }, { x: bounds.x + bounds.width, y: bounds.y }, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }, { x: bounds.x, y: bounds.y + bounds.height }].map(point => ({
+    x: center.x + (point.x - center.x) * cos - (point.y - center.y) * sin,
+    y: center.y + (point.x - center.x) * sin + (point.y - center.y) * cos,
+  }));
+  const xs = corners.map(point => point.x), ys = corners.map(point => point.y);
+  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(1, Math.max(...xs) - Math.min(...xs)), height: Math.max(1, Math.max(...ys) - Math.min(...ys)) };
+}
+
+/** Bounds of the visible paint, including rotation and connector geometry. */
+export function visibleElementBounds(board: BoardState, selection: Selection): Bounds | null {
+  if (selection.kind === "edges") {
+    const edge = board.edges.find(item => item.id === selection.id);
+    return edge ? connectorGeometry(board, edge)?.bounds ?? null : null;
+  }
+  const bounds = elementBounds(board, selection);
+  if (!bounds) return null;
+  const element = board[selection.kind].find(item => item.id === selection.id);
+  const paintPadding = selection.kind === "drawings" && element && "width" in element ? Math.max(0, element.width / 2) : 0;
+  const painted = paintPadding ? { x: bounds.x - paintPadding, y: bounds.y - paintPadding, width: bounds.width + paintPadding * 2, height: bounds.height + paintPadding * 2 } : bounds;
+  return rotatedBounds(painted, element && "rotation" in element ? element.rotation ?? 0 : 0);
+}
+
+export function canvasContentBounds(board: BoardState): Bounds | null {
+  const bounds = visibleCanvasElements(board).flatMap(selection => {
+    const value = visibleElementBounds(board, selection);
+    return value ? [value] : [];
+  });
+  if (!bounds.length) return null;
+  const x = Math.min(...bounds.map(value => value.x)), y = Math.min(...bounds.map(value => value.y));
+  return { x, y, width: Math.max(1, Math.max(...bounds.map(value => value.x + value.width)) - x), height: Math.max(1, Math.max(...bounds.map(value => value.y + value.height)) - y) };
+}
+
 export function selectionBounds(board: BoardState, selections: Selection[]): Bounds | null {
   const bounds = selections.flatMap(s => {
     const b = elementBounds(board, s); if (b) return [b];
@@ -32,6 +84,16 @@ export function selectionBounds(board: BoardState, selections: Selection[]): Bou
   if (!bounds.length) return null;
   const x = Math.min(...bounds.map(b => b.x)), y = Math.min(...bounds.map(b => b.y));
   return { x, y, width: Math.max(...bounds.map(b => b.x + b.width)) - x, height: Math.max(...bounds.map(b => b.y + b.height)) - y };
+}
+
+export function visibleSelectionBounds(board: BoardState, selections: Selection[]): Bounds | null {
+  const bounds = selections.flatMap(selection => {
+    const value = visibleElementBounds(board, selection);
+    return value ? [value] : [];
+  });
+  if (!bounds.length) return null;
+  const x = Math.min(...bounds.map(value => value.x)), y = Math.min(...bounds.map(value => value.y));
+  return { x, y, width: Math.max(1, Math.max(...bounds.map(value => value.x + value.width)) - x), height: Math.max(1, Math.max(...bounds.map(value => value.y + value.height)) - y) };
 }
 export function moveSelection(board: BoardState, selection: Selection[], dx: number, dy: number) {
   return selection.reduce((b, s) => moveElement(b, s, dx, dy), board);
@@ -308,6 +370,8 @@ export function addRelativeNode(board: BoardState, id: string, sibling: boolean,
   return { board: { ...board, nodes: [...board.nodes.map(n => n.id === parentId ? { ...n, collapsed: false } : n), node], edges: parent ? [...board.edges, { id: crypto.randomUUID(), source: parent.id, target: node.id, kind: "branch" as const }] : board.edges }, selection: { kind: "nodes" as const, id: node.id } };
 }
 export function fittedViewport(bounds: Bounds, width: number, height: number): Viewport {
-  const scale = Math.max(MIN_CANVAS_SCALE, Math.min(2, (width - 100) / Math.max(1, bounds.width), (height - 100) / Math.max(1, bounds.height)));
-  return { scale, x: width / 2 - (bounds.x + bounds.width / 2) * scale, y: height / 2 - (bounds.y + bounds.height / 2) * scale };
+  const viewportWidth = Math.max(1, Number.isFinite(width) ? width : 800), viewportHeight = Math.max(1, Number.isFinite(height) ? height : 600);
+  const usableWidth = Math.max(1, viewportWidth - 100), usableHeight = Math.max(1, viewportHeight - 100);
+  const scale = Math.max(MIN_CANVAS_SCALE, Math.min(2, usableWidth / Math.max(1, bounds.width), usableHeight / Math.max(1, bounds.height)));
+  return { scale, x: viewportWidth / 2 - (bounds.x + bounds.width / 2) * scale, y: viewportHeight / 2 - (bounds.y + bounds.height / 2) * scale };
 }

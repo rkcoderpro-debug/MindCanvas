@@ -275,6 +275,7 @@ export function elementBounds(board: BoardState, selection: Selection): Bounds |
   const el = board[selection.kind].find(e => e.id === selection.id);
   if (!el) return null;
   if ("points" in el) {
+    if (!el.points.length) return null;
     const xs = el.points.map(p => p.x), ys = el.points.map(p => p.y);
     return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(1, Math.max(...xs) - Math.min(...xs)), height: Math.max(1, Math.max(...ys) - Math.min(...ys)) };
   }

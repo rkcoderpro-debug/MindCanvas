@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
@@ -22,9 +22,11 @@ import type { ToolbarPosition } from "../lib/editorPreferences";
 import { CANVAS_TOOL_IDS } from "../lib/toolbarPreferences";
 import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
 import { getMindMapHierarchy } from "../lib/mindMapGraph";
+import MobileQuickActions from "./MobileQuickActions";
+import { clampDrawingSize, DRAWING_SIZE_RANGES, eraseDrawingPaths, readDrawingSizes, saveDrawingSizes, type DrawingToolName, type DrawingToolSizes } from "../lib/drawingTools";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
-type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
+type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "erase" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle; eraseRadius?: number; erasePoints?: Vec2[] };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
 type CanvasPointerInput = { pointerId: number; pointerType: string; button: number; clientX: number; clientY: number; shiftKey?: boolean; altKey?: boolean; preventDefault: () => void; stopPropagation?: () => void; capture?: boolean };
@@ -201,11 +203,12 @@ function enforceTrimEnd(element: HTMLMediaElement, media: CanvasMedia) {
 const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "select", icon: MousePointer2, key: "V" }, { id: "hand", icon: Hand, key: "H" },
   { id: "text", icon: Type, key: "T" }, { id: "pen", icon: PenLine, key: "P" },
-  { id: "highlighter", icon: Highlighter, key: "B" }, { id: "line", icon: Minus, key: "L" },
+  { id: "highlighter", icon: Highlighter, key: "B" }, { id: "eraser", icon: Eraser, key: "E" }, { id: "line", icon: Minus, key: "L" },
   { id: "rect", icon: Square, key: "R" }, { id: "ellipse", icon: Circle, key: "O" },
   { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
-export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, canUndo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
+const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
+export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
@@ -264,6 +267,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
+  const [drawingSizes, setDrawingSizes] = useState<DrawingToolSizes>(readDrawingSizes);
+  const [eraserCursor, setEraserCursor] = useState<Vec2 | null>(null);
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChangeProp, readOnly]);
   const iosMedia = board.media.filter(media => media.src.startsWith("data:") && ["image", "video", "audio"].includes(media.kind));
   const iosMediaSignature = iosTouchFallback ? JSON.stringify(iosMedia.map(media => [media.id, media.src])) : "";
@@ -344,6 +349,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     };
   }, [iosTouchFallback, iosOverlaySignature]);
   useEffect(() => saveCanvasTouchSettings(touchSettings), [touchSettings]);
+  useEffect(() => saveDrawingSizes(drawingSizes), [drawingSizes]);
   useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
   const cancelWheelFrame = () => { wheelFrameCancel.current?.(); wheelFrameCancel.current = null; };
   const commitWheelViewport = () => {
@@ -380,7 +386,11 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const hidden = hiddenNodes(b);
   const hiddenElements = new Set([...b.nodes.filter(e => e.hidden).map(e => e.id), ...b.texts.filter(e => e.hidden).map(e => e.id), ...b.shapes.filter(e => e.hidden).map(e => e.id), ...b.drawings.filter(e => e.hidden).map(e => e.id), ...b.media.filter(e => e.hidden).map(e => e.id), ...b.embeds.filter(e => e.hidden).map(e => e.id), ...b.edges.filter(e => e.hidden).map(e => e.id), ...hidden]);
   const connectorPulseIds = new Set(connectorPulse);
-  const isLocked = (s: Selection) => s.kind !== "edges" && !!b[s.kind].find(e => e.id === s.id && "locked" in e && e.locked);
+  const isLocked = (s: Selection) => {
+    const element = b[s.kind].find(e => e.id === s.id);
+    return !!element && "locked" in element && !!element.locked;
+  };
+  const canEditSelection = selections.some(selection => !isLocked(selection));
   const requestAutoPanFrame = (callback: () => void) => typeof window.requestAnimationFrame === "function"
     ? window.requestAnimationFrame(() => callback())
     : window.setTimeout(callback, 16);
@@ -680,7 +690,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     // the finger-drawing preference to phone layouts so desktop pen tablets
     // still follow the active drawing tool.
     const phoneLayout = typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches;
-    const touchShouldPan = input.pointerType === "touch" && (tool === "select" || (phoneLayout && (tool === "pen" || tool === "highlighter") && !touchSettings.drawWithFinger));
+    const touchShouldPan = input.pointerType === "touch" && (tool === "select" || (phoneLayout && (tool === "pen" || tool === "highlighter" || tool === "eraser") && !touchSettings.drawWithFinger));
     const stylusTool: ToolMode = isStylusPointer(input.pointerType) && touchSettings.stylusDrawOnly && ["select", "text", "connector"].includes(tool) ? "pen" : tool;
     const effectiveTool = input.pointerType === "touch" && !isStylusPointer(input.pointerType) ? tool : stylusTool;
     if (readOnly || space || tool === "hand" || input.button === 1 || touchShouldPan) {
@@ -697,8 +707,11 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
       setTool("select"); return;
     } else if (effectiveTool === "pen" || effectiveTool === "highlighter") {
-      const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: effectiveTool === "highlighter" ? palette.highlighter : ink, width: effectiveTool === "highlighter" ? 20 : strokeWidth, opacity: effectiveTool === "highlighter" ? .3 : 1 }] };
+      const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: effectiveTool === "highlighter" ? palette.highlighter : ink, width: effectiveTool === "highlighter" ? drawingSizes.highlighter : drawingSizes.pen, opacity: effectiveTool === "highlighter" ? .3 : 1 }] };
       setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: input.pointerId, next };
+    } else if (effectiveTool === "eraser") {
+      const radius = drawingSizes.eraser / 2, next = eraseDrawingPaths(base, [p], radius);
+      setSelected(null); setEraserCursor(p); setPreview(next); setInputMode("erasing"); gesture.current = { mode: "erase", start: p, screen: p, base, pointer: input.pointerId, next, eraseRadius: radius, erasePoints: [p] };
     } else if (effectiveTool === "line") {
       const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p, p], color: ink, width: strokeWidth, opacity: 1 }] };
       setSelected({ kind: "drawings", id }); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "line", start: p, screen: p, base, pointer: input.pointerId, next };
@@ -747,6 +760,12 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       if (path.points.length >= 20000) return;
       next = { ...g.next, drawings: [...g.base.drawings, { ...path, points: [...path.points, p] }] };
     }
+    if (g.mode === "erase") {
+      const previous = g.erasePoints?.at(-1) ?? g.start;
+      next = eraseDrawingPaths(g.next, [previous, p], g.eraseRadius ?? drawingSizes.eraser / 2);
+      g.erasePoints = [...(g.erasePoints ?? [g.start]), p];
+      setEraserCursor(p);
+    }
     if (g.mode === "line") {
       const path = g.next.drawings.at(-1)!;
       next = { ...g.next, drawings: [...g.base.drawings, { ...path, points: [g.start, p] }] };
@@ -761,7 +780,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const finish = (cancel = false, releaseCapture = true) => {
     const g = gesture.current; if (!g) { setInputMode(pinch.current ? "pinching" : "idle"); return; }
     stopAutoPan(); autoPanLastAt.current = null;
-    gesture.current = null; setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]);
+    gesture.current = null; setPreview(null); setEraserCursor(null); setMarquee(null); setDropTarget(null); setGuides([]);
     if (g.mode === "marquee") { if (cancel) setSelections(g.selections ?? []); }
     if (!cancel && g.reparent && g.target) {
       g.next = reparentNode(g.next, g.selection!.id, g.target);
@@ -777,9 +796,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const startPinch = (interactionBoard: BoardState, capturePointers: boolean) => {
     if (pinch.current || !svg.current) return false;
     const activeGesture = gesture.current;
-    const cancelTouchStroke = activeGesture?.mode === "draw" && !touchSettings.drawWithFinger;
+    const cancelTouchStroke = (activeGesture?.mode === "draw" || activeGesture?.mode === "erase") && !touchSettings.drawWithFinger;
     const pinchBase = cancelTouchStroke ? interactionBoard : activeGesture?.next ?? interactionBoard;
-    if (activeGesture) finish(activeGesture.mode !== "draw" || !touchSettings.drawWithFinger, false);
+    if (activeGesture) finish(!["draw", "erase"].includes(activeGesture.mode) || !touchSettings.drawWithFinger, false);
     const entries = [...touchPoints.current.entries()].slice(0, 2);
     if (entries.length < 2) return false;
     const first = entries[0][1], second = entries[1][1], rect = svg.current.getBoundingClientRect();
@@ -841,7 +860,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     stopAutoPan(); autoPanLastAt.current = null; autoPanPointer.current = null;
     const activeGesture = gesture.current;
     gesture.current = null; pinch.current = null; touchPoints.current.clear(); iosTouchActive.current = false;
-    setPreview(null); setMarquee(null); setDropTarget(null); setGuides([]); setInputMode("idle");
+    setPreview(null); setEraserCursor(null); setMarquee(null); setDropTarget(null); setGuides([]); setInputMode("idle");
     if (activeGesture && svg.current?.hasPointerCapture(activeGesture.pointer)) svg.current.releasePointerCapture(activeGesture.pointer);
   };
   const lostPointerCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
@@ -905,7 +924,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         // WebKit can cancel a touch when it decides the finger is leaving the
         // page. Preserve an in-progress drawing in that case; pan/select
         // gestures should still be discarded as before.
-        const preserveDrawing = cancel && gesture.current.mode === "draw";
+        const preserveDrawing = cancel && ["draw", "erase"].includes(gesture.current.mode);
         finish(cancel && !preserveDrawing);
         event.preventDefault();
       } else {
@@ -925,7 +944,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       if (iosTouchActive.current) cancelActiveInput();
       iosTouchActive.current = false;
     };
-  }, [iosTouchFallback, tool, touchSettings, snap, readOnly, space, palette.highlighter, palette.fill, ink, strokeWidth, board]);
+  }, [iosTouchFallback, tool, touchSettings, snap, readOnly, space, palette.highlighter, palette.fill, ink, strokeWidth, drawingSizes, board]);
   useEffect(() => {
     if (!gesture.current && !pinch.current) return;
     cancelActiveInput();
@@ -938,7 +957,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     document.addEventListener("visibilitychange", visibility);
     return () => { window.removeEventListener("blur", cancel); window.removeEventListener("orientationchange", cancel); document.removeEventListener("visibilitychange", visibility); };
   }, []);
-  const duplicate = () => { if (!selected) return; const next = duplicateSelection(board, selections); setSelections(next.selection); onChange(next.board); };
+  const duplicate = () => { const editableSelections = selections.filter(selection => !isLocked(selection)); if (!editableSelections.length) return; const next = duplicateSelection(board, editableSelections); setSelections(next.selection); onChange(next.board); };
   const copy = async () => { if (!selections.length) return; await copyCanvasSelection(board, selections); setHasCopy(true); };
   const paste = async () => {
     const content = await readCanvasSelection();
@@ -946,7 +965,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const image = await readClipboardImage();
     if (image) void addMediaBlobs([{ blob: image, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]);
   };
-  const remove = () => { if (!selected) return; onChange(removeSelection(board, selections)); setSelected(null); };
+  const remove = () => { const removable = selections.filter(selection => !isLocked(selection)); if (!removable.length) return; onChange(removeSelection(board, removable)); setSelected(null); };
   const relative = (sibling: boolean) => { if (selected?.kind !== "nodes" || selections.length !== 1) return; const next = addRelativeNode(board, selected.id, sibling, t("newNode")); if (next) { setTool("select"); edit(next.selection, next.board); } };
   const patch = (value: Record<string, unknown>) => { if (selected) onChange({ ...board, [selected.kind]: board[selected.kind].map(el => el.id === selected.id ? { ...el, ...value } : el) }); };
   const toggleTextPrefix = (prefix: "• " | "☐ ") => {
@@ -993,6 +1012,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); onRedo(); return; }
       if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); duplicate(); return; }
       if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); void copy(); return; }
+      if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); void paste(); return; }
       if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setSelections(orderedElements(board).filter(s => !hidden.has(s.id))); return; }
       if (mod && e.key.toLowerCase() === "g") { e.preventDefault(); onChange(e.shiftKey ? ungroupSelection(board, selections) : groupSelection(board, selections)); return; }
       if (mod && ["[", "]"].includes(e.key)) { e.preventDefault(); onChange(reorderSelection(board, selections, e.key === "]" ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward"))); return; }
@@ -1019,7 +1039,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     const wheel = (e: WheelEvent) => {
       if (editRef.current || gesture.current || pinch.current) return;
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest(".drawing-toolbar, .canvas-navigator, .zoom-control, .inspector-toggle, .canvas-fullscreen-toggle, .canvas-media video, .canvas-media audio, .canvas-embed-body")) return;
+      if (target?.closest(".drawing-toolbar, .drawing-size-control, .mobile-quick-actions, .canvas-navigator, .zoom-control, .inspector-toggle, .canvas-fullscreen-toggle, .canvas-media video, .canvas-media audio, .canvas-embed-body")) return;
       const rawX = Number.isFinite(e.deltaX) ? e.deltaX : 0, rawY = Number.isFinite(e.deltaY) ? e.deltaY : 0;
       if (rawX === 0 && rawY === 0) return;
       e.preventDefault();
@@ -1077,6 +1097,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     patch({ [key]: value });
   };
   const activeTool = tools.find(item => item.id === tool) ?? tools[0];
+  const drawingTool: DrawingToolName | null = tool === "pen" || tool === "highlighter" || tool === "eraser" ? tool : null;
+  const drawingSize = drawingTool ? drawingSizes[drawingTool] : 0;
+  const drawingSizeRange = drawingTool ? DRAWING_SIZE_RANGES[drawingTool] : null;
   const visibleToolbarTools = tools.filter(item => visibleToolIds.includes(item.id));
   const hiddenToolbarTools = tools.filter(item => !visibleToolIds.includes(item.id));
   const ActiveToolIcon = activeTool.icon;
@@ -1094,6 +1117,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       else void paste();
     }}>
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
+      {!readOnly && <MobileQuickActions hasSelection={selections.length > 0} canEditSelection={canEditSelection} canPaste onCopy={copy} onPaste={paste} onDuplicate={duplicate} onDelete={remove} canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo}/>}
       {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"} ${toolbarOverflowing ? "toolbar-overflowing" : ""}`} role="toolbar" aria-label={t("properties")}>
         {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(tool)} title={t(tool)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/><span>{t(tool)}</span></button>}
         <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
@@ -1102,7 +1126,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           setShowToolbarSwipeHint(false);
           try { localStorage.setItem("mindcanvas:mobile-toolbar-swiped:v1", "true"); } catch {}
         }}>{visibleToolbarTools.map(({ id, icon: Icon, key }) =>
-          <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
+          <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter", "eraser"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
@@ -1115,6 +1139,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
         <button className="mobile-extra-action" aria-label={t("arrangeMapSmart")} title={t("arrangeMapSmart")} disabled={!board.nodes.length || !!editing} onClick={openMindMapLayout}><Network size={20}/></button>
         <span className="toolbar-divider mobile-extra-action"/><button className="mobile-extra-action" aria-label={t("askAiSelection")} title={!selectedStudyText ? t("selectTextForAi") : !canUseAi ? t("aiManualHint") : t("askAiSelection")} disabled={!selectedStudyText} onClick={() => setAiOpen(true)}><Sparkles size={19}/></button><button type="button" className="canvas-more-tools-trigger" aria-label={t("moreTools")} title={t("moreTools")} aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen(value => !value)}><MoreHorizontal size={20}/></button></span>
         {toolbarExpanded && toolbarOverflowing && showToolbarSwipeHint && <span className="toolbar-swipe-hint" role="status">{t("swipeForMore")}</span>}
+      </div>}
+      {!readOnly && drawingTool && drawingSizeRange && <div className={`drawing-size-control drawing-size-${drawingTool}`} role="group" aria-label={t(drawingSizeLabelKey[drawingTool])}>
+        <ActiveToolIcon size={15}/><label><span>{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/></label><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(34, Math.max(8, drawingSize / 2))}px`, height: `${Math.min(34, Math.max(8, drawingSize / 2))}px` }}/>
       </div>}
       <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addMediaFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${space ? "hand" : tool}`}
@@ -1197,6 +1224,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
             {(selectedMindMapHierarchy.children.get(n.id)?.length ?? 0) > 0 && <g role="button" tabIndex={0} aria-label={t(n.collapsed ? "expand" : "collapse") + ": " + n.label} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); }} onKeyDown={e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onChange({ ...board, nodes: board.nodes.map(item => item.id === n.id ? { ...item, collapsed: !item.collapsed } : item) }); } }}><circle cx={n.x + n.width} cy={n.y + n.height / 2} r={10} fill="var(--surface-raised)" stroke="var(--accent)"/><text x={n.x + n.width} y={n.y + n.height / 2 + 5} textAnchor="middle" fontSize={16} fill="var(--accent)">{n.collapsed ? "+" : "−"}</text></g>}
           </g>; })}
           </LayerStack>
+          {eraserCursor && tool === "eraser" && <circle className="eraser-cursor" cx={eraserCursor.x} cy={eraserCursor.y} r={drawingSizes.eraser / 2} fill="var(--accent-soft)" stroke="var(--accent)" strokeWidth={1 / b.viewport.scale} pointerEvents="none"/>}
           {guides.map((guide, index) => guide.axis === "x"
             ? <line key={`x-${index}`} className="smart-guide" x1={guide.value} y1={guide.from} x2={guide.value} y2={guide.to} strokeWidth={1 / b.viewport.scale}/>
             : <line key={`y-${index}`} className="smart-guide" x1={guide.from} y1={guide.value} x2={guide.to} y2={guide.value} strokeWidth={1 / b.viewport.scale}/>)}
@@ -1254,9 +1282,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       </aside></div>}
       {sourceError && <div className="canvas-inline-error" role="alert"><span>{sourceError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setSourceError("")}><X size={14}/></button></div>}
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
-      {((inputMode === "drawing" && tool !== "line") || (tool === "pen" && inputMode !== "pinching")) && <div className="pen-mode-badge" role="status"><PenLine size={14}/><span>{t("pen")}</span></div>}
+      {((inputMode === "drawing" || inputMode === "erasing") && ["pen", "highlighter", "eraser"].includes(tool)) && <div className="pen-mode-badge" role="status">{tool === "eraser" ? <Eraser size={14}/> : <PenLine size={14}/>}<span>{t(tool)}</span></div>}
       {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
-      <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(tool) ? "drawHint" : "canvasHint")}</div>
+      <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(tool) ? "drawHint" : "canvasHint")}</div>
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <div className="canvas-mobile-dock">
         <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
@@ -1317,7 +1345,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
           </div>
           <label>{t("textBackground")}<span className="color-with-clear"><input type="color" value={"backgroundColor" in selectedEl ? selectedEl.backgroundColor ?? palette.fill : palette.fill} onChange={e => patch({ backgroundColor: e.target.value })}/><button className="icon-button" aria-label={t("clearBackground")} title={t("clearBackground")} onClick={() => patch({ backgroundColor: undefined })}><X size={14}/></button></span></label>
         </>}
-        {selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="40" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
+        {selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="120" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
         {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
         {selected?.kind === "nodes" && <><button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button><button className="secondary-button" onClick={openMindMapLayout}>{t("arrangeMapSmart")}</button><section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateByAngle", { angle: -mindMapRotationAngle })}</button><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateByAngle", { angle: mindMapRotationAngle })}</button></div></section></>}
         <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>

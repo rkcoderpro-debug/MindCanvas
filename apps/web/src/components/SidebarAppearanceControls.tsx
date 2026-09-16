@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, ChevronRight, Globe2, Sparkles } from "lucide-react";
 import { useLanguage, useTheme } from "../lib/i18n";
 import { THEME_OPTIONS, type Theme } from "../lib/theme";
@@ -48,6 +48,7 @@ export default function SidebarAppearanceControls({ collapsed, language, selecte
   const chooseTheme = (next: Theme) => {
     const option = THEME_OPTIONS.find(item => item.id === next);
     if (option?.access === "plus" && !canUsePremium) {
+      clearPreview();
       onLockedTheme?.();
       return;
     }
@@ -55,8 +56,17 @@ export default function SidebarAppearanceControls({ collapsed, language, selecte
     clearPreview();
     setOpen(null);
   };
+  const clearPreviewIfLeavingAppearance = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const related = event.relatedTarget;
+    const staysInside = typeof Node !== "undefined" && related instanceof Node && !!root.current?.contains(related);
+    if (!staysInside) clearPreview();
+  };
+  const clearPreviewIfFocusLeavesAppearance = (related: EventTarget | null) => {
+    const staysInside = typeof Node !== "undefined" && related instanceof Node && !!root.current?.contains(related);
+    if (!staysInside) clearPreview();
+  };
 
-  return <div ref={root} className={`sidebar-appearance ${collapsed ? "appearance-collapsed" : ""}`}>
+  return <div ref={root} className={`sidebar-appearance ${collapsed ? "appearance-collapsed" : ""}`} onPointerLeave={clearPreviewIfLeavingAppearance}>
     <button className="sidebar-control-button" aria-label={t("language")} aria-expanded={open === "language"} title={t("language")} onClick={() => toggle("language")}>
       <Globe2 size={17}/><span className="sidebar-control-value">{language === "vi" ? "VI" : "EN"}</span><ChevronRight className="sidebar-control-chevron" size={15}/>
     </button>
@@ -74,8 +84,8 @@ export default function SidebarAppearanceControls({ collapsed, language, selecte
       <div className="sidebar-theme-list">
         {THEME_OPTIONS.map(option => {
           const locked = option.access === "plus" && !canUsePremium;
-          return <button key={option.id} className={`${selectedTheme === option.id ? "selected" : ""} ${locked ? "locked" : ""}`} aria-pressed={selectedTheme === option.id} aria-disabled={locked} title={locked ? t("themeLockedHint") : undefined} onPointerEnter={() => preview(option.id)} onPointerLeave={clearPreview} onFocus={() => preview(option.id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) clearPreview(); }} onClick={() => chooseTheme(option.id)}>
-            <span className="sidebar-theme-dot" style={{ background: option.browserColor }}><span/></span><span className="sidebar-theme-label">{t(option.labelKey)}</span>{option.access === "plus" && <span className="sidebar-theme-premium"><Sparkles size={11}/>{t("themePremium")}</span>}{selectedTheme === option.id && <Check size={15}/>} 
+          return <button key={option.id} className={`${selectedTheme === option.id ? "selected" : ""} ${locked ? "locked" : ""}`} aria-pressed={selectedTheme === option.id} aria-disabled={locked} title={locked ? t("themeLockedHint") : undefined} onPointerEnter={() => preview(option.id)} onPointerDown={() => preview(option.id)} onFocus={() => preview(option.id)} onBlur={event => clearPreviewIfFocusLeavesAppearance(event.relatedTarget)} onClick={() => chooseTheme(option.id)}>
+            <span className="sidebar-theme-dot" style={{ background: `linear-gradient(135deg, ${option.gradient[0]}, ${option.gradient[1]})` }}><span/></span><span className="sidebar-theme-label">{t(option.labelKey)}</span>{option.access === "plus" && <span className="sidebar-theme-premium"><Sparkles size={11}/>{t("themePremium")}</span>}{selectedTheme === option.id && <Check size={15}/>}
           </button>;
         })}
       </div>

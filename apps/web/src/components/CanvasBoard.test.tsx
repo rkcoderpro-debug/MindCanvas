@@ -213,6 +213,37 @@ describe("Canvas interactions", () => {
     await act(async () => pointer(svg, "pointercancel", 20, 40));
     expect(current.drawings).toHaveLength(1);
   });
+
+  it("erases only the touched part of a vector stroke in one commit", async () => {
+    const b = { ...blankBoard(), nodes: [{ id: "node", label: "Keep", x: 260, y: 30, width: 190, height: 76 }], drawings: [{ id: "stroke", points: [{ x: 0, y: 100 }, { x: 120, y: 100 }], color: "#123456", width: 4, opacity: 1 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Tẩy"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => pointer(svg, "pointerdown", 60, 100));
+    expect(host.querySelector(".eraser-cursor")).not.toBeNull();
+    await act(async () => pointer(svg, "pointerup", 60, 100));
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(current.nodes).toEqual(b.nodes);
+    expect(current.drawings).toHaveLength(2);
+    expect(current.drawings.every(drawing => drawing.color === "#123456" && drawing.width === 4 && drawing.points.length > 0)).toBe(true);
+    expect(current.drawings[0].id).toBe("stroke");
+  });
+
+  it("expands mobile quick actions and duplicates the current selection", async () => {
+    const b = { ...blankBoard(), texts: [{ id: "text", text: "Quick", x: 20, y: 40, width: 160 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => { pointer(host.querySelector('[data-element="text"]')!, "pointerdown", 30, 50); pointer(svg, "pointerup", 30, 50); });
+    await act(async () => (host.querySelector(".mobile-quick-actions-trigger") as HTMLButtonElement).click());
+    expect(host.querySelector(".mobile-quick-actions-menu")).not.toBeNull();
+    const duplicate = [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent?.includes("Nhân đôi"))!;
+    expect(duplicate.disabled).toBe(false);
+    await act(async () => duplicate.click());
+    expect(current.texts).toHaveLength(2);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(host.querySelector(".mobile-quick-actions-menu")).toBeNull();
+  });
+
   it("creates an inline text editor, escapes without inserting an element", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     await act(async () => (host.querySelector('[aria-label="Chữ"]') as HTMLButtonElement).click());

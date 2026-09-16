@@ -67,7 +67,7 @@ describe("Workspace UI", () => {
     const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
     await act(async () => settings.click());
     const options = [...host.querySelectorAll<HTMLButtonElement>(".theme-option")];
-    expect(options).toHaveLength(18);
+    expect(options).toHaveLength(28);
     expect(host.textContent).toContain("Theme sáng");
     expect(host.textContent).toContain("Theme tối");
     const cobalt = options.find(button => button.textContent?.includes("Đêm Cobalt"))!;
@@ -86,7 +86,10 @@ describe("Workspace UI", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
     await act(async () => cobalt.dispatchEvent(new Event("pointerover", { bubbles: true })));
     expect(document.documentElement.dataset.theme).toBe("cobalt");
-    await act(async () => cobalt.dispatchEvent(new Event("pointerout", { bubbles: true })));
+    const roseSky = [...host.querySelectorAll<HTMLButtonElement>(".theme-option")].find(button => button.textContent?.includes("Rose Sky"))!;
+    await act(async () => roseSky.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    expect(document.documentElement.dataset.theme).toBe("roseSky");
+    await act(async () => cobalt.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body })));
     expect(document.documentElement.dataset.theme).toBe("light");
     await act(async () => cobalt.focus());
     expect(document.documentElement.dataset.theme).toBe("cobalt");
@@ -97,6 +100,18 @@ describe("Workspace UI", () => {
     await act(async () => cobalt.click());
     expect(document.documentElement.dataset.theme).toBe("cobalt");
     expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
+  });
+  it("keeps sidebar theme preview alive while crossing adjacent choices", async () => {
+    await act(async () => root.render(<App/>));
+    await act(async () => (host.querySelector('button[aria-label="Giao diện"]') as HTMLButtonElement).click());
+    const cobalt = [...host.querySelectorAll<HTMLButtonElement>(".sidebar-theme-list button")].find(button => button.textContent?.includes("Đêm Cobalt"))!;
+    const roseSky = [...host.querySelectorAll<HTMLButtonElement>(".sidebar-theme-list button")].find(button => button.textContent?.includes("Rose Sky"))!;
+    await act(async () => cobalt.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    expect(document.documentElement.dataset.theme).toBe("cobalt");
+    await act(async () => { roseSky.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })); cobalt.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: roseSky })); });
+    expect(document.documentElement.dataset.theme).toBe("roseSky");
+    await act(async () => roseSky.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body })));
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
   it("opens the Learning Hub without injecting demo decks or cards", async () => {
     await import("./components/LearningHubPage");
@@ -111,11 +126,11 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V4.7.1 quick search and finds text stored inside a canvas", async () => {
+  it("opens V4.7.2 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.7.1");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.7.2");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
@@ -155,7 +170,7 @@ describe("Workspace UI", () => {
     await act(async () => profile.click());
     expect(host.querySelector(".topbar-profile-menu")?.textContent).toContain("Đăng nhập Google");
   });
-  it("toggles and persists the V4.7.1 focus mode without losing the topbar exit control", async () => {
+  it("toggles and persists the V4.7.2 focus mode without losing the topbar exit control", async () => {
     await act(async () => root.render(<App/>));
     const toggle = host.querySelector('[aria-label="Chế độ tập trung"]') as HTMLButtonElement;
     await act(async () => toggle.click());

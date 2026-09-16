@@ -1,7 +1,7 @@
 import type { ToolMode } from "@mindcanvas/shared";
 
 export const CANVAS_TOOL_IDS = [
-  "select", "hand", "text", "pen", "highlighter", "line", "rect", "ellipse", "triangle", "connector",
+  "select", "hand", "text", "pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle", "connector",
 ] as const satisfies readonly ToolMode[];
 
 export const TOOLBAR_VISIBILITY_KEY = "mindcanvas:toolbar-tools:v1";

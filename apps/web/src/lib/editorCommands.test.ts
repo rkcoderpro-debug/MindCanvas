@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { blankBoard, parseBoard } from "./board";
-import { addRelativeNode, alignSelection, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateMindMapSelection, rotateMindMapSubtree, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection } from "./editorCommands";
+import { addRelativeNode, alignSelection, canvasContentBounds, distributeSelection, duplicateSelection, expandGroups, fittedViewport, groupSelection, moveLayer, moveSelection, normalizeEditor, orderedElements, pasteSelection, removeSelection, reparentNode, reorderSelection, resizeSelection, resizeSelectionFromHandle, rotateMindMapSelection, rotateMindMapSubtree, rotateSelection, setElementFlags, smartSnapMoveSelection, snapMoveSelection, ungroupSelection, visibleCanvasElements } from "./editorCommands";
 const fixture = () => normalizeEditor({ ...blankBoard(), nodes: [{ id:"n",label:"Root",x:0,y:0,width:190,height:76 }], texts:[{ id:"t",text:"Text",x:300,y:30,width:200 }], shapes:[{ id:"s",kind:"rect" as const,x:0,y:0,width:400,height:200,color:"#ffffff" }] });
 describe("Editor commands", () => {
   it("pastes an independent group with new IDs and a new offset each time", () => {
@@ -54,6 +54,24 @@ describe("Editor commands", () => {
     const v=fittedViewport({x:-100,y:-200,width:400,height:300},800,600); expect(v.scale).toBeGreaterThan(0); expect(Number.isFinite(v.x)).toBe(true);
     expect(()=>parseBoard({...fixture(),layerOrder:["missing"]})).toThrow();
     expect(()=>parseBoard({...fixture(),groups:[{id:"g",elementIds:["n","n"]}]})).toThrow();
+  });
+  it("fits the current outermost visible content instead of stale viewport or collapsed descendants", () => {
+    const b = { ...blankBoard(), viewport: { x: 90000, y: -70000, scale: .2 }, nodes: [
+      { id:"left", label:"Left", x:-900, y:-200, width:190, height:76 },
+      { id:"parent", label:"Parent", x:400, y:40, width:190, height:76, collapsed:true },
+      { id:"child", label:"Hidden child", x:90000, y:90000, width:190, height:76, parentId:"parent" },
+    ], edges: [{ id:"branch", source:"parent", target:"child", kind:"branch" as const }], drawings: [{ id:"rotated", points:[{x:900,y:200},{x:1050,y:200}], color:"#123456", width:20, opacity:1, rotation:45 }] };
+    const visible = visibleCanvasElements(b);
+    expect(visible.some(selection => selection.id === "child" || selection.id === "branch")).toBe(false);
+    const bounds = canvasContentBounds(b)!;
+    expect(bounds.x).toBeLessThan(-899);
+    expect(bounds.x + bounds.width).toBeLessThan(10000);
+    expect(bounds.width).toBeGreaterThan(1400);
+    expect(bounds.width).toBeLessThan(3000);
+    const viewport = fittedViewport(bounds, 800, 600);
+    expect(viewport.scale).toBeGreaterThan(0);
+    expect(viewport.x).not.toBe(90000);
+    expect(viewport.y).not.toBe(-70000);
   });
   it("supports editor-pro transforms, alignment, distribution, flags and grid snap", () => {
     const b = { ...blankBoard(), shapes: [

@@ -1,6 +1,6 @@
 import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE } from "./canvasViewport";
 
-export type CanvasInputMode = "idle" | "drawing" | "panning" | "pinching" | "selecting" | "transforming";
+export type CanvasInputMode = "idle" | "drawing" | "erasing" | "panning" | "pinching" | "selecting" | "transforming";
 
 export type CanvasTouchSettings = {
   drawWithFinger: boolean;

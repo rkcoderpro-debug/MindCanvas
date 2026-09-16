@@ -1,4 +1,4 @@
-export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "line" | "rect" | "ellipse" | "triangle" | "connector";
+export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "eraser" | "line" | "rect" | "ellipse" | "triangle" | "connector";
 
 export { LenientJsonError, parseLenientJson } from "./json.js";
 
