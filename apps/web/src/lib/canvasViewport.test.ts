@@ -8,10 +8,14 @@ describe("canvas viewport wheel helpers", () => {
     expect(normalizeWheelDelta(1, -1, 2)).toEqual({ x: 800, y: -800 });
   });
 
-  it("keeps regular wheel input vertical and maps Alt wheel input horizontally", () => {
-    expect(wheelPanDelta({ x: 4, y: -12 })).toEqual({ x: 0, y: -12 });
+  it("keeps both touchpad axes and maps Alt wheel input horizontally", () => {
+    expect(wheelPanDelta({ x: 4, y: -12 })).toEqual({ x: 4, y: -12 });
     expect(wheelPanDelta({ x: 4, y: -12 }, true)).toEqual({ x: 4, y: 0 });
     expect(wheelPanDelta({ x: 0, y: -12 }, true)).toEqual({ x: -12, y: 0 });
+  });
+
+  it("keeps a diagonal touchpad gesture available for free canvas panning", () => {
+    expect(wheelPanDelta({ x: 18.5, y: -7.25 })).toEqual({ x: 18.5, y: -7.25 });
   });
 
   it("pans only the viewport", () => {

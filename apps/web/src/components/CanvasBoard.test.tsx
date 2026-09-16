@@ -266,7 +266,7 @@ describe("Canvas interactions", () => {
     await act(async () => { pointer(svg, "pointerdown", 20, 30, { pointerType: "touch" }); pointer(svg, "pointermove", 77, 101, { pointerType: "touch" }); pointer(svg, "pointerup", 77, 101, { pointerType: "touch" }); });
     expect(pattern()).not.toBe(before); expect(current.viewport).toMatchObject({ x: 57, y: 71 }); expect(current.nodes).toEqual(b.nodes);
   });
-  it("batches a high-frequency wheel gesture into one vertical viewport commit", async () => {
+  it("batches a high-frequency touchpad gesture across both viewport axes", async () => {
     vi.useFakeTimers();
     try {
       await act(async () => root.render(<Harness initial={blankBoard()}/>));
@@ -280,7 +280,7 @@ describe("Canvas interactions", () => {
       expect(commit).not.toHaveBeenCalled();
       await act(async () => { vi.advanceTimersByTime(140); });
       expect(commit).toHaveBeenCalledTimes(1);
-      expect(current.viewport).toMatchObject({ x: 0, y: -15 });
+      expect(current.viewport).toMatchObject({ x: -12, y: -15 });
     } finally { vi.useRealTimers(); }
   });
   it("maps Alt plus wheel to horizontal panning", async () => {

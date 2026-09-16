@@ -12,6 +12,8 @@ export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offlin
 export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject };
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
 const CONFLICT_CHECKPOINT_WAIT_MS = 4000;
+const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
+type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
 function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
   return new Promise<void>(resolve => {
     const timeout = window.setTimeout(resolve, CONFLICT_CHECKPOINT_WAIT_MS);
@@ -39,6 +41,10 @@ export function useWorkspace(owner: string | null) {
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
+  // Realtime UPDATE events do not carry the originating browser/session. Keep
+  // the short-lived save snapshots so the echo of this device's own save is
+  // not mistaken for a collaborator edit that should reset Undo/Redo.
+  const localSaveMarkers = useRef<LocalSaveMarker[]>([]);
   const clearHistory = () => {
     pastRef.current = [];
     futureRef.current = [];
@@ -151,10 +157,20 @@ export function useWorkspace(owner: string | null) {
         for (const snapshot of pending) {
           if (!alive.current) return false;
           const save = async (candidate: CachedProject) => {
-            const saved = await persistProject(owner, candidate);
-            acknowledge(owner, candidate, saved?.revision);
-            const cached = readCache(owner).find(item => item.id === candidate.id);
-            if (alive.current && cached) setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
+            const now = Date.now();
+            localSaveMarkers.current = localSaveMarkers.current.filter(marker => now - marker.createdAt < LOCAL_SAVE_MATCH_WINDOW_MS);
+            const marker: LocalSaveMarker = { projectId: candidate.id, snapshot: candidate, createdAt: now };
+            localSaveMarkers.current.push(marker);
+            try {
+              const saved = await persistProject(owner, candidate);
+              marker.expectedRevision = saved?.revision;
+              acknowledge(owner, candidate, saved?.revision);
+              const cached = readCache(owner).find(item => item.id === candidate.id);
+              if (alive.current && cached) setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
+            } catch (err) {
+              localSaveMarkers.current = localSaveMarkers.current.filter(item => item !== marker);
+              throw err;
+            }
           };
           try {
             await save(snapshot);
@@ -219,7 +235,27 @@ export function useWorkspace(owner: string | null) {
       if (!alive.current || current.current?.id !== update.projectId) return;
       const local = current.current;
       if (!local) return;
-      if (JSON.stringify(local) === JSON.stringify(update.board)) {
+      const now = Date.now();
+      localSaveMarkers.current = localSaveMarkers.current.filter(marker => now - marker.createdAt < LOCAL_SAVE_MATCH_WINDOW_MS);
+      const markerIndex = localSaveMarkers.current.findIndex(marker => {
+        if (marker.projectId !== projectId || !sameBoardContent(marker.snapshot.board, update.board)) return false;
+        if (marker.expectedRevision !== undefined) return update.revision === undefined || update.revision === marker.expectedRevision;
+        if (marker.snapshot.revision === undefined) return true;
+        return update.revision === undefined || update.revision === marker.snapshot.revision + 1;
+      });
+      if (markerIndex >= 0) {
+        const [marker] = localSaveMarkers.current.splice(markerIndex, 1);
+        acknowledge(owner, marker.snapshot, update.revision ?? marker.expectedRevision);
+        const cached = readCache(owner).find(item => item.id === projectId);
+        if (alive.current && cached) {
+          setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
+          if (!cached.pending) setStatus("saved");
+        }
+        return;
+      }
+      // A cloud echo can differ in viewport or timestamps even when it is
+      // the same document. Those fields must never erase local history.
+      if (sameBoardContent(local, update.board)) {
         const cached = readCache(owner).find(item => item.id === projectId);
         if (cached && update.revision !== undefined) cacheProject(owner, { ...cached, revision: update.revision, pending: cached.pending });
         return;

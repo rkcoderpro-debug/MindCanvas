@@ -6,10 +6,17 @@ import { useWorkspace } from "./useWorkspace";
 import * as store from "../lib/projectStore";
 import { arrangeMindMapMultiSided } from "../lib/board";
 import { rotateMindMapSubtree } from "../lib/editorCommands";
+const collaborationHarness = vi.hoisted(() => ({ callback: null as ((update: any) => void) | null }));
+vi.mock("../lib/collaboration", () => ({
+  subscribeToProject: vi.fn((_projectId: string, callback: (update: any) => void) => {
+    collaborationHarness.callback = callback;
+    return () => { if (collaborationHarness.callback === callback) collaborationHarness.callback = null; };
+  }),
+}));
 let root: Root, api: ReturnType<typeof useWorkspace>, host: HTMLDivElement;
 function Harness({ owner = null }: { owner?: string | null }) { api = useWorkspace(owner); return <span>{api.board?.title ?? "Workspace"}</span>; }
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); collaborationHarness.callback = null; vi.restoreAllMocks(); });
 describe("Workspace lifecycle", () => {
   it("keeps the remote revision and owner when opening an invitation", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]);
@@ -127,6 +134,23 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.change({ ...api.board!, title: "Mobile 3" })); await act(async () => api.flush());
     expect(save.mock.calls.map(call => call[1].revision)).toEqual([undefined, 0, 1]);
     expect(store.readCache("A")[0].revision).toBe(2); expect(api.status).toBe("saved");
+  });
+  it("keeps Undo after the cloud echo changes status from saving to saved", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => ({ revision: (snapshot.revision ?? -1) + 1 }));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Cloud history")); await act(async () => api.flush());
+    const before = api.board!;
+    await act(async () => api.change({ ...before, texts: [{ id: "t", text: "cloud edit", x: 40, y: 40, width: 180 }] }));
+    expect(api.canUndo).toBe(true);
+    await act(async () => api.flush());
+    expect(api.status).toBe("saved"); expect(api.canUndo).toBe(true); expect(save).toHaveBeenCalledTimes(2);
+    expect(collaborationHarness.callback).toBeTypeOf("function");
+    const echoed = { ...api.board!, viewport: { x: 240, y: -80, scale: 1.27 }, updatedAt: "2099-01-01T00:00:00.000Z" };
+    await act(async () => collaborationHarness.callback?.({ projectId: echoed.id, board: echoed, revision: 1, updatedAt: echoed.updatedAt }));
+    expect(api.status).toBe("saved"); expect(api.canUndo).toBe(true);
+    await act(async () => api.undo());
+    expect(api.board!.texts).toHaveLength(0); expect(api.canRedo).toBe(true);
   });
   it("pauses a real cross-device conflict and overwrites only after an explicit choice", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
