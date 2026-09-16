@@ -372,7 +372,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
         <div className="flashcards-decks-heading"><strong>{t("decks")}</strong><button className="icon-button" aria-label={t("newDeck")} onClick={openCreateDeck}><Plus size={17}/></button></div>
         {flashcards.loading ? <p>{t("loading")}</p> : !flashcards.decks.length ? <div className="flashcards-empty-small"><BookOpen size={25}/><span>{t("noDecks")}</span></div> : <div className="deck-list">{flashcards.decks.map(deck => <div className={`deck-item ${deck.id === flashcards.selectedDeckId ? "active" : ""}`} key={deck.id}>
           <button className="deck-select" onClick={() => { flashcards.setSelectedDeckId(deck.id); setPanel("cards"); }}><BookOpen size={17}/><span>{deck.name}</span><small>{flashcards.selectedDeckId === deck.id ? flashcards.cards.length : ""}</small></button>
-          <LearningShareButton kind="flashcard" id={deck.id} title={deck.name} plan={accountPlan} available={!!owner && deck.source === "cloud" && deck.id === flashcards.selectedDeckId && !flashcards.cardsLoading && flashcards.cards.every(card => card.source === "cloud")}/><button className="icon-button deck-action" aria-label={`${t("renameDeck")}: ${deck.name}`} onClick={() => openRenameDeck(deck)}><Pencil size={14}/></button>
+          <button className="icon-button deck-action" aria-label={`${t("renameDeck")}: ${deck.name}`} onClick={() => openRenameDeck(deck)}><Pencil size={14}/></button>
         </div>)}</div>}
       </aside>
       <section className="flashcards-content">

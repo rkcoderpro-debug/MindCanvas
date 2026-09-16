@@ -9,7 +9,17 @@ $$;
 revoke all on function public.learning_share_tier(uuid) from public, anon;
 grant execute on function public.learning_share_tier(uuid) to authenticated;
 
-create table public.lab_projects (
+-- Keep the tier rule in one SQL function.  PostgreSQL parses CASE expressions
+-- differently in some PL/pgSQL contexts; the original migration used a bare
+-- CASE directly after `<`, which caused 42601 syntax errors on line 123.
+create or replace function public.learning_required_tier(p_kind text)
+returns integer language sql immutable as $$
+  select case p_kind when 'quiz' then 1 when 'flashcard' then 1 when 'lab' then 2 else 100 end
+$$;
+revoke all on function public.learning_required_tier(text) from public, anon;
+grant execute on function public.learning_required_tier(text) to authenticated;
+
+create table if not exists public.lab_projects (
   id uuid primary key, user_id uuid not null references auth.users(id) on delete cascade,
   title text not null check (length(trim(title)) between 1 and 200),
   subject text not null check (subject in ('physics','chemistry','other')),
@@ -32,10 +42,11 @@ begin
   end if;
   return new;
 end $$;
+drop trigger if exists learning_lab_storage on public.lab_projects;
 create trigger learning_lab_storage before insert or update on public.lab_projects
   for each row execute function public.guard_learning_lab_storage();
 
-create table public.learning_share_invitations (
+create table if not exists public.learning_share_invitations (
   id uuid primary key default gen_random_uuid(), kind text not null check (kind in ('quiz','flashcard','lab')),
   resource_id uuid not null, owner_id uuid not null references auth.users(id) on delete cascade,
   email text not null check (email = lower(trim(email)) and length(email) between 3 and 320),
@@ -44,10 +55,10 @@ create table public.learning_share_invitations (
   expires_at timestamptz not null, created_at timestamptz not null default now(),
   accepted_at timestamptz, recipient_id uuid references auth.users(id) on delete set null
 );
-create index learning_invites_owner on public.learning_share_invitations(owner_id,kind,resource_id);
-create index learning_invites_email on public.learning_share_invitations(email,status);
+create index if not exists learning_invites_owner on public.learning_share_invitations(owner_id,kind,resource_id);
+create index if not exists learning_invites_email on public.learning_share_invitations(email,status);
 
-create table public.learning_share_members (
+create table if not exists public.learning_share_members (
   kind text not null check (kind in ('quiz','flashcard','lab')),
   resource_id uuid not null, owner_id uuid not null references auth.users(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -55,7 +66,7 @@ create table public.learning_share_members (
   created_at timestamptz not null default now(),
   primary key(kind,resource_id,user_id), check (owner_id <> user_id)
 );
-create index learning_members_recipient on public.learning_share_members(user_id);
+create index if not exists learning_members_recipient on public.learning_share_members(user_id);
 
 create or replace function public.learning_resource_owner(p_kind text,p_id uuid,p_owner uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
@@ -73,14 +84,14 @@ returns boolean language sql stable security definer set search_path = '' as $$
   select exists(select 1 from public.learning_share_members m
     where m.kind=p_kind and m.resource_id=p_id and m.user_id=auth.uid()
       and public.learning_resource_owner(m.kind,m.resource_id,m.owner_id)
-      and public.learning_share_tier(m.owner_id) >= case when p_kind='lab' then 2 else 1 end)
+      and public.learning_share_tier(m.owner_id) >= public.learning_required_tier(p_kind))
 $$;
 revoke all on function public.learning_share_allowed(text,uuid) from public,anon;
 grant execute on function public.learning_share_allowed(text,uuid) to authenticated;
 
 alter table public.quiz_tests add column if not exists content_version integer not null default 1;
 alter table public.flashcards add column if not exists content_version integer not null default 1;
-create or replace function public.learning_bump_version() returns trigger language plpgsql as $$
+create or replace function public.learning_bump_version() returns trigger language plpgsql set search_path = public as $$
 begin
   if tg_table_name='quiz_tests' and (old.questions is distinct from new.questions or old.title is distinct from new.title) then
     new.content_version := old.content_version+1;
@@ -91,26 +102,38 @@ begin
   end if;
   return new;
 end $$;
+drop trigger if exists learning_quiz_version on public.quiz_tests;
 create trigger learning_quiz_version before update on public.quiz_tests for each row execute function public.learning_bump_version();
+drop trigger if exists learning_card_version on public.flashcards;
 create trigger learning_card_version before update on public.flashcards for each row execute function public.learning_bump_version();
+drop trigger if exists learning_lab_version on public.lab_projects;
 create trigger learning_lab_version before update on public.lab_projects for each row execute function public.learning_bump_version();
 
 alter table public.lab_projects enable row level security;
 alter table public.learning_share_invitations enable row level security;
 alter table public.learning_share_members enable row level security;
+drop policy if exists lab_read on public.lab_projects;
 create policy lab_read on public.lab_projects for select to authenticated
   using (user_id=auth.uid() or public.learning_share_allowed('lab',id));
+drop policy if exists lab_create on public.lab_projects;
 create policy lab_create on public.lab_projects for insert to authenticated with check (user_id=auth.uid() and public.learning_share_tier(auth.uid())>=2);
+drop policy if exists lab_change on public.lab_projects;
 create policy lab_change on public.lab_projects for update to authenticated using (user_id=auth.uid()) with check (user_id=auth.uid());
+drop policy if exists lab_delete on public.lab_projects;
 create policy lab_delete on public.lab_projects for delete to authenticated using (user_id=auth.uid());
+drop policy if exists learning_invites_read on public.learning_share_invitations;
 create policy learning_invites_read on public.learning_share_invitations for select to authenticated
   using (owner_id=auth.uid() or (status='pending' and email=lower(auth.jwt()->>'email')));
+drop policy if exists learning_members_read on public.learning_share_members;
 create policy learning_members_read on public.learning_share_members for select to authenticated
   using (owner_id=auth.uid() or user_id=auth.uid());
+drop policy if exists quiz_shared_read on public.quiz_tests;
 create policy quiz_shared_read on public.quiz_tests for select to authenticated
   using (public.learning_share_allowed('quiz',id));
+drop policy if exists decks_shared_read on public.flashcard_decks;
 create policy decks_shared_read on public.flashcard_decks for select to authenticated
   using (public.learning_share_allowed('flashcard',id));
+drop policy if exists cards_shared_read on public.flashcards;
 create policy cards_shared_read on public.flashcards for select to authenticated
   using (public.learning_share_allowed('flashcard',deck_id));
 
@@ -120,7 +143,7 @@ returns uuid language plpgsql security definer set search_path = '' as $$
 declare v_id uuid; v_email text := lower(trim(p_email));
 begin
   if auth.uid() is null or not public.learning_resource_owner(p_kind,p_id,auth.uid()) then raise exception 'Owner access required'; end if;
-  if public.learning_share_tier(auth.uid()) < case when p_kind='lab' then 2 else 1 end then raise exception 'Upgrade your plan to share this material'; end if;
+  if public.learning_share_tier(auth.uid()) < public.learning_required_tier(p_kind) then raise exception 'Upgrade your plan to share this material'; end if;
   if p_kind not in ('quiz','flashcard','lab') or p_days not between 1 and 30 or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' or p_hash !~ '^[0-9a-f]{64}$' then raise exception 'Invalid invitation'; end if;
   if v_email = lower(auth.jwt()->>'email') then raise exception 'Cannot invite yourself'; end if;
   insert into public.learning_share_invitations(kind,resource_id,owner_id,email,token_hash,expires_at)
@@ -135,7 +158,7 @@ begin
   if auth.uid() is null or v_email is null then raise exception 'Sign in to accept the invitation'; end if;
   select * into v from public.learning_share_invitations where token_hash=p_hash for update;
   if v.id is null or v.email<>v_email or v.status<>'pending' or v.expires_at<=now() then raise exception 'Invitation invalid, expired, or belongs to another account'; end if;
-  if not public.learning_resource_owner(v.kind,v.resource_id,v.owner_id) or public.learning_share_tier(v.owner_id)<case when v.kind='lab' then 2 else 1 end then raise exception 'Sharing is paused or material removed'; end if;
+  if not public.learning_resource_owner(v.kind,v.resource_id,v.owner_id) or public.learning_share_tier(v.owner_id) < public.learning_required_tier(v.kind) then raise exception 'Sharing is paused or material removed'; end if;
   insert into public.learning_share_members(kind,resource_id,owner_id,user_id,invitation_id)
   values (v.kind,v.resource_id,v.owner_id,auth.uid(),v.id)
   on conflict(kind,resource_id,user_id) do update set invitation_id=excluded.invitation_id;
@@ -160,15 +183,16 @@ begin
   else raise exception 'Owner access required'; end if;
 end $$;
 
-create table public.learning_quiz_attempts (
+create table if not exists public.learning_quiz_attempts (
   id uuid primary key default gen_random_uuid(), quiz_id uuid not null references public.quiz_tests(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   content_version integer not null, questions jsonb not null, answers jsonb,
   score integer, started_at timestamptz not null default now(), completed_at timestamptz,
   check (score is null or score>=0)
 );
-create index learning_quiz_attempts_user on public.learning_quiz_attempts(user_id,quiz_id);
+create index if not exists learning_quiz_attempts_user on public.learning_quiz_attempts(user_id,quiz_id);
 alter table public.learning_quiz_attempts enable row level security;
+drop policy if exists learning_attempt_read on public.learning_quiz_attempts;
 create policy learning_attempt_read on public.learning_quiz_attempts for select to authenticated using (user_id=auth.uid());
 create or replace function public.start_learning_quiz(p_id uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -187,14 +211,14 @@ begin
   select * into a from public.learning_quiz_attempts where id=p_attempt and user_id=auth.uid() for update;
   if a.id is null or a.completed_at is not null or not public.learning_share_allowed('quiz',a.quiz_id) then raise exception 'Attempt unavailable or access revoked'; end if;
   v_total:=jsonb_array_length(a.questions);
-  if jsonb_typeof(p_answers)<>'array' or jsonb_array_length(p_answers)<>v_total then raise exception 'Invalid answers'; end if;
+  if jsonb_typeof(p_answers) is distinct from 'array' or jsonb_array_length(p_answers)<>v_total then raise exception 'Invalid answers'; end if;
   select count(*) into v_score from jsonb_array_elements(a.questions) with ordinality q(item,n)
     where p_answers->(q.n-1) = q.item->'correctIndex';
   update public.learning_quiz_attempts set answers=p_answers,score=v_score,completed_at=now() where id=p_attempt;
   return v_score;
 end $$;
 
-create table public.learning_card_progress (
+create table if not exists public.learning_card_progress (
   user_id uuid not null references auth.users(id) on delete cascade,
   card_id uuid not null references public.flashcards(id) on delete cascade,
   content_version integer not null default 1,
@@ -204,13 +228,14 @@ create table public.learning_card_progress (
   primary key(user_id,card_id)
 );
 alter table public.learning_card_progress enable row level security;
+drop policy if exists card_progress_read on public.learning_card_progress;
 create policy card_progress_read on public.learning_card_progress for select to authenticated using (user_id=auth.uid() and exists(select 1 from public.flashcards c where c.id=card_id and public.learning_share_allowed('flashcard',c.deck_id)));
 create or replace function public.rate_learning_card(p_card uuid,p_rating text)
 returns void language plpgsql security definer set search_path = '' as $$
 declare c public.flashcards;
 begin
   select * into c from public.flashcards where id=p_card;
-  if c.id is null or not public.learning_share_allowed('flashcard',c.deck_id) or p_rating not in ('again','hard','good','easy') then raise exception 'Card unavailable or access revoked'; end if;
+  if c.id is null or not public.learning_share_allowed('flashcard',c.deck_id) or p_rating is null or p_rating not in ('again','hard','good','easy') then raise exception 'Card unavailable or access revoked'; end if;
   insert into public.learning_card_progress(user_id,card_id,content_version,rating,reviewed_count,due_at)
   values(auth.uid(),p_card,c.content_version,p_rating,1,now()+case p_rating when 'again' then interval '1 minute' when 'hard' then interval '1 day' when 'good' then interval '3 days' else interval '7 days' end)
   on conflict(user_id,card_id) do update set content_version=excluded.content_version,rating=excluded.rating,
@@ -232,7 +257,7 @@ language sql stable security definer set search_path = '' as $$
       when 'flashcard' then (select d.updated_at from public.flashcard_decks d where d.id=m.resource_id)
       else (select l.updated_at from public.lab_projects l where l.id=m.resource_id) end,
     case when not public.learning_resource_owner(m.kind,m.resource_id,m.owner_id) then 'removed'
-      when public.learning_share_tier(m.owner_id)<case when m.kind='lab' then 2 else 1 end then 'paused'
+      when public.learning_share_tier(m.owner_id) < public.learning_required_tier(m.kind) then 'paused'
       else 'active' end::text
   from public.learning_share_members m left join public.profiles p on p.id=m.owner_id
   where m.user_id=auth.uid()
@@ -243,3 +268,5 @@ grant execute on function public.list_learning_shares() to authenticated;
 grant select,insert,update,delete on public.lab_projects to authenticated;
 grant select on public.learning_share_invitations,public.learning_share_members,
   public.learning_quiz_attempts,public.learning_card_progress to authenticated;
+
+notify pgrst, 'reload schema';

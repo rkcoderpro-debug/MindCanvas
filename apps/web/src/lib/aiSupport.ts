@@ -28,7 +28,7 @@ export function createAiSupportIssue(kind: AiSupportKind, context: AiSupportCont
     `Issue: ${code}`,
     `Type: ${kind === "aiAuto" ? "AI Auto result or quota" : "AI Manual plan activation or quota"}`,
     `Time: ${createdAt}`,
-    `App: v4.9.0`,
+    `App: v5.0.0`,
     `Account email: ${context.email?.trim() || "not provided"}`,
     `Plan: ${context.plan?.trim() || "unknown"}`,
     `Provider: ${context.provider?.trim() || "not available"}`,
