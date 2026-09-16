@@ -189,7 +189,7 @@ describe("Workspace UI", () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.8.2");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.9.0");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;

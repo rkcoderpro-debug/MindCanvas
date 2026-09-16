@@ -30,8 +30,12 @@ export async function signInWithGoogle() {
   // still returns to the app origin; an invite must return to its exact link
   // so the authenticated account can accept it.
   const inviteToken = new URLSearchParams(window.location.search).get("invite");
+  const learningInvite = new URLSearchParams(window.location.search).get("learning_invite");
   if (inviteToken) {
     try { localStorage.setItem("mindcanvas:pending-invite", inviteToken); } catch {}
+  }
+  if (learningInvite) {
+    try { localStorage.setItem("mindcanvas:pending-learning-invite", learningInvite); } catch {}
   }
   const redirectTo = window.location.origin;
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } });

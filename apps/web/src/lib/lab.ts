@@ -293,3 +293,9 @@ export function deleteLab(owner: string | null, id: string): void {
 }
 
 export const LAB_LIMITS = { maxSourceText: MAX_SOURCE_TEXT, maxHtml: MAX_HTML } as const;
+
+/** The sandbox supplies an opaque origin; this CSP blocks network/resource access. */
+export function labSandboxDocument(html: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; navigate-to 'none'">`;
+  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
+}

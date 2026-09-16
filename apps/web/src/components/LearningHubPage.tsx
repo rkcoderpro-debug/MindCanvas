@@ -9,13 +9,14 @@ import { useQuizzes, type QuizStore } from "../hooks/useQuizzes";
 import FlashcardsPage from "./FlashcardsPage";
 import QuizPage from "./QuizPage";
 import LabPage from "./LabPage";
+import SharedLearningPage from "./SharedLearningPage";
 import StudyPlanDialog from "./StudyPlanDialog";
 import { generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcardsFromFile, type StudyPlanRecommendation } from "../lib/api";
 import { MAX_FILE_BYTES } from "../lib/board";
 import { saveDocumentToStorage } from "../lib/supabase";
 import type { AiGenerationOptions } from "../lib/aiOptions";
 
-type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab";
+type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -90,6 +91,7 @@ export default function LearningHubPage({ owner, projects, accountPlan, initialT
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
+    { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
   ];
 
   return <section className="learning-hub-page">
@@ -100,7 +102,8 @@ export default function LearningHubPage({ owner, projects, accountPlan, initialT
     {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}
     {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
-    {tab === "lab" && <LabPage owner={owner} embedded/>}
+    {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
+    {tab === "shared" && <SharedLearningPage owner={owner}/>}
   </section>;
 }
 

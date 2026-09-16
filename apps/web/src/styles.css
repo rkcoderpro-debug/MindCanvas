@@ -3427,3 +3427,29 @@ body,
 .learning-quick-actions .quick-action-icon.green { color: var(--success); background: color-mix(in srgb, var(--success) 15%, var(--surface)); }
 @media (max-width: 900px) { .lab-layout { grid-template-columns: 1fr; } .lab-saved-panel { position: static; } .lab-saved-list { display: flex; max-height: none; overflow-x: auto; } .lab-saved-row { min-width: 180px; } }
 @media (max-width: 620px) { .lab-page { padding: 17px 0 46px; } .lab-header { flex-direction: column; padding: 16px; border-radius: 17px; } .lab-header-actions { width: 100%; justify-content: stretch; } .lab-header-actions button { flex: 1; } .lab-card { padding: 15px; border-radius: 13px; } .lab-form-grid { grid-template-columns: 1fr; } .lab-step-heading h2 { font-size: 17px; } .lab-runner-frame { height: 70vh; height: 70dvh; min-height: 520px; } .lab-footer-actions { justify-content: stretch; } .lab-footer-actions button { flex: 1; } }
+.learning-share-dialog, .learning-share-upgrade { display: grid; gap: 14px; max-width: min(620px, 88vw); }
+.learning-share-dialog form { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 10px; align-items: end; }
+.learning-share-dialog form .primary-button { grid-column: 1 / -1; justify-self: start; }
+.learning-share-dialog label { display: grid; gap: 6px; min-width: 0; }
+.learning-share-dialog input, .learning-share-link input { min-width: 0; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); }
+.learning-share-link, .learning-share-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-width: 0; }
+.learning-share-row { padding: 9px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.learning-share-row button { flex: 0 0 auto; }
+.lab-cloud-actions { display: grid; gap: 8px; padding: 10px; }
+.lab-saved-entry { display: grid; gap: 4px; }
+.lab-saved-entry > .secondary-button { justify-self: end; margin: 0 8px 6px; font-size: 12px; }
+.shared-learning-pending { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent-border); border-radius: 12px; }
+.shared-learning-pending article { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.shared-learning { padding: clamp(15px, 3vw, 32px); display: grid; gap: 18px; }
+.shared-learning header, .shared-learning-filters, .shared-learning-quiz footer, .shared-ratings { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.shared-learning header { justify-content: space-between; }
+.shared-learning-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+.shared-learning-list article, .shared-learning-detail, .shared-learning-quiz, .shared-learning-card { display: grid; align-content: start; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-raised); min-width: 0; }
+.shared-learning-list article h3, .shared-learning-detail h3 { margin: 0; overflow-wrap: anywhere; }
+.shared-learning-list article button { justify-self: start; }
+.shared-learning-filters button[aria-pressed="true"], .shared-answer.selected { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.shared-answer, .shared-flip { display: block; width: 100%; text-align: left; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); }
+.shared-flip { min-height: 160px; font-size: 18px; overflow-wrap: anywhere; }
+.shared-flip small { display: block; margin-top: 20px; font-size: 12px; }
+.shared-lab-frame { display: block; width: 100%; height: min(75vh, 780px); min-height: 450px; border: 1px solid var(--line); border-radius: 12px; background: white; }
+@media (max-width: 620px) { .learning-share-dialog form { grid-template-columns: 1fr; } .learning-share-dialog form .primary-button { grid-column: 1; } .learning-share-link { flex-wrap: wrap; } .shared-lab-frame { min-height: 65vh; } }
