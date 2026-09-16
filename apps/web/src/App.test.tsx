@@ -126,11 +126,29 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("Chưa có bộ thẻ");
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens V4.7.4 quick search and finds text stored inside a canvas", async () => {
+  it("opens the interactive Lab and runs self-contained HTML in a sandbox", async () => {
+    await import("./components/LabPage");
+    await act(async () => root.render(<App/>));
+    const labButton = [...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Lab")!;
+    await act(async () => labButton.click());
+    expect(host.querySelector(".lab-page")).not.toBeNull();
+    const request = [...host.querySelectorAll<HTMLTextAreaElement>(".lab-step-card")][0].querySelectorAll("textarea")[1];
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(request, "Cho điều chỉnh vận tốc và xem quỹ đạo."); request.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Tạo prompt thiết kế")!.click());
+    expect(host.textContent).toContain("Prompt bước 1 để gửi cho AI");
+    const html = [...host.querySelectorAll<HTMLTextAreaElement>(".lab-step-card")][2].querySelector("textarea")!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(html, "<html><body><script>document.body.dataset.ready='yes'</script></body></html>"); html.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Kiểm tra và chạy")!.click());
+    const frame = host.querySelector(".lab-runner-frame") as HTMLIFrameElement;
+    expect(frame).not.toBeNull();
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(frame.getAttribute("srcdoc")).toContain("dataset.ready");
+  });
+  it("opens V4.8.0 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V4.7.4");
+    expect(host.querySelector(".beta")?.textContent).toBe("V4.8.0");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;
@@ -170,7 +188,7 @@ describe("Workspace UI", () => {
     await act(async () => profile.click());
     expect(host.querySelector(".topbar-profile-menu")?.textContent).toContain("Đăng nhập Google");
   });
-  it("toggles and persists the V4.7.4 focus mode without losing the topbar exit control", async () => {
+  it("toggles and persists the V4.8.0 focus mode without losing the topbar exit control", async () => {
     await act(async () => root.render(<App/>));
     const toggle = host.querySelector('[aria-label="Chế độ tập trung"]') as HTMLButtonElement;
     await act(async () => toggle.click());
