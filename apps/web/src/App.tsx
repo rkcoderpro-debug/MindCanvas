@@ -2,11 +2,12 @@ import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, Cloud, Crown, Download, Focus, FolderPlus, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { ArrowLeft, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
 import FloatingTimer from "./components/FloatingTimer";
 import PetCompanion from "./components/PetCompanion";
+import PlusTrialPopup from "./components/PlusTrialPopup";
 import ThemePicker from "./components/ThemePicker";
 import CommandPalette from "./components/CommandPalette";
 import TopbarProfile from "./components/TopbarProfile";
@@ -25,6 +26,7 @@ import { SIDEBAR_DEFAULT_WIDTH, clampSidebarWidth } from "./lib/sidebarLayout";
 import { getAccountPlan, getAdminStatus } from "./lib/api";
 import { readFocusTimerVisibility, readMobileZoomControlsVisibility, saveFocusTimerVisibility, saveMobileZoomControlsVisibility } from "./lib/uiPreferences";
 import { FREE_ACCOUNT_PLAN, type AccountPlan } from "./lib/account";
+import { activatePlusTrial, getPlusTrial, type PlusTrialState } from "./lib/plusTrial";
 import { errorMessage } from "./lib/errors";
 import { isIOSDevice } from "./lib/canvasInput";
 import ShareInbox from "./components/ShareInbox";
@@ -88,6 +90,11 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     } catch { return "top"; }
   });
   const [accountPlan, setAccountPlan] = useState<AccountPlan>(FREE_ACCOUNT_PLAN);
+  const [plusTrial, setPlusTrial] = useState<PlusTrialState | null>(null);
+  const [trialOpen, setTrialOpen] = useState(false);
+  const [trialWorking, setTrialWorking] = useState(false);
+  const [trialActivated, setTrialActivated] = useState(false);
+  const [trialError, setTrialError] = useState("");
   const [webBackground, setWebBackground] = useState<WebBackground | null>(readWebBackground);
   const [isAdmin, setIsAdmin] = useState(false);
   const [inviteToken] = useState(() => {
@@ -164,10 +171,19 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   useEffect(() => { setAiPanelMode("closed"); }, [ws.board?.id]);
   useEffect(() => {
     let alive = true;
-    setAccountPlan(FREE_ACCOUNT_PLAN); setIsAdmin(false);
+    setAccountPlan(FREE_ACCOUNT_PLAN); setIsAdmin(false); setPlusTrial(null); setTrialOpen(false); setTrialActivated(false); setTrialError("");
     if (!user) return () => { alive = false; };
     void getAccountPlan().then(plan => { if (alive) setAccountPlan(plan); }).catch(() => {});
     void getAdminStatus().then(result => { if (alive) setIsAdmin(result.isAdmin); }).catch(() => {});
+    void getPlusTrial().then(trial => {
+      if (!alive) return;
+      setPlusTrial(trial);
+      if (trial.eligible && !trial.consumed && !trial.active) {
+        let dismissed = false;
+        try { dismissed = sessionStorage.getItem(`mindcanvas:plus-trial-dismissed:${user.id}`) === "true"; } catch {}
+        if (!dismissed) setTrialOpen(true);
+      }
+    }).catch(() => { /* v5.3 migration may not be deployed yet; account remains usable */ });
     return () => { alive = false; };
   }, [user]);
   useEffect(() => {
@@ -203,6 +219,23 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     }).catch(e => { if (alive) { setLearningInviteError(e instanceof Error ? e.message : "Không thể nhận lời mời."); setLearningInviteState("error"); } });
     return () => { alive = false; };
   }, [learningInvite, user]);
+  const closeTrial = () => {
+    if (trialWorking) return;
+    setTrialOpen(false);
+    if (!trialActivated && user) { try { sessionStorage.setItem(`mindcanvas:plus-trial-dismissed:${user.id}`, "true"); } catch {} }
+  };
+  const startTrial = async () => {
+    if (!user || trialWorking) return;
+    setTrialWorking(true); setTrialError("");
+    try {
+      const trial = await activatePlusTrial();
+      setPlusTrial(trial); setTrialActivated(true); setTrialOpen(true);
+      const plan = await getAccountPlan();
+      setAccountPlan(plan);
+      try { sessionStorage.removeItem(`mindcanvas:plus-trial-dismissed:${user.id}`); } catch {}
+    } catch (err) { setTrialError(errorMessage(err, "Không thể kích hoạt Plus miễn phí.")); }
+    finally { setTrialWorking(false); }
+  };
   const resizeSidebar = (event: React.PointerEvent<HTMLDivElement>) => {
     if (sidebarCollapsed) return;
     event.preventDefault();
@@ -252,7 +285,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="breadcrumbs"><button onClick={home}>{ws.board ? <ArrowLeft size={17}/> : <LayoutGrid size={17}/>} {t("workspace")}</button>{ws.board && <span>/ {ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
-        <div className="topbar-account-actions"><button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
+        <div className="topbar-account-actions">{plusTrial?.eligible && !plusTrial.consumed && !plusTrial.active && <button type="button" className="topbar-trial-button" aria-label="Kích hoạt 3 ngày Plus miễn phí" title="3 ngày Plus miễn phí" onClick={() => { setTrialActivated(false); setTrialError(""); setTrialOpen(true); }}><Gift size={15}/><span>3 ngày Plus</span></button>}<button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
       </header>
       {ws.board && <header className="mobile-canvas-header">
         <button type="button" className="icon-button mobile-canvas-back" aria-label={t("workspace")} title={t("workspace")} onClick={home}><ArrowLeft size={20}/></button>
@@ -299,6 +332,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     <FloatingTimer visible={timerVisible}/>
     <MusicIsland/>
     <PetCompanion owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
+    {trialOpen && plusTrial && <PlusTrialPopup trial={plusTrial} working={trialWorking} activated={trialActivated} error={trialError} onActivate={() => void startTrial()} onClose={closeTrial}/>}
     {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
       <label>{t("name")}<input autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button" disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}

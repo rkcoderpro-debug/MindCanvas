@@ -4,6 +4,17 @@ export const PET_KINDS = ["cat", "dog", "fox", "rabbit"] as const;
 export type PetKind = (typeof PET_KINDS)[number];
 export type PetMood = "energetic" | "happy" | "calm" | "tired" | "sad";
 export type PetActivityType = "workspace" | "flashcard" | "quiz" | "lab";
+export type PetPointerTracking = { active: boolean; x: number; y: number; turn: number };
+
+/** Keep the companion calm until the pointer enters a local attention radius. */
+export function getPetPointerTracking(dx: number, dy: number, radius = 220): PetPointerTracking {
+  const safeRadius = Math.max(1, radius);
+  const distance = Math.hypot(dx, dy);
+  if (!Number.isFinite(distance) || distance > safeRadius) return { active: false, x: 0, y: 0, turn: 0 };
+  const nx = Math.max(-1, Math.min(1, dx / safeRadius));
+  const ny = Math.max(-1, Math.min(1, dy / safeRadius));
+  return { active: true, x: nx * 5, y: ny * 3.5, turn: nx * 8 };
+}
 
 export type PetState = {
   kind: PetKind;

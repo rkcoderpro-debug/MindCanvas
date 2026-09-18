@@ -1,3 +1,5 @@
+import { FLAPPY_BIRD_DEMO_HTML } from "./flappyBirdDemo";
+
 export type LabSubject = "physics" | "chemistry" | "other";
 
 export type LabVariable = {
@@ -41,6 +43,8 @@ export type LabProject = {
   programHtml: string;
   createdAt: string;
   updatedAt: string;
+  /** Built-in starter content. System demos are immutable; saving creates a personal copy. */
+  systemDemo?: boolean;
 };
 
 export type LabPromptInput = {
@@ -60,6 +64,26 @@ const MAX_SOURCE_TEXT = 120_000;
 const MAX_PROMPT = 200_000;
 const MAX_HTML = 1_500_000;
 const SUBJECTS: LabSubject[] = ["physics", "chemistry", "other"];
+export const STARTER_LAB_ID = "system-demo-flappy-bird";
+const STARTER_LAB_RELEASED_AT = "2026-09-18T00:00:00.000Z";
+
+export const FLAPPY_BIRD_STARTER_LAB: LabProject = {
+  id: STARTER_LAB_ID,
+  title: "Flappy Bird — Demo",
+  subject: "other",
+  learnerLevel: "đại học",
+  sourceFileName: "mindcanvas-flappy-bird.html",
+  sourceText: "",
+  request: "mô phỏng game flappy bird",
+  designPrompt: "",
+  planPrompt: "",
+  design: null,
+  programPrompt: "",
+  programHtml: FLAPPY_BIRD_DEMO_HTML,
+  createdAt: STARTER_LAB_RELEASED_AT,
+  updatedAt: STARTER_LAB_RELEASED_AT,
+  systemDemo: true,
+};
 
 type JsonObject = Record<string, unknown>;
 
@@ -260,24 +284,38 @@ function cleanLab(value: unknown): LabProject | null {
     programHtml: typeof value.programHtml === "string" ? value.programHtml.slice(0, MAX_HTML) : "",
     createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
+    systemDemo: value.systemDemo === true,
   };
 }
 
 export function readLabs(owner: string | null): LabProject[] {
+  let personal: LabProject[] = [];
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey(owner)) || "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(cleanLab).filter((item): item is LabProject => !!item).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    if (Array.isArray(parsed)) personal = parsed.map(cleanLab).filter((item): item is LabProject => !!item && item.id !== STARTER_LAB_ID);
   } catch {
-    return [];
+    personal = [];
   }
+  personal.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // The starter Lab is a virtual system template, so it appears for guests and
+  // every account without duplicating 30+ KB into each user's localStorage.
+  return [FLAPPY_BIRD_STARTER_LAB, ...personal];
 }
 
 export function saveLab(owner: string | null, input: Omit<LabProject, "createdAt" | "updatedAt"> & Partial<Pick<LabProject, "createdAt" | "updatedAt">>): LabProject {
-  const current = readLabs(owner);
-  const existing = current.find(item => item.id === input.id);
+  const current = readLabs(owner).filter(item => !item.systemDemo);
+  const copyingStarter = input.id === STARTER_LAB_ID || input.systemDemo === true;
+  const targetId = copyingStarter ? safeId() : input.id;
+  const existing = current.find(item => item.id === targetId);
   const now = new Date().toISOString();
-  const lab: LabProject = { ...input, createdAt: existing?.createdAt ?? input.createdAt ?? now, updatedAt: now };
+  const lab: LabProject = {
+    ...input,
+    id: targetId,
+    title: copyingStarter && input.title.trim() === FLAPPY_BIRD_STARTER_LAB.title ? "Flappy Bird — Bản sao" : input.title,
+    createdAt: existing?.createdAt ?? input.createdAt ?? now,
+    updatedAt: now,
+    systemDemo: false,
+  };
   const next = [lab, ...current.filter(item => item.id !== lab.id)].slice(0, MAX_LABS);
   try { localStorage.setItem(storageKey(owner), JSON.stringify(next)); } catch { /* local persistence is best effort */ }
   return lab;
@@ -288,7 +326,8 @@ export function createLab(owner: string | null, input: Omit<LabProject, "id" | "
 }
 
 export function deleteLab(owner: string | null, id: string): void {
-  const next = readLabs(owner).filter(item => item.id !== id);
+  if (id === STARTER_LAB_ID) return;
+  const next = readLabs(owner).filter(item => !item.systemDemo && item.id !== id);
   try { localStorage.setItem(storageKey(owner), JSON.stringify(next)); } catch { /* local persistence is best effort */ }
 }
 

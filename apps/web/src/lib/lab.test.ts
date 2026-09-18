@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { buildLabPlanPrompt, buildLabProgramPrompt, deleteLab, parseLabDesign, readLabs, saveLab, validateLabHtml, validateLabPlanPrompt, type LabDesign } from "./lab";
+import { buildLabPlanPrompt, buildLabProgramPrompt, deleteLab, FLAPPY_BIRD_STARTER_LAB, parseLabDesign, readLabs, saveLab, STARTER_LAB_ID, validateLabHtml, validateLabPlanPrompt, type LabDesign } from "./lab";
 
 const design: LabDesign = {
   format: "mindcanvas-lab-design",
@@ -56,18 +56,34 @@ describe("interactive lab helpers", () => {
 
   it("keeps saved labs isolated by account and supports deletion", () => {
     const saved = saveLab("alice", { id: "lab-a", title: design.title, subject: design.subject, learnerLevel: "10", sourceFileName: "", sourceText: "", request: "simulate", designPrompt: "prompt", planPrompt: "implementation plan", design, programPrompt: "implementation plan", programHtml: "<html></html>" });
-    expect(readLabs("alice")).toHaveLength(1);
-    expect(readLabs("bob")).toHaveLength(0);
+    expect(readLabs("alice")).toHaveLength(2);
+    expect(readLabs("bob")).toHaveLength(1);
     expect(saved.createdAt).toBeTruthy();
-    expect(readLabs("alice")[0].planPrompt).toBe("implementation plan");
+    expect(readLabs("alice").find(lab => lab.id === "lab-a")?.planPrompt).toBe("implementation plan");
     deleteLab("alice", "lab-a");
-    expect(readLabs("alice")).toHaveLength(0);
+    expect(readLabs("alice")).toHaveLength(1);
+    expect(readLabs("alice")[0].id).toBe(STARTER_LAB_ID);
   });
 
   it("maps a v4.8.0 saved program prompt into the new plan prompt field", () => {
     localStorage.setItem("mindcanvas:labs:v1:legacy", JSON.stringify([{ id: "legacy", title: "Legacy", subject: "physics", request: "simulate", programPrompt: "returned implementation plan", programHtml: "" }]));
-    const legacy = readLabs("legacy")[0];
+    const legacy = readLabs("legacy").find(lab => lab.id === "legacy")!;
     expect(legacy.planPrompt).toBe("returned implementation plan");
     expect(legacy.programPrompt).toBe("returned implementation plan");
   });
+
+  it("exposes one immutable Flappy Bird starter Lab and saves edits as a personal copy", () => {
+    const initial = readLabs("alice");
+    expect(initial.filter(lab => lab.id === STARTER_LAB_ID)).toHaveLength(1);
+    expect(initial[0].programHtml).toBe(FLAPPY_BIRD_STARTER_LAB.programHtml);
+    expect(initial[0].programHtml).toContain("Mô phỏng game Flappy Bird");
+    const copy = saveLab("alice", initial[0]);
+    expect(copy.id).not.toBe(STARTER_LAB_ID);
+    expect(copy.systemDemo).toBe(false);
+    expect(copy.title).toBe("Flappy Bird — Bản sao");
+    expect(readLabs("alice").filter(lab => lab.id === STARTER_LAB_ID)).toHaveLength(1);
+    deleteLab("alice", STARTER_LAB_ID);
+    expect(readLabs("alice")[0].id).toBe(STARTER_LAB_ID);
+  });
+
 });

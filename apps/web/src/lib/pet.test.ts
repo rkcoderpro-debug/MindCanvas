@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyInactivityDecay, getPetLevel, getPetMood, normalizePet, recordPetStudy } from "./pet";
+import { applyInactivityDecay, getPetLevel, getPetMood, getPetPointerTracking, normalizePet, recordPetStudy } from "./pet";
 
 const now = new Date("2026-09-16T10:00:00.000Z");
 
@@ -28,5 +28,11 @@ describe("study companion state", () => {
   it("keeps the pointer-following preference in the local profile", () => {
     expect(normalizePet({ follow_pointer: false }, now)?.followPointer).toBe(false);
     expect(normalizePet({}, now)?.followPointer).toBe(true);
+  });
+
+  it("only follows the pointer inside its attention radius and returns to idle outside", () => {
+    expect(getPetPointerTracking(40, -20, 220).active).toBe(true);
+    expect(getPetPointerTracking(40, -20, 220).x).toBeGreaterThan(0);
+    expect(getPetPointerTracking(400, 0, 220)).toEqual({ active: false, x: 0, y: 0, turn: 0 });
   });
 });

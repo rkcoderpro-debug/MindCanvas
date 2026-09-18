@@ -6,14 +6,34 @@ export type LearningKind = "quiz" | "flashcard" | "lab";
 export type IncomingLearningShare = { kind: LearningKind; resource_id: string; owner_name: string; title: string; updated_at: string; status: "active" | "paused" | "removed" };
 export type LearningInvite = { id: string; email: string; status: string; expires_at: string; recipient_id: string | null };
 export type LearningMember = { user_id: string; created_at: string };
+export type SharedQuizQuestion = { id: string; prompt: string; options: string[]; correctIndex?: number; explanation?: string };
+export type SharedQuizSession = { id: string; questions: SharedQuizQuestion[]; version: number };
+export type SharedQuizResult = { score: number; total: number; version: number; questions: Array<Required<Pick<SharedQuizQuestion, "id" | "prompt" | "options">> & { correctIndex: number; explanation?: string }> };
+export type LearningShareErrorCode = "MIGRATION_MISSING" | "ACCESS_REVOKED" | "RESOURCE_REMOVED" | "ATTEMPT_NOT_FOUND" | "ATTEMPT_ALREADY_COMPLETED" | "INVALID_ANSWERS" | "NETWORK_ERROR" | "UNKNOWN";
+export class LearningShareError extends Error {
+  constructor(public code: LearningShareErrorCode, message: string) { super(message); this.name = "LearningShareError"; }
+}
+
 
 async function client() {
   const session = await getCurrentSession();
   if (!supabase || !session) throw new Error("Đăng nhập để dùng học liệu được chia sẻ.");
   return supabase;
 }
+function learningError(error: { message?: string; code?: string } | unknown): LearningShareError {
+  const raw = typeof error === "object" && error !== null ? error as { message?: string; code?: string } : {};
+  const message = String(raw.message ?? error ?? "Unknown learning share error");
+  if (raw.code === "PGRST202" || /schema cache|could not find the function/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0020_v5_3_reliability_trial.sql trên Supabase.");
+  if (/ACCESS_REVOKED|access revoked|sharing paused/i.test(message)) return new LearningShareError("ACCESS_REVOKED", "Quyền truy cập học liệu đã bị thu hồi hoặc tạm dừng.");
+  if (/RESOURCE_REMOVED|material removed/i.test(message)) return new LearningShareError("RESOURCE_REMOVED", "Học liệu gốc không còn tồn tại.");
+  if (/ATTEMPT_NOT_FOUND/i.test(message)) return new LearningShareError("ATTEMPT_NOT_FOUND", "Không tìm thấy lượt làm bài hiện tại.");
+  if (/ATTEMPT_ALREADY_COMPLETED/i.test(message)) return new LearningShareError("ATTEMPT_ALREADY_COMPLETED", "Lượt làm bài này đã được nộp trước đó.");
+  if (/INVALID_ANSWERS|Invalid answers/i.test(message)) return new LearningShareError("INVALID_ANSWERS", "Dữ liệu câu trả lời không hợp lệ.");
+  if (/failed to fetch|network|fetch/i.test(message)) return new LearningShareError("NETWORK_ERROR", "Không thể kết nối. Dữ liệu trên màn hình vẫn được giữ lại.");
+  return new LearningShareError("UNKNOWN", message);
+}
 function checked<T>(result: { data: T; error: { message: string; code?: string } | null }): T {
-  if (result.error) throw new Error(result.error.code === "PGRST202" ? "Chưa cài migration 0018_v4_9_learning_shares.sql trên Supabase." : result.error.message);
+  if (result.error) throw learningError(result.error);
   return result.data;
 }
 export function canShare(kind: LearningKind, plan?: string): boolean {
@@ -83,9 +103,7 @@ export async function deletePublishedLab(id: string, owner: string) {
 
 export async function getSharedContent(kind: LearningKind, id: string) {
   const c = await client();
-  const table = kind === "quiz" ? "quiz_tests" : kind === "lab" ? "lab_projects" : "flashcard_decks";
-  const result = await c.from(table).select("*").eq("id", id).single();
-  return checked(result) as Record<string, unknown>;
+  return checked(await c.rpc("get_learning_shared_content", { p_kind: kind, p_id: id })) as Record<string, unknown>;
 }
 export async function getSharedCards(id: string) {
   const c = await client();
@@ -97,11 +115,22 @@ export async function getSharedCards(id: string) {
 export async function rateSharedCard(id: string, rating: "again" | "hard" | "good" | "easy") {
   const c = await client(); checked(await c.rpc("rate_learning_card", { p_card: id, p_rating: rating }));
 }
-export async function startSharedQuiz(id: string) {
+export async function startSharedQuiz(id: string): Promise<SharedQuizSession> {
   const c = await client();
-  return checked(await c.rpc("start_learning_quiz", { p_id: id })) as { id: string; questions: Array<{ id: string; prompt: string; options: string[]; correctIndex: number; explanation: string }>; version: number };
+  return checked(await c.rpc("start_learning_quiz", { p_id: id })) as SharedQuizSession;
 }
-export async function finishSharedQuiz(attemptId: string, answers: Array<number | null>) {
+export async function finishSharedQuiz(attemptId: string, answers: Array<number | null>): Promise<SharedQuizResult> {
   const c = await client();
-  return checked(await c.rpc("finish_learning_quiz", { p_attempt: attemptId, p_answers: answers })) as number;
+  return checked(await c.rpc("finish_learning_quiz", { p_attempt: attemptId, p_answers: answers })) as SharedQuizResult;
+}
+
+export function sharedLearningErrorMessage(error: unknown, action: "open" | "start" | "submit" | "rate" = "open") {
+  const resolved = error instanceof LearningShareError ? error : learningError(error);
+  if (resolved.code === "NETWORK_ERROR") return resolved.message;
+  if (resolved.code === "ACCESS_REVOKED") return action === "submit" ? "Không thể nộp bài vì quyền truy cập đã bị thu hồi hoặc tạm dừng." : resolved.message;
+  if (resolved.code === "RESOURCE_REMOVED") return "Học liệu gốc đã bị xóa.";
+  if (resolved.code === "ATTEMPT_NOT_FOUND") return "Không tìm thấy lượt làm bài. Câu trả lời hiện tại vẫn được giữ; hãy thử bắt đầu lượt mới nếu lỗi tiếp diễn.";
+  if (resolved.code === "ATTEMPT_ALREADY_COMPLETED") return "Lượt làm này đã được nộp. Hãy mở lượt mới để làm lại.";
+  if (resolved.code === "INVALID_ANSWERS") return "Không thể nộp vì dữ liệu câu trả lời không hợp lệ. Câu trả lời trên màn hình vẫn được giữ.";
+  return resolved.message;
 }

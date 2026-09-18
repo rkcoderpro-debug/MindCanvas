@@ -53,6 +53,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const [runnerHtml, setRunnerHtml] = useState("");
   const [runnerKey, setRunnerKey] = useState(0);
   const [isRunnerFullscreen, setIsRunnerFullscreen] = useState(false);
+  const [runnerFallbackFullscreen, setRunnerFallbackFullscreen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState<"prompt" | "html" | null>(null);
@@ -67,7 +68,8 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       setPublishedIds(rows.filter(row => current.some(lab => lab.id === row.id && new Date(lab.updatedAt).getTime() === new Date(row.updated_at).getTime())).map(row => row.id));
     }).catch(() => undefined);
     setLabs(next);
-    if (next[0]) loadLab(next[0]);
+    const initial = next.find(lab => !lab.systemDemo) ?? next[0];
+    if (initial) loadLab(initial);
     else resetDraft();
     // A Lab is intentionally account-scoped in this first release. It does not
     // inherit the currently open canvas or expose it to an iframe.
@@ -86,6 +88,15 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     };
   }, []);
 
+  useEffect(() => {
+    if (!runnerFallbackFullscreen) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setRunnerFallbackFullscreen(false); setIsRunnerFullscreen(false); }
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [runnerFallbackFullscreen]);
+
   const selectedLab = useMemo(() => labs.find(item => item.id === selectedId) ?? null, [labs, selectedId]);
 
   function resetDraft() {
@@ -97,6 +108,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     setHtmlFileName("");
     setRunnerHtml("");
     setIsRunnerFullscreen(false);
+    setRunnerFallbackFullscreen(false);
     setError("");
     setNotice("");
     setRunnerKey(value => value + 1);
@@ -109,8 +121,9 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     setLegacyDesign(lab.design);
     setProgramHtml(lab.programHtml);
     setHtmlFileName("");
-    setRunnerHtml("");
+    setRunnerHtml(lab.systemDemo ? lab.programHtml : "");
     setIsRunnerFullscreen(false);
+    setRunnerFallbackFullscreen(false);
     setError("");
     setNotice("");
     setRunnerKey(value => value + 1);
@@ -181,6 +194,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       planPrompt: "",
       programPrompt: designPrompt,
       programHtml,
+      systemDemo: selectedLab?.systemDemo === true,
     };
     const saved = selectedId ? saveLab(owner, { ...input, id: selectedId }) : createLab(owner, input);
     const next = readLabs(owner);
@@ -191,7 +205,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   };
 
   const removeCurrent = async () => {
-    if (!selectedLab || !window.confirm(t("labDeleteConfirm"))) return;
+    if (!selectedLab || selectedLab.systemDemo || !window.confirm(t("labDeleteConfirm"))) return;
     if (owner) {
       try { await deletePublishedLab(selectedLab.id, owner); }
       catch (e) { setError(e instanceof Error ? e.message : "Không thể xóa Lab trên cloud."); return; }
@@ -199,7 +213,8 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     deleteLab(owner, selectedLab.id);
     const next = readLabs(owner);
     setLabs(next);
-    if (next[0]) loadLab(next[0]);
+    const initial = next.find(lab => !lab.systemDemo) ?? next[0];
+    if (initial) loadLab(initial);
     else resetDraft();
     setNotice(t("labDeleted"));
   };
@@ -241,8 +256,9 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
         setIsRunnerFullscreen(false);
         return;
       }
+      if (runnerFallbackFullscreen) { setRunnerFallbackFullscreen(false); setIsRunnerFullscreen(false); return; }
       const request = target.requestFullscreen ?? target.webkitRequestFullscreen;
-      if (!request) { setError(t("labFullscreenError")); return; }
+      if (!request) { setRunnerFallbackFullscreen(true); setIsRunnerFullscreen(true); return; }
       await request.call(target);
       // The fullscreenchange event remains the source of truth for Escape or
       // another browser-level exit. Updating after the promise resolves makes
@@ -250,8 +266,10 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       // on a later task.
       setIsRunnerFullscreen(true);
     } catch {
-      setIsRunnerFullscreen(false);
-      setError(t("labFullscreenError"));
+      // iOS/Safari variants may expose Fullscreen API but reject it for this
+      // element. Keep the same iframe alive and use a fixed-position fallback.
+      setRunnerFallbackFullscreen(true);
+      setIsRunnerFullscreen(true);
     }
   };
 
@@ -261,12 +279,12 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       <div className="lab-header-actions">{!embedded && onOpenLearning && <button className="secondary-button" type="button" onClick={onOpenLearning}><FileText size={16}/>{t("backToLearningHub")}</button>}<button className="primary-button" type="button" onClick={resetDraft}><Plus size={16}/>{t("labNew")}</button></div>
     </header>
     <div className="lab-layout">
-      <aside className="lab-saved-panel"><div className="lab-panel-heading"><div><span className="eyebrow">LABS</span><h2>{t("labSavedTitle")}</h2></div><span>{labs.length}</span></div>{labs.length ? <div className="lab-saved-list">{labs.map(lab => <div key={lab.id} className="lab-saved-entry"><button type="button" className={`lab-saved-row ${lab.id === selectedId ? "active" : ""}`} onClick={() => loadLab(lab)}><span className="lab-saved-icon"><Beaker size={16}/></span><span><strong>{lab.title}</strong><small>{lab.subject} · {new Date(lab.updatedAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US")}</small></span></button></div>)}</div> : <div className="lab-empty-saved"><Beaker size={23}/><p>{t("labNoSaved")}</p></div>}{selectedLab && <button type="button" className="text-danger-button lab-delete-button" onClick={removeCurrent}><Trash2 size={14}/>{t("labDelete")}</button>}</aside>
+      <aside className="lab-saved-panel"><div className="lab-panel-heading"><div><span className="eyebrow">LABS</span><h2>{t("labSavedTitle")}</h2></div><span>{labs.length}</span></div>{labs.length ? <div className="lab-saved-list">{labs.map(lab => <div key={lab.id} className="lab-saved-entry"><button type="button" className={`lab-saved-row ${lab.id === selectedId ? "active" : ""}`} onClick={() => loadLab(lab)}><span className="lab-saved-icon"><Beaker size={16}/></span><span><strong>{lab.title}{lab.systemDemo ? " · Demo" : ""}</strong><small>{lab.subject} · {new Date(lab.updatedAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US")}</small></span></button></div>)}</div> : <div className="lab-empty-saved"><Beaker size={23}/><p>{t("labNoSaved")}</p></div>}{selectedLab && !selectedLab.systemDemo && <button type="button" className="text-danger-button lab-delete-button" onClick={removeCurrent}><Trash2 size={14}/>{t("labDelete")}</button>}</aside>
       <main className="lab-main">
         {selectedLab && <div className="lab-detail-actions"><button className="secondary-button" disabled={!owner || !selectedLab.programHtml || !canShare("lab", accountPlan?.effectivePlanId)} title={!canShare("lab", accountPlan?.effectivePlanId) ? "Cần gói Pro để đưa Lab lên cloud" : undefined} onClick={() => { if (!owner) return; setError(""); void publishLab(selectedLab, owner).then(() => { setPublishedIds(ids => [...new Set([...ids, selectedLab.id])]); setNotice("Đã lưu HTML mô phỏng lên cloud. Nếu vừa sửa Lab, hãy lưu local rồi tải lên lại."); }).catch(e => setError(e.message)); }}>Lưu Lab lên cloud</button><LearningShareButton kind="lab" id={selectedLab.id} title={selectedLab.title} plan={accountPlan} available={publishedIds.includes(selectedLab.id)}/></div>}
         <section className="lab-card lab-step-card"><div className="lab-step-heading"><span className="lab-step-number">1</span><div><span className="eyebrow">AI MANUAL</span><h2>{t("labStepSource")}</h2><p>{t("labStepSourceHint")}</p></div></div><div className="lab-form-grid"><label>{t("labName")}<input value={draft.title} maxLength={200} onChange={event => updateDraft("title", event.target.value)} placeholder={t("labNamePlaceholder")}/></label><label>{t("labSubject")}<select value={draft.subject} onChange={event => updateDraft("subject", event.target.value as LabSubject)}><option value="physics">{t("labPhysics")}</option><option value="chemistry">{t("labChemistry")}</option><option value="other">{t("labOther")}</option></select></label><label>{t("labLearnerLevel")}<input value={draft.learnerLevel} maxLength={120} onChange={event => updateDraft("learnerLevel", event.target.value)} placeholder={t("labLearnerLevelPlaceholder")}/></label><label className="lab-upload-field"><span>{t("labSourceFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{sourceBusy ? t("labReading") : draft.sourceFileName || t("labChooseFile")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.markdown,.json,.csv" onChange={event => void chooseSource(event.target.files?.[0])}/></span><small>{t("labSourceFileHint")}</small></label></div><label>{t("labSourceText")}<textarea rows={5} value={draft.sourceText} onChange={event => updateDraft("sourceText", event.target.value)} placeholder={t("labSourceTextPlaceholder")}/></label><label>{t("labRequest")}<textarea rows={4} value={draft.request} onChange={event => updateDraft("request", event.target.value)} placeholder={t("labRequestPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={createDesignPrompt}><WandSparkles size={16}/>{t("labCreateHtmlPrompt")}</button>{designPrompt && <button className="secondary-button" type="button" onClick={() => void copy(designPrompt, "prompt")}><Clipboard size={15}/>{copied === "prompt" ? t("copiedPrompt") : t("copyPrompt")}</button>}</div>{designPrompt && <label className="lab-output-field"><span>{t("labHtmlPromptLabel")}</span><textarea rows={11} readOnly value={designPrompt}/></label>}</section>
 
-        <section className="lab-card lab-step-card lab-run-card"><div className="lab-step-heading"><span className="lab-step-number">2</span><div><span className="eyebrow">SANDBOX RUNNER</span><h2>{t("labStepRun")}</h2><p>{t("labStepRunHint")}</p></div></div><label className="lab-upload-field"><span>{t("labHtmlFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{htmlFileName || t("labHtmlFileHint")}</span><input type="file" accept=".html,.htm,text/html" onChange={event => void chooseHtmlFile(event.target.files?.[0])}/></span><small>{t("labHtmlUploadHint")}</small></label><label>{t("labHtmlInput")}<textarea rows={14} value={programHtml} onChange={event => { setProgramHtml(event.target.value); setHtmlFileName(""); setRunnerHtml(""); }} placeholder={t("labHtmlPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={runProgram}><Play size={16}/>{t("labRun")}</button><button className="secondary-button" type="button" onClick={() => { setProgramHtml(""); setHtmlFileName(""); setRunnerHtml(""); setIsRunnerFullscreen(false); }}><RefreshCw size={15}/>{t("labClearHtml")}</button>{programHtml && <button className="secondary-button" type="button" onClick={() => void copy(programHtml, "html")}><Clipboard size={15}/>{copied === "html" ? t("copiedPrompt") : t("copyPrompt")}</button>}{programHtml && <button className="secondary-button" type="button" onClick={downloadHtml}><Download size={15}/>{t("labDownloadHtml")}</button>}</div><div className="lab-runner-shell" ref={runnerRef}><div className="lab-runner-toolbar"><span><span className="lab-live-dot"/> {runnerHtml ? t("labReady") : t("labWaiting")}</span>{runnerHtml && <button type="button" className="icon-button" aria-label={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} title={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} onClick={() => void toggleRunnerFullscreen()}>{isRunnerFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}</button>}</div>{runnerHtml ? <iframe key={runnerKey} className="lab-runner-frame" title={draft.title || t("labTitle")} sandbox="allow-scripts" srcDoc={labSandboxDocument(runnerHtml)}/> : <div className="lab-runner-empty"><Beaker size={32}/><p>{t("labRunnerEmpty")}</p></div>}</div></section>
+        <section className="lab-card lab-step-card lab-run-card"><div className="lab-step-heading"><span className="lab-step-number">2</span><div><span className="eyebrow">SANDBOX RUNNER</span><h2>{t("labStepRun")}</h2><p>{t("labStepRunHint")}</p></div></div><label className="lab-upload-field"><span>{t("labHtmlFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{htmlFileName || t("labHtmlFileHint")}</span><input type="file" accept=".html,.htm,text/html" onChange={event => void chooseHtmlFile(event.target.files?.[0])}/></span><small>{t("labHtmlUploadHint")}</small></label><label>{t("labHtmlInput")}<textarea rows={14} value={programHtml} onChange={event => { setProgramHtml(event.target.value); setHtmlFileName(""); setRunnerHtml(""); }} placeholder={t("labHtmlPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={runProgram}><Play size={16}/>{t("labRun")}</button><button className="secondary-button" type="button" onClick={() => { setProgramHtml(""); setHtmlFileName(""); setRunnerHtml(""); setIsRunnerFullscreen(false); setRunnerFallbackFullscreen(false); }}><RefreshCw size={15}/>{t("labClearHtml")}</button>{programHtml && <button className="secondary-button" type="button" onClick={() => void copy(programHtml, "html")}><Clipboard size={15}/>{copied === "html" ? t("copiedPrompt") : t("copyPrompt")}</button>}{programHtml && <button className="secondary-button" type="button" onClick={downloadHtml}><Download size={15}/>{t("labDownloadHtml")}</button>}</div><div className={`lab-runner-shell ${runnerFallbackFullscreen ? "lab-runner-fallback-fullscreen" : ""}`} ref={runnerRef}><div className="lab-runner-toolbar"><span><span className="lab-live-dot"/> {runnerHtml ? t("labReady") : t("labWaiting")}</span>{runnerHtml && <button type="button" className="icon-button" aria-label={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} title={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} onClick={() => void toggleRunnerFullscreen()}>{isRunnerFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}</button>}</div>{runnerHtml ? <iframe key={runnerKey} className="lab-runner-frame" title={draft.title || t("labTitle")} sandbox="allow-scripts" srcDoc={labSandboxDocument(runnerHtml)}/> : <div className="lab-runner-empty"><Beaker size={32}/><p>{t("labRunnerEmpty")}</p></div>}</div></section>
         {error && <p className="form-error lab-message" role="alert">{error}</p>}{notice && !error && <p className="lab-notice" role="status">{notice}</p>}
         <footer className="lab-footer-actions"><button className="primary-button" type="button" onClick={saveCurrent}><Save size={16}/>{t("labSave")}</button>{selectedLab && <button className="secondary-button" type="button" onClick={() => loadLab(selectedLab)}><RefreshCw size={15}/>{t("labDiscardChanges")}</button>}</footer>
       </main>

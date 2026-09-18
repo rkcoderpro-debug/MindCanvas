@@ -109,6 +109,16 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.home()); expect(api.board).toBeNull();
     await act(async () => api.open(api.projects.find(p => p.id === id)!)); expect(api.board!.texts[0].text).toBe("saved");
   });
+  it("checkpoints the latest canvas state on pagehide before delayed persistence runs", async () => {
+    await act(async () => root.render(<Harness/>));
+    await act(async () => api.create("Pagehide recovery"));
+    const id = api.board!.id;
+    await act(async () => api.navigate({ ...api.board!, viewport: { x: 321, y: -144, scale: 1.42 } }));
+    // navigate() normally defers the cache write; pagehide must checkpoint the
+    // in-memory canvas immediately so reopening cannot fall back to stale data.
+    await act(async () => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    expect(store.readCache(null).find(project => project.id === id)?.board.viewport).toEqual({ x: 321, y: -144, scale: 1.42 });
+  });
   it("records newly created canvas text and shapes as undoable edits", async () => {
     await act(async () => root.render(<CanvasHarness/>));
     await act(async () => api.create("Canvas history"));

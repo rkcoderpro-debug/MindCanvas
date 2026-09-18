@@ -95,6 +95,39 @@ export function useWorkspace(owner: string | null) {
     } catch (err) { report(err); } finally { if (alive.current) setLoading(false); }
   }, [owner, report]);
   const upsertSummary = (p: Project) => { if (alive.current) setProjects(items => [p, ...items.filter(i => i.id !== p.id)]); };
+  const checkpointCurrent = useCallback(() => {
+    const active = current.current;
+    if (!active) return;
+    try {
+      const existing = readCache(owner).find(project => project.id === active.id);
+      const accessRole = existing?.accessRole ?? (owner ? "owner" : undefined);
+      const shared = existing?.shared ?? (!!existing?.ownerId && existing.ownerId !== owner);
+      const changed = !existing?.board || JSON.stringify(existing.board) !== JSON.stringify(active);
+      const pending = !!owner && accessRole !== "viewer" && !existing?.cloudOffline && (existing?.pending === true || changed);
+      const snapshot: CachedProject = {
+        ...existing,
+        id: active.id,
+        title: active.title,
+        updatedAt: active.updatedAt,
+        board: active,
+        thumbnail: changed ? createCanvasThumbnail(active) : existing?.thumbnail ?? createCanvasThumbnail(active),
+        folderId: folderId.current,
+        pending,
+        revision: existing?.revision,
+        ownerId: existing?.ownerId ?? owner ?? undefined,
+        accessRole,
+        shared,
+        cloudOffline: existing?.cloudOffline,
+      };
+      cacheProject(owner, snapshot);
+      cacheFailed.current = false;
+      dirty.current = readCache(owner).some(project => project.pending);
+    } catch (err) {
+      cacheFailed.current = true;
+      report(err);
+    }
+  }, [owner, report]);
+
   const loadThumbnail = useCallback(async (projectId: string) => {
     if (thumbnailRequests.current.has(projectId)) return;
     const cached = readCache(owner).find(project => project.id === projectId);
@@ -230,12 +263,13 @@ export function useWorkspace(owner: string | null) {
     alive.current = true; void refresh();
     const cameOnline = () => { setOnline(true); void flush(); };
     const wentOffline = () => { setOnline(false); setStatus(cacheFailed.current ? "saveError" : "offline"); };
-    const beforeUnload = (e: BeforeUnloadEvent) => { if ((owner && dirty.current) || cacheFailed.current) { e.preventDefault(); e.returnValue = ""; } };
-    const hidden = () => { if (document.visibilityState === "hidden") void flush(); };
+    const beforeUnload = (e: BeforeUnloadEvent) => { checkpointCurrent(); if ((owner && dirty.current) || cacheFailed.current) { e.preventDefault(); e.returnValue = ""; } };
+    const hidden = () => { if (document.visibilityState === "hidden") { checkpointCurrent(); void flush(); } };
+    const pageHide = () => { checkpointCurrent(); void flush(); };
     window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
-    window.addEventListener("beforeunload", beforeUnload); document.addEventListener("visibilitychange", hidden);
-    return () => { alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", hidden); };
-  }, [refresh, flush, owner]);
+    window.addEventListener("beforeunload", beforeUnload); window.addEventListener("pagehide", pageHide); document.addEventListener("visibilitychange", hidden);
+    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
+  }, [refresh, flush, owner, checkpointCurrent]);
 
   // A shared project receives durable Postgres Changes while it is open. The
   // current viewport remains local; a remote content update is applied only
@@ -443,7 +477,7 @@ export function useWorkspace(owner: string | null) {
     // debounce timer.
     if (previousProjectId) void flush(previousProjectId);
   };
-  const home = async () => { const ticket = ++navigation.current; await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); clearHistory(); setVersions([]); await refresh(); };
+  const home = async () => { const ticket = ++navigation.current; checkpointCurrent(); await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); clearHistory(); setVersions([]); await refresh(); };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
   const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
   const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };

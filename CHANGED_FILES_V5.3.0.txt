@@ -1,0 +1,29 @@
+MindCanvas v5.3.0
+
+Modified:
+- README.md
+- apps/server/src/index.ts
+- apps/web/public/sw.js
+- apps/web/src/App.tsx
+- apps/web/src/App.test.tsx
+- apps/web/src/components/AppSidebar.tsx
+- apps/web/src/components/InteractivePet.tsx
+- apps/web/src/components/LabPage.tsx
+- apps/web/src/components/SharedLearningPage.tsx
+- apps/web/src/hooks/useWorkspace.ts
+- apps/web/src/hooks/useWorkspace.test.tsx
+- apps/web/src/lib/aiSupport.ts
+- apps/web/src/lib/lab.ts
+- apps/web/src/lib/lab.test.ts
+- apps/web/src/lib/learningShare.ts
+- apps/web/src/lib/pet.ts
+- apps/web/src/lib/pet.test.ts
+- apps/web/src/styles.css
+
+Added:
+- apps/web/src/components/PlusTrialPopup.tsx
+- apps/web/src/lib/flappyBirdDemo.ts
+- apps/web/src/lib/plusTrial.ts
+- supabase/migrations/0020_v5_3_reliability_trial.sql
+- V5.3.0_RELIABILITY_SHARED_TRIAL_VI.md
+- CHANGED_FILES_V5.3.0.txt
