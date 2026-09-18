@@ -109,6 +109,19 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.home()); expect(api.board).toBeNull();
     await act(async () => api.open(api.projects.find(p => p.id === id)!)); expect(api.board!.texts[0].text).toBe("saved");
   });
+  it("persists an in-progress drawing draft before leaving the canvas", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => ({ revision: snapshot.revision === undefined ? 0 : snapshot.revision + 1 }));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Draft stroke"));
+    await act(async () => api.flush());
+    const draft = { ...api.board!, drawings: [{ id: "draft", points: [{ x: 10, y: 10 }, { x: 80, y: 60 }], color: "#123456", width: 4, opacity: 1 }] };
+    await act(async () => api.checkpointDraft(draft));
+    expect(store.readCache("A")[0].board.drawings).toHaveLength(1);
+    expect(store.readCache("A")[0].pending).toBe(true);
+    await act(async () => api.home());
+    expect(save.mock.calls.at(-1)?.[1].board.drawings).toHaveLength(1);
+  });
   it("checkpoints the latest canvas state on pagehide before delayed persistence runs", async () => {
     await act(async () => root.render(<Harness/>));
     await act(async () => api.create("Pagehide recovery"));

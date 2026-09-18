@@ -25,7 +25,7 @@ import { getMindMapHierarchy } from "../lib/mindMapGraph";
 import MobileQuickActions from "./MobileQuickActions";
 import { clampDrawingSize, DRAWING_SIZE_RANGES, eraseDrawingPaths, readDrawingSizes, saveDrawingSizes, type DrawingToolName, type DrawingToolSizes } from "../lib/drawingTools";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "draw" | "erase" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle; eraseRadius?: number; erasePoints?: Vec2[] };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -208,12 +208,13 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
 const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
-export default function CanvasBoard({ board, onChange: onChangeProp, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
+export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), backgroundInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), iosTouchActive = useRef(false), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
+  const draftCheckpointAt = useRef(0);
   const iosTouchFallback = isIOSDevice();
   const boardRef = useRef(board);
   const onChange = (next: BoardState) => {
@@ -674,6 +675,13 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     if (shouldUseIOSNativeTouch(e)) return;
     selectElementAt({ pointerId: e.pointerId, pointerType: e.pointerType, button: e.button, clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, altKey: e.altKey, preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation(), capture: true }, s);
   };
+  const checkpointGestureDraft = (next: BoardState, force = false) => {
+    if (!onDraftChange) return;
+    const now = performance.now();
+    if (!force && now - draftCheckpointAt.current < 180) return;
+    draftCheckpointAt.current = now;
+    onDraftChange(next);
+  };
   const begin = (input: CanvasPointerInput) => {
     const interactionBoard = wheelPending.current ?? board;
     commitWheelViewport();
@@ -708,16 +716,16 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       setTool("select"); return;
     } else if (effectiveTool === "pen" || effectiveTool === "highlighter") {
       const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: effectiveTool === "highlighter" ? palette.highlighter : ink, width: effectiveTool === "highlighter" ? drawingSizes.highlighter : drawingSizes.pen, opacity: effectiveTool === "highlighter" ? .3 : 1 }] };
-      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: input.pointerId, next };
+      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft(next, true);
     } else if (effectiveTool === "eraser") {
       const radius = drawingSizes.eraser / 2, next = eraseDrawingPaths(base, [p], radius);
-      setSelected(null); setEraserCursor(p); setPreview(next); setInputMode("erasing"); gesture.current = { mode: "erase", start: p, screen: p, base, pointer: input.pointerId, next, eraseRadius: radius, erasePoints: [p] };
+      setSelected(null); setEraserCursor(p); setPreview(next); setInputMode("erasing"); gesture.current = { mode: "erase", start: p, screen: p, base, pointer: input.pointerId, next, eraseRadius: radius, erasePoints: [p] }; checkpointGestureDraft(next, true);
     } else if (effectiveTool === "line") {
       const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p, p], color: ink, width: strokeWidth, opacity: 1 }] };
-      setSelected({ kind: "drawings", id }); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "line", start: p, screen: p, base, pointer: input.pointerId, next };
+      setSelected({ kind: "drawings", id }); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "line", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft(next, true);
     } else if (effectiveTool === "rect" || effectiveTool === "ellipse" || effectiveTool === "triangle") {
       const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: effectiveTool, x: p.x, y: p.y, width: 1, height: 1, color: palette.fill }] };
-      setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: input.pointerId, next };
+      setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft(next, true);
     }
     if (input.capture) svg.current?.setPointerCapture(input.pointerId);
   };
@@ -772,6 +780,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     }
     if (g.mode === "shape") next = { ...g.next, shapes: [...g.base.shapes, { ...g.next.shapes.at(-1)!, x: Math.min(p.x, g.start.x), y: Math.min(p.y, g.start.y), width: Math.max(1, Math.abs(dx)), height: Math.max(1, Math.abs(dy)) }] };
     g.next = next; setPreview(next);
+    if (["draw", "erase", "line", "shape"].includes(g.mode)) checkpointGestureDraft(next);
   };
   const move = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (shouldUseIOSNativeTouch(e)) return;
@@ -787,6 +796,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
       g.next = autoLayoutMindMap(g.next, g.target);
     }
     if (!cancel && JSON.stringify(g.base) !== JSON.stringify(g.next)) {
+      if (["draw", "erase", "line", "shape"].includes(g.mode)) checkpointGestureDraft(g.next, true);
       if (g.mode === "pan" && onViewportChange) onViewportChange({ ...boardRef.current, viewport: g.next.viewport });
       else onChange(g.next);
     }
@@ -866,7 +876,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
   const lostPointerCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (shouldUseIOSNativeTouch(e)) return;
     touchPoints.current.delete(e.pointerId);
-    if (gesture.current?.pointer === e.pointerId) finish(true, false);
+    if (gesture.current?.pointer === e.pointerId) {
+      const preserve = ["draw", "erase", "line", "shape"].includes(gesture.current.mode);
+      finish(!preserve, false);
+    }
     if (pinch.current?.pointerIds.includes(e.pointerId)) { pinch.current = null; touchPoints.current.clear(); setPreview(null); setInputMode("idle"); }
   };
   useEffect(() => {
@@ -950,12 +963,17 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onViewportC
     cancelActiveInput();
   }, [tool]);
   useEffect(() => {
-    const cancel = () => cancelActiveInput();
-    const visibility = () => { if (document.visibilityState !== "visible") cancel(); };
-    window.addEventListener("blur", cancel);
-    window.addEventListener("orientationchange", cancel);
+    const preserveOrCancel = () => {
+      const active = gesture.current;
+      if (active && ["draw", "erase", "line", "shape"].includes(active.mode)) finish(false, false);
+      else cancelActiveInput();
+    };
+    const visibility = () => { if (document.visibilityState !== "visible") preserveOrCancel(); };
+    window.addEventListener("blur", preserveOrCancel);
+    window.addEventListener("pagehide", preserveOrCancel);
+    window.addEventListener("orientationchange", preserveOrCancel);
     document.addEventListener("visibilitychange", visibility);
-    return () => { window.removeEventListener("blur", cancel); window.removeEventListener("orientationchange", cancel); document.removeEventListener("visibilitychange", visibility); };
+    return () => { window.removeEventListener("blur", preserveOrCancel); window.removeEventListener("pagehide", preserveOrCancel); window.removeEventListener("orientationchange", preserveOrCancel); document.removeEventListener("visibilitychange", visibility); };
   }, []);
   const duplicate = () => { const editableSelections = selections.filter(selection => !isLocked(selection)); if (!editableSelections.length) return; const next = duplicateSelection(board, editableSelections); setSelections(next.selection); onChange(next.board); };
   const copy = async () => { if (!selections.length) return; await copyCanvasSelection(board, selections); setHasCopy(true); };

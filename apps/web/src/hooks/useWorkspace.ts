@@ -100,6 +100,13 @@ export function useWorkspace(owner: string | null) {
     if (!active) return;
     try {
       const existing = readCache(owner).find(project => project.id === active.id);
+      // CanvasBoard can checkpoint an in-progress pen/eraser gesture directly
+      // into the durable cache. Never replace that newer draft with the last
+      // React-committed board while leaving the canvas or hiding the page.
+      if (existing && existing.board.updatedAt > active.updatedAt && JSON.stringify(existing.board) !== JSON.stringify(active)) {
+        dirty.current = dirty.current || !!existing.pending;
+        return;
+      }
       const accessRole = existing?.accessRole ?? (owner ? "owner" : undefined);
       const shared = existing?.shared ?? (!!existing?.ownerId && existing.ownerId !== owner);
       const changed = !existing?.board || JSON.stringify(existing.board) !== JSON.stringify(active);
@@ -124,6 +131,47 @@ export function useWorkspace(owner: string | null) {
       dirty.current = readCache(owner).some(project => project.pending);
     } catch (err) {
       cacheFailed.current = true;
+      report(err);
+    }
+  }, [owner, report]);
+
+  const checkpointDraft = useCallback((next: BoardState) => {
+    const active = current.current;
+    if (!active || active.id !== next.id) return;
+    try {
+      const normalized = normalizeEditor(next, active);
+      const existing = readCache(owner).find(project => project.id === next.id);
+      if (existing?.accessRole === "viewer" || existing?.cloudOffline) return;
+      const timestamp = new Date().toISOString();
+      const draft = { ...normalized, updatedAt: timestamp };
+      const ownerId = existing?.ownerId ?? owner ?? undefined;
+      const shared = existing?.shared ?? (!!ownerId && ownerId !== owner);
+      const accessRole = existing?.accessRole ?? (shared ? "viewer" : owner ? "owner" : undefined);
+      const snapshot: CachedProject = {
+        ...existing,
+        id: draft.id,
+        title: draft.title,
+        updatedAt: draft.updatedAt,
+        board: draft,
+        thumbnail: createCanvasThumbnail(draft),
+        folderId: folderId.current,
+        pending: !!owner && accessRole !== "viewer",
+        revision: existing?.revision,
+        ownerId,
+        accessRole,
+        shared,
+        cloudOffline: existing?.cloudOffline,
+      };
+      cacheProject(owner, snapshot);
+      cacheFailed.current = false;
+      dirty.current = !!owner || dirty.current;
+      if (alive.current) {
+        upsertSummary(snapshot);
+        setStatus(!owner ? "localSaved" : navigator.onLine ? "pending" : "offline");
+      }
+    } catch (err) {
+      cacheFailed.current = true;
+      if (alive.current) setStatus("saveError");
       report(err);
     }
   }, [owner, report]);
@@ -570,5 +618,5 @@ export function useWorkspace(owner: string | null) {
   // Reading them here keeps the toolbar state aligned with the transaction
   // that was just created, including a create-text/shape commit followed
   // immediately by Undo while a cloud save is still settling.
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, checkpointDraft, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
 }
