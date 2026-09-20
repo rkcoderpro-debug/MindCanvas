@@ -1,0 +1,13 @@
+CHANGED_FILES_V4.5.1.txt
+V4.5.1_PDF_ANNOTATION_VI.md
+apps/web/package.json
+apps/web/public/sw.js
+apps/web/src/App.test.tsx
+apps/web/src/components/AppSidebar.tsx
+apps/web/src/components/DocumentViewer.tsx
+apps/web/src/lib/aiSupport.ts
+apps/web/src/lib/documentAnnotations.test.ts
+apps/web/src/lib/documentAnnotations.ts
+apps/web/src/lib/i18n.tsx
+apps/web/src/styles.css
+package-lock.json

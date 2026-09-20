@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Eraser, FileSpreadsheet, FileText, Maximize2, Minimize2, PenLine, RotateCcw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eraser, FileSpreadsheet, FileText, Highlighter, Maximize2, Minimize2, PenLine, RotateCcw, RotateCw, X } from "lucide-react";
 import type { UploadedDocument, DocumentKind } from "../lib/documentStore";
 import { useLanguage } from "../lib/i18n";
 import { PDFDocument, rgb } from "pdf-lib";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
+import { annotationMapsEqual, cloneAnnotationMap, eraseAnnotationStrokes, type AnnotationStroke, type AnnotationTool } from "../lib/documentAnnotations";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type Point = { x: number; y: number };
-type Stroke = { points: Point[]; color: string; width: number };
+type Stroke = AnnotationStroke;
+type AnnotationMode = AnnotationTool | "eraser";
+type ActiveStroke = Stroke & { page: number };
 
 type Props = { source: Source; embedded?: boolean; onClose?: () => void };
 
@@ -89,20 +92,31 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
   const [error, setError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [drawing, setDrawing] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState<AnnotationMode>("pen");
   const [color, setColor] = useState("#2563eb");
   const [width, setWidth] = useState(3);
+  const [eraserSize, setEraserSize] = useState(20);
   const [strokes, setStrokes] = useState<Record<number, Stroke[]>>({});
+  const [historyRevision, setHistoryRevision] = useState(0);
   const pageCanvas = useRef<HTMLCanvasElement>(null);
   const annotationCanvas = useRef<HTMLCanvasElement>(null);
   const viewer = useRef<HTMLDivElement>(null);
-  const currentStroke = useRef<Stroke | null>(null);
+  const currentStroke = useRef<ActiveStroke | null>(null);
+  const activeEraser = useRef<{ page: number; before: Record<number, Stroke[]>; changed: boolean } | null>(null);
+  const strokesRef = useRef<Record<number, Stroke[]>>({});
+  const historyPast = useRef<Record<number, Stroke[]>[]>([]);
+  const historyFuture = useRef<Record<number, Stroke[]>[]>([]);
+  const eraserCursor = useRef<Point | null>(null);
   const dimensions = useRef<Record<number, { width: number; height: number; pdfWidth: number; pdfHeight: number }>>({});
   const pdfBytes = useMemo(() => kind === "pdf" ? bytesFromDataUrl(source.dataUrl) : null, [kind, source.dataUrl]);
+  strokesRef.current = strokes;
 
   useEffect(() => {
     if (kind !== "pdf" || !pdfBytes) return;
     let alive = true;
-    setLoading(true); setError(""); setPage(1);
+    setLoading(true); setError(""); setPage(1); setPdf(null); setPageCount(0);
+    strokesRef.current = {}; setStrokes({}); historyPast.current = []; historyFuture.current = []; setHistoryRevision(value => value + 1);
+    currentStroke.current = null; activeEraser.current = null; eraserCursor.current = null;
     void import("pdfjs-dist/legacy/build/pdf.mjs").then(module => {
       if (!alive) return;
       // PDF.js 6 no longer silently falls back to a fake worker in the
@@ -134,20 +148,164 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     return () => { alive = false; };
   }, [pdf, page]);
 
+  const drawStroke = (context: CanvasRenderingContext2D, stroke: Stroke) => {
+    if (!stroke.points.length) return;
+    context.save();
+    context.strokeStyle = stroke.color;
+    context.fillStyle = stroke.color;
+    context.globalAlpha = stroke.tool === "highlight" ? 0.34 : 1;
+    context.lineWidth = stroke.width;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    if (stroke.points.length === 1) {
+      context.beginPath();
+      context.arc(stroke.points[0].x, stroke.points[0].y, Math.max(0.5, stroke.width / 2), 0, Math.PI * 2);
+      context.fill();
+    } else {
+      context.beginPath();
+      stroke.points.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+      context.stroke();
+    }
+    context.restore();
+  };
   const redraw = (targetPage = page) => {
     const canvas = annotationCanvas.current; const context = canvas?.getContext("2d"); const size = dimensions.current[targetPage];
     if (!canvas || !context || !size) return;
-    const ratio = window.devicePixelRatio || 1; context.clearRect(0, 0, canvas.width, canvas.height); context.save(); context.scale(ratio, ratio); context.lineCap = "round"; context.lineJoin = "round";
-    for (const stroke of strokes[targetPage] ?? []) { context.strokeStyle = stroke.color; context.lineWidth = stroke.width; context.beginPath(); stroke.points.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)); context.stroke(); }
+    const ratio = window.devicePixelRatio || 1;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.save(); context.scale(ratio, ratio);
+    for (const stroke of strokesRef.current[targetPage] ?? []) drawStroke(context, stroke);
+    const active = currentStroke.current;
+    if (active?.page === targetPage && active.tool !== undefined) drawStroke(context, active);
+    if (annotationMode === "eraser" && targetPage === page && eraserCursor.current) {
+      context.save();
+      context.strokeStyle = "rgba(239, 68, 68, .9)";
+      context.lineWidth = 1 / ratio;
+      context.setLineDash([4 / ratio, 3 / ratio]);
+      context.beginPath();
+      context.arc(eraserCursor.current.x, eraserCursor.current.y, eraserSize / 2, 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
+    }
     context.restore();
   };
-  useEffect(() => { redraw(); }, [strokes, page]);
+  useEffect(() => { redraw(); }, [strokes, page, annotationMode, historyRevision]);
 
-  const beginStroke = (event: React.PointerEvent<HTMLCanvasElement>) => { if (!drawing) return; const rect = event.currentTarget.getBoundingClientRect(); currentStroke.current = { points: [{ x: event.clientX - rect.left, y: event.clientY - rect.top }], color, width }; event.currentTarget.setPointerCapture(event.pointerId); };
-  const moveStroke = (event: React.PointerEvent<HTMLCanvasElement>) => { const stroke = currentStroke.current; if (!stroke) return; const rect = event.currentTarget.getBoundingClientRect(); stroke.points.push({ x: event.clientX - rect.left, y: event.clientY - rect.top }); redraw(); };
-  const finishStroke = () => { const stroke = currentStroke.current; currentStroke.current = null; if (!stroke || stroke.points.length < 2) return; setStrokes(current => ({ ...current, [page]: [...(current[page] ?? []), stroke] })); };
-  const clearPage = () => setStrokes(current => ({ ...current, [page]: [] }));
-  const undoStroke = () => setStrokes(current => ({ ...current, [page]: (current[page] ?? []).slice(0, -1) }));
+  const setStrokesImmediately = (next: Record<number, Stroke[]>) => {
+    strokesRef.current = next;
+    setStrokes(next);
+  };
+  const recordStrokes = (next: Record<number, Stroke[]>) => {
+    if (annotationMapsEqual(strokesRef.current, next)) return;
+    historyPast.current.push(cloneAnnotationMap(strokesRef.current));
+    historyFuture.current = [];
+    setStrokesImmediately(next);
+    setHistoryRevision(value => value + 1);
+  };
+  const pointFromEvent = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  const applyEraser = (point: Point, targetPage: number) => {
+    const active = activeEraser.current;
+    if (!active || active.page !== targetPage) return;
+    const currentPage = strokesRef.current[targetPage] ?? [];
+    const nextPage = eraseAnnotationStrokes(currentPage, point, eraserSize / 2);
+    const next = { ...strokesRef.current, [targetPage]: nextPage };
+    if (annotationMapsEqual(strokesRef.current, next)) return;
+    active.changed = true;
+    setStrokesImmediately(next);
+    redraw(targetPage);
+  };
+  const beginStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing) return;
+    const point = pointFromEvent(event);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    if (annotationMode === "eraser") {
+      activeEraser.current = { page, before: cloneAnnotationMap(strokesRef.current), changed: false };
+      eraserCursor.current = point;
+      applyEraser(point, page);
+      redraw(page);
+      return;
+    }
+    currentStroke.current = { page, points: [point], color, width: annotationMode === "highlight" ? Math.max(10, width * 3) : width, tool: annotationMode };
+    redraw(page);
+  };
+  const moveStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = pointFromEvent(event);
+    if (annotationMode === "eraser" && activeEraser.current) {
+      eraserCursor.current = point;
+      applyEraser(point, activeEraser.current.page);
+      redraw(activeEraser.current.page);
+      return;
+    }
+    const stroke = currentStroke.current;
+    if (!stroke) return;
+    stroke.points.push(point);
+    redraw(stroke.page);
+  };
+  const finishStroke = () => {
+    const stroke = currentStroke.current;
+    currentStroke.current = null;
+    const eraser = activeEraser.current;
+    activeEraser.current = null;
+    eraserCursor.current = null;
+    if (eraser?.changed) {
+      historyPast.current.push(eraser.before);
+      historyFuture.current = [];
+      setHistoryRevision(value => value + 1);
+    }
+    if (stroke && stroke.points.length >= 2) {
+      const committedStroke: Stroke = { points: stroke.points, color: stroke.color, width: stroke.width, tool: stroke.tool };
+      const next = { ...strokesRef.current, [stroke.page]: [...(strokesRef.current[stroke.page] ?? []), committedStroke] };
+      recordStrokes(next);
+    }
+    redraw(page);
+  };
+  const clearPage = () => {
+    const currentPage = strokesRef.current[page] ?? [];
+    if (!currentPage.length) return;
+    recordStrokes({ ...strokesRef.current, [page]: [] });
+  };
+  const undoStroke = () => {
+    const previous = historyPast.current.pop();
+    if (!previous) return;
+    historyFuture.current.push(cloneAnnotationMap(strokesRef.current));
+    setStrokesImmediately(previous);
+    setHistoryRevision(value => value + 1);
+  };
+  const redoStroke = () => {
+    const next = historyFuture.current.pop();
+    if (!next) return;
+    historyPast.current.push(cloneAnnotationMap(strokesRef.current));
+    setStrokesImmediately(next);
+    setHistoryRevision(value => value + 1);
+  };
+  const chooseAnnotationMode = (mode: AnnotationMode) => {
+    setAnnotationMode(mode);
+    if (mode !== "eraser") eraserCursor.current = null;
+    redraw(page);
+  };
+  useEffect(() => {
+    if (!fullscreen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.shiftKey) redoStroke(); else undoStroke();
+      } else if (key === "y") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        redoStroke();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [fullscreen]);
   const exportPdf = async () => {
     if (!pdfBytes) return;
     try {
@@ -157,7 +315,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
         if (!size) continue;
         for (const stroke of pageStrokes) for (let index = 1; index < stroke.points.length; index += 1) {
           const from = stroke.points[index - 1], to = stroke.points[index], [r, g, b] = colorParts(stroke.color);
-          pdfPage.drawLine({ start: { x: from.x / size.width * size.pdfWidth, y: size.pdfHeight - from.y / size.height * size.pdfHeight }, end: { x: to.x / size.width * size.pdfWidth, y: size.pdfHeight - to.y / size.height * size.pdfHeight }, thickness: Math.max(.5, stroke.width / size.width * size.pdfWidth), color: rgb(r, g, b) });
+          pdfPage.drawLine({ start: { x: from.x / size.width * size.pdfWidth, y: size.pdfHeight - from.y / size.height * size.pdfHeight }, end: { x: to.x / size.width * size.pdfWidth, y: size.pdfHeight - to.y / size.height * size.pdfHeight }, thickness: Math.max(.5, stroke.width / size.width * size.pdfWidth), color: rgb(r, g, b), opacity: stroke.tool === "highlight" ? .34 : 1 });
         }
       }
       const savedBytes = await pdfDocument.save();
@@ -185,13 +343,19 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
               </label>
               {drawing && (
                 <>
-                  <input aria-label={t("penColor")} type="color" value={color} onChange={event => setColor(event.target.value)} />
+                  <div className="document-annotation-tools" role="toolbar" aria-label={t("pdfAnnotationTools")}>
+                    <button type="button" className={annotationMode === "pen" ? "active" : ""} aria-pressed={annotationMode === "pen"} title={t("pdfPen")} onClick={() => chooseAnnotationMode("pen")}><PenLine size={14} /><span>{t("pdfPen")}</span></button>
+                    <button type="button" className={annotationMode === "highlight" ? "active" : ""} aria-pressed={annotationMode === "highlight"} title={t("pdfHighlight")} onClick={() => chooseAnnotationMode("highlight")}><Highlighter size={14} /><span>{t("pdfHighlight")}</span></button>
+                    <button type="button" className={annotationMode === "eraser" ? "active" : ""} aria-pressed={annotationMode === "eraser"} title={t("pdfEraser")} onClick={() => chooseAnnotationMode("eraser")}><Eraser size={14} /><span>{t("pdfEraser")}</span></button>
+                  </div>
+                  <input aria-label={t("penColor")} disabled={annotationMode === "eraser"} type="color" value={color} onChange={event => setColor(event.target.value)} />
                   <label className="document-width">
-                    <PenLine size={13} />
-                    <input aria-label={t("penWidth")} type="range" min="1" max="16" value={width} onChange={event => setWidth(Number(event.target.value))} />
+                    {annotationMode === "eraser" ? <Eraser size={13} /> : annotationMode === "highlight" ? <Highlighter size={13} /> : <PenLine size={13} />}
+                    <input aria-label={annotationMode === "eraser" ? t("eraserSize") : t("penWidth")} type="range" min={annotationMode === "eraser" ? 8 : 1} max={annotationMode === "eraser" ? 48 : 16} value={annotationMode === "eraser" ? eraserSize : width} onChange={event => annotationMode === "eraser" ? setEraserSize(Number(event.target.value)) : setWidth(Number(event.target.value))} />
                   </label>
-                  <button title={t("undoDrawing")} onClick={undoStroke}><RotateCcw size={15} /></button>
-                  <button title={t("clearDrawing")} onClick={clearPage}><Eraser size={15} /></button>
+                  <button type="button" title={t("undoDrawing")} disabled={historyRevision >= 0 && !historyPast.current.length} onClick={undoStroke}><RotateCcw size={15} /></button>
+                  <button type="button" title={t("redoDrawing")} disabled={historyRevision >= 0 && !historyFuture.current.length} onClick={redoStroke}><RotateCw size={15} /></button>
+                  <button type="button" title={t("clearDrawing")} disabled={!strokesRef.current[page]?.length} onClick={clearPage}><Eraser size={15} /></button>
                 </>
               )}
               <button className="primary-button" title={t("exportAnnotatedPdf")} onClick={() => void exportPdf()}>
@@ -214,7 +378,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
             <>
               <div className="pdf-page-stack">
                 <canvas ref={pageCanvas} />
-                <canvas ref={annotationCanvas} className="pdf-annotation-canvas" onPointerDown={beginStroke} onPointerMove={moveStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} />
+                <canvas ref={annotationCanvas} className={`pdf-annotation-canvas annotation-${annotationMode}`} onPointerDown={beginStroke} onPointerMove={moveStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { eraserCursor.current = null; redraw(page); }} />
               </div>
               <div className="document-pager">
                 <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}><ChevronLeft size={16} /></button>

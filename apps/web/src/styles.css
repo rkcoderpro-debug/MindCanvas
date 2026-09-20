@@ -3708,6 +3708,11 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .document-viewer-title small { color: var(--muted); font-size: 10px; font-weight: 800; }
 .document-viewer-actions { flex-wrap: wrap; justify-content: flex-end; }
 .document-viewer-actions > button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 11px; }
+.document-annotation-tools { display: inline-flex; align-items: center; gap: 3px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.document-annotation-tools button { display: inline-flex; align-items: center; gap: 4px; min-height: 27px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; }
+.document-annotation-tools button.active, .document-annotation-tools button:hover { color: var(--accent); background: var(--accent-soft); }
+.document-annotation-tools button span { white-space: nowrap; }
+.document-viewer-actions > button:disabled { opacity: .42; cursor: not-allowed; }
 .document-draw-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; cursor: pointer; }
 .document-width { display: inline-flex; align-items: center; gap: 4px; }
 .document-width input { width: 65px; }
@@ -3715,6 +3720,7 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .pdf-page-stack { position: relative; flex: 0 0 auto; box-shadow: 0 8px 24px var(--shadow); background: #fff; line-height: 0; }
 .pdf-page-stack > canvas { display: block; max-width: min(100%, 900px); }
 .pdf-annotation-canvas { position: absolute; inset: 0; z-index: 2; cursor: crosshair; touch-action: none; }
+.pdf-annotation-canvas.annotation-eraser { cursor: none; }
 .document-pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 0; color: var(--muted); font-size: 12px; }
 .document-pager button { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); color: var(--text); }
 .document-pager button:disabled { opacity: .45; }
@@ -3728,4 +3734,4 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .office-sheet-tabs button { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-raised); color: var(--muted); font: inherit; font-size: 11px; white-space: nowrap; }
 .office-sheet-tabs button.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .pptx-slide { display: grid; align-content: center; min-height: 260px; margin: 18px; padding: 40px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(135deg, var(--surface-raised), var(--accent-soft)); box-shadow: 0 8px 24px var(--shadow); font-size: clamp(16px, 2vw, 27px); line-height: 1.45; }
-@media (max-width: 700px) { .document-viewer-header { align-items: flex-start; flex-direction: column; } .document-viewer-actions { width: 100%; justify-content: flex-start; } .document-viewer-embedded { min-height: 390px; } .document-pdf-body { padding: 8px; } .office-html { padding: 10px; } .pptx-slide { margin: 10px; padding: 24px; } }
+@media (max-width: 700px) { .document-viewer-header { align-items: flex-start; flex-direction: column; } .document-viewer-actions { width: 100%; justify-content: flex-start; } .document-annotation-tools button span { display: none; } .document-viewer-embedded { min-height: 390px; } .document-pdf-body { padding: 8px; } .office-html { padding: 10px; } .pptx-slide { margin: 10px; padding: 24px; } }
