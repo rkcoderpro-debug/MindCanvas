@@ -5,6 +5,7 @@ apps/web/src/App.test.tsx
 apps/web/src/App.tsx
 apps/web/src/components/AppSidebar.tsx
 apps/web/src/components/CanvasBoard.tsx
+apps/web/src/components/CanvasBoard.test.tsx
 apps/web/src/components/DocumentViewer.tsx
 apps/web/src/components/FolderManager.tsx
 apps/web/src/components/InteractivePet.tsx
@@ -17,6 +18,7 @@ apps/web/src/lib/canvasViewport.ts
 apps/web/src/lib/documentStore.test.ts
 apps/web/src/lib/documentStore.ts
 apps/web/src/lib/i18n.tsx
+apps/web/src/lib/aiSupport.ts
 apps/web/src/lib/lab.test.ts
 apps/web/src/lib/lab.ts
 apps/web/src/lib/labStorage.test.ts

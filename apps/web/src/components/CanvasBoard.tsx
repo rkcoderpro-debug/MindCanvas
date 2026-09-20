@@ -17,7 +17,7 @@ import { copyCanvasSelection, hasCanvasClipboard, readCanvasSelection, readClipb
 import { getDocumentSource } from "../lib/supabase";
 import { selectionRevision, type SelectionAiResult } from "../lib/api";
 import Dialog from "./Dialog";
-import { MAX_CANVAS_SCALE, MIN_CANVAS_SCALE, autoPanViewportDelta, panViewport, readWheelDelta, wheelPanDelta, zoomViewportAtPoint } from "../lib/canvasViewport";
+import { autoPanViewportDelta, panViewport, readWheelDelta, wheelPanDelta, zoomViewportAtFactor, zoomViewportAtPoint } from "../lib/canvasViewport";
 import type { ToolbarPosition } from "../lib/editorPreferences";
 import { CANVAS_TOOL_IDS } from "../lib/toolbarPreferences";
 import { DEFAULT_CANVAS_TOUCH_SETTINGS, isIOSDevice, pinchScale, readCanvasTouchSettings, saveCanvasTouchSettings, type CanvasInputMode } from "../lib/canvasInput";
@@ -1033,7 +1033,25 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     try { const source = await getDocumentSource({ documentId }); setSourceView({ url: source.url, name: source.name, kind: source.kind, page }); }
     catch { setSourceError(t("sourceError")); }
   };
-  const zoom = (factor: number) => { commitWheelViewport(); onChange({ ...board, viewport: { ...board.viewport, scale: clamp(board.viewport.scale * factor, MIN_CANVAS_SCALE, MAX_CANVAS_SCALE) } }); };
+  const visibleCanvasCenter = () => {
+    const frameRect = frame.current?.getBoundingClientRect();
+    const canvasRect = svg.current?.getBoundingClientRect();
+    if (!frameRect) return { x: 0, y: 0 };
+    if (!canvasRect) return { x: frameRect.width / 2, y: frameRect.height / 2 };
+    return { x: canvasRect.left - frameRect.left + canvasRect.width / 2, y: canvasRect.top - frameRect.top + canvasRect.height / 2 };
+  };
+  const zoom = (factor: number) => {
+    commitWheelViewport();
+    const source = boardRef.current;
+    const viewport = zoomViewportAtFactor(source.viewport, factor, visibleCanvasCenter());
+    onChange({ ...source, viewport });
+  };
+  const resetZoom = () => {
+    commitWheelViewport();
+    const source = boardRef.current;
+    const viewport = zoomViewportAtFactor(source.viewport, 1 / source.viewport.scale, visibleCanvasCenter());
+    onChange({ ...source, viewport });
+  };
   const addNode = () => {
     const parent = selected?.kind === "nodes" ? board.nodes.find(n => n.id === selected.id) : undefined;
     const id = crypto.randomUUID(), p = parent ? { x: parent.x + parent.width + 90, y: parent.y + 20 } : point((svg.current?.getBoundingClientRect().left ?? 0) + 250, (svg.current?.getBoundingClientRect().top ?? 0) + 180);
@@ -1085,9 +1103,15 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     // available even when the pointer is over an SVG foreignObject.
     const el = frame.current; if (!el) return;
     const wheel = (e: WheelEvent) => {
-      if (editRef.current || gesture.current || pinch.current) return;
+      const zoomGesture = e.ctrlKey || e.metaKey;
+      if (editRef.current || gesture.current || pinch.current) { if (zoomGesture) e.preventDefault(); return; }
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest(".drawing-toolbar, .drawing-size-control, .mobile-quick-actions, .canvas-navigator, .zoom-control, .inspector-toggle, .canvas-fullscreen-toggle, .canvas-media video, .canvas-media audio, .canvas-embed-body")) return;
+      const controlTarget = target?.closest(".drawing-toolbar, .drawing-size-control, .mobile-quick-actions, .canvas-navigator, .zoom-control, .inspector-toggle, .canvas-fullscreen-toggle, .canvas-media video, .canvas-media audio");
+      if (controlTarget && !zoomGesture) return;
+      // A regular wheel over an embedded document/media belongs to that
+      // viewer. Ctrl/⌘+wheel is intentionally handled by the canvas, however,
+      // so the browser never zooms the entire page while the pointer is here.
+      if (!zoomGesture && target?.closest(".canvas-embed-body")) return;
       const normalized = readWheelDelta(e);
       if (normalized.x === 0 && normalized.y === 0) return;
       e.preventDefault();
@@ -1096,7 +1120,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       const rect = el.getBoundingClientRect();
       const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       const pan = wheelPanDelta(normalized, e.altKey);
-      const viewport = e.ctrlKey || e.metaKey
+      const viewport = zoomGesture
         ? zoomViewportAtPoint(currentViewport, normalized.y, anchor)
         : panViewport(currentViewport, -pan.x, -pan.y);
       wheelPending.current = { ...source, viewport };
@@ -1348,7 +1372,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
           {mindMapLayoutSummary[side].length ? mindMapLayoutSummary[side].map(branch => <div className="mind-map-branch-group" key={branch.rootId}><strong>{branch.rootLabel}</strong><ul>{branch.nodeLabels.map((label, index) => <li key={`${branch.rootId}-${index}`} title={label}>{label}</li>)}</ul></div>) : <small className="mind-map-no-branch">{t("mindMapNoBranches")}</small>}
         </section>)}</div>}
       </aside>}
-      <div className={`zoom-control ${showMobileZoomControls ? "mobile-zoom-visible" : "mobile-zoom-hidden"}`}><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={() => onChange({ ...board, viewport: { x: 0, y: 0, scale: 1 } })}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
+      <div className={`zoom-control ${showMobileZoomControls ? "mobile-zoom-visible" : "mobile-zoom-hidden"}`}><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={resetZoom}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
     {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
       <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={backgroundPattern === option ? "active" : ""} aria-pressed={backgroundPattern === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div><input ref={backgroundInput} hidden type="file" accept="image/*,video/*,.mov,.m4v,.webm" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void addBackgroundFile(file); }}/><div className="canvas-background-media-control">{backgroundMedia ? <><div className="canvas-background-file"><span className={`background-media-icon ${backgroundMedia.kind}`}>{backgroundMedia.kind === "video" ? <Film size={14}/> : <ImagePlus size={14}/>}</span><span title={backgroundMedia.name}>{backgroundMedia.name || t(backgroundMedia.kind === "video" ? "video" : "image")}</span></div><button type="button" className="icon-button" aria-label={t("clearCanvasBackground")} title={t("clearCanvasBackground")} onClick={() => onChange({ ...board, background: "dots" })}><Trash2 size={15}/></button></> : <button type="button" className="secondary-button" onClick={openBackgroundPicker}><ImagePlus size={15}/>{t("uploadCanvasBackground")}</button>}{backgroundMedia && <button type="button" className="secondary-button" onClick={openBackgroundPicker}><ImagePlus size={15}/>{t("replace")}</button>}<small className="field-hint">{canUseCanvasBackground ? t("canvasBackgroundHint") : t("backgroundProOnly")}</small></div>{backgroundMedia && <div className="canvas-background-adjustments"><label>{t("backgroundMediaOpacity")}<input type="range" min=".1" max="1" step=".05" value={backgroundMedia.opacity ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, opacity: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBlur")}<input type="range" min="0" max="24" step="1" value={backgroundMedia.blur ?? 0} onChange={event => onChange({ ...board, background: { ...backgroundMedia, blur: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBrightness")}<input type="range" min=".5" max="1.5" step=".05" value={backgroundMedia.brightness ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, brightness: Number(event.target.value) } })}/></label><label>{t("backgroundMediaFit")}<select value={backgroundMedia.fit ?? "cover"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, fit: event.target.value as "cover" | "contain" } })}><option value="cover">{t("backgroundFitCover")}</option><option value="contain">{t("backgroundFitContain")}</option></select></label><label>{t("backgroundMediaPosition")}<select value={backgroundMedia.position ?? "center"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, position: event.target.value } })}><option value="center">{t("center")}</option><option value="top">{t("alignTop")}</option><option value="right">{t("alignRight")}</option><option value="bottom">{t("alignBottom")}</option><option value="left">{t("alignLeft")}</option></select></label></div>}</section>

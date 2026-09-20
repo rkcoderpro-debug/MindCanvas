@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Eraser, FileSpreadsheet, FileText,
 import type { UploadedDocument, DocumentKind } from "../lib/documentStore";
 import { useLanguage } from "../lib/i18n";
 import { PDFDocument, rgb } from "pdf-lib";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type Point = { x: number; y: number };
@@ -104,7 +105,13 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     setLoading(true); setError(""); setPage(1);
     void import("pdfjs-dist/legacy/build/pdf.mjs").then(module => {
       if (!alive) return;
-      return module.getDocument({ data: pdfBytes, disableWorker: true } as any).promise.then((document) => { if (alive) { setPdf(document); setPageCount(document.numPages); } });
+      // PDF.js 6 no longer silently falls back to a fake worker in the
+      // browser. Point it at Vite's emitted worker asset before opening the
+      // document so embedded and manager viewers work in production builds.
+      module.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      // Pass a copy because the worker may transfer (and detach) the input
+      // buffer; exportPdf still needs the original bytes later.
+      return module.getDocument({ data: pdfBytes.slice() }).promise.then((document) => { if (alive) { setPdf(document); setPageCount(document.numPages); } });
     }).catch((cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : "Không thể mở PDF."); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [kind, pdfBytes]);

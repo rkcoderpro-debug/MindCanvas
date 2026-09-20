@@ -306,6 +306,35 @@ describe("Canvas interactions", () => {
       expect(current.viewport).toMatchObject({ x: -10, y: 0 });
     } finally { vi.useRealTimers(); }
   });
+  it("keeps Ctrl plus wheel inside the canvas and zooms around the pointer", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => root.render(<Harness initial={blankBoard()}/>));
+      const frame = host.querySelector(".editor-frame")!;
+      const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 120, clientY: 90, deltaY: -80, deltaMode: 0, ctrlKey: true });
+      await act(async () => frame.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(true);
+      await act(async () => { vi.advanceTimersByTime(140); });
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(current.viewport.scale).toBeGreaterThan(1);
+      expect(current.viewport.x).toBeLessThan(0);
+      expect(current.viewport.y).toBeLessThan(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it("centers plus/minus and reset zoom on the visible canvas", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const frame = host.querySelector(".editor-frame")!;
+    const svg = host.querySelector("svg.canvas-svg")!;
+    const rect = { left: 10, top: 20, width: 800, height: 600, right: 810, bottom: 620, x: 10, y: 20, toJSON: () => ({}) };
+    Object.defineProperty(frame, "getBoundingClientRect", { configurable: true, value: () => rect });
+    Object.defineProperty(svg, "getBoundingClientRect", { configurable: true, value: () => rect });
+    await act(async () => (host.querySelector('[aria-label="Phóng to"]') as HTMLButtonElement).click());
+    expect(current.viewport.scale).toBeCloseTo(1.1);
+    expect(current.viewport.x).toBeCloseTo(-40);
+    expect(current.viewport.y).toBeCloseTo(-30);
+    await act(async () => (host.querySelector('[aria-label="Đặt lại góc nhìn"]') as HTMLButtonElement).click());
+    expect(current.viewport).toMatchObject({ scale: 1, x: 0, y: 0 });
+  });
   it("shows the connector source and pulses both endpoints after a connection", async () => {
     const b = { ...blankBoard(), nodes: [
       { id: "source", label: "Source", x: 20, y: 40, width: 190, height: 76 },

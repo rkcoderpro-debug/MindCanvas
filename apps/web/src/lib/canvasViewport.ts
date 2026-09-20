@@ -66,3 +66,13 @@ export function zoomViewportAtPoint(viewport: CanvasViewport, deltaY: number, an
   const worldY = (anchor.y - viewport.y) / viewport.scale;
   return { scale, x: anchor.x - worldX * scale, y: anchor.y - worldY * scale };
 }
+
+/** Zoom by an explicit multiplier while keeping the world under the anchor fixed. */
+export function zoomViewportAtFactor(viewport: CanvasViewport, factor: number, anchor: ViewportAnchor): CanvasViewport {
+  if (!Number.isFinite(factor) || factor <= 0) return viewport;
+  const scale = Math.min(MAX_CANVAS_SCALE, Math.max(MIN_CANVAS_SCALE, viewport.scale * factor));
+  if (scale === viewport.scale) return viewport;
+  const worldX = (anchor.x - viewport.x) / viewport.scale;
+  const worldY = (anchor.y - viewport.y) / viewport.scale;
+  return { scale, x: anchor.x - worldX * scale, y: anchor.y - worldY * scale };
+}

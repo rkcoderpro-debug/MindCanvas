@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, readWheelDelta, wheelPanDelta, zoomViewportAtPoint } from "./canvasViewport";
+import { MIN_CANVAS_SCALE, autoPanViewportDelta, normalizeWheelDelta, panViewport, readWheelDelta, wheelPanDelta, zoomViewportAtFactor, zoomViewportAtPoint } from "./canvasViewport";
 
 describe("canvas viewport wheel helpers", () => {
   it("normalizes line and page wheel units", () => {
@@ -38,6 +38,17 @@ describe("canvas viewport wheel helpers", () => {
     const worldBefore = { x: (anchor.x - before.x) / before.scale, y: (anchor.y - before.y) / before.scale };
     const worldAfter = { x: (anchor.x - after.x) / after.scale, y: (anchor.y - after.y) / after.scale };
     expect(after.scale).toBeGreaterThan(1);
+    expect(worldAfter.x).toBeCloseTo(worldBefore.x);
+    expect(worldAfter.y).toBeCloseTo(worldBefore.y);
+  });
+
+  it("keeps the visible canvas center fixed for button zoom", () => {
+    const before = { x: -80, y: 45, scale: 1.25 };
+    const anchor = { x: 420, y: 280 };
+    const after = zoomViewportAtFactor(before, 1.1, anchor);
+    const worldBefore = { x: (anchor.x - before.x) / before.scale, y: (anchor.y - before.y) / before.scale };
+    const worldAfter = { x: (anchor.x - after.x) / after.scale, y: (anchor.y - after.y) / after.scale };
+    expect(after.scale).toBeCloseTo(1.375);
     expect(worldAfter.x).toBeCloseTo(worldBefore.x);
     expect(worldAfter.y).toBeCloseTo(worldBefore.y);
   });
