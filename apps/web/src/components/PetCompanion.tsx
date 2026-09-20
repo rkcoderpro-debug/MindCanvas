@@ -1,3 +1,4 @@
+import { usePetPosition } from "../lib/usePetPosition";
 import InteractivePet from "./InteractivePet";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Heart, Sparkles, X } from "lucide-react";
@@ -61,7 +62,8 @@ function moodCopy(mood: PetMood, language: "vi" | "en") {
   return COPY[language][mood];
 }
 
-export default function PetCompanion({ owner, active, activityType = "workspace" }: { owner: string | null; active: boolean; activityType?: PetActivityType }) {
+export default function PetCompanion({ owner, active, visible = true, activityType = "workspace" }: { visible?: boolean; owner: string | null; active: boolean; activityType?: PetActivityType }) {
+  const floating = usePetPosition();
   const { language } = useLanguage();
   const copy = COPY[language];
   const [pet, setPet] = useState<PetState>(() => readPet(owner));
@@ -158,7 +160,7 @@ export default function PetCompanion({ owner, active, activityType = "workspace"
     else setNameDraft(pet.name);
   };
 
-  return <aside className={`pet-companion ${expanded ? "is-expanded" : ""}`} aria-label={copy.label}>
+  return <aside {...floating} hidden={!visible} className={`pet-companion ${expanded ? "is-expanded" : ""}`} aria-label={copy.label}>
     {expanded && <section className="pet-companion-card" aria-label={copy.label}>
       <header>
         <div><strong>{pet.name}</strong><small>{moodCopy(mood, language)}</small></div>

@@ -59,7 +59,7 @@ export type LabPromptInput = {
 export type LabPlanPromptInput = LabPromptInput;
 
 const LAB_STORAGE_PREFIX = "mindcanvas:labs:v1:";
-const MAX_LABS = 40;
+
 const MAX_SOURCE_TEXT = 120_000;
 const MAX_PROMPT = 200_000;
 const MAX_HTML = 1_500_000;
@@ -185,7 +185,7 @@ export function buildLabPlanPrompt(input: LabPlanPromptInput): string {
     source,
     "Analyze only the concepts needed for the requested simulation. Do not invent scientific facts or measurements that are not supported by the source; label estimates and assumptions clearly.",
     "First reason through the learning objective, common misconceptions, scientific facts, equations, signs, units, variables, numerical ranges, assumptions and model limits needed for the requested simulation. Then implement the result directly.",
-    "Return exactly one complete HTML document only. Do not return a plan, JSON, Markdown fences, commentary, links or a generic summary. Inline all CSS and JavaScript in that one file so the user can save it as an .html file and upload it to MindCanvas Lab.",
+    "Create a real downloadable UTF-8 file named mindcanvas-lab.html using your file creation or artifact tools. Attach the file or provide its working download link. Do not merely paste HTML into the chat when file creation is available. Never invent a download link. If this environment cannot create downloadable files, briefly say so and return the complete HTML for the user to save. Inline all CSS and JavaScript in the single file. Do not return a plan or JSON.",
     "The HTML must include a clear scene and UI layout; every user interaction and state transition; visual elements, labels, vectors and charts where relevant; responsive desktop/mobile behavior; accessibility; a reset control; labeled controls with units; explanations, equations and assumptions; and a visible note for every scientific simplification.",
     "Include a deterministic test plan and a small in-page validation/test panel or callable test routine. The tests must have IDs, initial conditions, exact user actions or input values, expected visual or numerical results, tolerance where relevant, boundary cases, reset behavior, pause/step behavior and invalid-input handling. Report each test as passed, failed or not run so the simulation can be checked after it is built.",
     "The final file must be self-contained and work inside an iframe with sandbox=\"allow-scripts\" and no same-origin permission. Use only inline CSS and JavaScript plus native SVG or Canvas 2D. Do not load fonts, images, scripts, modules, data or libraries from the network. Do not use fetch, XMLHttpRequest, WebSocket, external URLs, iframes, object/embed tags, forms or top-level navigation.",
@@ -257,10 +257,10 @@ function safeId(): string {
   try { return crypto.randomUUID(); } catch { return `lab-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
 }
 
-function cleanLab(value: unknown): LabProject | null {
+export function cleanLab(value: unknown): LabProject | null {
   if (!isObject(value)) return null;
   if (typeof value.id !== "string" || typeof value.title !== "string" || !isSubject(value.subject)) return null;
-  if (typeof value.request !== "string" || value.request.length > MAX_PROMPT) return null;
+  if (typeof value.request !== "string") return null;
   const design = value.design === null || value.design === undefined ? null : (() => {
     try { return parseLabDesign(JSON.stringify(value.design)); } catch { return null; }
   })();
@@ -281,7 +281,7 @@ function cleanLab(value: unknown): LabProject | null {
     programPrompt: typeof value.programPrompt === "string"
       ? value.programPrompt.slice(0, MAX_PROMPT)
       : typeof value.planPrompt === "string" ? value.planPrompt.slice(0, MAX_PROMPT) : "",
-    programHtml: typeof value.programHtml === "string" ? value.programHtml.slice(0, MAX_HTML) : "",
+    programHtml: typeof value.programHtml === "string" ? value.programHtml : "",
     createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
     systemDemo: value.systemDemo === true,
@@ -316,8 +316,8 @@ export function saveLab(owner: string | null, input: Omit<LabProject, "createdAt
     updatedAt: now,
     systemDemo: false,
   };
-  const next = [lab, ...current.filter(item => item.id !== lab.id)].slice(0, MAX_LABS);
-  try { localStorage.setItem(storageKey(owner), JSON.stringify(next)); } catch { /* local persistence is best effort */ }
+  const next = [lab, ...current.filter(item => item.id !== lab.id)];
+  localStorage.setItem(storageKey(owner), JSON.stringify(next));
   return lab;
 }
 
@@ -328,7 +328,7 @@ export function createLab(owner: string | null, input: Omit<LabProject, "id" | "
 export function deleteLab(owner: string | null, id: string): void {
   if (id === STARTER_LAB_ID) return;
   const next = readLabs(owner).filter(item => !item.systemDemo && item.id !== id);
-  try { localStorage.setItem(storageKey(owner), JSON.stringify(next)); } catch { /* local persistence is best effort */ }
+  localStorage.setItem(storageKey(owner), JSON.stringify(next));
 }
 
 export const LAB_LIMITS = { maxSourceText: MAX_SOURCE_TEXT, maxHtml: MAX_HTML } as const;

@@ -3665,3 +3665,30 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .learning-music-launcher { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: var(--surface-raised); font-size: 12px; font-weight: 750; }
 .learning-music-launcher:hover, .learning-music-launcher.active { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
 @media (max-width: 620px) { .learning-hub-header-actions { gap: 6px; } .learning-music-launcher { min-height: 34px; padding-inline: 9px; } .learning-music-launcher span { display: none; } }
+
+/* v5.4: folder-first navigation and persistent resize affordance. */
+.workspace-nav-row { display:flex; min-width:0; align-items:center; }
+.workspace-nav-row > button:first-child { flex:1; min-width:0; }
+.workspace-nav-row .workspace-expand { flex:0 0 30px; padding:8px 4px; justify-content:center; }
+.workspace-subnav { display:grid; gap:3px; margin-left:12px; padding-left:5px; border-left:1px solid var(--line); }
+.workspace-subnav button { padding-block:7px; font-size:12px; }
+.sidebar .folder-list { flex:1 1 auto; min-height:70px; max-height:none; align-content:start; }
+.sidebar > .nav-list, .sidebar > .sidebar-bottom, .sidebar > .sidebar-header, .sidebar > .section-label, .sidebar > .manage-folders-button { flex-shrink:0; }
+.sidebar-resize-handle { right:0; width:12px; }
+.sidebar-resize-handle::after { top:8px; bottom:8px; left:8px; width:3px; background:color-mix(in srgb,var(--accent) 65%,var(--line)); }
+.sidebar-collapsed .workspace-nav-row { flex-wrap:wrap; }
+.sidebar-collapsed .workspace-subnav { margin-left:0; padding:0; }
+.lab-footer-actions { position:sticky; bottom:0; z-index:12; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-raised); box-shadow:0 -6px 18px var(--shadow-soft); }
+.lab-footer-actions > span { margin-right:auto; color:var(--muted); font-size:12px; }
+.lab-runner-toolbar button { display:inline-flex; align-items:center; gap:5px; padding:7px; border-radius:8px; color:var(--text); background:var(--surface-raised); }
+.pet-companion[hidden] { display:none; }
+.pet-interaction-area { touch-action:none; cursor:grab; user-select:none; }
+.pet-interaction-area:active { cursor:grabbing; }
+.pet-companion-card { max-height:calc(100dvh - 190px); overflow-y:auto; }
+.interactive-pet .pet-head { transition:transform .24s ease-out; }
+.interactive-pet .pet-pupils { transition:transform .18s ease-out; }
+.interactive-pet[data-kind="dog"] .pet-ear-left, .interactive-pet[data-kind="dog"] .pet-ear-right { transform-box:fill-box; transform-origin:top center; animation:pet-ear-sway 4s ease-in-out infinite; }
+.interactive-pet[data-kind="dog"] .pet-ear-right { animation-delay:-2s; }
+@keyframes pet-ear-sway { 0%,80%,100% { transform:rotate(0deg); } 88% { transform:rotate(5deg); } 94% { transform:rotate(-3deg); } }
+@media (prefers-reduced-motion:reduce) { .interactive-pet *, .interactive-pet[data-kind="dog"] .pet-ear-left, .interactive-pet[data-kind="dog"] .pet-ear-right { animation:none !important; transition:none !important; } }
+@media (max-width:620px) { .sidebar.mobile-open .folder-list { max-height:none; min-height:90px; } .lab-footer-actions { bottom:calc(60px + env(safe-area-inset-bottom)); } }

@@ -11,18 +11,13 @@ export function normalizeWheelDelta(deltaX: number, deltaY: number, deltaMode: n
   return { x: deltaX * unit, y: deltaY * unit };
 }
 
-/**
- * Read both modern and legacy wheel fields. A few laptop/browser combinations
- * expose a precision touchpad gesture through wheelDeltaX/wheelDelta while
- * leaving one of deltaX/deltaY at zero. Keeping the fallback here prevents
- * the canvas from losing a horizontal or diagonal part of the gesture.
- */
-export function readWheelDelta(event: Pick<WheelEvent, "deltaX" | "deltaY" | "deltaMode"> & { wheelDelta?: number; wheelDeltaX?: number }) {
+/** Prefer standard deltas, including zero; use legacy fields only when absent. */
+export function readWheelDelta(event: Partial<Pick<WheelEvent, "deltaX" | "deltaY">> & Pick<WheelEvent, "deltaMode"> & { wheelDelta?: number; wheelDeltaX?: number }) {
   const legacyX = Number.isFinite(event.wheelDeltaX) ? -(event.wheelDeltaX ?? 0) : 0;
   const legacyY = Number.isFinite(event.wheelDelta) ? -(event.wheelDelta ?? 0) : 0;
-  const deltaX = Number.isFinite(event.deltaX) && event.deltaX !== 0 ? event.deltaX : legacyX;
-  const deltaY = Number.isFinite(event.deltaY) && event.deltaY !== 0 ? event.deltaY : legacyY;
-  return normalizeWheelDelta(deltaX, deltaY, event.deltaMode);
+  const deltaX = Number.isFinite(event.deltaX) ? event.deltaX : legacyX;
+  const deltaY = Number.isFinite(event.deltaY) ? event.deltaY : legacyY;
+  return normalizeWheelDelta(deltaX ?? 0, deltaY ?? 0, event.deltaMode);
 }
 
 /**

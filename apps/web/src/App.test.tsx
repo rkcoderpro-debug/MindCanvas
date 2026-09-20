@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { IDBFactory } from "fake-indexeddb";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,7 @@ import { cacheProject } from "./lib/projectStore";
 import { blankBoard } from "./lib/board";
 let root: Root, host: HTMLDivElement;
 beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear();
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
@@ -14,6 +16,13 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace UI", () => {
+  it("starts new users at 280px and keeps workspace shortcuts collapsed", async () => {
+    await act(async () => root.render(<App/>));
+    expect(localStorage.getItem("mindcanvas:sidebar-width")).toBe("280");
+    expect(host.querySelector(".workspace-subnav")).toBeNull();
+    await act(async () => (host.querySelector(".workspace-expand") as HTMLButtonElement).click());
+    expect(host.querySelector(".workspace-subnav")?.textContent).toContain("Thùng rác");
+  });
   it("favorites, duplicates, trashes and restores real projects from cards", async()=>{
     const board=blankBoard("Keep me");cacheProject(null,{id:board.id,title:board.title,board,folderId:null,updatedAt:board.updatedAt,pending:false});
     await act(async()=>root.render(<App/>));
@@ -25,6 +34,7 @@ describe("Workspace UI", () => {
     expect(host.querySelectorAll(".project-card")).toHaveLength(2);
     await act(async()=>menu().click());await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Đưa vào thùng rác")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
     expect(host.querySelectorAll(".project-card")).toHaveLength(1);
+    await act(async () => (host.querySelector(".workspace-expand") as HTMLButtonElement).click());
     await act(async()=>[...host.querySelectorAll("nav button")].find(b=>b.textContent==="Thùng rác")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
     expect(host.querySelector(".project-card")?.textContent).toContain("Keep me");
     await act(async()=>menu().click());await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Khôi phục")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
@@ -60,6 +70,7 @@ describe("Workspace UI", () => {
     const english = [...host.querySelectorAll<HTMLButtonElement>(".language-popover button")].find(button => button.textContent === "English")!;
     await act(async () => english.click());
     expect(document.documentElement.lang).toBe("en"); expect(localStorage.getItem("mindcanvas:language")).toBe("en");
+    await act(async () => (host.querySelector(".workspace-expand") as HTMLButtonElement).click());
     expect(host.textContent).toContain("Recent files"); expect(host.textContent).toContain("Ghi chú của tôi");
   });
   it("offers free and Plus grouped themes and applies a cool dark palette immediately", async () => {
@@ -134,10 +145,12 @@ describe("Workspace UI", () => {
     const labButton = [...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(button => button.textContent?.includes("Lab"))!;
     await act(async () => labButton.click());
     expect(host.querySelector(".lab-page")).not.toBeNull();
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect((host.querySelector(".lab-footer-actions button") as HTMLButtonElement).disabled).toBe(false); });
     const request = [...host.querySelectorAll<HTMLTextAreaElement>(".lab-step-card")][0].querySelectorAll("textarea")[1];
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(request, "Cho điều chỉnh vận tốc và xem quỹ đạo."); request.dispatchEvent(new Event("input", { bubbles: true })); });
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Tạo prompt HTML")!.click());
     expect(host.textContent).toContain("Prompt yêu cầu AI tạo file HTML");
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect((host.querySelector(".lab-footer-actions button") as HTMLButtonElement).disabled).toBe(false); });
     const html = [...host.querySelectorAll<HTMLTextAreaElement>(".lab-step-card")][1].querySelector("textarea")!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(html, "<html><body><script>document.body.dataset.ready='yes'</script></body></html>"); html.dispatchEvent(new Event("input", { bubbles: true })); });
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Kiểm tra và chạy")!.click());
@@ -160,36 +173,37 @@ describe("Workspace UI", () => {
     expect((shell as HTMLDivElement & { requestFullscreen?: unknown }).requestFullscreen).toBe(requestFullscreen);
     expect(document.fullscreenElement).toBeNull();
     expect((document as Document & { webkitFullscreenElement?: Element | null }).webkitFullscreenElement).toBeFalsy();
-    const fullscreenButton = shell.querySelector(".lab-runner-toolbar button") as HTMLButtonElement;
+    const fullscreenButton = shell.querySelector(".lab-runner-toolbar button[aria-label]") as HTMLButtonElement;
     expect(fullscreenButton?.outerHTML).toContain("aria-label");
     expect(fullscreenButton.disabled).toBe(false);
     expect(fullscreenButton.getAttribute("aria-label")).toBe("Mở mô phỏng toàn màn hình");
     await act(async () => fullscreenButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(shell.querySelector(".lab-runner-toolbar button")?.getAttribute("aria-label")).toBe("Thoát toàn màn hình");
+    expect(shell.querySelector(".lab-runner-toolbar button[aria-label]")?.getAttribute("aria-label")).toBe("Thoát toàn màn hình");
     await act(async () => fullscreenButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
-    expect(shell.querySelector(".lab-runner-toolbar button")?.getAttribute("aria-label")).toBe("Mở mô phỏng toàn màn hình");
+    expect(shell.querySelector(".lab-runner-toolbar button[aria-label]")?.getAttribute("aria-label")).toBe("Mở mô phỏng toàn màn hình");
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(request, ""); request.dispatchEvent(new Event("input", { bubbles: true })); });
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Lưu Lab")!.click());
-    expect(host.textContent).toContain("Đã lưu Lab trên trình duyệt.");
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect(host.textContent).toContain("Đã lưu Lab trên trình duyệt."); });
   });
   it("saves an HTML-only Lab before the source/request section is completed", async () => {
     await import("./components/LabPage");
     await act(async () => root.render(<App/>));
     await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Trung tâm học tập") as HTMLButtonElement).click());
     await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(button => button.textContent?.includes("Lab")) as HTMLButtonElement).click());
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect((host.querySelector(".lab-footer-actions button") as HTMLButtonElement).disabled).toBe(false); });
     const html = [...host.querySelectorAll<HTMLTextAreaElement>(".lab-step-card")][1].querySelector("textarea")!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(html, "<html><body><h1>Lab</h1></body></html>"); html.dispatchEvent(new Event("input", { bubbles: true })); });
     await act(async () => ([...host.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Lưu Lab") as HTMLButtonElement).click());
-    expect(host.textContent).toContain("Đã lưu Lab trên trình duyệt.");
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect(host.textContent).toContain("Đã lưu Lab trên trình duyệt."); });
     expect(host.textContent).not.toContain("Hãy mô tả mô phỏng trước khi tạo prompt.");
   });
   it("opens V4.8.2 quick search and finds text stored inside a canvas", async () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V5.3.0");
+    expect(host.querySelector(".beta")?.textContent).toBe("V5.4.0");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;

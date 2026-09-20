@@ -23,8 +23,8 @@ describe("interactive lab helpers", () => {
     const prompt = buildLabPlanPrompt({ language: "vi", subject: "physics", learnerLevel: "lớp 10", request: "Cho đổi góc bắn và vận tốc rồi xem quỹ đạo.", sourceFileName: "chapter.pdf" });
     expect(prompt).toContain("chapter.pdf");
     expect(prompt).toContain("Cho đổi góc bắn");
-    expect(prompt).toContain("Return exactly one complete HTML document only");
-    expect(prompt).toContain("save it as an .html file");
+    expect(prompt).toContain("Create a real downloadable UTF-8 file");
+    expect(prompt).toContain("mindcanvas-lab.html");
     expect(prompt).toContain("deterministic test plan");
     expect(prompt).toContain("in-page validation/test panel");
     const program = buildLabProgramPrompt({ language: "vi", design });

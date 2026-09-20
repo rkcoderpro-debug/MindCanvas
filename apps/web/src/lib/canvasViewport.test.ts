@@ -9,7 +9,12 @@ describe("canvas viewport wheel helpers", () => {
   });
 
   it("keeps legacy horizontal touchpad deltas when a browser omits deltaX", () => {
-    expect(readWheelDelta({ deltaX: 0, deltaY: 0, deltaMode: 0, wheelDeltaX: -18, wheelDelta: -7 })).toEqual({ x: 18, y: 7 });
+    expect(readWheelDelta({ deltaMode: 0, wheelDeltaX: -18, wheelDelta: -7 })).toEqual({ x: 18, y: 7 });
+  });
+
+  it("preserves real zero deltas instead of injecting legacy motion", () => {
+    expect(readWheelDelta({ deltaX: 7, deltaY: 0, deltaMode: 0, wheelDelta: -120 })).toEqual({ x: 7, y: 0 });
+    expect(readWheelDelta({ deltaX: 0, deltaY: 9, deltaMode: 0, wheelDeltaX: -120 })).toEqual({ x: 0, y: 9 });
   });
 
   it("keeps both touchpad axes and maps Alt wheel input horizontally", () => {

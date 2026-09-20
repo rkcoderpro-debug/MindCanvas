@@ -93,17 +93,20 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   };
   const toggleLabel = isMobile ? (mobileOpen ? t("close") : t("mobileMenu")) : t(sidebarCollapsed ? "sidebarExpand" : "sidebarCollapse");
 
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V5.3.0</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V5.4.0</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
-        <button className={!boardOpen && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, null)} onClick={goHome}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button>
+        <div className="workspace-nav-row"><button className={!boardOpen && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, null)} onClick={goHome}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button><button className="workspace-expand" aria-label={language === "vi" ? "Mở/đóng các mục Workspace" : "Toggle Workspace items"} aria-expanded={workspaceExpanded} onClick={() => setWorkspaceExpanded(value => !value)}>{workspaceExpanded ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}</button></div>
+        {workspaceExpanded && <div className="workspace-subnav">
         <button className={!boardOpen && recent ? "active" : ""} title={t("recent")} onClick={() => goView("recent")}><Clock3 size={18}/><span className="nav-label">{t("recent")}</span><span className="nav-count">{projects.filter(project => !project.deletedAt).length}</span></button>
         <button className={!boardOpen && filter === "__favorites" ? "active" : ""} title={t("favorites")} onClick={() => goView("__favorites")}><Star size={18}/><span className="nav-label">{t("favorites")}</span></button>
         <button className={!boardOpen && filter === "__trash" ? "active" : ""} title={t("trash")} onClick={() => goView("__trash")}><Trash2 size={18}/><span className="nav-label">{t("trash")}</span></button>
+        </div>}
         <button className={!boardOpen && filter === "__shared" ? "active" : ""} title={t("sharedWithMe")} onClick={() => goView("__shared")}><Users size={18}/><span className="nav-label">{t("sharedWithMe")}</span><span className="nav-count">{projects.filter(project => project.shared && !project.deletedAt).length}</span></button>
         <button className={`nav-learning ${!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""}`} aria-current={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "page" : undefined} title={t("learningHub")} onClick={() => goView("__learning")}><BookOpen size={18}/><span className="nav-label">{t("learningHub")}</span></button>
       </nav>
