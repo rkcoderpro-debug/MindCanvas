@@ -33,6 +33,7 @@ import ShareInbox from "./components/ShareInbox";
 import ToolbarCustomization from "./components/ToolbarCustomization";
 import WebBackgroundControls from "./components/WebBackgroundControls";
 import { readWebBackground, saveWebBackground, type WebBackground } from "./lib/webBackground";
+import { listDocuments, saveDocument, type UploadedDocument } from "./lib/documentStore";
 const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 const CanvasBoard = lazy(() => import("./components/CanvasBoard"));
 const FolderManager = lazy(() => import("./components/FolderManager"));
@@ -109,8 +110,14 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const [learningInvite] = useState(() => new URLSearchParams(window.location.search).get("learning_invite") || (() => { try { return localStorage.getItem("mindcanvas:pending-learning-invite") ?? ""; } catch { return ""; } })());
   const [learningInviteState, setLearningInviteState] = useState<"waiting" | "accepting" | "accepted" | "error">("waiting");
   const [learningInviteError, setLearningInviteError] = useState("");
+  const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
+  useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
+  const saveCanvasDocument = async (file: { name: string; mimeType: string; kind: UploadedDocument["kind"]; size: number; dataUrl: string }) => {
+    try { const project = ws.projects.find(item => item.id === ws.board?.id); const saved = await saveDocument(user?.id ?? null, { ...file, folderId: project?.folderId ?? null }); setDocuments(rows => [saved, ...rows.filter(item => item.id !== saved.id)]); }
+    catch (err) { ws.setError(errorMessage(err, "Không thể lưu tài liệu vào thư viện.")); }
+  };
   const home = () => {
     setMobileProjectMenuOpen(false);
     setAiPanelMode("closed");
@@ -327,8 +334,8 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
             {!readOnly && <button type="button" className="mobile-project-ai-action" onClick={() => { setMobileProjectMenuOpen(false); setAiPanelMode("open"); }}><Sparkles size={19}/><span>{t("ai")}</span></button>}
           </div>
         </aside></div>}
-        <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
+        <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds} onDocumentSaved={file => void saveCanvasDocument(file)}/>
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>

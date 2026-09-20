@@ -119,7 +119,7 @@ export type CanvasMedia = {
   locked?: boolean;
 };
 
-export type CanvasEmbedKind = "web" | "youtube" | "video";
+export type CanvasEmbedKind = "web" | "youtube" | "video" | "document";
 
 export type CanvasEmbed = {
   id: string;
@@ -127,6 +127,9 @@ export type CanvasEmbed = {
   /** A validated http(s) URL, normalized to a YouTube embed URL when applicable. */
   url: string;
   title?: string;
+  /** Data URL and original filename metadata for embedded PDF/Office files. */
+  mimeType?: string;
+  fileName?: string;
   x: number;
   y: number;
   width: number;

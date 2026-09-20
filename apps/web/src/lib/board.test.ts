@@ -58,6 +58,14 @@ describe("Editable canvas model", () => {
     expect(() => parseBoard({ ...b, media: [{ ...audio, trimStart: 9, trimEnd: 8 }] })).toThrow("Invalid media trim");
     expect(() => parseBoard({ ...b, embeds: [{ ...embed, url: "javascript:alert(1)" }] })).toThrow("Invalid embed");
   });
+  it("persists supported document embeds while rejecting unsafe or unknown document data", () => {
+    const documentEmbed = { id: "pdf", kind: "document" as const, url: "data:application/pdf;base64,AA==", title: "notes.pdf", fileName: "notes.pdf", mimeType: "application/pdf", x: 20, y: 30, width: 620, height: 520 };
+    const parsed = parseBoard({ ...blankBoard(), embeds: [documentEmbed] });
+    expect(parsed.embeds).toEqual([documentEmbed]);
+    expect(exportCanvasSvg(parsed)).toContain("notes.pdf");
+    expect(() => parseBoard({ ...blankBoard(), embeds: [{ ...documentEmbed, url: "data:text/html;base64,AA==" }] })).toThrow("Invalid embedded document");
+    expect(() => parseBoard({ ...blankBoard(), embeds: [{ ...documentEmbed, kind: "document", url: "https://example.com/file.pdf" }] })).toThrow("Invalid embedded document");
+  });
   it("collapses descendants safely even with cycles", () => { const b = connect(connect(board(), "a", "b"), "b", "a"); b.nodes[0] = { ...b.nodes[0], collapsed: true } as typeof b.nodes[0]; expect([...hiddenNodes(b)]).toEqual(["b"]); });
   it("keeps relation edges out of collapse and selected-branch layout", () => {
     const before = { ...blankBoard(), nodes: [
