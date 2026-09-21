@@ -3,6 +3,7 @@ import { ArrowLeft, BarChart3, Check, Database, LoaderCircle, RefreshCw, Search,
 import { assignAdminPlan, getAdminSummary, getAdminUserDetail, getAdminUsers, type AdminSummary, type AdminUserDetail, type AdminUserSummary } from "../lib/api";
 import { PLAN_CATALOG, formatStorage, formatVnd, usagePercent, type PlanId } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
+import FeatureGuideAdminPanel from "./FeatureGuideAdminPanel";
 
 function dateLabel(value: string | null | undefined) {
   if (!value) return "—";
@@ -15,7 +16,7 @@ function UsageBar({ used, limit, label, unit = "bytes" }: { used: number; limit:
   return <div className="admin-usage-bar"><div><span>{label}</span><small>{format(used)} / {format(limit)}</small></div><span className="admin-progress"><i style={{ width: `${usagePercent(used, limit)}%` }}/></span></div>;
 }
 
-export default function AdminDashboard({ onBack }: { onBack: () => void }) {
+export default function AdminDashboard({ onBack, ownerId, onRunGuide }: { onBack: () => void; ownerId: string | null; onRunGuide?: (guideId: string) => void }) {
   const { t } = useLanguage();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
@@ -88,5 +89,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         <section className="admin-history"><h3>{t("adminHistory")}</h3>{detail.history.length ? <ul>{detail.history.map(item => <li key={item.id}><span><strong>{item.previousPlanId} → {item.newPlanId}</strong><small>{dateLabel(item.createdAt)}</small></span><small>{item.newAddonEnabled ? t("aiManualAddOnActive") : ""}</small></li>)}</ul> : <p>{t("adminNoHistory")}</p>}</section>
       </>}</aside>
     </section>
+    <FeatureGuideAdminPanel ownerId={ownerId} onRunGuide={onRunGuide}/>
   </main>;
 }

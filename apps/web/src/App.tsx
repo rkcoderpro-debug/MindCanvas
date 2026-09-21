@@ -34,6 +34,7 @@ import ToolbarCustomization from "./components/ToolbarCustomization";
 import WebBackgroundControls from "./components/WebBackgroundControls";
 import { readWebBackground, saveWebBackground, type WebBackground } from "./lib/webBackground";
 import { listDocuments, saveDocument, type UploadedDocument } from "./lib/documentStore";
+import FeatureGuideManager from "./components/FeatureGuideManager";
 const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 const CanvasBoard = lazy(() => import("./components/CanvasBoard"));
 const FolderManager = lazy(() => import("./components/FolderManager"));
@@ -45,6 +46,7 @@ const SyncCenter = lazy(() => import("./components/SyncCenter"));
 const PlanUpgradeDialog = lazy(() => import("./components/PlanUpgradeDialog"));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
 const ShareDialog = lazy(() => import("./components/ShareDialog"));
+const FeatureGuidePage = lazy(() => import("./components/FeatureGuidePage"));
 
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
 function AuthenticatedApp() {
@@ -111,6 +113,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const [learningInviteState, setLearningInviteState] = useState<"waiting" | "accepting" | "accepted" | "error">("waiting");
   const [learningInviteError, setLearningInviteError] = useState("");
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
+  const [manualGuideId, setManualGuideId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
   useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
@@ -264,6 +267,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     if (user) void getAccountPlan().then(setAccountPlan).catch(() => {});
   };
   useEffect(() => { saveWebBackground(webBackground); }, [webBackground]);
+  const guideTrigger = ws.board ? "canvas" : filter === "__learning" || filter === "__flashcards" ? "learning" : filter === "__lab" ? "lab" : filter === "__manager" ? "documents" : null;
 
   useEffect(() => { setMobileProjectMenuOpen(false); }, [ws.board?.id, canvasFullscreen]);
   useEffect(() => {
@@ -335,14 +339,15 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
           </div>
         </aside></div>}
         <CanvasBoard key={ws.board.id} board={ws.board} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds} onDocumentSaved={file => void saveCanvasDocument(file)}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={setManualGuideId}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={setManualGuideId}/> : filter === "__manager" ? <FolderManager projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>
     <MusicIsland/>
     <PetCompanion visible={petVisible} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
-    {trialOpen && plusTrial && <PlusTrialPopup trial={plusTrial} working={trialWorking} activated={trialActivated} error={trialError} onActivate={() => void startTrial()} onClose={closeTrial}/>}
-    {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
+    <FeatureGuideManager key={user?.id ?? "guest"} ownerId={user?.id ?? null} trigger={guideTrigger} manualGuideId={manualGuideId} onManualConsumed={() => setManualGuideId(null)} blocked={focusMode || modal !== null}/>
+   {trialOpen && plusTrial && <PlusTrialPopup trial={plusTrial} working={trialWorking} activated={trialActivated} error={trialError} onActivate={() => void startTrial()} onClose={closeTrial}/>}
+   {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
       <label>{t("name")}<input autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button" disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => setFolderAction(null)); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}

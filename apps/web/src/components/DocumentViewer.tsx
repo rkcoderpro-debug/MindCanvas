@@ -5,6 +5,7 @@ import { useLanguage } from "../lib/i18n";
 import { PDFDocument, rgb } from "pdf-lib";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { annotationMapsEqual, cloneAnnotationMap, eraseAnnotationStrokes, type AnnotationStroke, type AnnotationTool } from "../lib/documentAnnotations";
+import { GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type Point = { x: number; y: number };
@@ -85,6 +86,11 @@ function OfficeViewer({ source }: { source: Source }) {
 export default function DocumentViewer({ source, embedded = false, onClose }: Props) {
   const { t } = useLanguage();
   const kind = kindFor(source);
+  useEffect(() => {
+    if (kind !== "pdf") return;
+    const timer = window.setTimeout(() => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "pdf-annotation" } })), 0);
+    return () => window.clearTimeout(timer);
+  }, [kind, source.dataUrl, source.id]);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [pdf, setPdf] = useState<any>(null);
@@ -445,7 +451,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
               </button>
             </>
           )}
-          <button title={fullscreen ? t("exitFullscreen") : t("maximizeCanvas")} onClick={() => void toggleFullscreen()}>
+          <button className="document-fullscreen-toggle" title={fullscreen ? t("exitFullscreen") : t("maximizeCanvas")} onClick={() => void toggleFullscreen()}>
             {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
           {onClose && <button title={t("close")} onClick={onClose}><X size={16} /></button>}

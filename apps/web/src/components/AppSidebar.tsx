@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
 import { sidebarDensityFor } from "../lib/sidebarLayout";
 import SidebarAppearanceControls from "./SidebarAppearanceControls";
 
-export type SidebarView = "recent" | "__favorites" | "__trash" | "__learning" | "__flashcards" | "__shared" | "__lab";
+export type SidebarView = "recent" | "__favorites" | "__trash" | "__learning" | "__flashcards" | "__shared" | "__lab" | "__guides";
 
 type Props = {
   projects: Project[];
@@ -97,7 +97,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V5.5.3</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V5.6.0</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
@@ -109,6 +109,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
         </div>}
         <button className={!boardOpen && filter === "__shared" ? "active" : ""} title={t("sharedWithMe")} onClick={() => goView("__shared")}><Users size={18}/><span className="nav-label">{t("sharedWithMe")}</span><span className="nav-count">{projects.filter(project => project.shared && !project.deletedAt).length}</span></button>
         <button className={`nav-learning ${!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""}`} aria-current={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "page" : undefined} title={t("learningHub")} onClick={() => goView("__learning")}><BookOpen size={18}/><span className="nav-label">{t("learningHub")}</span></button>
+        <button className={!boardOpen && filter === "__guides" ? "active" : ""} aria-current={!boardOpen && filter === "__guides" ? "page" : undefined} title={t("guides")} onClick={() => goView("__guides")}><CircleHelp size={18}/><span className="nav-label">{t("guides")}</span></button>
       </nav>
       {isMobile && showSwipeHint && <div className="mobile-nav-swipe-hint" role="status">{t("swipeForMore")}</div>}
       <div className="section-label"><span>{t("folders")}</span><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>
