@@ -5,6 +5,7 @@ import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
 import { sidebarDensityFor } from "../lib/sidebarLayout";
 import SidebarAppearanceControls from "./SidebarAppearanceControls";
+import { emitGuideAction } from "../lib/featureGuides";
 
 export type SidebarView = "recent" | "__favorites" | "__trash" | "__learning" | "__flashcards" | "__shared" | "__lab" | "__guides";
 
@@ -45,8 +46,8 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 620px)").matches);
   const closeMobile = () => setMobileOpen(false);
   const goHome = () => { closeMobile(); onHome(); };
-  const goView = (view: SidebarView) => { closeMobile(); onOpenView(view); };
-  const openFolder = (folderId: string) => { closeMobile(); onOpenFolder(folderId); };
+  const goView = (view: SidebarView) => { closeMobile(); onOpenView(view); if (view === "recent") emitGuideAction("workspace:recent"); else if (view === "__favorites") emitGuideAction("workspace:favorites"); else if (view === "__trash") emitGuideAction("workspace:trash"); };
+  const openFolder = (folderId: string) => { closeMobile(); onOpenFolder(folderId); emitGuideAction("workspace:folder", folderId); };
   const handleDrop = (event: DragEvent, folderId: string | null) => { closeMobile(); onDropProject(event, folderId); };
   const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : sidebarWidth}px` } as CSSProperties;
   const density = sidebarDensityFor(sidebarWidth, sidebarCollapsed);
@@ -97,7 +98,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   return <>
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
-      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V5.7.0</span></span></button>
+      <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">V5.7.1</span></span></button>
         <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
@@ -130,7 +131,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
         })}
         {!folders.length && <small>{t("noFolders")}</small>}
       </div>
-      <button className="manage-folders-button" title={t("manageFolders")} onClick={() => { closeMobile(); onManageFolders(); }}><FolderCog size={17}/><span className="nav-label">{t("manageFolders")}</span></button>
+      <button className="manage-folders-button" title={t("manageFolders")} onClick={() => { closeMobile(); onManageFolders(); emitGuideAction("workspace:folder-manager"); }}><FolderCog size={17}/><span className="nav-label">{t("manageFolders")}</span></button>
       <div className="sidebar-bottom">
       <SidebarAppearanceControls collapsed={sidebarCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange} canUsePremium={canUsePremiumTheme} onLockedTheme={onLockedTheme}/>
         <button title={t("settings")} onClick={() => { closeMobile(); onSettings(); }}><Settings2 size={17}/><span className="nav-label">{t("settings")}</span></button>

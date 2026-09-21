@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, MousePointer2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, MousePointer2, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
-import type { GuideDefinition, GuideStep } from "../lib/featureGuides";
+import { GUIDE_ACTION_EVENT, practiceActionsForGuide, type GuideDefinition, type GuideRequiredAction, type GuideStep, type GuideStepCompletion } from "../lib/featureGuides";
 
 type Box = { left: number; top: number; width: number; height: number };
 type CursorPlacement = { left: number; top: number; angle: number };
 
 type Props = {
   guide: GuideDefinition;
+  currentRoute?: string | null;
   onComplete: () => void;
   onSkip: () => void;
 };
@@ -35,8 +36,6 @@ function cursorPlacement(box: Box): CursorPlacement {
   const half = size / 2;
   const horizontal = clamp(box.left + box.width / 2 - half, 12, Math.max(12, window.innerWidth - size - 12));
   const vertical = clamp(box.top + box.height / 2 - half, 12, Math.max(12, window.innerHeight - size - 12));
-  // Keep the pointer outside the focus ring. Prefer the side with the most
-  // breathing room so the animation never covers the control it describes.
   const spaceAbove = box.top;
   const spaceBelow = window.innerHeight - (box.top + box.height);
   const spaceLeft = box.left;
@@ -48,14 +47,46 @@ function cursorPlacement(box: Box): CursorPlacement {
   return { left: horizontal, top: clamp(box.top - size - gap, 12, Math.max(12, window.innerHeight - size - 12)), angle: -135 };
 }
 
-export default function FeatureGuideOverlay({ guide, onComplete, onSkip }: Props) {
+function actionsForStep(guide: GuideDefinition, step: GuideStep, isPractice: boolean): GuideRequiredAction[] {
+  const completion = step.completion;
+  if (completion?.type === "action" || completion?.type === "manual") return completion.actions ?? [];
+  return isPractice ? practiceActionsForGuide(guide.id) : [];
+}
+
+function completionForStep(step: GuideStep, isPractice: boolean): GuideStepCompletion {
+  if (step.completion) return step.completion;
+  if (isPractice) return { type: "manual", actions: [] };
+  return { type: "click", selector: step.target };
+}
+
+function readInputReady(completion: Extract<GuideStepCompletion, { type: "input" }>) {
+  const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(completion.selector);
+  if (!element) return false;
+  const value = "value" in element ? element.value : "";
+  return value.trim().length >= (completion.minLength ?? 1);
+}
+
+function readStateReady(completion: Extract<GuideStepCompletion, { type: "state" }>) {
+  const element = document.querySelector<HTMLElement>(completion.selector);
+  if (!element) return false;
+  if (!completion.attribute) return true;
+  return element.getAttribute(completion.attribute) === (completion.value ?? "true");
+}
+
+export default function FeatureGuideOverlay({ guide, currentRoute = null, onComplete, onSkip }: Props) {
   const { language, t } = useLanguage();
   const [stepIndex, setStepIndex] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
   const [targetFound, setTargetFound] = useState(false);
-  const [targetMissingFor, setTargetMissingFor] = useState(0);
+  const [targetActivated, setTargetActivated] = useState(false);
+  const [actionNames, setActionNames] = useState<string[]>([]);
+  const actionNamesRef = useRef<string[]>([]);
+  const [readinessTick, setReadinessTick] = useState(0);
   const step = guide.steps[stepIndex] ?? guide.steps[0];
   const isPractice = step.kind === "practice" || !step.target;
+  const completion = completionForStep(step, isPractice);
+  const requiredActions = actionsForStep(guide, step, isPractice);
+  const routeSkipped = Boolean(step.skipWhenRoute && currentRoute === step.skipWhenRoute);
   const title = language === "vi" ? step.titleVi : step.titleEn;
   const body = language === "vi" ? step.bodyVi : step.bodyEn;
 
@@ -63,9 +94,11 @@ export default function FeatureGuideOverlay({ guide, onComplete, onSkip }: Props
     const next = targetBox(findTarget(step));
     setBox(next);
     setTargetFound(Boolean(next));
+    setReadinessTick(value => value + 1);
   }, [step]);
 
   useEffect(() => {
+    setTargetActivated(false);
     measure();
     const interval = window.setInterval(measure, 180);
     const onViewportChange = () => measure();
@@ -79,43 +112,71 @@ export default function FeatureGuideOverlay({ guide, onComplete, onSkip }: Props
   }, [measure]);
 
   useEffect(() => {
-    setTargetMissingFor(0);
-    if (targetFound || isPractice) return;
-    const interval = window.setInterval(() => setTargetMissingFor(value => value + 1), 1000);
-    return () => window.clearInterval(interval);
-  }, [isPractice, stepIndex, targetFound]);
+    const handleGuideAction = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name;
+      if (!name) return;
+      const next = actionNamesRef.current.includes(name) ? actionNamesRef.current : [...actionNamesRef.current, name];
+      actionNamesRef.current = next;
+      setActionNames(next);
+      setReadinessTick(value => value + 1);
+    };
+    window.addEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
+    return () => window.removeEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
+  }, []);
+
+  const actionsReady = requiredActions.length > 0 && requiredActions.every(action => actionNames.includes(action.id));
+  const ready = useMemo(() => {
+    void readinessTick;
+    if (routeSkipped) return true;
+    if (isPractice) return actionsReady || requiredActions.length === 0;
+    if (!targetFound) return false;
+    if (completion.type === "click") return targetActivated;
+    if (completion.type === "input") return readInputReady(completion);
+    if (completion.type === "state") return readStateReady(completion);
+    if (completion.type === "route") return currentRoute === completion.route;
+    if (completion.type === "action") return actionsReady;
+    return completion.actions?.every(action => actionNames.includes(action.id)) ?? true;
+  }, [actionNames, actionsReady, completion, currentRoute, isPractice, readinessTick, requiredActions, routeSkipped, targetActivated, targetFound]);
+
+  const next = useCallback(() => {
+    if (!ready) return;
+    if (stepIndex >= guide.steps.length - 1) onComplete();
+    else setStepIndex(value => value + 1);
+  }, [guide.steps.length, onComplete, ready, stepIndex]);
+  const advanceAfterClick = useCallback(() => {
+    if (stepIndex >= guide.steps.length - 1) onComplete();
+    else setStepIndex(value => value + 1);
+  }, [guide.steps.length, onComplete, stepIndex]);
 
   useEffect(() => {
     if (isPractice) return;
     const handleTargetClick = (event: MouseEvent) => {
       const target = findTarget(step);
       const eventTarget = event.target;
-      if (!target || !(eventTarget instanceof Node) || !target.contains(eventTarget)) return;
-      window.setTimeout(() => {
-        if (stepIndex >= guide.steps.length - 1) onComplete();
-        else setStepIndex(value => value + 1);
-      }, 120);
+      if (!target || !(eventTarget instanceof Element) || !target.contains(eventTarget)) return;
+      setTargetActivated(true);
+      if (completion.type === "click") window.setTimeout(advanceAfterClick, 120);
     };
     document.addEventListener("click", handleTargetClick, true);
     return () => document.removeEventListener("click", handleTargetClick, true);
-  }, [guide.steps.length, isPractice, onComplete, step, stepIndex]);
+  }, [advanceAfterClick, completion.type, isPractice, step]);
 
   const popover = useMemo(() => {
-    const width = Math.min(380, window.innerWidth - 32);
+    const width = Math.min(400, window.innerWidth - 32);
     if (!box) return { left: Math.max(16, (window.innerWidth - width) / 2), top: Math.max(20, window.innerHeight * 0.2), width };
     const left = clamp(box.left + box.width / 2 - width / 2, 16, Math.max(16, window.innerWidth - width - 16));
     const below = box.top + box.height + 18;
-    const heightEstimate = 245;
+    const heightEstimate = 320;
     const top = below + heightEstimate < window.innerHeight ? below : clamp(box.top - heightEstimate - 18, 16, Math.max(16, window.innerHeight - heightEstimate - 16));
     return { left, top, width };
   }, [box]);
 
-  const next = () => {
-    if (stepIndex >= guide.steps.length - 1) onComplete();
-    else setStepIndex(value => value + 1);
-  };
-
   const pointer = box ? cursorPlacement(box) : null;
+  const statusText = isPractice
+    ? actionsReady ? t("guidePracticeReady") : t("guidePracticeNeedsActions")
+    : routeSkipped ? t("guideRouteAlreadyOpen")
+      : !targetFound ? t("guideWaitingForTarget")
+        : ready ? t("guideStepReady") : completion.type === "action" ? t("guideWaitingForAction") : t("guideWaitingForClick");
 
   const overlay = <div className="feature-guide-root" role="dialog" aria-modal="true" aria-label={title}>
     <div className="feature-guide-backdrop" aria-hidden="true"/>
@@ -124,11 +185,13 @@ export default function FeatureGuideOverlay({ guide, onComplete, onSkip }: Props
     <section className="feature-guide-popover" style={{ left: popover.left, top: popover.top, width: popover.width }}>
       <header><div><span className="feature-guide-kicker">{guide.titleVi === guide.titleEn ? guide.titleEn : language === "vi" ? "HƯỚNG DẪN TÍNH NĂNG" : "FEATURE GUIDE"}</span><strong>{title}</strong></div><button type="button" className="icon-button" aria-label={t("close")} onClick={onSkip}><X size={17}/></button></header>
       <p>{body}</p>
+      {isPractice && <div className="feature-guide-checklist" aria-label={language === "vi" ? "Danh sách thao tác cần hoàn thành" : "Required actions"}>{requiredActions.map(action => <div className={actionNames.includes(action.id) ? "complete" : ""} key={action.id}><span>{actionNames.includes(action.id) ? <Check size={13}/> : <i/>}</span><small>{language === "vi" ? action.labelVi : action.labelEn}</small></div>)}</div>}
+      <div className={`feature-guide-status ${ready ? "ready" : ""}`} role="status"><MousePointer2 size={14}/>{statusText}</div>
       <div className="feature-guide-progress" aria-label={`${stepIndex + 1}/${guide.steps.length}`}><span>{stepIndex + 1}/{guide.steps.length}</span><i><b style={{ width: `${((stepIndex + 1) / guide.steps.length) * 100}%` }}/></i></div>
       <div className="feature-guide-actions">
         <button type="button" className="text-button" onClick={onSkip}>{t("guideSkip")}</button>
         {stepIndex > 0 && <button type="button" className="secondary-button" onClick={() => setStepIndex(value => Math.max(0, value - 1))}><ArrowLeft size={14}/>{t("guideBack")}</button>}
-        {isPractice ? <button type="button" className="primary-button feature-guide-practice-done" onClick={next}>{t("guidePracticeDone")}<ArrowRight size={14}/></button> : targetFound ? <small className="feature-guide-waiting"><MousePointer2 size={14}/>{t("guideWaitingForClick")}</small> : <button type="button" className="primary-button" onClick={next}>{targetMissingFor > 2 ? t("guideTargetMissing") : t("guideNext")}<ArrowRight size={14}/></button>}
+        <button type="button" className="primary-button feature-guide-next" disabled={!ready} onClick={next}>{isPractice ? t("guidePracticeDone") : t("guideNext")}<ArrowRight size={14}/></button>
       </div>
     </section>
   </div>;

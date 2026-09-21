@@ -5,7 +5,7 @@ import { useLanguage } from "../lib/i18n";
 import { PDFDocument, rgb } from "pdf-lib";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { annotationMapsEqual, cloneAnnotationMap, eraseAnnotationStrokes, type AnnotationStroke, type AnnotationTool } from "../lib/documentAnnotations";
-import { GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
+import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type Point = { x: number; y: number };
@@ -279,6 +279,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
       const committedStroke: Stroke = { points: stroke.points, color: stroke.color, width: stroke.width, tool: stroke.tool };
       const next = { ...strokesRef.current, [stroke.page]: [...(strokesRef.current[stroke.page] ?? []), committedStroke] };
       recordStrokes(next);
+      emitGuideAction("pdf:draw");
     }
     redraw(page);
   };
@@ -303,6 +304,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
   };
   const chooseAnnotationMode = (mode: AnnotationMode) => {
     setAnnotationMode(mode);
+    emitGuideAction(`pdf:tool:${mode}`);
     if (mode !== "eraser") eraserCursor.current = null;
     redraw(page);
   };
@@ -407,6 +409,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
       }
       const savedBytes = await pdfDocument.save();
       const blob = new Blob([new Uint8Array(savedBytes)], { type: "application/pdf" }); const url = URL.createObjectURL(blob); const anchor = window.document.createElement("a"); anchor.href = url; anchor.download = `${source.name.replace(/\.pdf$/i, "")}-annotated.pdf`; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      emitGuideAction("pdf:export");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể xuất PDF mới."); }
   };
   const toggleFullscreen = async () => { if (!viewer.current) return; try { if (document.fullscreenElement === viewer.current) await document.exitFullscreen(); else await viewer.current.requestFullscreen(); } catch { setFullscreen(value => !value); } };

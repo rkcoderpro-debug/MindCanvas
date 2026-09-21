@@ -267,7 +267,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     if (user) void getAccountPlan().then(setAccountPlan).catch(() => {});
   };
   useEffect(() => { saveWebBackground(webBackground); }, [webBackground]);
-  const guideTrigger = ws.board ? "canvas" : filter === "__learning" || filter === "__flashcards" ? "learning" : filter === "__lab" ? "lab" : filter === "__manager" ? "documents" : null;
+  const guideTrigger = ws.board ? "canvas" : filter === "__learning" || filter === "__flashcards" ? "learning" : filter === "__lab" ? "lab" : filter === "__manager" ? "documents" : !recent && !filter ? "workspace" : null;
 
   useEffect(() => { setMobileProjectMenuOpen(false); }, [ws.board?.id, canvasFullscreen]);
   useEffect(() => {

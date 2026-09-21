@@ -4,9 +4,26 @@ export type GuideDemo = "navigation" | "canvas" | "learning" | "lab" | "pdf" | "
 
 export type GuideStepKind = "target" | "practice";
 
+export type GuideRequiredAction = {
+  id: string;
+  labelVi: string;
+  labelEn: string;
+};
+
+export type GuideStepCompletion =
+  | { type: "click"; selector?: string }
+  | { type: "input"; selector: string; minLength?: number }
+  | { type: "state"; selector: string; attribute?: string; value?: string }
+  | { type: "route"; route: string }
+  | { type: "action"; actions: GuideRequiredAction[] }
+  | { type: "manual"; actions?: GuideRequiredAction[] };
+
 export type GuideStep = {
   target?: string;
   kind?: GuideStepKind;
+  completion?: GuideStepCompletion;
+  /** Let a navigation step be acknowledged when the requested route is already active. */
+  skipWhenRoute?: string;
   titleVi: string;
   titleEn: string;
   bodyVi: string;
@@ -40,8 +57,64 @@ export type GuideProgress = Record<string, GuideProgressEntry>;
 
 export const GUIDE_PROGRESS_EVENT = "mindcanvas:feature-guide-progress";
 export const GUIDE_REQUEST_EVENT = "mindcanvas:feature-guide-request";
-export const GUIDE_CONTENT_VERSION = "v2";
+export const GUIDE_ACTION_EVENT = "mindcanvas:feature-guide-action";
+export const GUIDE_CONTENT_VERSION = "v3";
 const STORAGE_PREFIX = `mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}`;
+
+/**
+ * Components publish meaningful user actions instead of letting a guide infer
+ * completion from a random click. This keeps practice steps honest and also
+ * makes the flow testable without coupling it to a particular layout.
+ */
+export function emitGuideAction(name: string, payload?: unknown) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name, payload, at: Date.now() } }));
+}
+
+export function practiceActionsForGuide(guideId: string): GuideRequiredAction[] {
+  const actions: Record<string, GuideRequiredAction[]> = {
+    "workspace-navigation": [
+      { id: "workspace:recent", labelVi: "Mở File gần đây", labelEn: "Open Recent files" },
+      { id: "workspace:favorites", labelVi: "Mở Yêu thích", labelEn: "Open Favorites" },
+      { id: "workspace:trash", labelVi: "Mở Thùng rác", labelEn: "Open Trash" },
+      { id: "workspace:folder", labelVi: "Mở một thư mục", labelEn: "Open a folder" },
+    ],
+    "canvas-controls": [
+      { id: "canvas:draw", labelVi: "Vẽ một nét", labelEn: "Draw a stroke" },
+      { id: "canvas:select", labelVi: "Chọn hoặc kéo chọn phần tử", labelEn: "Select or marquee-select an element" },
+      { id: "canvas:move", labelVi: "Di chuyển phần tử", labelEn: "Move an element" },
+      { id: "canvas:pan", labelVi: "Pan canvas bằng Hand/Space", labelEn: "Pan the canvas with Hand/Space" },
+    ],
+    "learning-hub": [
+      { id: "learning:tab:flashcards", labelVi: "Mở Flashcard", labelEn: "Open Flashcards" },
+      { id: "learning:tab:quiz", labelVi: "Mở Quiz", labelEn: "Open Quiz" },
+    ],
+    "lab-simulation": [
+      { id: "lab:prompt", labelVi: "Tạo prompt HTML", labelEn: "Create the HTML prompt" },
+      { id: "lab:html-input", labelVi: "Đưa HTML vào runner", labelEn: "Put HTML into the runner" },
+      { id: "lab:run", labelVi: "Chạy thử mô phỏng", labelEn: "Run the simulation" },
+      { id: "lab:save", labelVi: "Lưu Lab", labelEn: "Save the Lab" },
+    ],
+    "document-library": [
+      { id: "documents:open", labelVi: "Mở một tài liệu", labelEn: "Open a document" },
+      { id: "documents:back", labelVi: "Quay lại danh sách", labelEn: "Return to the list" },
+    ],
+    "pdf-annotation": [
+      { id: "pdf:draw", labelVi: "Vẽ một nét trên PDF", labelEn: "Draw a stroke on the PDF" },
+      { id: "pdf:export", labelVi: "Xuất PDF mới", labelEn: "Export a new PDF" },
+    ],
+    "ai-workflow": [
+      { id: "ai:search", labelVi: "Tìm một thao tác AI", labelEn: "Search for an AI action" },
+      { id: "ai:action", labelVi: "Mở kết quả AI", labelEn: "Open an AI result" },
+    ],
+    "tool-hold-shortcuts": [
+      { id: "canvas:draw", labelVi: "Vẽ bằng Bút", labelEn: "Draw with Pen" },
+      { id: "canvas:erase", labelVi: "Tẩy bằng Eraser", labelEn: "Erase with Eraser" },
+      { id: "canvas:pan", labelVi: "Pan bằng Hand/Space", labelEn: "Pan with Hand/Space" },
+    ],
+  };
+  return actions[guideId] ?? [];
+}
 
 /**
  * The selectors deliberately point at stable semantic classes instead of
@@ -109,10 +182,10 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     outcomeEn: "Choose a study activity and start your first session.",
     steps: [
       { target: ".learning-hub-nav", titleVi: "Mở thanh công cụ học", titleEn: "Find the study tabs", bodyVi: "Thanh này chứa Overview, Flashcard, Quiz, Kế hoạch, Tiến độ và Lab. Trạng thái học được giữ lại trên thiết bị và tài khoản.", bodyEn: "This bar contains Overview, Flashcards, Quiz, Plan, Progress and Lab. Study state is kept on this browser and account." },
-      { target: ".learning-hub-nav button:nth-child(2)", titleVi: "Mở Flashcard", titleEn: "Open Flashcards", bodyVi: "Bấm Flashcard để tạo bộ thẻ, liên kết project và ôn theo lịch lặp lại ngắt quãng.", bodyEn: "Click Flashcards to create decks, link a project and review with spaced repetition." },
-      { target: ".learning-hub-nav button:nth-child(3)", titleVi: "Mở Quiz", titleEn: "Open Quiz", bodyVi: "Bấm Quiz để tạo hoặc làm bài bốn lựa chọn. Bạn có thể xem giải thích sau mỗi câu.", bodyEn: "Click Quiz to create or take four-choice tests. Explanations are available after each answer." },
-      { target: ".learning-hub-nav button:nth-child(4)", titleVi: "Lập kế hoạch học", titleEn: "Plan a study path", bodyVi: "Bấm Kế hoạch để chọn nhiệm vụ, số thẻ và thời gian tập trung cho từng ngày.", bodyEn: "Click Plan to choose tasks, card targets and focus time for each day." },
-      { target: ".learning-hub-nav button:nth-child(6)", titleVi: "Mở Lab", titleEn: "Open Lab", bodyVi: "Bấm Lab để tạo mô phỏng HTML tương tác; bước chạy luôn dùng file HTML hoàn chỉnh thay vì đoạn text rời.", bodyEn: "Click Lab to build an interactive HTML simulation. The runner uses a complete HTML file instead of loose text." },
+      { target: '.learning-hub-nav button[data-guide-tab="flashcards"]', titleVi: "Mở Flashcard", titleEn: "Open Flashcards", bodyVi: "Bấm Flashcard để tạo bộ thẻ, liên kết project và ôn theo lịch lặp lại ngắt quãng.", bodyEn: "Click Flashcards to create decks, link a project and review with spaced repetition." },
+      { target: '.learning-hub-nav button[data-guide-tab="quiz"]', titleVi: "Mở Quiz", titleEn: "Open Quiz", bodyVi: "Bấm Quiz để tạo hoặc làm bài bốn lựa chọn. Bạn có thể xem giải thích sau mỗi câu.", bodyEn: "Click Quiz to create or take four-choice tests. Explanations are available after each answer." },
+      { target: '.learning-hub-nav button[data-guide-tab="plan"]', titleVi: "Lập kế hoạch học", titleEn: "Plan a study path", bodyVi: "Bấm Kế hoạch để chọn nhiệm vụ, số thẻ và thời gian tập trung cho từng ngày.", bodyEn: "Click Plan to choose tasks, card targets and focus time for each day." },
+      { target: '.learning-hub-nav button[data-guide-tab="lab"]', titleVi: "Mở Lab", titleEn: "Open Lab", bodyVi: "Bấm Lab để tạo mô phỏng HTML tương tác; bước chạy luôn dùng file HTML hoàn chỉnh thay vì đoạn text rời.", bodyEn: "Click Lab to build an interactive HTML simulation. The runner uses a complete HTML file instead of loose text." },
       { kind: "practice", titleVi: "Tự bắt đầu một phiên học", titleEn: "Start a study session", bodyVi: "Hãy tự chọn Flashcard hoặc Quiz, tạo một nội dung nhỏ và mở phiên học đầu tiên. Khi xong, bấm nút bên dưới.", bodyEn: "Choose Flashcards or Quiz, create a small item and open your first study session. When finished, use the button below." },
     ],
   },
@@ -129,12 +202,13 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     outcomeVi: "Chạy thử và lưu được một mô phỏng HTML có thể tải xuống.",
     outcomeEn: "Run and save a downloadable HTML simulation.",
     steps: [
-      { target: ".lab-step-card", titleVi: "Chuẩn bị yêu cầu", titleEn: "Prepare the request", bodyVi: "Điền tên Lab, môn học, nguồn và điều người học cần điều chỉnh. Bấm Tạo HTML prompt để yêu cầu AI trả về một file HTML tự chạy.", bodyEn: "Fill in the Lab title, subject, source and what the learner should adjust. Create an HTML prompt that asks AI for a self-contained file." },
-      { target: ".lab-step-card .lab-actions .primary-button", titleVi: "Tạo prompt HTML", titleEn: "Create the HTML prompt", bodyVi: "Bấm nút này, sao chép prompt và gửi cho AI bạn chọn. Nhắc AI trả về file .html hoàn chỉnh để dễ tải xuống.", bodyEn: "Click this button, copy the prompt and send it to your AI provider. Ask for a complete .html file that can be downloaded." },
-      { target: ".lab-run-card .lab-upload-field", titleVi: "Đưa file HTML vào runner", titleEn: "Bring the HTML file into the runner", bodyVi: "Chọn file .html AI trả về hoặc dán toàn bộ nội dung vào ô Simulation HTML. File được kiểm tra trước khi chạy.", bodyEn: "Choose the returned .html file or paste the complete document into Simulation HTML. It is checked before running." },
-      { target: ".lab-run-card .lab-actions .primary-button", titleVi: "Kiểm tra và chạy", titleEn: "Check and run", bodyVi: "Bấm Kiểm tra và chạy để mở preview sandbox. Nếu có resource ngoài hoặc HTML không an toàn, runner sẽ báo để bạn sửa.", bodyEn: "Click Check and run to open the sandbox preview. Unsafe external resources are reported before execution." },
-      { target: ".lab-runner-toolbar button", titleVi: "Lưu Lab", titleEn: "Save the Lab", bodyVi: "Nút Lưu Lab nằm ngay trên runner và còn có bản sticky ở chân trang, nên không biến mất khi bạn cuộn.", bodyEn: "Save lab is on the runner and repeated in the sticky footer, so it stays available while you scroll." },
-      { target: ".lab-footer-actions", titleVi: "Kiểm tra trạng thái lưu", titleEn: "Check save status", bodyVi: "Chờ trạng thái chuyển sang đã lưu trên thiết bị trước khi rời trang. Nội dung vẫn giữ lại nếu lần lưu cloud gặp lỗi.", bodyEn: "Wait for the status to say it is saved on this device before leaving. Draft content is retained if cloud saving fails." },
+      { target: ".nav-learning", skipWhenRoute: "lab", titleVi: "Đi tới Trung tâm học tập", titleEn: "Go to Learning Hub", bodyVi: "Bước này cần thao tác thật: bấm Trung tâm học tập ở sidebar. Guide sẽ chờ đến khi trang học tập mở, không tự nhảy qua.", bodyEn: "This step requires a real action: click Learning Hub in the sidebar. The guide waits until the study page opens." },
+      { target: '.learning-hub-nav button[data-guide-tab="lab"]', skipWhenRoute: "lab", titleVi: "Mở tab Lab", titleEn: "Open the Lab tab", bodyVi: "Trong Trung tâm học tập, bấm đúng tab Lab. Khi tab đã mở, bước tiếp theo mới xuất hiện.", bodyEn: "In Learning Hub, click the Lab tab. The next step appears only after the tab is actually open." },
+      { target: ".lab-step-card input", completion: { type: "input", selector: ".lab-step-card input", minLength: 2 }, titleVi: "Chuẩn bị yêu cầu", titleEn: "Prepare the request", bodyVi: "Nhập tên Lab (ít nhất 2 ký tự), sau đó guide mới cho phép sang bước tạo prompt. Bạn vẫn có thể bổ sung môn học, nguồn và yêu cầu chi tiết.", bodyEn: "Enter a Lab name (at least 2 characters), then the guide allows the prompt step. You can also fill the subject, source and detailed request." },
+      { target: ".lab-step-card .lab-actions .primary-button", completion: { type: "action", actions: [{ id: "lab:prompt", labelVi: "Tạo prompt HTML", labelEn: "Create the HTML prompt" }] }, titleVi: "Tạo prompt HTML", titleEn: "Create the HTML prompt", bodyVi: "Bấm nút này, sao chép prompt và gửi cho AI bạn chọn. Nhắc AI trả về file .html hoàn chỉnh để dễ tải xuống.", bodyEn: "Click this button, copy the prompt and send it to your AI provider. Ask for a complete .html file that can be downloaded." },
+      { target: ".lab-run-card textarea", completion: { type: "action", actions: [{ id: "lab:html-input", labelVi: "Đưa HTML vào runner", labelEn: "Put HTML into the runner" }] }, titleVi: "Đưa file HTML vào runner", titleEn: "Bring the HTML file into the runner", bodyVi: "Chọn file .html AI trả về hoặc dán toàn bộ nội dung vào ô Simulation HTML. Guide chỉ qua khi hệ thống nhận được HTML thật.", bodyEn: "Choose the returned .html file or paste the complete document into Simulation HTML. The guide advances only after real HTML is received." },
+      { target: ".lab-run-card .lab-actions .primary-button", completion: { type: "action", actions: [{ id: "lab:run", labelVi: "Chạy thử mô phỏng", labelEn: "Run the simulation" }] }, titleVi: "Kiểm tra và chạy", titleEn: "Check and run", bodyVi: "Bấm Kiểm tra và chạy để mở preview sandbox. Nếu có resource ngoài hoặc HTML không an toàn, runner sẽ báo để bạn sửa.", bodyEn: "Click Check and run to open the sandbox preview. Unsafe external resources are reported before execution." },
+      { target: ".lab-footer-actions .primary-button", completion: { type: "action", actions: [{ id: "lab:save", labelVi: "Lưu Lab", labelEn: "Save the Lab" }] }, titleVi: "Lưu Lab", titleEn: "Save the Lab", bodyVi: "Bấm nút Lưu Lab ở chân trang hoặc trên runner. Guide chờ xác nhận lưu thành công, không chỉ chờ click.", bodyEn: "Click Save Lab in the footer or runner. The guide waits for a successful save confirmation, not just a click." },
       { kind: "practice", titleVi: "Tự tạo Lab của bạn", titleEn: "Build your own Lab", bodyVi: "Hãy tạo một prompt, chạy một file HTML nhỏ, thử một điều khiển trong preview và lưu Lab. Khi xong, bấm nút bên dưới.", bodyEn: "Create a prompt, run a small HTML file, try one control in the preview and save the Lab. When finished, use the button below." },
     ],
   },

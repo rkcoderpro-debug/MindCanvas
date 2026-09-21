@@ -7,6 +7,7 @@ import type { AccountPlan } from "../lib/account";
 import { LearningShareButton } from "./LearningShareDialog";
 
 import { readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from "../lib/labStorage";
+import { emitGuideAction } from "../lib/featureGuides";
 
 type Draft = {
   title: string;
@@ -70,6 +71,9 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const dirty = ready && snapshot !== savedFingerprint;
   const ownerRef = useRef(owner); ownerRef.current = owner;
   const saveLock = useRef(false);
+  useEffect(() => {
+    if (programHtml.trim().length >= 20) emitGuideAction("lab:html-input");
+  }, [programHtml]);
   useEffect(() => {
     let alive = true;
     setReady(false); setPublishedIds([]);
@@ -183,6 +187,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     const prompt = buildLabPlanPrompt({ language, subject: draft.subject, learnerLevel: draft.learnerLevel, request: draft.request, sourceFileName: draft.sourceFileName, sourceText: draft.sourceText });
     setDesignPrompt(prompt);
     setNotice(t("labPromptReady"));
+    emitGuideAction("lab:prompt");
   };
 
   const runProgram = () => {
@@ -192,6 +197,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     setRunnerHtml(programHtml.trim());
     setRunnerKey(value => value + 1);
     setNotice(check.warnings.length ? `${t("labRunning")} ${check.warnings.join(" ")}` : t("labRunning"));
+    emitGuideAction("lab:run");
   };
 
   const chooseHtmlFile = async (file: File | undefined) => {
@@ -203,6 +209,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       setHtmlFileName(file.name);
       setRunnerHtml("");
       setNotice(t("labHtmlFileReady"));
+      emitGuideAction("lab:html-input");
     } catch {
       setError(t("labHtmlFileError"));
     }
@@ -238,6 +245,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     setSelectedId(saved.id);
     setPublishedIds(ids => ids.filter(id => id !== saved.id));
     setNotice(t("labSaved"));
+    emitGuideAction("lab:save");
     } catch { setError("Lưu Lab thất bại. Nội dung vẫn được giữ; hãy thử lại hoặc tải HTML xuống."); }
     finally { saveLock.current = false; setSaving(false); }
   };

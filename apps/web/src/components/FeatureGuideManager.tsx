@@ -84,7 +84,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
   const celebrationGuide = guideForId(celebrationGuideId);
   if (!guide && !celebrationGuide) return null;
   return <>
-    {guide && <FeatureGuideOverlay guide={guide} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
+    {guide && <FeatureGuideOverlay guide={guide} currentRoute={trigger} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
     {celebrationGuide && <FeatureGuideCelebration guide={celebrationGuide} onClose={() => setCelebrationGuideId(null)}/>} 
   </>;
 }

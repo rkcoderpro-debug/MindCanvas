@@ -27,6 +27,7 @@ import { clampDrawingSize, DRAWING_SIZE_RANGES, eraseDrawingPaths, readDrawingSi
 import DocumentViewer from "./DocumentViewer";
 import { DOCUMENT_ACCEPT, documentKindFor, fileToDataUrl, MAX_DOCUMENT_BYTES, type DocumentKind } from "../lib/documentStore";
 import { TOOL_HOLD_THRESHOLD_MS, toolAfterRelease } from "../lib/toolActivation";
+import { emitGuideAction } from "../lib/featureGuides";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean; onDocumentSaved?: (document: { name: string; mimeType: string; kind: DocumentKind; size: number; dataUrl: string }) => void };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "zoom" | "draw" | "erase" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle; eraseRadius?: number; erasePoints?: Vec2[]; zoomAnchor?: Vec2 };
@@ -869,6 +870,14 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       if (["draw", "erase", "line", "shape"].includes(g.mode)) checkpointGestureDraft(g.next, true);
       if ((g.mode === "pan" || g.mode === "zoom") && onViewportChange) onViewportChange({ ...boardRef.current, viewport: g.next.viewport });
       else onChange(g.next);
+    }
+    if (!cancel) {
+      if (["draw", "line", "shape"].includes(g.mode)) emitGuideAction("canvas:draw");
+      if (g.mode === "erase") emitGuideAction("canvas:erase");
+      if (g.mode === "marquee") emitGuideAction("canvas:select");
+      if (g.mode === "move") emitGuideAction("canvas:move");
+      if (g.mode === "pan") emitGuideAction("canvas:pan");
+      if (g.mode === "zoom") emitGuideAction("canvas:zoom");
     }
     if (releaseCapture && svg.current?.hasPointerCapture(g.pointer)) svg.current.releasePointerCapture(g.pointer);
     setInputMode(pinch.current ? "pinching" : "idle");

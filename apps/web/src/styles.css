@@ -3807,6 +3807,15 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .feature-guide-actions .text-button { margin-right: auto; }
 .feature-guide-actions .secondary-button, .feature-guide-actions .primary-button { min-height: 32px; padding: 7px 10px; font-size: 11px; }
 .feature-guide-waiting { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 8px; color: var(--accent); background: var(--accent-soft); font-size: 10px; font-weight: 750; }
+.feature-guide-status { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 6px 8px; border-radius: 9px; color: var(--muted); background: var(--surface); font-size: 10px; line-height: 1.35; }
+.feature-guide-status.ready { color: var(--success, #45c59a); background: color-mix(in srgb, var(--success, #45c59a) 12%, var(--surface)); }
+.feature-guide-checklist { display: grid; gap: 6px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.feature-guide-checklist > div { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.feature-guide-checklist > div > span { display: grid; place-items: center; width: 17px; height: 17px; flex: 0 0 17px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); }
+.feature-guide-checklist > div > span i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .45; }
+.feature-guide-checklist > div.complete { color: var(--success, #45c59a); }
+.feature-guide-checklist > div.complete > span { border-color: currentColor; background: color-mix(in srgb, currentColor 15%, transparent); }
+.feature-guide-next:disabled { cursor: not-allowed; opacity: .42; filter: grayscale(.3); }
 @keyframes feature-guide-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes feature-guide-focus-pulse { 0%,100% { opacity: .84; } 50% { opacity: 1; } }
 @keyframes feature-guide-pointer { 0%,100% { transform: rotate(var(--cursor-angle, 0deg)) translate(-3px, -3px); } 50% { transform: rotate(var(--cursor-angle, 0deg)) translate(4px, 4px); } }
