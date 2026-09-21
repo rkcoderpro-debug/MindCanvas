@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, Check, MousePointer2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronUp, MousePointer2, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { GUIDE_ACTION_EVENT, practiceActionsForGuide, type GuideDefinition, type GuideRequiredAction, type GuideStep, type GuideStepCompletion } from "../lib/featureGuides";
 
@@ -10,8 +10,10 @@ type CursorPlacement = { left: number; top: number; angle: number };
 type Props = {
   guide: GuideDefinition;
   currentRoute?: string | null;
+  practiceResourceId?: string | null;
   onComplete: () => void;
   onSkip: () => void;
+  onPracticeDecision?: (decision: "keep" | "trash", resourceId: string) => void | Promise<void>;
 };
 
 function findTarget(step: GuideStep) {
@@ -40,6 +42,8 @@ function cursorPlacement(box: Box): CursorPlacement {
   const spaceBelow = window.innerHeight - (box.top + box.height);
   const spaceLeft = box.left;
   const spaceRight = window.innerWidth - (box.left + box.width);
+  // Keep the animated pointer outside the focus ring. It points toward the
+  // target instead of sitting on top of the button the user must press.
   if (spaceAbove >= size + gap) return { left: horizontal, top: box.top - size - gap, angle: -135 };
   if (spaceBelow >= size + gap) return { left: horizontal, top: box.top + box.height + gap, angle: 45 };
   if (spaceLeft >= size + gap) return { left: box.left - size - gap, top: vertical, angle: 135 };
@@ -73,7 +77,7 @@ function readStateReady(completion: Extract<GuideStepCompletion, { type: "state"
   return element.getAttribute(completion.attribute) === (completion.value ?? "true");
 }
 
-export default function FeatureGuideOverlay({ guide, currentRoute = null, onComplete, onSkip }: Props) {
+export default function FeatureGuideOverlay({ guide, currentRoute = null, practiceResourceId = null, onComplete, onSkip, onPracticeDecision }: Props) {
   const { language, t } = useLanguage();
   const [stepIndex, setStepIndex] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
@@ -82,6 +86,9 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, onComp
   const [actionNames, setActionNames] = useState<string[]>([]);
   const actionNamesRef = useRef<string[]>([]);
   const [readinessTick, setReadinessTick] = useState(0);
+  const [practicePanelCollapsed, setPracticePanelCollapsed] = useState(false);
+  const [decisionPending, setDecisionPending] = useState<"keep" | "trash" | null>(null);
+  const [decisionError, setDecisionError] = useState("");
   const step = guide.steps[stepIndex] ?? guide.steps[0];
   const isPractice = step.kind === "practice" || !step.target;
   const completion = completionForStep(step, isPractice);
@@ -89,6 +96,9 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, onComp
   const routeSkipped = Boolean(step.skipWhenRoute && currentRoute === step.skipWhenRoute);
   const title = language === "vi" ? step.titleVi : step.titleEn;
   const body = language === "vi" ? step.bodyVi : step.bodyEn;
+  const isCanvasPracticeFinal = guide.id === "canvas-controls" && isPractice && stepIndex === guide.steps.length - 1;
+  const showBackdrop = Boolean(box) && !isPractice;
+  const targetMissing = !box && !routeSkipped && !isPractice;
 
   const measure = useCallback(() => {
     const next = targetBox(findTarget(step));
@@ -99,6 +109,7 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, onComp
 
   useEffect(() => {
     setTargetActivated(false);
+    setDecisionError("");
     measure();
     const interval = window.setInterval(measure, 180);
     const onViewportChange = () => measure();
@@ -110,6 +121,14 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, onComp
       window.removeEventListener("scroll", onViewportChange, true);
     };
   }, [measure]);
+
+  // A practice checklist belongs to the current practice step. Actions from
+  // earlier guided steps must never satisfy the final hands-on task.
+  useEffect(() => {
+    actionNamesRef.current = [];
+    setActionNames([]);
+    setPracticePanelCollapsed(false);
+  }, [stepIndex, isPractice]);
 
   useEffect(() => {
     const handleGuideAction = (event: Event) => {
@@ -139,10 +158,10 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, onComp
   }, [actionNames, actionsReady, completion, currentRoute, isPractice, readinessTick, requiredActions, routeSkipped, targetActivated, targetFound]);
 
   const next = useCallback(() => {
-    if (!ready) return;
+    if (!ready || isCanvasPracticeFinal) return;
     if (stepIndex >= guide.steps.length - 1) onComplete();
     else setStepIndex(value => value + 1);
-  }, [guide.steps.length, onComplete, ready, stepIndex]);
+  }, [guide.steps.length, isCanvasPracticeFinal, onComplete, ready, stepIndex]);
   const advanceAfterClick = useCallback(() => {
     if (stepIndex >= guide.steps.length - 1) onComplete();
     else setStepIndex(value => value + 1);
@@ -161,38 +180,57 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, onComp
     return () => document.removeEventListener("click", handleTargetClick, true);
   }, [advanceAfterClick, completion.type, isPractice, step]);
 
+  const decidePractice = useCallback(async (decision: "keep" | "trash") => {
+    if (!practiceResourceId || decisionPending) return;
+    setDecisionPending(decision);
+    setDecisionError("");
+    try {
+      await onPracticeDecision?.(decision, practiceResourceId);
+      onComplete();
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : t("error"));
+      setDecisionPending(null);
+    }
+  }, [decisionPending, onComplete, onPracticeDecision, practiceResourceId, t]);
+
   const popover = useMemo(() => {
     const width = Math.min(400, window.innerWidth - 32);
-    if (!box) return { left: Math.max(16, (window.innerWidth - width) / 2), top: Math.max(20, window.innerHeight * 0.2), width };
+    if (isPractice) return { left: Math.max(16, window.innerWidth - width - 18), top: Math.max(16, window.innerHeight - 18 - 420), width };
+    if (!box) return { left: Math.max(16, window.innerWidth - width - 18), top: 18, width };
     const left = clamp(box.left + box.width / 2 - width / 2, 16, Math.max(16, window.innerWidth - width - 16));
     const below = box.top + box.height + 18;
     const heightEstimate = 320;
     const top = below + heightEstimate < window.innerHeight ? below : clamp(box.top - heightEstimate - 18, 16, Math.max(16, window.innerHeight - heightEstimate - 16));
     return { left, top, width };
-  }, [box]);
+  }, [box, isPractice]);
 
-  const pointer = box ? cursorPlacement(box) : null;
+  const pointer = showBackdrop && box ? cursorPlacement(box) : null;
   const statusText = isPractice
     ? actionsReady ? t("guidePracticeReady") : t("guidePracticeNeedsActions")
     : routeSkipped ? t("guideRouteAlreadyOpen")
       : !targetFound ? t("guideWaitingForTarget")
         : ready ? t("guideStepReady") : completion.type === "action" ? t("guideWaitingForAction") : t("guideWaitingForClick");
+  const panelClass = ["feature-guide-popover", isPractice ? "feature-guide-practice-panel" : "", targetMissing ? "feature-guide-target-missing" : ""].filter(Boolean).join(" ");
+  const panelStyle = isPractice || targetMissing ? { left: popover.left, top: popover.top, width: popover.width } : { left: popover.left, top: popover.top, width: popover.width };
 
-  const overlay = <div className="feature-guide-root" role="dialog" aria-modal="true" aria-label={title}>
-    <div className="feature-guide-backdrop" aria-hidden="true"/>
-    {box && <div className="feature-guide-focus" aria-hidden="true" style={{ left: box.left - 8, top: box.top - 8, width: box.width + 16, height: box.height + 16 }}/>} 
+  const overlay = <div className={`feature-guide-root ${isPractice ? "feature-guide-practice-mode" : ""} ${targetMissing ? "feature-guide-target-missing-mode" : ""}`} role="dialog" aria-modal="false" aria-label={title}>
+    {showBackdrop && <div className="feature-guide-backdrop" aria-hidden="true"/>}
+    {showBackdrop && box && <div className="feature-guide-focus" aria-hidden="true" style={{ left: box.left - 8, top: box.top - 8, width: box.width + 16, height: box.height + 16 }}/>} 
     {pointer && <div className="feature-guide-cursor" aria-hidden="true" style={{ left: pointer.left, top: pointer.top, "--cursor-angle": `${pointer.angle}deg` } as CSSProperties}><MousePointer2 size={27}/></div>}
-    <section className="feature-guide-popover" style={{ left: popover.left, top: popover.top, width: popover.width }}>
-      <header><div><span className="feature-guide-kicker">{guide.titleVi === guide.titleEn ? guide.titleEn : language === "vi" ? "HƯỚNG DẪN TÍNH NĂNG" : "FEATURE GUIDE"}</span><strong>{title}</strong></div><button type="button" className="icon-button" aria-label={t("close")} onClick={onSkip}><X size={17}/></button></header>
-      <p>{body}</p>
-      {isPractice && <div className="feature-guide-checklist" aria-label={language === "vi" ? "Danh sách thao tác cần hoàn thành" : "Required actions"}>{requiredActions.map(action => <div className={actionNames.includes(action.id) ? "complete" : ""} key={action.id}><span>{actionNames.includes(action.id) ? <Check size={13}/> : <i/>}</span><small>{language === "vi" ? action.labelVi : action.labelEn}</small></div>)}</div>}
-      <div className={`feature-guide-status ${ready ? "ready" : ""}`} role="status"><MousePointer2 size={14}/>{statusText}</div>
-      <div className="feature-guide-progress" aria-label={`${stepIndex + 1}/${guide.steps.length}`}><span>{stepIndex + 1}/{guide.steps.length}</span><i><b style={{ width: `${((stepIndex + 1) / guide.steps.length) * 100}%` }}/></i></div>
-      <div className="feature-guide-actions">
-        <button type="button" className="text-button" onClick={onSkip}>{t("guideSkip")}</button>
-        {stepIndex > 0 && <button type="button" className="secondary-button" onClick={() => setStepIndex(value => Math.max(0, value - 1))}><ArrowLeft size={14}/>{t("guideBack")}</button>}
-        <button type="button" className="primary-button feature-guide-next" disabled={!ready} onClick={next}>{isPractice ? t("guidePracticeDone") : t("guideNext")}<ArrowRight size={14}/></button>
-      </div>
+    <section className={panelClass} style={panelStyle}>
+      <header className={isPractice ? "feature-guide-drag-handle" : undefined}><div><span className="feature-guide-kicker">{guide.titleVi === guide.titleEn ? guide.titleEn : language === "vi" ? "HƯỚNG DẪN TÍNH NĂNG" : "FEATURE GUIDE"}</span><strong>{title}</strong></div><div className="feature-guide-header-actions">{isPractice && <button type="button" className="icon-button" aria-label={practicePanelCollapsed ? t("guidePracticeExpand") : t("guidePracticeCollapse")} onClick={() => setPracticePanelCollapsed(value => !value)}>{practicePanelCollapsed ? <ChevronUp size={17}/> : <ChevronDown size={17}/>}</button>}<button type="button" className="icon-button" aria-label={t("close")} onClick={onSkip}><X size={17}/></button></div></header>
+      {!practicePanelCollapsed && <>
+        <p>{body}</p>
+        {isPractice && <div className="feature-guide-checklist" aria-label={language === "vi" ? "Danh sách thao tác cần hoàn thành" : "Required actions"}>{requiredActions.map(action => <div className={actionNames.includes(action.id) ? "complete" : ""} key={action.id}><span>{actionNames.includes(action.id) ? <Check size={13}/> : <i/>}</span><small>{language === "vi" ? action.labelVi : action.labelEn}</small></div>)}</div>}
+        <div className={`feature-guide-status ${ready ? "ready" : ""}`} role="status"><MousePointer2 size={14}/>{decisionError || statusText}</div>
+        <div className="feature-guide-progress" aria-label={`${stepIndex + 1}/${guide.steps.length}`}><span>{stepIndex + 1}/{guide.steps.length}</span><i><b style={{ width: `${((stepIndex + 1) / guide.steps.length) * 100}%` }}/></i></div>
+        {isCanvasPracticeFinal && practiceResourceId && <div className="feature-guide-practice-decision"><strong>{t("guidePracticeCanvasDecision")}</strong><div><button type="button" className="secondary-button" disabled={!!decisionPending} onClick={() => void decidePractice("trash")}>{decisionPending === "trash" ? t("saving") : t("guidePracticeCanvasTrash")}</button><button type="button" className="primary-button" disabled={!!decisionPending} onClick={() => void decidePractice("keep")}>{decisionPending === "keep" ? t("saving") : t("guidePracticeCanvasKeep")}</button></div></div>}
+        <div className="feature-guide-actions">
+          <button type="button" className="text-button" onClick={onSkip}>{t("guideSkip")}</button>
+          {stepIndex > 0 && <button type="button" className="secondary-button" onClick={() => setStepIndex(value => Math.max(0, value - 1))}><ArrowLeft size={14}/>{t("guideBack")}</button>}
+          {!isCanvasPracticeFinal || !practiceResourceId ? <button type="button" className="primary-button feature-guide-next" disabled={!ready} onClick={next}>{isPractice ? t("guidePracticeDone") : t("guideNext")}<ArrowRight size={14}/></button> : <span className="feature-guide-decision-hint">{t("guidePracticeCanvasChoose")}</span>}
+        </div>
+      </>}
     </section>
   </div>;
 

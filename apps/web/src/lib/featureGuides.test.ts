@@ -11,7 +11,7 @@ afterEach(() => storage.clear());
 
 describe("feature guides", () => {
   it("keeps a stable guide registry with first-use triggers and GIF demos", () => {
-    expect(GUIDE_CONTENT_VERSION).toBe("v3");
+    expect(GUIDE_CONTENT_VERSION).toBe("v4");
     expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(7);
     expect(guideForTrigger("canvas")?.id).toBe("canvas-controls");
     expect(GUIDE_DEFINITIONS.every(guide => guide.gifSrc?.endsWith(".gif"))).toBe(true);
@@ -19,6 +19,12 @@ describe("feature guides", () => {
     expect(GUIDE_DEFINITIONS.every(guide => guide.steps.at(-1)?.kind === "practice")).toBe(true);
     expect(GUIDE_DEFINITIONS.every(guide => practiceActionsForGuide(guide.id).length > 0)).toBe(true);
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "lab-simulation")?.steps[0].target).toBe(".nav-learning");
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "canvas-controls")?.steps.slice(0, 4).map(step => step.target)).toEqual([
+      ".workspace-nav-row > button:first-child",
+      ".workspace-create-button",
+      ".guide-project-name-input",
+      ".guide-project-create-submit",
+    ]);
   });
 
   it("publishes explicit action events for practice verification", () => {

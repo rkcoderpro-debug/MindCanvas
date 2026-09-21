@@ -509,21 +509,23 @@ export function useWorkspace(owner: string | null) {
       if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
     } catch (err) { report(err); }
   };
-  const create = async (title: string, imported?: BoardState, targetFolderId: string | null = null) => {
+  const create = async (title: string, imported?: BoardState, targetFolderId: string | null = null): Promise<BoardState> => {
     ++navigation.current;
     // Creating a new canvas is still a valid local action when a previous
     // cloud save is offline or waiting for conflict resolution. The old
     // project's pending snapshot remains isolated in its own cache entry and
     // can be retried later; it must not block a new canvas.
+    const next = imported ?? blankBoard(title);
     const previousProjectId = current.current?.id;
-    if (!alive.current) return;
+    if (!alive.current) return next;
     folderId.current = targetFolderId; clearHistory(); setVersions([]);
-    stage(imported ?? blankBoard(title));
+    stage(next);
     // Save only the project that was open before this action. This keeps a
     // stalled cloud request from blocking the new canvas, while preserving
     // ordering through SaveQueue and leaving the new draft on its normal
     // debounce timer.
     if (previousProjectId) void flush(previousProjectId);
+    return next;
   };
   const home = async () => { const ticket = ++navigation.current; checkpointCurrent(); await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); clearHistory(); setVersions([]); await refresh(); };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };

@@ -58,7 +58,7 @@ export type GuideProgress = Record<string, GuideProgressEntry>;
 export const GUIDE_PROGRESS_EVENT = "mindcanvas:feature-guide-progress";
 export const GUIDE_REQUEST_EVENT = "mindcanvas:feature-guide-request";
 export const GUIDE_ACTION_EVENT = "mindcanvas:feature-guide-action";
-export const GUIDE_CONTENT_VERSION = "v3";
+export const GUIDE_CONTENT_VERSION = "v4";
 const STORAGE_PREFIX = `mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}`;
 
 /**
@@ -158,6 +158,10 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     outcomeVi: "Tạo được một nét vẽ và di chuyển một phần tử trên canvas.",
     outcomeEn: "Draw a stroke and move an element on the canvas.",
     steps: [
+      { target: ".workspace-nav-row > button:first-child", skipWhenRoute: "workspace", titleVi: "Đi tới Workspace", titleEn: "Go to Workspace", bodyVi: "Bấm Workspace ở sidebar. Guide sẽ đưa bạn tới trang tạo canvas thay vì bắt bạn tự tìm trong nền tối.", bodyEn: "Click Workspace in the sidebar. The guide takes you to the canvas creation page instead of making you search through a dimmed screen." },
+      { target: ".workspace-create-button", titleVi: "Tạo canvas thực hành", titleEn: "Create a practice canvas", bodyVi: "Bấm Tạo project mới. Canvas này chỉ dành cho bài thực hành; cuối guide bạn sẽ tự chọn giữ lại hoặc đưa vào thùng rác.", bodyEn: "Click New project. This canvas is only for practice; at the end you choose whether to keep it or move it to Trash." },
+      { target: ".guide-project-name-input", completion: { type: "input", selector: ".guide-project-name-input", minLength: 1 }, titleVi: "Đặt tên canvas", titleEn: "Name the canvas", bodyVi: "Nhập tên bất kỳ cho canvas thực hành. Khi có tên, nút Tạo sẽ sáng để bạn bấm.", bodyEn: "Enter any name for the practice canvas. Once it has a name, the Create button becomes available." },
+      { target: ".guide-project-create-submit", titleVi: "Mở canvas mới", titleEn: "Open the new canvas", bodyVi: "Bấm Tạo. Guide sẽ chờ canvas mới mở xong rồi mới chỉ thanh công cụ thật.", bodyEn: "Click Create. The guide waits for the new canvas to open before pointing at the real toolbar." },
       { target: ".drawing-toolbar", titleVi: "Mở thanh công cụ", titleEn: "Open the toolbar", bodyVi: "Đây là thanh công cụ chính. Bấm nút mở rộng nếu các tool đang được thu gọn.", bodyEn: "This is the main toolbar. Expand it if the tools are collapsed." },
       { target: '[data-tool="select"]', titleVi: "V — trỏ và chọn", titleEn: "V — pointer and select", bodyVi: "Bấm V để chọn một phần tử. Kéo từ vùng trống để tạo khung chọn nhiều phần tử; kéo phần đã chọn để di chuyển.", bodyEn: "Click V to select an element. Drag from empty space to marquee-select multiple elements, then drag the selection to move it." },
       { target: '[data-tool="pen"]', titleVi: "P — bút vẽ", titleEn: "P — pen", bodyVi: "Bấm P, sau đó kéo trên canvas để viết. Nét vẽ hiện ngay trong lúc kéo, kể cả với chuột hoặc bảng vẽ.", bodyEn: "Click P, then drag on the canvas to draw. The stroke renders while you drag with a mouse or tablet." },

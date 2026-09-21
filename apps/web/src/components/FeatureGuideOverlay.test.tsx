@@ -12,8 +12,8 @@ function rect() {
   return { left: 100, top: 80, width: 120, height: 36, right: 220, bottom: 116, x: 100, y: 80, toJSON: () => ({}) } as DOMRect;
 }
 
-function guide(steps: GuideDefinition["steps"]): GuideDefinition {
-  return { id: "test-guide", category: "canvas", titleVi: "Hướng dẫn", titleEn: "Guide", summaryVi: "", summaryEn: "", demo: "canvas", steps, gifSrc: "/guides/test.gif" };
+function guide(steps: GuideDefinition["steps"], id = "test-guide"): GuideDefinition {
+  return { id, category: "canvas", titleVi: "Hướng dẫn", titleEn: "Guide", summaryVi: "", summaryEn: "", demo: "canvas", steps, gifSrc: "/guides/test.gif" };
 }
 
 beforeEach(() => {
@@ -31,6 +31,8 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(next).not.toBeNull();
     expect(next?.disabled).toBe(true);
     expect(document.body.textContent).toContain("Hãy mở đúng khu vực");
+    expect(document.body.querySelector(".feature-guide-backdrop")).toBeNull();
+    expect(document.body.querySelector(".feature-guide-target-missing")).not.toBeNull();
     expect(complete).not.toHaveBeenCalled();
   });
 
@@ -49,6 +51,8 @@ describe("FeatureGuideOverlay strict completion", () => {
     const complete = vi.fn();
     const definition = guide([{ kind: "practice", titleVi: "Thực hành", titleEn: "Practice", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "one", labelVi: "Một", labelEn: "One" }, { id: "two", labelVi: "Hai", labelEn: "Two" }] } }]);
     await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, onComplete: complete, onSkip: vi.fn() })));
+    expect(document.body.querySelector(".feature-guide-backdrop")).toBeNull();
+    expect(document.body.querySelector(".feature-guide-practice-panel")).not.toBeNull();
     const next = () => document.body.querySelector<HTMLButtonElement>(".feature-guide-next")!;
     expect(next().disabled).toBe(true);
     await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "one" } })));
@@ -56,6 +60,19 @@ describe("FeatureGuideOverlay strict completion", () => {
     await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "two" } })));
     expect(next().disabled).toBe(false);
     await act(async () => next().click());
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires an explicit keep-or-trash choice for a practice canvas", async () => {
+    const complete = vi.fn();
+    const decision = vi.fn();
+    const definition = guide([{ kind: "practice", titleVi: "Canvas", titleEn: "Canvas", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "one", labelVi: "Một", labelEn: "One" }] } }], "canvas-controls");
+    await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, practiceResourceId: "practice-1", onPracticeDecision: decision, onComplete: complete, onSkip: vi.fn() })));
+    await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "one" } })));
+    const keep = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Giữ canvas");
+    expect(keep).not.toBeUndefined();
+    await act(async () => keep?.click());
+    expect(decision).toHaveBeenCalledWith("keep", "practice-1");
     expect(complete).toHaveBeenCalledTimes(1);
   });
 });
