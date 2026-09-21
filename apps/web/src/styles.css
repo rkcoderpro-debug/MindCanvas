@@ -3714,12 +3714,17 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .document-annotation-tools button span { white-space: nowrap; }
 .document-viewer-actions > button:disabled { opacity: .42; cursor: not-allowed; }
 .document-draw-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; cursor: pointer; }
+.document-draw-toggle:has(input:disabled) { opacity: .62; cursor: not-allowed; }
 .document-width { display: inline-flex; align-items: center; gap: 4px; }
 .document-width input { width: 65px; }
 .document-pdf-body { display: grid; place-items: center; gap: 8px; min-height: 0; overflow: auto; padding: 14px; background: color-mix(in srgb, var(--canvas) 88%, var(--surface)); }
+.document-pdf-body.pdf-hand-active { cursor: grab; }
+.document-pdf-body.pdf-hand-active:active { cursor: grabbing; }
+.pdf-page-shell { position: relative; flex: 0 0 auto; overflow: visible; line-height: 0; }
 .pdf-page-stack { position: relative; flex: 0 0 auto; box-shadow: 0 8px 24px var(--shadow); background: #fff; line-height: 0; }
 .pdf-page-stack > canvas { display: block; max-width: min(100%, 900px); }
 .pdf-annotation-canvas { position: absolute; inset: 0; z-index: 2; cursor: crosshair; touch-action: none; }
+.pdf-annotation-canvas.annotation-inactive { pointer-events: none; }
 .pdf-annotation-canvas.annotation-eraser { cursor: none; }
 .document-pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 0; color: var(--muted); font-size: 12px; }
 .document-pager button { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); color: var(--text); }

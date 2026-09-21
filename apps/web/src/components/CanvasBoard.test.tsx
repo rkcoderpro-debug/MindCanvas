@@ -321,6 +321,42 @@ describe("Canvas interactions", () => {
       expect(current.viewport.y).toBeLessThan(0);
     } finally { vi.useRealTimers(); }
   });
+  it("zooms around the first XP-Pen point while Ctrl is held", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 120, 100, { pointerType: "xpen", pointerId: 91, ctrlKey: true });
+      pointer(svg, "pointermove", 120, 40, { pointerType: "xpen", pointerId: 91, ctrlKey: true });
+      pointer(svg, "pointerup", 120, 40, { pointerType: "xpen", pointerId: 91, ctrlKey: true });
+    });
+    expect(current.viewport.scale).toBeGreaterThan(1);
+    expect(current.viewport.x).toBeLessThan(0);
+    expect(current.viewport.y).toBeLessThan(0);
+  });
+  it("uses Space as a temporary hand tool and H as a temporary highlighter", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " ", bubbles: true, cancelable: true })));
+    await act(async () => { pointer(svg, "pointerdown", 30, 40); pointer(svg, "pointermove", 90, 110); pointer(svg, "pointerup", 90, 110); });
+    expect(current.viewport).toMatchObject({ x: 60, y: 70 });
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keyup", { code: "Space", key: " ", bubbles: true })));
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true, cancelable: true })));
+    await act(async () => { pointer(svg, "pointerdown", 20, 30); pointer(svg, "pointermove", 80, 90); pointer(svg, "pointerup", 80, 90); });
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keyup", { key: "h", bubbles: true })));
+    expect(current.drawings).toHaveLength(1);
+    expect(current.drawings[0].opacity).toBe(.3);
+  });
+  it("uses V as a temporary selection tool while another drawing tool is active", async () => {
+    const b = { ...blankBoard(), shapes: [{ id: "shape", kind: "rect" as const, x: 20, y: 20, width: 80, height: 60, color: "#fff" }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keydown", { key: "v", bubbles: true, cancelable: true })));
+    await act(async () => { pointer(host.querySelector('[data-element="shape"]')!, "pointerdown", 30, 30); pointer(svg, "pointermove", 100, 90); pointer(svg, "pointerup", 100, 90); });
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keyup", { key: "v", bubbles: true })));
+    expect(current.shapes[0]).toMatchObject({ x: 90, y: 80 });
+    expect(current.drawings).toHaveLength(0);
+  });
   it("centers plus/minus and reset zoom on the visible canvas", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const frame = host.querySelector(".editor-frame")!;

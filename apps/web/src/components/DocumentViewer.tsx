@@ -93,13 +93,19 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
   const [fullscreen, setFullscreen] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [annotationMode, setAnnotationMode] = useState<AnnotationMode>("pen");
+  const [heldAnnotationMode, setHeldAnnotationMode] = useState<AnnotationMode | null>(null);
+  const [spaceHeld, setSpaceHeld] = useState(false);
   const [color, setColor] = useState("#2563eb");
   const [width, setWidth] = useState(3);
   const [eraserSize, setEraserSize] = useState(20);
+  const [pdfZoom, setPdfZoom] = useState(1);
+  const [pdfZoomOrigin, setPdfZoomOrigin] = useState<Point>({ x: 0, y: 0 });
   const [strokes, setStrokes] = useState<Record<number, Stroke[]>>({});
   const [historyRevision, setHistoryRevision] = useState(0);
   const pageCanvas = useRef<HTMLCanvasElement>(null);
   const annotationCanvas = useRef<HTMLCanvasElement>(null);
+  const pdfBody = useRef<HTMLDivElement>(null);
+  const pdfPageShell = useRef<HTMLDivElement>(null);
   const viewer = useRef<HTMLDivElement>(null);
   const currentStroke = useRef<ActiveStroke | null>(null);
   const activeEraser = useRef<{ page: number; before: Record<number, Stroke[]>; changed: boolean } | null>(null);
@@ -107,14 +113,21 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
   const historyPast = useRef<Record<number, Stroke[]>[]>([]);
   const historyFuture = useRef<Record<number, Stroke[]>[]>([]);
   const eraserCursor = useRef<Point | null>(null);
+  const ctrlHeld = useRef(false);
+  const spaceHeldRef = useRef(false);
+  const heldAnnotationKeys = useRef<string[]>([]);
+  const pdfZoomGesture = useRef<{ pointerId: number; startY: number; startZoom: number; origin: Point } | null>(null);
+  const pdfPanGesture = useRef<{ pointerId: number; startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
   const dimensions = useRef<Record<number, { width: number; height: number; pdfWidth: number; pdfHeight: number }>>({});
   const pdfBytes = useMemo(() => kind === "pdf" ? bytesFromDataUrl(source.dataUrl) : null, [kind, source.dataUrl]);
   strokesRef.current = strokes;
+  const effectiveAnnotationMode = heldAnnotationMode ?? annotationMode;
+  const annotationActive = fullscreen && (drawing || heldAnnotationMode !== null);
 
   useEffect(() => {
     if (kind !== "pdf" || !pdfBytes) return;
     let alive = true;
-    setLoading(true); setError(""); setPage(1); setPdf(null); setPageCount(0);
+    setLoading(true); setError(""); setPage(1); setPdf(null); setPageCount(0); setPdfZoom(1); setPdfZoomOrigin({ x: 0, y: 0 });
     strokesRef.current = {}; setStrokes({}); historyPast.current = []; historyFuture.current = []; setHistoryRevision(value => value + 1);
     currentStroke.current = null; activeEraser.current = null; eraserCursor.current = null;
     void import("pdfjs-dist/legacy/build/pdf.mjs").then(module => {
@@ -177,7 +190,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     for (const stroke of strokesRef.current[targetPage] ?? []) drawStroke(context, stroke);
     const active = currentStroke.current;
     if (active?.page === targetPage && active.tool !== undefined) drawStroke(context, active);
-    if (annotationMode === "eraser" && targetPage === page && eraserCursor.current) {
+    if (effectiveAnnotationMode === "eraser" && targetPage === page && eraserCursor.current) {
       context.save();
       context.strokeStyle = "rgba(239, 68, 68, .9)";
       context.lineWidth = 1 / ratio;
@@ -203,8 +216,9 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     setHistoryRevision(value => value + 1);
   };
   const pointFromEvent = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const rect = pdfPageShell.current?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect();
+    const zoom = Math.max(.01, pdfZoom);
+    return { x: pdfZoomOrigin.x + (event.clientX - rect.left - pdfZoomOrigin.x) / zoom, y: pdfZoomOrigin.y + (event.clientY - rect.top - pdfZoomOrigin.y) / zoom };
   };
   const applyEraser = (point: Point, targetPage: number) => {
     const active = activeEraser.current;
@@ -218,22 +232,22 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     redraw(targetPage);
   };
   const beginStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawing) return;
+    if (!annotationActive || event.ctrlKey || event.metaKey || ctrlHeld.current || spaceHeldRef.current) return;
     const point = pointFromEvent(event);
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    if (annotationMode === "eraser") {
+    if (effectiveAnnotationMode === "eraser") {
       activeEraser.current = { page, before: cloneAnnotationMap(strokesRef.current), changed: false };
       eraserCursor.current = point;
       applyEraser(point, page);
       redraw(page);
       return;
     }
-    currentStroke.current = { page, points: [point], color, width: annotationMode === "highlight" ? Math.max(10, width * 3) : width, tool: annotationMode };
+    currentStroke.current = { page, points: [point], color, width: effectiveAnnotationMode === "highlight" ? Math.max(10, width * 3) : width, tool: effectiveAnnotationMode };
     redraw(page);
   };
   const moveStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point = pointFromEvent(event);
-    if (annotationMode === "eraser" && activeEraser.current) {
+    if (activeEraser.current) {
       eraserCursor.current = point;
       applyEraser(point, activeEraser.current.page);
       redraw(activeEraser.current.page);
@@ -286,12 +300,67 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     if (mode !== "eraser") eraserCursor.current = null;
     redraw(page);
   };
+  const beginPdfPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button, input, label, .document-pager")) return;
+    const body = pdfBody.current;
+    const shell = pdfPageShell.current;
+    if (!body || !shell) return;
+    if (event.ctrlKey || event.metaKey || ctrlHeld.current) {
+      const rect = shell.getBoundingClientRect();
+      const origin = { x: pdfZoomOrigin.x + (event.clientX - rect.left - pdfZoomOrigin.x) / Math.max(.01, pdfZoom), y: pdfZoomOrigin.y + (event.clientY - rect.top - pdfZoomOrigin.y) / Math.max(.01, pdfZoom) };
+      pdfZoomGesture.current = { pointerId: event.pointerId, startY: event.clientY, startZoom: pdfZoom, origin };
+      setPdfZoomOrigin(origin);
+      body.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      return;
+    }
+    if (spaceHeldRef.current) {
+      pdfPanGesture.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, scrollLeft: body.scrollLeft, scrollTop: body.scrollTop };
+      body.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    }
+  };
+  const movePdfPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const body = pdfBody.current;
+    const zoomGesture = pdfZoomGesture.current;
+    const panGesture = pdfPanGesture.current;
+    if (!body) return;
+    if (zoomGesture?.pointerId === event.pointerId) {
+      const nextZoom = Math.min(4, Math.max(.5, zoomGesture.startZoom * Math.exp((zoomGesture.startY - event.clientY) * .004)));
+      setPdfZoom(nextZoom);
+      event.preventDefault();
+      return;
+    }
+    if (panGesture?.pointerId === event.pointerId) {
+      body.scrollLeft = panGesture.scrollLeft - (event.clientX - panGesture.startX);
+      body.scrollTop = panGesture.scrollTop - (event.clientY - panGesture.startY);
+      event.preventDefault();
+    }
+  };
+  const finishPdfPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const body = pdfBody.current;
+    if (pdfZoomGesture.current?.pointerId === event.pointerId) pdfZoomGesture.current = null;
+    if (pdfPanGesture.current?.pointerId === event.pointerId) pdfPanGesture.current = null;
+    if (body?.hasPointerCapture?.(event.pointerId)) body.releasePointerCapture(event.pointerId);
+  };
   useEffect(() => {
-    if (!fullscreen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!fullscreen) return;
+      if (event.key === "Control" || event.key === "Meta") { ctrlHeld.current = true; return; }
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.code === "Space") { event.preventDefault(); spaceHeldRef.current = true; setSpaceHeld(true); return; }
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        const key = event.key.toLowerCase();
+        if (!event.repeat && (key === "e" || key === "h")) {
+          event.preventDefault();
+          heldAnnotationKeys.current = heldAnnotationKeys.current.filter(item => item !== key);
+          heldAnnotationKeys.current.push(key);
+          setHeldAnnotationMode(key === "e" ? "eraser" : "highlight");
+        }
+        return;
+      }
       const key = event.key.toLowerCase();
       if (key === "z") {
         event.preventDefault();
@@ -303,8 +372,20 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
         redoStroke();
       }
     };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Control" || event.key === "Meta") { ctrlHeld.current = false; return; }
+      if (event.code === "Space") { spaceHeldRef.current = false; setSpaceHeld(false); return; }
+      const key = event.key.toLowerCase();
+      if (key !== "e" && key !== "h") return;
+      heldAnnotationKeys.current = heldAnnotationKeys.current.filter(item => item !== key);
+      const active = heldAnnotationKeys.current.at(-1);
+      setHeldAnnotationMode(active === "e" ? "eraser" : active === "h" ? "highlight" : null);
+    };
+    const handleBlur = () => { ctrlHeld.current = false; spaceHeldRef.current = false; heldAnnotationKeys.current = []; setSpaceHeld(false); setHeldAnnotationMode(null); pdfZoomGesture.current = null; pdfPanGesture.current = null; };
     window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("blur", handleBlur);
+    return () => { window.removeEventListener("keydown", handleKeyDown, true); window.removeEventListener("keyup", handleKeyUp, true); window.removeEventListener("blur", handleBlur); handleBlur(); };
   }, [fullscreen]);
   const exportPdf = async () => {
     if (!pdfBytes) return;
@@ -337,11 +418,11 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
           {kind === "pdf" && (
             <>
               <label className="document-draw-toggle">
-                <input type="checkbox" checked={drawing} onChange={event => setDrawing(event.target.checked)} />
+                <input type="checkbox" checked={drawing} disabled={!fullscreen} onChange={event => setDrawing(event.target.checked)} />
                 <PenLine size={15} />
-                {t("drawOnPdf")}
+                {fullscreen ? t("drawOnPdf") : t("pdfDrawFullscreenOnly")}
               </label>
-              {drawing && (
+              {drawing && fullscreen && (
                 <>
                   <div className="document-annotation-tools" role="toolbar" aria-label={t("pdfAnnotationTools")}>
                     <button type="button" className={annotationMode === "pen" ? "active" : ""} aria-pressed={annotationMode === "pen"} title={t("pdfPen")} onClick={() => chooseAnnotationMode("pen")}><PenLine size={14} /><span>{t("pdfPen")}</span></button>
@@ -371,18 +452,20 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
         </div>
       </header>
       {kind === "pdf" ? (
-        <div className="document-pdf-body">
+          <div ref={pdfBody} className={`document-pdf-body ${spaceHeld ? "pdf-hand-active" : ""}`} onPointerDown={beginPdfPointer} onPointerMove={movePdfPointer} onPointerUp={finishPdfPointer} onPointerCancel={finishPdfPointer} style={{ touchAction: fullscreen ? "none" : "auto" }}>
           {loading && <div className="document-loading">Đang render PDF…</div>}
           {error && <div className="document-error">{error}</div>}
           {!loading && !error && (
             <>
-              <div className="pdf-page-stack">
+              <div ref={pdfPageShell} className="pdf-page-shell">
+                <div className="pdf-page-stack" style={{ transform: `scale(${pdfZoom})`, transformOrigin: `${pdfZoomOrigin.x}px ${pdfZoomOrigin.y}px` }}>
                 <canvas ref={pageCanvas} />
-                <canvas ref={annotationCanvas} className={`pdf-annotation-canvas annotation-${annotationMode}`} onPointerDown={beginStroke} onPointerMove={moveStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { eraserCursor.current = null; redraw(page); }} />
+                <canvas ref={annotationCanvas} className={`pdf-annotation-canvas annotation-${effectiveAnnotationMode} ${annotationActive ? "annotation-active" : "annotation-inactive"}`} style={{ pointerEvents: annotationActive ? "auto" : "none" }} onPointerDown={beginStroke} onPointerMove={moveStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { eraserCursor.current = null; redraw(page); }} />
+                </div>
               </div>
               <div className="document-pager">
                 <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}><ChevronLeft size={16} /></button>
-                <span>{page} / {pageCount}</span>
+                <span>{page} / {pageCount} · {Math.round(pdfZoom * 100)}%</span>
                 <button disabled={page >= pageCount} onClick={() => setPage(value => value + 1)}><ChevronRight size={16} /></button>
               </div>
             </>

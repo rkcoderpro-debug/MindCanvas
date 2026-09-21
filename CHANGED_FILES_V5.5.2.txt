@@ -1,0 +1,13 @@
+CHANGED_FILES_V5.5.2.txt
+V5.5.2_XPEN_PDF_VI.md
+apps/web/package.json
+apps/web/public/sw.js
+apps/web/src/App.test.tsx
+apps/web/src/components/AppSidebar.tsx
+apps/web/src/components/CanvasBoard.test.tsx
+apps/web/src/components/CanvasBoard.tsx
+apps/web/src/components/DocumentViewer.tsx
+apps/web/src/lib/aiSupport.ts
+apps/web/src/lib/i18n.tsx
+apps/web/src/styles.css
+package-lock.json
