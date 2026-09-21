@@ -414,7 +414,18 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     const dx = p.x - g.start.x, dy = p.y - g.start.y;
     const rect = { x: Math.min(g.start.x, p.x), y: Math.min(g.start.y, p.y), width: Math.abs(dx), height: Math.abs(dy) };
     setMarquee(rect);
-    const found = orderedElements(g.base).filter(s => { if (hidden.has(s.id) || s.kind === "edges") return false; const bounds = elementBounds(g.base, s)!; return bounds.x >= rect.x && bounds.y >= rect.y && bounds.x + bounds.width <= rect.x + rect.width && bounds.y + bounds.height <= rect.y + rect.height; });
+    // A left-to-right drag selects elements fully inside the box. A
+    // right-to-left drag behaves like a desktop pointer's crossing selection
+    // and includes every element the box touches.
+    const crossing = dx < 0;
+    const found = orderedElements(g.base).filter(s => {
+      if (hidden.has(s.id) || s.kind === "edges") return false;
+      const bounds = elementBounds(g.base, s);
+      if (!bounds || rect.width === 0 || rect.height === 0) return false;
+      return crossing
+        ? bounds.x < rect.x + rect.width && bounds.x + bounds.width > rect.x && bounds.y < rect.y + rect.height && bounds.y + bounds.height > rect.y
+        : bounds.x >= rect.x && bounds.y >= rect.y && bounds.x + bounds.width <= rect.x + rect.width && bounds.y + bounds.height <= rect.y + rect.height;
+    });
     setSelections(expandGroups(g.base, [...(g.selections ?? []), ...found]));
   };
   const autoPanTick = () => {
@@ -744,7 +755,12 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     // still follow the active drawing tool.
     const phoneLayout = typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches;
     const touchShouldPan = input.pointerType === "touch" && (inputTool === "select" || (phoneLayout && (inputTool === "pen" || inputTool === "highlighter" || inputTool === "eraser") && !touchSettings.drawWithFinger));
-    const stylusTool: ToolMode = isStylusPointer(input.pointerType) && touchSettings.stylusDrawOnly && ["select", "text", "connector"].includes(inputTool) ? "pen" : inputTool;
+    // Holding V is an explicit pointer override, so it must never be turned
+    // into a pen by the stylus-only preference. Keep the legacy behavior for
+    // the normal Select tool and for text/connector insertion.
+    const temporarySelect = heldToolRef.current === "select";
+    const forceStylusPen = ["text", "connector"].includes(inputTool) || (inputTool === "select" && !temporarySelect);
+    const stylusTool: ToolMode = isStylusPointer(input.pointerType) && touchSettings.stylusDrawOnly && forceStylusPen ? "pen" : inputTool;
     const effectiveTool = input.pointerType === "touch" && !isStylusPointer(input.pointerType) ? tool : stylusTool;
     if (readOnly || inputTool === "hand" || input.button === 1 || touchShouldPan) {
       setSelected(null); setInputMode("panning"); gesture.current = { mode: "pan", start: p, screen: { x: input.clientX, y: input.clientY }, base, pointer: input.pointerId, next: base };
@@ -1216,13 +1232,14 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     patch({ [key]: value });
   };
   const activeTool = tools.find(item => item.id === tool) ?? tools[0];
+  const activeToolDefinition = tools.find(item => item.id === activeToolMode) ?? activeTool;
   const drawingTool: DrawingToolName | null = tool === "pen" || tool === "highlighter" || tool === "eraser" ? tool : null;
   const drawingSize = drawingTool ? drawingSizes[drawingTool] : 0;
   const drawingSizeRange = drawingTool ? DRAWING_SIZE_RANGES[drawingTool] : null;
   const drawingSizeProgress = drawingTool && drawingSizeRange ? `${((drawingSize - drawingSizeRange.min) / Math.max(1, drawingSizeRange.max - drawingSizeRange.min)) * 100}%` : "0%";
   const visibleToolbarTools = tools.filter(item => visibleToolIds.includes(item.id));
   const hiddenToolbarTools = tools.filter(item => !visibleToolIds.includes(item.id));
-  const ActiveToolIcon = activeTool.icon;
+  const ActiveToolIcon = activeToolDefinition.icon;
   const chooseTool = (id: ToolMode) => {
     finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
     if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches) setToolbarExpanded(false);
@@ -1239,7 +1256,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
       {!readOnly && <MobileQuickActions hasSelection={selections.length > 0} canEditSelection={canEditSelection} canPaste onCopy={copy} onPaste={paste} onDuplicate={duplicate} onDelete={remove} canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo}/>}
       {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"} ${toolbarOverflowing ? "toolbar-overflowing" : ""}`} role="toolbar" aria-label={t("properties")}>
-        {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(tool)} title={t(tool)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/><span>{t(tool)}</span></button>}
+        {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(activeToolMode)} title={t(activeToolMode)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/><span>{t(activeToolMode)}</span></button>}
         <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
         <span ref={toolbarTools} className="drawing-toolbar-tools" onScroll={() => {
           if (!showToolbarSwipeHint) return;
@@ -1264,7 +1281,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
         <ActiveToolIcon size={14}/><span className="drawing-size-label">{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} style={{ "--range-progress": drawingSizeProgress } as CSSProperties} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(18, Math.max(6, drawingSize / 3))}px`, height: `${Math.min(18, Math.max(6, drawingSize / 3))}px` }}/>
       </div>}
       <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={`${iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"},${DOCUMENT_ACCEPT}`} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addCanvasFiles(files); }}/>
-      <svg ref={svg} tabIndex={0} aria-label="Canvas" className={`canvas-svg tool-${activeToolMode}`}
+      <svg ref={svg} tabIndex={0} aria-label="Canvas" data-selection-tool={activeToolMode === "select" ? "pointer" : undefined} className={`canvas-svg tool-${activeToolMode} ${activeToolMode === "select" ? "selection-pointer" : ""}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e); }} onPointerCancelCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e, true); }}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => { if (!shouldUseIOSNativeTouch(e) && gesture.current?.pointer === e.pointerId) finish(); }} onPointerCancel={e => { if (!shouldUseIOSNativeTouch(e) && gesture.current?.pointer === e.pointerId) finish(true); }} onLostPointerCapture={lostPointerCapture}>
         <CanvasBackground board={b}/>
@@ -1410,9 +1427,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       </aside></div>}
       {sourceError && <div className="canvas-inline-error" role="alert"><span>{sourceError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setSourceError("")}><X size={14}/></button></div>}
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
-      {((inputMode === "drawing" || inputMode === "erasing") && ["pen", "highlighter", "eraser"].includes(tool)) && <div className="pen-mode-badge" role="status">{tool === "eraser" ? <Eraser size={14}/> : <PenLine size={14}/>}<span>{t(tool)}</span></div>}
+      {((inputMode === "drawing" || inputMode === "erasing") && ["pen", "highlighter", "eraser"].includes(activeToolMode)) && <div className="pen-mode-badge" role="status">{activeToolMode === "eraser" ? <Eraser size={14}/> : <PenLine size={14}/>}<span>{t(activeToolMode)}</span></div>}
       {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
-      <div className="canvas-hint">{t(tool === "connector" ? "connectorHint" : tool === "text" ? "textHint" : tool === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(tool) ? "drawHint" : "canvasHint")}</div>
+      <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div>
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <div className="canvas-mobile-dock">
         <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>

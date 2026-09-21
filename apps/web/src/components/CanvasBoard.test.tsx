@@ -357,6 +357,23 @@ describe("Canvas interactions", () => {
     expect(current.shapes[0]).toMatchObject({ x: 90, y: 80 });
     expect(current.drawings).toHaveLength(0);
   });
+  it("uses V as a pointer marquee tool to select and move multiple elements", async () => {
+    const b = { ...blankBoard(), shapes: [
+      { id: "left", kind: "rect" as const, x: 20, y: 20, width: 60, height: 50, color: "#fff" },
+      { id: "right", kind: "rect" as const, x: 120, y: 20, width: 60, height: 50, color: "#fff" },
+    ] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keydown", { key: "v", bubbles: true, cancelable: true })));
+    expect(svg.getAttribute("data-selection-tool")).toBe("pointer");
+    await act(async () => { pointer(svg, "pointerdown", 190, 100, { pointerId: 7, pointerType: "xpen" }); pointer(svg, "pointermove", 50, 0, { pointerId: 7, pointerType: "xpen" }); pointer(svg, "pointerup", 50, 0, { pointerId: 7, pointerType: "xpen" }); });
+    expect(host.querySelectorAll('[stroke-dasharray="4 3"]')).toHaveLength(2);
+    await act(async () => { pointer(host.querySelector('[data-element="left"]')!, "pointerdown", 30, 30, { pointerId: 8, pointerType: "xpen" }); pointer(svg, "pointermove", 60, 50, { pointerId: 8, pointerType: "xpen" }); pointer(svg, "pointerup", 60, 50, { pointerId: 8, pointerType: "xpen" }); });
+    await act(async () => svg.dispatchEvent(new KeyboardEvent("keyup", { key: "v", bubbles: true })));
+    expect(current.shapes.map(shape => shape.x)).toEqual([50, 150]);
+    expect(current.drawings).toHaveLength(0);
+  });
   it("centers plus/minus and reset zoom on the visible canvas", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const frame = host.querySelector(".editor-frame")!;

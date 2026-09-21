@@ -515,7 +515,11 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .canvas-svg * { user-select: none; -webkit-user-select: none; }
 .canvas-background-base { transition: fill .2s ease; }
 .smart-guide { pointer-events: none; stroke: var(--accent-2); stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
-.tool-select { cursor: default; }
+.tool-select, .selection-pointer { cursor: default; }
+.selection-pointer [data-element] { cursor: pointer; }
+.selection-pointer [data-element]:active { cursor: grabbing; }
+.editor-layout[data-input-mode="selecting"] .selection-pointer { cursor: crosshair; }
+.editor-layout[data-input-mode="selecting"] .selection-pointer [data-element] { cursor: crosshair; }
 .tool-hand { cursor: grab; }
 .tool-hand:active { cursor: grabbing; }
 .tool-pen, .tool-highlighter, .tool-eraser, .tool-rect, .tool-ellipse, .tool-connector { cursor: crosshair; }
