@@ -62,9 +62,10 @@ export default function FeatureGuidePage({ ownerId, onRunGuide }: Props) {
       const entry = progress[guide.id];
       const title = language === "vi" ? guide.titleVi : guide.titleEn;
       const summary = language === "vi" ? guide.summaryVi : guide.summaryEn;
+      const outcome = language === "vi" ? guide.outcomeVi : guide.outcomeEn;
       return <article className="feature-guide-card" key={guide.id}>
         <div className="feature-guide-card-media">{guide.gifSrc && <img src={guide.gifSrc} alt={`${title} ${t("guideGifAlt")}`} loading="lazy" onError={event => { event.currentTarget.style.display = "none"; }}/>}<GuideDemo kind={guide.demo}/><span className="feature-guide-category">{categoryLabel(guide.category, language)}</span></div>
-        <div className="feature-guide-card-body"><div className="feature-guide-card-heading"><h2>{title}</h2><span className={`feature-guide-status ${entry?.status ?? "unseen"}`}>{statusLabel(entry?.status, language)}</span></div><p>{summary}</p><div className="feature-guide-card-actions"><button type="button" className="primary-button" onClick={() => onRunGuide(guide.id)}><Play size={15}/>{t("runGuide")}</button><small>{guide.steps.length} {t("guideSteps")}</small></div></div>
+        <div className="feature-guide-card-body"><div className="feature-guide-card-heading"><h2>{title}</h2><span className={`feature-guide-status ${entry?.status ?? "unseen"}`}>{statusLabel(entry?.status, language)}</span></div><p>{summary}</p>{outcome && <small className="feature-guide-outcome"><Sparkles size={13}/>{outcome}</small>}<div className="feature-guide-card-actions"><button type="button" className="primary-button" onClick={() => onRunGuide(guide.id)}><Play size={15}/>{t("runGuide")}</button><small>{guide.steps.length} {t("guideSteps")}</small></div></div>
       </article>;
     })}</div>}
   </main>;

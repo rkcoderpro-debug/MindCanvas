@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Play, RotateCcw, ShieldCheck } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
-import { GUIDE_DEFINITIONS, GUIDE_PROGRESS_EVENT, guideIsActivated, markGuideStarted, readGuideProgress, resetGuideProgress, type GuideCategory } from "../lib/featureGuides";
+import { GUIDE_CONTENT_VERSION, GUIDE_DEFINITIONS, GUIDE_PROGRESS_EVENT, guideIsActivated, markGuideStarted, readGuideProgress, resetGuideProgress, type GuideCategory } from "../lib/featureGuides";
 
 type Props = {
   ownerId: string | null;
@@ -39,7 +39,7 @@ export default function FeatureGuideAdminPanel({ ownerId, onRunGuide }: Props) {
       const entry = progress[guide.id];
       const isActivated = guideIsActivated(progress, guide.id);
       const title = language === "vi" ? guide.titleVi : guide.titleEn;
-      return <tr key={guide.id}><td><strong>{title}</strong><small>{categoryLabel(guide.category, language)}</small></td><td><label className="admin-guide-check"><input type="checkbox" checked={isActivated} onChange={event => { if (event.target.checked) markGuideStarted(ownerId, guide.id); else resetGuideProgress(ownerId, guide.id); }}/><span>{isActivated ? t("guideAdminActivated") : t("guideAdminUnseen")}</span></label></td><td>{entry?.startedAt ? new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.startedAt)) : "—"}</td><td><code>v1</code></td><td><div className="admin-guide-row-actions"><button type="button" className="secondary-button" onClick={() => onRunGuide?.(guide.id)}><Play size={13}/>{t("guideAdminRun")}</button><button type="button" className="icon-button" aria-label={t("guideAdminReset")} title={t("guideAdminReset")} onClick={() => resetGuideProgress(ownerId, guide.id)}><RotateCcw size={15}/></button></div></td></tr>;
+      return <tr key={guide.id}><td><strong>{title}</strong><small>{categoryLabel(guide.category, language)} · {guide.steps.length} {t("guideSteps")}</small></td><td><label className="admin-guide-check"><input type="checkbox" checked={isActivated} onChange={event => { if (event.target.checked) markGuideStarted(ownerId, guide.id); else resetGuideProgress(ownerId, guide.id); }}/><span>{isActivated ? t("guideAdminActivated") : t("guideAdminUnseen")}</span></label></td><td>{entry?.startedAt ? new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.startedAt)) : "—"}</td><td><code>{GUIDE_CONTENT_VERSION}</code></td><td><div className="admin-guide-row-actions"><button type="button" className="secondary-button" onClick={() => onRunGuide?.(guide.id)}><Play size={13}/>{t("guideAdminRun")}</button><button type="button" className="icon-button" aria-label={t("guideAdminReset")} title={t("guideAdminReset")} onClick={() => resetGuideProgress(ownerId, guide.id)}><RotateCcw size={15}/></button></div></td></tr>;
     })}</tbody></table></div>
   </section>;
 }

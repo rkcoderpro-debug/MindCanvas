@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoardState } from "@mindcanvas/shared";
 import CanvasBoard from "./CanvasBoard";
 import { blankBoard } from "../lib/board";
+import { TOOL_HOLD_THRESHOLD_MS } from "../lib/toolActivation";
 let root: Root, host: HTMLDivElement, current: BoardState;
 const commit = vi.fn();
 const navigateCommit = vi.fn();
@@ -345,6 +346,23 @@ describe("Canvas interactions", () => {
     await act(async () => svg.dispatchEvent(new KeyboardEvent("keyup", { key: "h", bubbles: true })));
     expect(current.drawings).toHaveLength(1);
     expect(current.drawings[0].opacity).toBe(.3);
+  });
+  it("keeps a quick toolbar click and restores the previous tool after a hold", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => root.render(<Harness initial={blankBoard()}/>));
+      const pen = host.querySelector('[aria-label="Bút"]') as HTMLButtonElement;
+      const eraser = host.querySelector('[aria-label="Tẩy"]') as HTMLButtonElement;
+      await act(async () => pen.click());
+      expect(pen.getAttribute("aria-pressed")).toBe("true");
+      await act(async () => pointer(eraser, "pointerdown", 12, 12, { pointerId: 51 }));
+      await act(async () => { vi.advanceTimersByTime(TOOL_HOLD_THRESHOLD_MS + 10); });
+      expect(eraser.getAttribute("aria-pressed")).toBe("true");
+      await act(async () => pointer(eraser, "pointerup", 12, 12, { pointerId: 51 }));
+      expect(pen.getAttribute("aria-pressed")).toBe("true");
+      await act(async () => pen.click());
+      expect(pen.getAttribute("aria-pressed")).toBe("true");
+    } finally { vi.useRealTimers(); }
   });
   it("uses V as a temporary selection tool while another drawing tool is active", async () => {
     const b = { ...blankBoard(), shapes: [{ id: "shape", kind: "rect" as const, x: 20, y: 20, width: 80, height: 60, color: "#fff" }] };

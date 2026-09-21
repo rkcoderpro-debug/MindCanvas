@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FeatureGuideOverlay from "./FeatureGuideOverlay";
+import FeatureGuideCelebration from "./FeatureGuideCelebration";
 import { finishGuide, GUIDE_REQUEST_EVENT, guideForId, guideForTrigger, markGuideStarted, readGuideProgress } from "../lib/featureGuides";
 
 type Props = {
@@ -14,6 +15,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
   const [activeGuideId, setActiveGuideId] = useState<string | null>(null);
   const [activeManual, setActiveManual] = useState(false);
   const [requestedGuideId, setRequestedGuideId] = useState<string | null>(null);
+  const [celebrationGuideId, setCelebrationGuideId] = useState<string | null>(null);
   const lastTrigger = useRef<string | null>(null);
   const manualConsumed = useRef<string | null>(null);
 
@@ -72,11 +74,17 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
 
   const close = (status: "completed" | "skipped") => {
     if (!activeGuideId) return;
-    finishGuide(ownerId, activeGuideId, status);
+    const completedId = activeGuideId;
+    finishGuide(ownerId, completedId, status);
     setActiveGuideId(null);
     setActiveManual(false);
+    if (status === "completed") setCelebrationGuideId(completedId);
   };
   const guide = guideForId(activeGuideId);
-  if (!guide) return null;
-  return <FeatureGuideOverlay guide={guide} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>;
+  const celebrationGuide = guideForId(celebrationGuideId);
+  if (!guide && !celebrationGuide) return null;
+  return <>
+    {guide && <FeatureGuideOverlay guide={guide} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
+    {celebrationGuide && <FeatureGuideCelebration guide={celebrationGuide} onClose={() => setCelebrationGuideId(null)}/>} 
+  </>;
 }

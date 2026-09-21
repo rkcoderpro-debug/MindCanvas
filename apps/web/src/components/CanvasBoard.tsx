@@ -26,6 +26,7 @@ import MobileQuickActions from "./MobileQuickActions";
 import { clampDrawingSize, DRAWING_SIZE_RANGES, eraseDrawingPaths, readDrawingSizes, saveDrawingSizes, type DrawingToolName, type DrawingToolSizes } from "../lib/drawingTools";
 import DocumentViewer from "./DocumentViewer";
 import { DOCUMENT_ACCEPT, documentKindFor, fileToDataUrl, MAX_DOCUMENT_BYTES, type DocumentKind } from "../lib/documentStore";
+import { TOOL_HOLD_THRESHOLD_MS, toolAfterRelease } from "../lib/toolActivation";
 
 type Props = { board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean; onDocumentSaved?: (document: { name: string; mimeType: string; kind: DocumentKind; size: number; dataUrl: string }) => void };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "zoom" | "draw" | "erase" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle; eraseRadius?: number; erasePoints?: Vec2[]; zoomAnchor?: Vec2 };
@@ -268,7 +269,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const [iosOverlayItems, setIOSOverlayItems] = useState<Array<IOSOverlayItem & { left: number; top: number; screenWidth: number; screenHeight: number }>>([]);
   const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false), [heldTool, setHeldTool] = useState<ToolMode | null>(null);
-  const spaceRef = useRef(false), ctrlRef = useRef(false), heldToolRef = useRef<ToolMode | null>(null), heldToolKeys = useRef<string[]>([]);
+  const spaceRef = useRef(false), ctrlRef = useRef(false), heldToolRef = useRef<ToolMode | null>(null);
+  const keyboardToolPresses = useRef(new Map<string, { tool: ToolMode; previous: ToolMode; startedAt: number }>());
+  const toolbarToolPress = useRef<{ tool: ToolMode; previous: ToolMode; pointerId: number; startedAt: number; timer: number | null; held: boolean } | null>(null);
   const previousThemeInk = useRef(palette.ink);
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   const [drawingSizes, setDrawingSizes] = useState<DrawingToolSizes>(readDrawingSizes);
@@ -501,6 +504,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   useEffect(() => () => {
     stopAutoPan();
     if (connectorPulseTimer.current !== null) window.clearTimeout(connectorPulseTimer.current);
+    if (toolbarToolPress.current?.timer !== null) window.clearTimeout(toolbarToolPress.current?.timer);
+    toolbarToolPress.current = null;
     recorder.current?.stop();
     recorderStream.current?.getTracks().forEach(track => track.stop());
   }, []);
@@ -1108,12 +1113,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       const active = document.fullscreenElement;
       return !!active?.closest(".document-viewer.is-fullscreen");
     };
-    const setTemporaryTool = (key: string, next: ToolMode | null) => {
-      heldToolKeys.current = heldToolKeys.current.filter(item => item !== key);
-      if (next) heldToolKeys.current.push(key);
-      const active = heldToolKeys.current.at(-1);
-      heldToolRef.current = active ? temporaryTools[active] ?? null : null;
-      setHeldTool(heldToolRef.current);
+    const setTemporaryTool = (next: ToolMode | null) => {
+      heldToolRef.current = next;
+      setHeldTool(next);
     };
     const keydown = (e: KeyboardEvent) => {
       if (pdfFullscreenActive()) return;
@@ -1145,7 +1147,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
         const temporary = temporaryTools[e.key.toLowerCase()];
         if (temporary) {
           e.preventDefault();
-          if (!e.repeat) setTemporaryTool(e.key.toLowerCase(), temporary);
+          if (!e.repeat && !keyboardToolPresses.current.has(e.key.toLowerCase())) {
+            keyboardToolPresses.current.set(e.key.toLowerCase(), { tool: temporary, previous: tool, startedAt: performance.now() });
+            setTemporaryTool(temporary);
+          }
           return;
         }
         const item = tools.find(i => i.key.length === 1 && i.key.toLowerCase() === e.key.toLowerCase());
@@ -1156,9 +1161,17 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       if (e.key === "Control" || e.key === "Meta") { ctrlRef.current = false; return; }
       if (e.code === "Space") { spaceRef.current = false; setSpace(false); return; }
       const key = e.key.toLowerCase();
-      if (temporaryTools[key]) setTemporaryTool(key, null);
+      const press = keyboardToolPresses.current.get(key);
+      if (!press) return;
+      keyboardToolPresses.current.delete(key);
+      setTemporaryTool(null);
+      const duration = performance.now() - press.startedAt;
+      setTool(toolAfterRelease(press.previous, press.tool, duration));
     };
-    const blur = () => { ctrlRef.current = false; spaceRef.current = false; heldToolKeys.current = []; heldToolRef.current = null; setSpace(false); setHeldTool(null); finish(true); };
+    const blur = () => {
+      ctrlRef.current = false; spaceRef.current = false; keyboardToolPresses.current.clear(); heldToolRef.current = null;
+      setSpace(false); setHeldTool(null); toolbarToolPress.current = null; finish(true);
+    };
     window.addEventListener("keydown", keydown); window.addEventListener("keyup", keyup); window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", keydown); window.removeEventListener("keyup", keyup); window.removeEventListener("blur", blur); };
   });
@@ -1244,6 +1257,39 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
     if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches) setToolbarExpanded(false);
   };
+  const beginToolbarToolPress = (event: ReactPointerEvent<HTMLButtonElement>, id: ToolMode) => {
+    if (event.button !== 0) return;
+    const active = toolbarToolPress.current;
+    if (active) {
+      if (active.timer !== null) window.clearTimeout(active.timer);
+      setTool(active.previous);
+    }
+    finishEdit();
+    const previous = tool;
+    setTool(id);
+    setMobileMoreOpen(false);
+    const state = { tool: id, previous, pointerId: event.pointerId, startedAt: performance.now(), timer: null as number | null, held: false };
+    state.timer = window.setTimeout(() => {
+      if (toolbarToolPress.current === state) toolbarToolPress.current = { ...state, held: true, timer: null };
+    }, TOOL_HOLD_THRESHOLD_MS);
+    toolbarToolPress.current = state;
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is not available in jsdom/Safari fallback. */ }
+  };
+  const endToolbarToolPress = (event: ReactPointerEvent<HTMLButtonElement>, id: ToolMode) => {
+    const state = toolbarToolPress.current;
+    if (!state || state.tool !== id || state.pointerId !== event.pointerId) return;
+    if (state.timer !== null) window.clearTimeout(state.timer);
+    toolbarToolPress.current = null;
+    const duration = performance.now() - state.startedAt;
+    setTool(toolAfterRelease(state.previous, state.tool, duration));
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* Pointer capture is not available in jsdom/Safari fallback. */ }
+  };
+  const toolbarToolEvents = (id: ToolMode) => ({
+    onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => beginToolbarToolPress(event, id),
+    onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => endToolbarToolPress(event, id),
+    onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => endToolbarToolPress(event, id),
+    onClick: (event: ReactMouseEvent<HTMLButtonElement>) => { if (event.detail === 0) chooseTool(id); },
+  });
   return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addCanvasFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
@@ -1263,7 +1309,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
           setShowToolbarSwipeHint(false);
           try { localStorage.setItem("mindcanvas:mobile-toolbar-swiped:v1", "true"); } catch {}
         }}>{visibleToolbarTools.map(({ id, icon: Icon, key }) =>
-          <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter", "eraser"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} onClick={() => chooseTool(id)}><Icon size={19}/></button>)}
+          <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter", "eraser"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} {...toolbarToolEvents(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
@@ -1410,7 +1456,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       </div>}
       {mobileMoreOpen && !readOnly && <div className="canvas-tools-sheet-backdrop" onClick={() => setMobileMoreOpen(false)}><aside className="canvas-tools-sheet" aria-label={t("moreTools")} onClick={event => event.stopPropagation()}>
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
-        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} onClick={() => chooseTool(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
+        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>
           <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
           <button onClick={() => { setEmbedOpen(true); setMobileMoreOpen(false); }}><Globe2 size={19}/><span>{t("embedWeb")}</span></button>

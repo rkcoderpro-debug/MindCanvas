@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GUIDE_DEFINITIONS, finishGuide, guideForTrigger, markGuideStarted, readGuideProgress, resetGuideProgress } from "./featureGuides";
+import { GUIDE_CONTENT_VERSION, GUIDE_DEFINITIONS, finishGuide, guideForTrigger, markGuideStarted, readGuideProgress, resetGuideProgress } from "./featureGuides";
 
 const storage = new Map<string, string>();
 beforeEach(() => {
@@ -10,9 +10,12 @@ afterEach(() => storage.clear());
 
 describe("feature guides", () => {
   it("keeps a stable guide registry with first-use triggers and GIF demos", () => {
-    expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(6);
+    expect(GUIDE_CONTENT_VERSION).toBe("v2");
+    expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(7);
     expect(guideForTrigger("canvas")?.id).toBe("canvas-controls");
     expect(GUIDE_DEFINITIONS.every(guide => guide.gifSrc?.endsWith(".gif"))).toBe(true);
+    expect(GUIDE_DEFINITIONS.every(guide => guide.steps.length >= 3)).toBe(true);
+    expect(GUIDE_DEFINITIONS.every(guide => guide.steps.at(-1)?.kind === "practice")).toBe(true);
   });
 
   it("persists activated state per owner and can reset one guide", () => {
