@@ -41,8 +41,10 @@ describe("FeatureGuideOverlay strict completion", () => {
     const definition = guide([{ target: ".real-target", titleVi: "Bấm nút", titleEn: "Click button", bodyVi: "", bodyEn: "" }]);
     await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, onComplete: complete, onSkip: vi.fn() })));
     const target = document.createElement("button"); target.className = "real-target"; target.textContent = "Open"; target.getBoundingClientRect = rect; host.append(target);
-    await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 40)); });
+    await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 220)); });
     expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).not.toBeNull();
+    expect(document.body.querySelector(".feature-guide-focus")?.getAttribute("data-spotlight")).toBe("full-region");
+    expect(document.body.querySelector(".feature-guide-target-hint")).not.toBeNull();
     await act(async () => { target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); await new Promise(resolve => window.setTimeout(resolve, 220)); });
     expect(complete).toHaveBeenCalledTimes(1);
   });

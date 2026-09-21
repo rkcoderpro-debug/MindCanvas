@@ -77,7 +77,7 @@ export default function WorkspaceHome({ projects, title, loading, onOpen, onCrea
           {canManageMetadata && <button disabled={!onManage} onClick={() => { setValue(p.title); setDialog({ project:p,kind:"rename" }); setMenu(null); }}>{t("rename")}</button>}
           {canManageMetadata && <button disabled={!onManage} onClick={() => { setValue(p.folderId ?? ""); setDialog({ project:p,kind:"move" }); setMenu(null); }}>{t("move")}</button>}
           <button disabled={!onDuplicate || busy} onClick={() => void run(() => onDuplicate!(p, `${p.title} — ${t("copySuffix")}`))}>{t("duplicate")}</button>
-          {canManageMetadata && <button disabled={!onManage || busy} onClick={() => void run(() => onManage!(p,{ deletedAt:new Date().toISOString() }))}>{t("moveToTrash")}</button>}
+          {canManageMetadata && <button className="project-menu-danger" disabled={!onManage || busy} onClick={() => void run(() => onManage!(p,{ deletedAt:new Date().toISOString() }))}>{t("moveToTrash")}</button>}
         </>}
       </div>}
     </article>; })}</div>}

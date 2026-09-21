@@ -25,6 +25,16 @@ describe("feature guides", () => {
       ".guide-project-name-input",
       ".guide-project-create-submit",
     ]);
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "pdf-annotation")?.steps.slice(0, 2).map(step => step.target)).toEqual([
+      ".manager-documents",
+      ".document-file-table .file-row",
+    ]);
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "tool-hold-shortcuts")?.steps.slice(0, 4).map(step => step.target)).toEqual([
+      ".workspace-nav-row > button:first-child",
+      ".workspace-create-button",
+      ".guide-project-name-input",
+      ".guide-project-create-submit",
+    ]);
   });
 
   it("publishes explicit action events for practice verification", () => {

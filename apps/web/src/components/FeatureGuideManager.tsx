@@ -62,13 +62,39 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     if (blocked || !manualGuideId || manualConsumed.current === manualGuideId) return;
     const guide = guideForId(manualGuideId);
     if (!guide) return;
-    manualConsumed.current = manualGuideId;
-    markGuideStarted(ownerId, guide.id);
-    setActiveManual(true);
-    setPracticeResourceId(null);
-    setActiveGuideId(guide.id);
-    onManualConsumed?.();
-  }, [blocked, manualGuideId, onManualConsumed, ownerId]);
+    const firstStep = guide.steps[0];
+    const targetReady = !firstStep?.target || Boolean(firstStep.skipWhenRoute && trigger === firstStep.skipWhenRoute) || (() => {
+      try { return Boolean(document.querySelector(firstStep.target)); } catch { return false; }
+    })();
+    let settled = false;
+    const start = () => {
+      if (settled || manualConsumed.current === manualGuideId) return;
+      settled = true;
+      manualConsumed.current = manualGuideId;
+      markGuideStarted(ownerId, guide.id);
+      setActiveManual(true);
+      setPracticeResourceId(null);
+      setActiveGuideId(guide.id);
+      onManualConsumed?.();
+    };
+    if (targetReady) {
+      // Let the route render one frame before mounting the overlay. This keeps
+      // a guide launched from the Wiki from flashing a false "target missing"
+      // state while a lazy page is being mounted.
+      const frame = window.requestAnimationFrame(start);
+      return () => { settled = true; window.cancelAnimationFrame(frame); };
+    }
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      let ready = false;
+      try { ready = !firstStep?.target || Boolean(firstStep.skipWhenRoute && trigger === firstStep.skipWhenRoute) || Boolean(firstStep.target && document.querySelector(firstStep.target)); } catch { ready = false; }
+      if (ready || Date.now() - startedAt >= 1800) {
+        window.clearInterval(interval);
+        start();
+      }
+    }, 60);
+    return () => { settled = true; window.clearInterval(interval); };
+  }, [blocked, manualGuideId, onManualConsumed, ownerId, trigger]);
 
   useEffect(() => {
     if (blocked || activeGuideId || activeManual || !trigger || lastTrigger.current === trigger) return;
