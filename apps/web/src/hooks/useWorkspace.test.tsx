@@ -173,6 +173,18 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
     save.mockResolvedValue({}); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
   });
+  it("still returns to Workspace after a save timeout while retaining the pending draft", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    vi.spyOn(store, "persistProject").mockRejectedValue(new Error("TimeoutError: signal timed out"));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Timeout draft"));
+    await act(async () => api.flush());
+    expect(api.status).toBe("saveError");
+    const id = api.board!.id;
+    await act(async () => api.home());
+    expect(api.board).toBeNull();
+    expect(store.readCache("A").find(project => project.id === id)?.pending).toBe(true);
+  });
   it("opens a new canvas while the previous cloud save is still stalled", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
     let stalledId = "";

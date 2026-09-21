@@ -90,6 +90,9 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
   const [decisionPending, setDecisionPending] = useState<"keep" | "trash" | null>(null);
   const [decisionError, setDecisionError] = useState("");
   const step = guide.steps[stepIndex] ?? guide.steps[0];
+  const canvasToolbarStepIndex = guide.id === "canvas-controls"
+    ? guide.steps.findIndex(value => value.target === ".drawing-toolbar")
+    : -1;
   const isPractice = step.kind === "practice" || !step.target;
   const completion = completionForStep(step, isPractice);
   const requiredActions = actionsForStep(guide, step, isPractice);
@@ -121,6 +124,21 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
       window.removeEventListener("scroll", onViewportChange, true);
     };
   }, [measure]);
+
+  // Creating a practice canvas changes the route before React can advance the
+  // old name/create step.  A save timeout can also interrupt the action event,
+  // leaving the guide pointed at controls that no longer exist.  Once the
+  // canvas route and its real toolbar are present, recover to the first
+  // toolbar step.  Keep the initial Workspace step explicit unless the guide
+  // has positively observed the practice canvas being created.
+  useEffect(() => {
+    if (guide.id !== "canvas-controls" || currentRoute !== "canvas" || canvasToolbarStepIndex < 0 || stepIndex >= canvasToolbarStepIndex) return;
+    const toolbarVisible = Boolean(document.querySelector(".drawing-toolbar"));
+    const practiceCanvasCreated = Boolean(practiceResourceId);
+    if (!toolbarVisible && !practiceCanvasCreated) return;
+    if (stepIndex < 1 && !practiceCanvasCreated) return;
+    setStepIndex(canvasToolbarStepIndex);
+  }, [canvasToolbarStepIndex, currentRoute, guide.id, practiceResourceId, stepIndex]);
 
   // A practice checklist belongs to the current practice step. Actions from
   // earlier guided steps must never satisfy the final hands-on task.

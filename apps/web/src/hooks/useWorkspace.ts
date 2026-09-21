@@ -527,7 +527,21 @@ export function useWorkspace(owner: string | null) {
     if (previousProjectId) void flush(previousProjectId);
     return next;
   };
-  const home = async () => { const ticket = ++navigation.current; checkpointCurrent(); await flush(); if (!alive.current || cacheFailed.current || ticket !== navigation.current) return; current.current = null; setBoard(null); clearHistory(); setVersions([]); await refresh(); };
+  const home = async () => {
+    const ticket = ++navigation.current;
+    checkpointCurrent();
+    // A failed cloud flush is kept as a pending local snapshot and reported
+    // to the user, but it must not trap navigation in the current canvas. The
+    // guide (and the Workspace button) must still be able to advance while a
+    // retry remains available.
+    await flush();
+    if (!alive.current || ticket !== navigation.current) return;
+    current.current = null;
+    setBoard(null);
+    clearHistory();
+    setVersions([]);
+    await refresh();
+  };
   const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
   const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
   const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };

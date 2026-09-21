@@ -75,4 +75,30 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(decision).toHaveBeenCalledWith("keep", "practice-1");
     expect(complete).toHaveBeenCalledTimes(1);
   });
+
+  it("recovers to the real canvas toolbar when the route changed before the guide advanced", async () => {
+    const complete = vi.fn();
+    const definition = guide([
+      { target: ".workspace-nav-row > button:first-child", titleVi: "Workspace", titleEn: "Workspace", bodyVi: "", bodyEn: "" },
+      { target: ".workspace-create-button", titleVi: "Tạo", titleEn: "Create", bodyVi: "", bodyEn: "" },
+      { target: ".guide-project-name-input", completion: { type: "input", selector: ".guide-project-name-input", minLength: 1 }, titleVi: "Tên", titleEn: "Name", bodyVi: "", bodyEn: "" },
+      { target: ".guide-project-create-submit", titleVi: "Mở", titleEn: "Open", bodyVi: "", bodyEn: "" },
+      { target: ".drawing-toolbar", titleVi: "Mở thanh công cụ", titleEn: "Open toolbar", bodyVi: "", bodyEn: "" },
+    ], "canvas-controls");
+    const workspace = document.createElement("div");
+    workspace.className = "workspace-nav-row";
+    const workspaceButton = document.createElement("button");
+    workspaceButton.textContent = "Workspace";
+    workspaceButton.getBoundingClientRect = rect;
+    workspace.append(workspaceButton);
+    const toolbar = document.createElement("button");
+    toolbar.className = "drawing-toolbar";
+    toolbar.textContent = "Toolbar";
+    toolbar.getBoundingClientRect = rect;
+    await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, currentRoute: "canvas", onComplete: complete, onSkip: vi.fn() })));
+    host.append(workspace, toolbar);
+    await act(async () => { workspaceButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); await new Promise(resolve => window.setTimeout(resolve, 220)); });
+    expect(document.body.textContent).toContain("Mở thanh công cụ");
+    expect(document.body.querySelector(".feature-guide-progress")?.getAttribute("aria-label")).toBe("5/5");
+  });
 });

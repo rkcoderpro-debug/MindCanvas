@@ -22,6 +22,7 @@ mindcanvas-v1/apps/web/src/components/InteractivePet.tsx
 mindcanvas-v1/apps/web/src/components/PetCompanion.tsx
 mindcanvas-v1/apps/web/src/components/WorkspaceHome.tsx
 mindcanvas-v1/apps/web/src/hooks/useWorkspace.ts
+mindcanvas-v1/apps/web/src/hooks/useWorkspace.test.tsx
 mindcanvas-v1/apps/web/src/lib/aiSupport.ts
 mindcanvas-v1/apps/web/src/lib/board.test.ts
 mindcanvas-v1/apps/web/src/lib/board.ts
