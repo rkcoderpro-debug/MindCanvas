@@ -4099,3 +4099,141 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 @media (max-width: 760px) { .feature-guide-grid { grid-template-columns: 1fr; } .feature-guide-page-header, .admin-guide-panel-header { flex-direction: column; } .feature-guide-count, .admin-guide-actions { align-self: flex-start; justify-content: flex-start; } }
 @media (max-width: 620px) { .page-help-root { padding: 0; } .page-help-panel { width: 100%; height: 100dvh; border-radius: 0; padding: 14px; } .page-help-row { grid-template-columns: 92px minmax(0, 1fr); gap: 10px; } .page-help-locate { grid-column: 2; justify-self: start; } .page-help-control-preview { min-width: 0; } }
 @media (prefers-reduced-motion: reduce) { .feature-guide-demo::before, .feature-guide-demo-cursor, .feature-guide-focus, .feature-guide-cursor, .feature-guide-popover, .feature-guide-backdrop, .feature-guide-celebration-card, .feature-guide-celebration-icon, .feature-guide-confetti span, .page-help-panel, .page-help-locate-target { animation: none; } .feature-guide-progress b { transition: none; } }
+
+/* v5.10 editor visual refresh.  This layer only changes presentation; the
+   document model, editor commands, import/export and guide events stay intact. */
+.document-tools-page.document-tools-shell {
+  gap: 14px;
+  width: min(1680px, 100%);
+  min-height: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: clamp(14px, 2.5vw, 28px) clamp(14px, 3.2vw, 42px) 42px;
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent-soft) 72%, transparent), transparent 34%),
+    color-mix(in srgb, var(--app-bg) 92%, var(--surface));
+}
+.document-tools-shell .tool-page-hero {
+  align-items: center;
+  min-height: 92px;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, var(--accent-border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--accent-soft));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow) 72%, transparent);
+}
+.tool-page-heading-copy { display: grid; min-width: 0; gap: 5px; }
+.tool-page-heading-copy .document-tools-back { justify-self: start; margin-bottom: 2px; }
+.tool-page-heading-copy .eyebrow { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 10px; font-weight: 850; letter-spacing: .13em; }
+.tool-page-heading-copy h1 { margin: 0; color: var(--text); font-size: clamp(23px, 2.8vw, 32px); letter-spacing: -.035em; line-height: 1.08; }
+.tool-page-heading-copy p { max-width: 680px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.tool-page-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.tool-page-heading-actions .primary-button { min-height: 38px; padding: 9px 14px; border-radius: 10px; box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 18%, transparent); }
+.document-tools-shell .document-tools-tabs {
+  gap: 4px;
+  min-height: 48px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 89%, var(--soft));
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--shadow) 45%, transparent);
+}
+.document-tools-shell .document-tools-tabs button { min-height: 40px; padding: 8px 15px; border-radius: 10px; color: var(--muted); transition: background .16s ease, color .16s ease, box-shadow .16s ease; }
+.document-tools-shell .document-tools-tabs button.active { border-color: transparent; color: var(--accent-contrast); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 25%, transparent); }
+.document-tools-shell .document-tools-tabs button:hover:not(.active) { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
+.document-tools-shell .tool-document-search { width: min(680px, 100%); max-width: none; min-height: 42px; box-sizing: border-box; border-radius: 12px; background: color-mix(in srgb, var(--surface-raised) 95%, var(--soft)); box-shadow: 0 4px 12px color-mix(in srgb, var(--shadow) 28%, transparent); }
+.document-tools-shell .tool-document-search:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), 0 5px 14px color-mix(in srgb, var(--shadow) 35%, transparent); }
+.document-tools-shell > .form-error { max-width: 680px; margin: 0; }
+.document-tools-shell .document-tool-layout { grid-template-columns: minmax(228px, 292px) minmax(0, 1fr); gap: 16px; min-height: min(710px, 72vh); }
+.document-tools-shell .document-tool-list {
+  align-content: start;
+  gap: 5px;
+  max-height: min(710px, 72vh);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent-border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, var(--soft));
+  box-shadow: 0 9px 24px color-mix(in srgb, var(--shadow) 48%, transparent);
+  scrollbar-width: thin;
+}
+.document-tools-shell .document-tool-list h3 { position: sticky; z-index: 1; top: -14px; margin: -14px -14px 5px; padding: 14px 14px 10px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); color: var(--text); background: color-mix(in srgb, var(--surface-raised) 98%, var(--soft)); font-size: 12px; letter-spacing: .03em; }
+.document-tools-shell .document-tool-list button { position: relative; gap: 10px; min-height: 54px; padding: 9px 10px; border-color: transparent; border-radius: 11px; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.document-tools-shell .document-tool-list button > svg { flex: 0 0 auto; width: 17px; height: 17px; padding: 7px; border-radius: 9px; color: var(--accent); background: var(--accent-soft); box-sizing: content-box; }
+.document-tools-shell .document-tool-list button > span { gap: 4px; min-width: 0; }
+.document-tools-shell .document-tool-list button > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-tools-shell .document-tool-list button small { font-size: 10px; }
+.document-tools-shell .document-tool-list button:hover { border-color: var(--accent-border); background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface)); transform: translateX(2px); }
+.document-tools-shell .document-tool-list button.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: linear-gradient(100deg, color-mix(in srgb, var(--accent-soft) 88%, var(--surface)), color-mix(in srgb, var(--surface) 85%, var(--accent-soft))); box-shadow: inset 3px 0 0 var(--accent), 0 5px 12px color-mix(in srgb, var(--accent) 13%, transparent); }
+.document-tools-shell .document-tool-list button.active > svg { color: var(--accent-contrast); background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.document-tools-shell .document-tool-new { min-height: 58px; margin: 0 0 4px; border-style: solid; border-color: color-mix(in srgb, var(--accent-border) 80%, var(--line)); border-radius: 11px; background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface)); }
+.document-tools-shell .document-tool-new:hover { border-color: var(--accent); background: var(--accent-soft); }
+.document-tools-shell .document-tool-new > svg { padding: 6px; }
+.document-tools-shell .document-tool-workspace { min-height: 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent-border)); border-radius: 16px; background: var(--surface); box-shadow: 0 12px 30px color-mix(in srgb, var(--shadow) 56%, transparent); }
+.document-tools-shell .document-tool-workspace > .document-viewer { min-height: 0; }
+.document-tools-shell .tool-empty-state { min-height: 540px; padding: 30px; background: radial-gradient(circle at 50% 35%, var(--accent-soft), transparent 34%); }
+.document-tools-shell .tool-empty-state > svg { width: 48px; height: 48px; padding: 13px; border-radius: 16px; color: var(--accent); background: var(--accent-soft); }
+.document-tools-shell .tool-empty-state h2 { font-size: 18px; letter-spacing: -.02em; }
+
+.document-tools-shell .docx-editor-panel {
+  min-height: 680px;
+  border: 0;
+  border-radius: inherit;
+  background: var(--surface);
+}
+.document-tools-shell .docx-editor-topbar { min-height: 68px; padding: 10px 16px; border-bottom-color: color-mix(in srgb, var(--line) 80%, var(--accent-border)); background: color-mix(in srgb, var(--surface-raised) 96%, var(--accent-soft)); }
+.document-tools-shell .docx-editor-title { gap: 10px; }
+.document-tools-shell .docx-editor-title > svg { width: 20px; height: 20px; padding: 9px; border-radius: 11px; color: var(--accent-contrast); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 20%, transparent); }
+.document-tools-shell .docx-editor-title > div { gap: 3px; }
+.document-tools-shell .docx-title-button { max-width: min(42vw, 520px); font-size: 14px; letter-spacing: -.015em; }
+.document-tools-shell .docx-editor-title small { color: var(--muted); font-size: 10px; }
+.document-tools-shell .docx-editor-status { gap: 6px; }
+.document-tools-shell .docx-save-state { min-height: 28px; padding: 5px 9px; border: 1px solid transparent; background: var(--soft); }
+.document-tools-shell .docx-save-state.saved { border-color: color-mix(in srgb, var(--success) 22%, transparent); }
+.document-tools-shell .docx-editor-status > .primary-button, .document-tools-shell .docx-editor-status > .secondary-button { min-height: 36px; padding: 8px 12px; border-radius: 9px; }
+.document-tools-shell .docx-editor-status > .primary-button { box-shadow: 0 7px 16px color-mix(in srgb, var(--accent) 24%, transparent); }
+.document-tools-shell .docx-ribbon-tabs { min-height: 43px; gap: 2px; padding: 0 14px; background: var(--surface-raised); }
+.document-tools-shell .docx-ribbon-tabs button { min-height: 42px; padding: 9px 14px; border-bottom-width: 3px; border-radius: 8px 8px 0 0; font-size: 11px; }
+.document-tools-shell .docx-ribbon-tabs button.active { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 58%, transparent); }
+.document-tools-shell .docx-ribbon-tabs .docx-ribbon-collapse { width: 34px; border: 1px solid transparent; border-radius: 8px; }
+.document-tools-shell .docx-ribbon { min-height: 74px; background: linear-gradient(180deg, color-mix(in srgb, var(--soft) 84%, var(--surface-raised)), var(--soft)); }
+.document-tools-shell .docx-ribbon-groups { align-items: stretch; gap: 4px; min-height: 72px; padding: 7px 14px; }
+.document-tools-shell .docx-ribbon-group { min-height: 58px; padding: 4px 9px 17px; border-right-color: color-mix(in srgb, var(--line) 78%, transparent); }
+.document-tools-shell .docx-ribbon-action { min-width: 45px; height: 43px !important; padding: 4px 6px !important; border-radius: 8px !important; }
+.document-tools-shell .docx-ribbon-action span { color: inherit; font-size: 8px; }
+.document-tools-shell .docx-ribbon-group > small, .document-tools-shell .docx-ribbon-group::after { bottom: 2px; font-size: 8px; }
+.document-tools-shell .docx-ribbon-field select, .document-tools-shell .docx-ribbon-field input, .document-tools-shell .docx-ribbon-group label select, .document-tools-shell .docx-ribbon-group label input:not([type="color"]) { min-height: 27px; border-radius: 8px; background: color-mix(in srgb, var(--surface) 95%, var(--soft)); }
+.document-tools-shell .docx-findbar { padding: 7px 14px; background: color-mix(in srgb, var(--surface-raised) 94%, var(--accent-soft)); }
+.document-tools-shell .docx-compatibility, .document-tools-shell .docx-editor-notice, .document-tools-shell .docx-draft-choice { margin-inline: 14px; border-radius: 10px; }
+.document-tools-shell .docx-editor-viewport { background: color-mix(in srgb, var(--app-bg) 74%, #818aa0); }
+.document-tools-shell .docx-editor-viewport.continuous { background: color-mix(in srgb, var(--canvas) 90%, var(--soft)); }
+.document-tools-shell .docx-editor-scroll { padding: 24px clamp(14px, 3vw, 34px) 34px; }
+.document-tools-shell .docx-ruler { border-radius: 8px 8px 0 0; background: color-mix(in srgb, var(--surface-raised) 94%, var(--soft)); }
+.document-tools-shell .docx-page-stack { border-color: color-mix(in srgb, var(--line) 75%, transparent); box-shadow: 0 18px 42px color-mix(in srgb, var(--shadow-strong) 78%, transparent); }
+.document-tools-shell .docx-editable:focus { outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent); outline-offset: 4px; }
+.document-tools-shell .docx-statusbar { min-height: 34px; padding: 5px 14px; border-top-color: color-mix(in srgb, var(--line) 80%, var(--accent-border)); background: color-mix(in srgb, var(--surface-raised) 96%, var(--soft)); }
+
+@media (max-width: 900px) {
+  .document-tools-shell .tool-page-hero { align-items: flex-start; flex-direction: column; }
+  .document-tools-shell .tool-page-heading-actions { width: 100%; justify-content: flex-start; }
+  .document-tools-shell .document-tool-layout { grid-template-columns: minmax(190px, 240px) minmax(0, 1fr); }
+  .document-tools-shell .docx-editor-topbar { min-height: 0; }
+}
+@media (max-width: 760px) {
+  .document-tools-page.document-tools-shell { padding: 12px 10px 28px; }
+  .document-tools-shell .document-tool-layout { grid-template-columns: 1fr; min-height: 0; }
+  .document-tools-shell .document-tool-list { max-height: 198px; }
+  .document-tools-shell .document-tool-list h3 { top: -14px; }
+  .document-tools-shell .document-tool-workspace { min-height: 560px; }
+  .document-tools-shell .docx-editor-panel { min-height: 560px; }
+  .document-tools-shell .docx-title-button { max-width: 72vw; }
+}
+@media (max-width: 520px) {
+  .document-tools-shell .tool-page-hero { padding: 15px; }
+  .document-tools-shell .tool-page-heading-actions .primary-button { width: 100%; justify-content: center; }
+  .document-tools-shell .docx-editor-status { width: 100%; justify-content: flex-start; }
+  .document-tools-shell .docx-editor-status > .primary-button, .document-tools-shell .docx-editor-status > .secondary-button { flex: 1 1 auto; }
+  .document-tools-shell .docx-ribbon-tabs { overflow-x: auto; padding-inline: 8px; }
+  .document-tools-shell .docx-ribbon-groups { min-width: max-content; }
+}

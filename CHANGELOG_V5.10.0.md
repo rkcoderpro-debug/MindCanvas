@@ -18,6 +18,13 @@
   in the structured model and export package.
 - Footer PAGE field and PDF.js worker asset are emitted/configured correctly.
 
+## Visual refresh
+
+- Redesigned the document-tools shell with a clearer library navigator, stronger
+  active-document state, compact tabs, and a responsive upload/search header.
+- Refined the DOCX top bar, ribbon density, paper workspace, ruler, status bar,
+  empty state, and responsive breakpoints without changing document behavior.
+
 ## Compatibility notes
 
 - Data remains local by default; no cloud storage or paid service was added.
