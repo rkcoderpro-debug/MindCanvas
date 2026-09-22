@@ -66,6 +66,15 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     if (blocked || !manualGuideId || manualConsumed.current === manualGuideId) return;
     const guide = guideForId(manualGuideId);
     if (!guide) return;
+    // Manual launches from the Wiki follow the same once-only rule as
+    // contextual launches. A completed or skipped guide is intentionally not
+    // mounted again; resetGuideProgress is the explicit opt-in for a replay.
+    const status = readGuideProgress(ownerId)[guide.id]?.status;
+    if (status && status !== "unseen") {
+      manualConsumed.current = manualGuideId;
+      onManualConsumed?.();
+      return;
+    }
     const firstStep = guide.steps[0];
     const targetReady = !firstStep?.target || Boolean(firstStep.skipWhenRoute && trigger === firstStep.skipWhenRoute) || (() => {
       try { return Boolean(document.querySelector(firstStep.target)); } catch { return false; }

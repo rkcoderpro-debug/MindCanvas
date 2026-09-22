@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Maximize2, Minimize2, RotateCcw } from "lucide-react";
+import { CheckCircle2, Clock3, Inbox, Maximize2, Minimize2, RefreshCw, RotateCcw, Search, SlidersHorizontal, Users } from "lucide-react";
 import { labSandboxDocument } from "../lib/lab";
 import {
   acceptPendingLearningInvite,
@@ -25,6 +25,8 @@ export default function SharedLearningPage({ owner }: { owner: string | null }) 
   const [items, setItems] = useState<IncomingLearningShare[]>([]);
   const [pending, setPending] = useState<Array<{ id: string; kind: LearningKind; token_hash: string; expires_at: string }>>([]);
   const [kind, setKind] = useState<"all" | "quiz" | "flashcard" | "lab">("all");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"updated" | "title">("updated");
   const [active, setActive] = useState<IncomingLearningShare | null>(null);
   const [content, setContent] = useState<Record<string, unknown> | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -47,6 +49,14 @@ export default function SharedLearningPage({ owner }: { owner: string | null }) 
     void listLearningShares().then(setItems).catch(e => setError(sharedLearningErrorMessage(e)));
     void listPendingLearningInvites().then(setPending).catch(e => setError(sharedLearningErrorMessage(e)));
   };
+
+  const visibleItems = items
+    .filter(item => kind === "all" || item.kind === kind)
+    .filter(item => !query.trim() || `${item.title} ${item.owner_name}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "vi") : b.updated_at.localeCompare(a.updated_at));
+  const activeCount = items.filter(item => item.status === "active").length;
+  const pausedCount = items.filter(item => item.status === "paused").length;
+  const removedCount = items.filter(item => item.status === "removed").length;
 
   useEffect(() => { reload(); }, [owner]);
 
@@ -158,7 +168,7 @@ export default function SharedLearningPage({ owner }: { owner: string | null }) 
   const reviewQuestions = quizResult?.questions ?? [];
 
   return <section className="shared-learning">
-    <header><div><span className="eyebrow">LEARNING HUB</span><h2>Được chia sẻ với tôi</h2></div><button className="secondary-button" onClick={reload}>Làm mới</button></header>
+    <header className="shared-learning-header"><div><span className="eyebrow">LEARNING HUB · INBOX</span><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tập trung mọi Quiz, Flashcard và Lab được gửi cho bạn trong một không gian học riêng.</p></div><button className="secondary-button" onClick={reload}><RefreshCw size={15}/>Làm mới</button></header>
     {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}
     {active ? <div className="shared-learning-detail">
       <button className="secondary-button shared-back-button" onClick={() => { setActive(null); resetDetail(); reload(); }}>← Danh sách</button>
@@ -190,9 +200,11 @@ export default function SharedLearningPage({ owner }: { owner: string | null }) 
       {active.kind === "lab" && <><p>Lab chỉ tải phiên bản mới khi bạn mở lại. Chuyển vào/ra toàn màn hình không tải lại mô phỏng.</p><div ref={labShellRef} className={`shared-lab-shell ${labFallbackFullscreen ? "shared-lab-fallback-fullscreen" : ""}`}><div className="shared-lab-toolbar"><span>Lab tương tác</span><button type="button" className="secondary-button" onClick={() => void toggleLabFullscreen()}>{labFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>} {labFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}</button></div><iframe className="shared-lab-frame" title={active.title} sandbox="allow-scripts" srcDoc={labSandboxDocument(String(content?.program_html ?? ""))}/></div></>}
     </div> : <>
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}
-      <div className="shared-learning-filters">{(["all","quiz","flashcard","lab"] as const).map(x => <button key={x} aria-pressed={kind === x} onClick={() => setKind(x)}>{({ all: "Tất cả", quiz: "Quiz", flashcard: "Flashcard", lab: "Lab" })[x]}</button>)}</div>
-      <div className="shared-learning-list">{items.filter(item => kind === "all" || item.kind === kind).map(item => <article key={`${item.kind}:${item.resource_id}`}><span>{({ quiz: "Quiz", flashcard: "Flashcard", lab: "Lab" })[item.kind]}</span><h3>{item.title ?? "Học liệu đã xóa"}</h3><small>Người chia sẻ: {item.owner_name} · {item.updated_at ? new Date(item.updated_at).toLocaleDateString("vi-VN") : "—"}</small><p>{item.status === "active" ? "Có quyền truy cập" : item.status === "paused" ? "Tạm dừng: chủ học liệu cần nâng gói" : "Không còn học liệu gốc"}</p><button className="primary-button" disabled={item.status !== "active"} onClick={() => void open(item)}>{item.kind === "quiz" ? "Làm Quiz" : item.kind === "flashcard" ? "Ôn Flashcard" : "Chạy Lab"}</button></article>)}</div>
-      {!items.length && <p>Chưa có học liệu được chia sẻ với bạn.</p>}
+      <div className="shared-learning-summary" aria-label="Tóm tắt học liệu chia sẻ"><article><Inbox size={18}/><strong>{items.length}</strong><span>Tổng học liệu</span></article><article><Users size={18}/><strong>{activeCount}</strong><span>Đang truy cập</span></article><article><Clock3 size={18}/><strong>{pausedCount + removedCount}</strong><span>Cần kiểm tra</span></article></div>
+      <div className="shared-learning-controls"><div className="shared-learning-filters">{(["all","quiz","flashcard","lab"] as const).map(x => <button key={x} aria-pressed={kind === x} onClick={() => setKind(x)}>{({ all: "Tất cả", quiz: "Quiz", flashcard: "Flashcard", lab: "Lab" })[x]}<small>{x === "all" ? items.length : items.filter(item => item.kind === x).length}</small></button>)}</div><label className="shared-learning-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc người chia sẻ…" aria-label="Tìm học liệu được chia sẻ"/></label><label className="shared-learning-sort"><SlidersHorizontal size={15}/><select value={sort} onChange={event => setSort(event.target.value as "updated" | "title")} aria-label="Sắp xếp học liệu"><option value="updated">Mới cập nhật</option><option value="title">Tên A–Z</option></select></label></div>
+      <div className="shared-learning-list">{visibleItems.map(item => <article className={`shared-learning-item status-${item.status}`} key={`${item.kind}:${item.resource_id}`}><div className="shared-learning-item-top"><span className="shared-learning-kind">{({ quiz: "Quiz", flashcard: "Flashcard", lab: "Lab" })[item.kind]}</span><span className={`shared-learning-status status-${item.status}`}>{item.status === "active" ? "Có quyền truy cập" : item.status === "paused" ? "Tạm dừng" : "Đã gỡ"}</span></div><h3>{item.title ?? "Học liệu đã xóa"}</h3><small>Chia sẻ bởi <strong>{item.owner_name}</strong></small><small>Cập nhật {item.updated_at ? new Date(item.updated_at).toLocaleDateString("vi-VN") : "—"}</small><p>{item.status === "active" ? "Bạn có thể mở và học nội dung này ngay." : item.status === "paused" ? "Chủ học liệu đã tạm dừng quyền truy cập." : "Học liệu gốc không còn khả dụng."}</p><button className="primary-button" disabled={item.status !== "active"} onClick={() => void open(item)}>{item.kind === "quiz" ? "Làm Quiz" : item.kind === "flashcard" ? "Ôn Flashcard" : "Chạy Lab"}</button></article>)}</div>
+      {!items.length && <div className="shared-learning-empty"><Inbox size={34}/><h3>Chưa có học liệu được chia sẻ</h3><p>Khi ai đó gửi Quiz, Flashcard hoặc Lab đến tài khoản này, nội dung sẽ xuất hiện ở đây.</p></div>}
+      {items.length > 0 && !visibleItems.length && <div className="shared-learning-empty"><Search size={30}/><h3>Không tìm thấy kết quả</h3><p>Thử đổi bộ lọc hoặc từ khóa tìm kiếm.</p></div>}
     </>}
   </section>;
 }

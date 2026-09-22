@@ -28,6 +28,18 @@ function kindFor(source: Source): DocumentKind { return source.kind; }
 export function shouldRequestPdfGuide(kind: DocumentKind, enableGuide = true, dedicated = false) {
   return kind === "pdf" && enableGuide && !dedicated;
 }
+/**
+ * Pointer moves from a hovering mouse/pen must never mutate annotations. A
+ * move belongs to the stroke only while its pointer id is the one captured by
+ * the annotation canvas and the device is still pressed/contacting it.
+ */
+export function shouldHandleAnnotationMove(activePointerId: number | null, eventPointerId: number, buttons: number, _pointerType: string) {
+  // Pointer capture keeps delivery tied to the stroke, but a captured pointer
+  // can still emit hover moves after contact ends. Every device must report a
+  // pressed/contact button while extending a stroke; pointer type alone is not
+  // proof that a pen is touching the page.
+  return activePointerId === eventPointerId && buttons > 0;
+}
 function colorParts(value: string) { const match = /^#([0-9a-f]{6})$/i.exec(value); if (!match) return [0.16, 0.42, 0.82] as const; const number = Number.parseInt(match[1], 16); return [((number >> 16) & 255) / 255, ((number >> 8) & 255) / 255, (number & 255) / 255] as const; }
 function sanitizeOfficeHtml(value: string): string {
   if (typeof DOMParser === "undefined") return value.replace(/<(?:script|iframe|object|embed|link|style)\b[\s\S]*?<\/[^>]+>/gi, "").replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
@@ -129,6 +141,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
   const heldAnnotationKeys = useRef<string[]>([]);
   const pdfZoomGesture = useRef<{ pointerId: number; startY: number; startZoom: number; origin: Point } | null>(null);
   const pdfPanGesture = useRef<{ pointerId: number; startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const annotationPointer = useRef<{ pointerId: number; page: number } | null>(null);
   const dimensions = useRef<Record<number, { width: number; height: number; pdfWidth: number; pdfHeight: number }>>({});
   const pdfBytes = useMemo(() => kind === "pdf" ? bytesFromDataUrl(source.dataUrl) : null, [kind, source.dataUrl]);
   strokesRef.current = strokes;
@@ -141,6 +154,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
     setLoading(true); setError(""); setPage(1); setPdf(null); setPageCount(0); setPdfZoom(1); setPdfZoomOrigin({ x: 0, y: 0 });
     strokesRef.current = {}; setStrokes({}); historyPast.current = []; historyFuture.current = []; setHistoryRevision(value => value + 1);
     currentStroke.current = null; activeEraser.current = null; eraserCursor.current = null;
+    annotationPointer.current = null;
     void import("pdfjs-dist/legacy/build/pdf.mjs").then(module => {
       if (!alive) return;
       // PDF.js 6 no longer silently falls back to a fake worker in the
@@ -244,6 +258,8 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
   };
   const beginStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!annotationActive || event.ctrlKey || event.metaKey || ctrlHeld.current || spaceHeldRef.current) return;
+    if (event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0) || annotationPointer.current) return;
+    annotationPointer.current = { pointerId: event.pointerId, page };
     const point = pointFromEvent(event);
     event.currentTarget.setPointerCapture?.(event.pointerId);
     if (effectiveAnnotationMode === "eraser") {
@@ -257,6 +273,8 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
     redraw(page);
   };
   const moveStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const activePointer = annotationPointer.current;
+    if (!activePointer || !shouldHandleAnnotationMove(activePointer.pointerId, event.pointerId, event.buttons, event.pointerType)) return;
     const point = pointFromEvent(event);
     if (activeEraser.current) {
       eraserCursor.current = point;
@@ -269,7 +287,11 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
     stroke.points.push(point);
     redraw(stroke.page);
   };
-  const finishStroke = () => {
+  const finishStroke = (event?: { pointerId: number }) => {
+    const activePointer = annotationPointer.current;
+    if (!activePointer || (event && event.pointerId !== activePointer.pointerId)) return;
+    annotationPointer.current = null;
+    if (annotationCanvas.current?.hasPointerCapture?.(activePointer.pointerId)) annotationCanvas.current.releasePointerCapture(activePointer.pointerId);
     const stroke = currentStroke.current;
     currentStroke.current = null;
     const eraser = activeEraser.current;
@@ -288,6 +310,18 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
     }
     redraw(page);
   };
+  useEffect(() => {
+    if (kind !== "pdf") return;
+    const finishFromWindow = (event: PointerEvent) => {
+      if (annotationPointer.current?.pointerId === event.pointerId) finishStroke(event);
+    };
+    window.addEventListener("pointerup", finishFromWindow, true);
+    window.addEventListener("pointercancel", finishFromWindow, true);
+    return () => {
+      window.removeEventListener("pointerup", finishFromWindow, true);
+      window.removeEventListener("pointercancel", finishFromWindow, true);
+    };
+  }, [kind, page]);
   const clearPage = () => {
     const currentPage = strokesRef.current[page] ?? [];
     if (!currentPage.length) return;

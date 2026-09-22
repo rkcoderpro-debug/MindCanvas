@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { buildDocx } from "./DocumentToolsPage";
-import { shouldRequestPdfGuide } from "./DocumentViewer";
+import { shouldHandleAnnotationMove, shouldRequestPdfGuide } from "./DocumentViewer";
 
 describe("DOCX editor export", () => {
   it("writes a readable OOXML package instead of renaming HTML", async () => {
@@ -23,5 +23,14 @@ describe("DOCX editor export", () => {
     const orderedKinds = ["docx", "pdf"] as const;
     expect(orderedKinds.map(kind => shouldRequestPdfGuide(kind))).toEqual([false, true]);
     expect(shouldRequestPdfGuide("pdf", true, true)).toBe(false);
+  });
+
+  it("ignores hover moves and unrelated pointers while drawing a PDF", () => {
+    expect(shouldHandleAnnotationMove(null, 1, 0, "mouse")).toBe(false);
+    expect(shouldHandleAnnotationMove(7, 8, 1, "mouse")).toBe(false);
+    expect(shouldHandleAnnotationMove(7, 7, 0, "mouse")).toBe(false);
+    expect(shouldHandleAnnotationMove(7, 7, 1, "mouse")).toBe(true);
+    expect(shouldHandleAnnotationMove(7, 7, 0, "pen")).toBe(false);
+    expect(shouldHandleAnnotationMove(7, 7, 1, "pen")).toBe(true);
   });
 });

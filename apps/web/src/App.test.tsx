@@ -33,6 +33,21 @@ describe("Workspace UI", () => {
     expect(document.body.querySelector(".page-help-panel")?.textContent).toContain("Project mới");
     expect(document.body.querySelector(".page-help-panel")?.textContent).toContain("Tìm");
   });
+  it("keeps contextual help available on canvas and Learning Hub after their guides", async () => {
+    const board = blankBoard("Help canvas");
+    cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
+    localStorage.setItem(`mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}:guest`, JSON.stringify({
+      "canvas-controls": { status: "completed" },
+      "learning-hub": { status: "completed" },
+    }));
+    await import("./components/CanvasBoard");
+    await act(async () => root.render(<App/>));
+    await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());
+    expect(host.querySelector('button[aria-label="Trợ giúp trang này"]')).not.toBeNull();
+    await act(async () => (host.querySelector(".brand") as HTMLButtonElement).click());
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Trung tâm học tập") as HTMLButtonElement).click());
+    expect(host.querySelector('button[aria-label="Trợ giúp trang này"]')).not.toBeNull();
+  });
   it("favorites, duplicates, trashes and restores real projects from cards", async()=>{
     const board=blankBoard("Keep me");cacheProject(null,{id:board.id,title:board.title,board,folderId:null,updatedAt:board.updatedAt,pending:false});
     await act(async()=>root.render(<App/>));
@@ -213,7 +228,7 @@ describe("Workspace UI", () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V5.10.0");
+    expect(host.querySelector(".beta")?.textContent).toBe("V5.10.1");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;

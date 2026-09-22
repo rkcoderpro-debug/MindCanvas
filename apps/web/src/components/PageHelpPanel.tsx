@@ -103,20 +103,43 @@ function instructionFor(element: HTMLElement, language: string) {
   return vi ? "Bấm một lần để sử dụng." : "Click once to use it.";
 }
 
+function helpIdentity(element: HTMLElement, label: string, description: string) {
+  const explicit = element.dataset.helpId?.trim();
+  if (explicit) return `help:${explicit}`;
+  const tool = element.dataset.tool?.trim();
+  if (tool) return `tool:${tool}`;
+  const tab = element.dataset.guideTab?.trim();
+  if (tab) return `tab:${tab}`;
+  // The same action is often rendered once as an icon and once as a text
+  // button. Use its resolved explanation as the stable identity instead of
+  // the HTML tag or the full visible label, so it appears only once in ?.
+  const normalizedDescription = description
+    .toLocaleLowerCase()
+    .replace(/[\u2026:·]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Concrete explanations describe the business action, so the icon and its
+  // text counterpart collapse into one row even when their visible labels
+  // differ. Unknown controls retain their label to avoid collapsing every
+  // generic button into one entry.
+  if (!normalizedDescription.startsWith("thực hiện chức năng") && !normalizedDescription.startsWith("use ")) return `semantic:${normalizedDescription}`;
+  return `semantic:${normalizedDescription} ${label.toLocaleLowerCase().replace(/\s+/g, " ").trim()}`;
+}
+
 function scanControls(scope: PageHelpScope, language: string): HelpControl[] {
   const candidates = ROOTS[scope].flatMap(selector => [...document.querySelectorAll<HTMLElement>(`${selector} button, ${selector} input:not([type=hidden]), ${selector} select, ${selector} a[href]`)]);
   const seen = new Set<string>();
   const controls: HelpControl[] = [];
   for (const element of candidates) {
-    if (element.closest(".page-help-root, .feature-guide-root, .feature-guide-celebration-root")) continue;
+    if (element.closest(".page-help-root, .feature-guide-root, .feature-guide-celebration-root") || element.matches(".page-help-trigger, .page-help-locate")) continue;
     if (element.hidden || element.getAttribute("aria-hidden") === "true") continue;
     const style = window.getComputedStyle(element);
     if (style.display === "none" || style.visibility === "hidden") continue;
     const label = readableLabel(element, language);
-    const semantic = `${element.tagName}:${element.dataset.tool ?? ""}:${element.dataset.guideTab ?? ""}:${label.replace(/:\s.+$/, "").toLocaleLowerCase()}`;
+    const info = explain(element, label, language);
+    const semantic = helpIdentity(element, label, info.description);
     if (seen.has(semantic)) continue;
     seen.add(semantic);
-    const info = explain(element, label, language);
     controls.push({ element, key: `${semantic}:${controls.length}`, label, description: info.description, instruction: instructionFor(element, language), shortcut: info.shortcut });
     if (controls.length >= 60) break;
   }

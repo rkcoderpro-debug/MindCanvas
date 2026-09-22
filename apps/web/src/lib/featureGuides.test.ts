@@ -11,7 +11,7 @@ afterEach(() => storage.clear());
 
 describe("feature guides", () => {
   it("keeps a stable guide registry with first-use triggers and GIF demos", () => {
-    expect(GUIDE_CONTENT_VERSION).toBe("v5.10");
+    expect(GUIDE_CONTENT_VERSION).toBe("v5.10.1");
     expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(8);
     expect(guideForTrigger("canvas")?.id).toBe("canvas-controls");
     expect(guideForTrigger("documents")?.id).toBe("folder-manager");
@@ -58,5 +58,15 @@ describe("feature guides", () => {
     expect(pageHelpIsUnlocked(readGuideProgress("user-a"), "workspace")).toBe(false);
     resetGuideProgress("user-a", "canvas-controls");
     expect(readGuideProgress("user-a")["canvas-controls"]?.status).toBe("unseen");
+  });
+
+  it("carries completed guides across releases without replaying them, while reset wins", () => {
+    storage.set("mindcanvas:feature-guides:v5.10:guest", JSON.stringify({
+      "workspace-navigation": { status: "completed", completedAt: "2026-09-21T00:00:00.000Z" },
+    }));
+    expect(pageHelpIsUnlocked(readGuideProgress(null), "workspace")).toBe(true);
+    resetGuideProgress(null, "workspace-navigation");
+    expect(readGuideProgress(null)["workspace-navigation"]?.status).toBe("unseen");
+    expect(pageHelpIsUnlocked(readGuideProgress(null), "workspace")).toBe(false);
   });
 });

@@ -62,8 +62,12 @@ export type PageHelpScope = "workspace" | "canvas" | "learning" | "folders";
 export const GUIDE_PROGRESS_EVENT = "mindcanvas:feature-guide-progress";
 export const GUIDE_REQUEST_EVENT = "mindcanvas:feature-guide-request";
 export const GUIDE_ACTION_EVENT = "mindcanvas:feature-guide-action";
-export const GUIDE_CONTENT_VERSION = "v5.10";
-const STORAGE_PREFIX = `mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}`;
+export const GUIDE_CONTENT_VERSION = "v5.10.1";
+// Guide completion is a user preference, not content that should reset on
+// every release. Keep the current versioned key for migrations, but read the
+// immediately preceding guide stores so a completed guide never auto-plays
+// again after an update.
+const LEGACY_GUIDE_VERSIONS = ["v5.10", "v5.9", "v5.8.1", "v5.8", "v5.7.4", "v5.7.3", "v5.7.2", "v5.7.1", "v5.7"];
 let activeGuideSessionId: string | null = null;
 
 function newSessionId() {
@@ -1380,8 +1384,8 @@ export function guideForTrigger(trigger: string | null | undefined) {
     : null;
 }
 
-function storageKey(ownerId: string | null | undefined) {
-  return `${STORAGE_PREFIX}:${ownerId || "guest"}`;
+function storageKey(ownerId: string | null | undefined, version = GUIDE_CONTENT_VERSION) {
+  return `mindcanvas:feature-guides:${version}:${ownerId || "guest"}`;
 }
 
 function normalizeEntry(value: unknown): GuideProgressEntry | null {
@@ -1409,17 +1413,27 @@ export function readGuideProgress(
   ownerId: string | null | undefined,
 ): GuideProgress {
   try {
-    const raw = localStorage.getItem(storageKey(ownerId));
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return {};
-    return Object.fromEntries(
-      Object.entries(parsed).flatMap(([id, value]) => {
+    const readAt = (key: string): GuideProgress => {
+      const raw = localStorage.getItem(key);
+      if (!raw) return {};
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      return Object.fromEntries(Object.entries(parsed).flatMap(([id, value]) => {
         const entry = normalizeEntry(value);
         return entry ? [[id, entry]] : [];
-      }),
-    );
+      }));
+    };
+    // An explicit entry in the current store (including `unseen` after a
+    // reset) wins over legacy data. This makes resetGuideProgress durable.
+    const current = readAt(storageKey(ownerId));
+    const merged: GuideProgress = { ...current };
+    for (const version of LEGACY_GUIDE_VERSIONS) {
+      const legacy = readAt(storageKey(ownerId, version));
+      for (const [id, entry] of Object.entries(legacy)) {
+        if (!Object.prototype.hasOwnProperty.call(merged, id)) merged[id] = entry;
+      }
+    }
+    return merged;
   } catch {
     return {};
   }
