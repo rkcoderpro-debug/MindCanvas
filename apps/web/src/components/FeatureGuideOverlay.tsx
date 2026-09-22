@@ -152,14 +152,44 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
     const handleGuideAction = (event: Event) => {
       const name = (event as CustomEvent<{ name?: string }>).detail?.name;
       if (!name) return;
+
+      // Creation actions can replace the dialog (and even navigate to another
+      // page) before the user has had a chance to press the overlay's
+      // Continue button. Resolve the action against the current or a later
+      // step so the guide never gets stranded on the old input target.
+      const actionStepIndex = guide.steps.findIndex((candidate, index) => {
+        if (index < stepIndex) return false;
+        const candidateCompletion = candidate.completion;
+        return candidateCompletion?.type === "action" && candidateCompletion.actions?.some(action => action.id === name);
+      });
+      const belongsToCurrentPractice = requiredActions.some(action => action.id === name);
+      if (actionStepIndex < 0 && !belongsToCurrentPractice) return;
+
       const next = actionNamesRef.current.includes(name) ? actionNamesRef.current : [...actionNamesRef.current, name];
       actionNamesRef.current = next;
       setActionNames(next);
       setReadinessTick(value => value + 1);
+
+      // A real action is an acknowledgement, not a request to click the
+      // same control again. Advance after the next render so the new route or
+      // list item can mount before it is measured. Practice steps remain
+      // manual and still require the keep/trash or Done decision.
+      if (!isPractice && actionStepIndex >= 0) {
+        const followingStep = actionStepIndex + 1;
+        window.setTimeout(() => {
+          setStepIndex(current => {
+            if (current > actionStepIndex) return current;
+            // Keep a final action step visible so the user can review the
+            // completed state and explicitly press Continue.
+            if (followingStep >= guide.steps.length) return current;
+            return followingStep;
+          });
+        }, 80);
+      }
     };
     window.addEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
     return () => window.removeEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
-  }, []);
+  }, [guide.steps, isPractice, onComplete, stepIndex]);
 
   const actionsReady = requiredActions.length > 0 && requiredActions.every(action => actionNames.includes(action.id));
   const ready = useMemo(() => {

@@ -1,0 +1,17 @@
+mindcanvas-v1/apps/web/package.json
+mindcanvas-v1/package-lock.json
+mindcanvas-v1/apps/web/public/sw.js
+mindcanvas-v1/apps/web/src/App.test.tsx
+mindcanvas-v1/apps/web/src/App.tsx
+mindcanvas-v1/apps/web/src/components/AppSidebar.tsx
+mindcanvas-v1/apps/web/src/components/CanvasBoard.test.tsx
+mindcanvas-v1/apps/web/src/components/CanvasBoard.tsx
+mindcanvas-v1/apps/web/src/components/FeatureGuideOverlay.test.tsx
+mindcanvas-v1/apps/web/src/components/FeatureGuideOverlay.tsx
+mindcanvas-v1/apps/web/src/components/FolderManager.tsx
+mindcanvas-v1/apps/web/src/components/WorkspaceHome.tsx
+mindcanvas-v1/apps/web/src/hooks/useWorkspace.ts
+mindcanvas-v1/apps/web/src/lib/aiSupport.ts
+mindcanvas-v1/apps/web/src/styles.css
+mindcanvas-v1/V5.8.1_GUIDE_SYNC_FOLDER_TEXT_VI.md
+mindcanvas-v1/CHANGED_FILES_V5.8.1.txt

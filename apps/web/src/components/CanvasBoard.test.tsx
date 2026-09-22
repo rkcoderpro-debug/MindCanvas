@@ -181,6 +181,15 @@ describe("Canvas interactions", () => {
     await act(async () => host.querySelector(".canvas-copy")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
     expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Sửa nội dung"]')?.value).toBe("Editable text");
   });
+  it("edits text while V temporarily switches from a drawing tool to Select", async () => {
+    const b = { ...blankBoard(), texts: [{ id: "txt", text: "Pen-friendly edit", x: 20, y: 40, width: 220 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "v", bubbles: true, cancelable: true })));
+    await act(async () => host.querySelector(".canvas-copy")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true })));
+    expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Sửa nội dung"]')?.value).toBe("Pen-friendly edit");
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "v", bubbles: true, cancelable: true })));
+  });
   it("keeps the properties panel toggle available after closing it", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const inspector = host.querySelector("aside.inspector")!;

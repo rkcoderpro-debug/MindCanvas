@@ -62,6 +62,20 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  it("jumps past a stale input step when creation completes directly", async () => {
+    const definition = guide([
+      { target: ".name-input", completion: { type: "input", selector: ".name-input", minLength: 1 }, titleVi: "Tên", titleEn: "Name", bodyVi: "", bodyEn: "" },
+      { target: ".create-submit", completion: { type: "action", actions: [{ id: "created", labelVi: "Đã tạo", labelEn: "Created" }] }, titleVi: "Tạo", titleEn: "Create", bodyVi: "", bodyEn: "" },
+      { target: ".after-create", titleVi: "Tiếp theo", titleEn: "Next", bodyVi: "", bodyEn: "" },
+    ]);
+    const input = document.createElement("input"); input.className = "name-input"; input.value = "Canvas mới"; input.getBoundingClientRect = rect;
+    const submit = document.createElement("button"); submit.className = "create-submit"; submit.getBoundingClientRect = rect;
+    host.append(input, submit);
+    await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, onComplete: vi.fn(), onSkip: vi.fn() })));
+    await act(async () => { window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "created" } })); input.remove(); submit.remove(); await new Promise(resolve => window.setTimeout(resolve, 160)); });
+    expect(document.body.querySelector(".feature-guide-progress")?.getAttribute("aria-label")).toBe("3/3");
+  });
+
   it("requires every declared practice action before completing", async () => {
     const complete = vi.fn();
     const definition = guide([{ kind: "practice", titleVi: "Thực hành", titleEn: "Practice", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "one", labelVi: "Một", labelEn: "One" }, { id: "two", labelVi: "Hai", labelEn: "Two" }] } }]);

@@ -542,7 +542,16 @@ export function useWorkspace(owner: string | null) {
     setVersions([]);
     await refresh();
   };
-  const newFolder = async (name: string) => { try { const f = await addFolder(owner, name); if (alive.current) setFolders(fs => [...fs, f]); } catch (err) { report(err); } };
+  const newFolder = async (name: string): Promise<ProjectFolder> => {
+    try {
+      const f = await addFolder(owner, name);
+      if (alive.current) setFolders(fs => [...fs, f]);
+      return f;
+    } catch (err) {
+      report(err);
+      throw err;
+    }
+  };
   const renameFolder = async (folder: ProjectFolder, name: string) => { try { await updateFolder(owner, folder, name); if (alive.current) setFolders(fs => fs.map(f => f.id === folder.id ? { ...f, name } : f)); } catch (err) { report(err); throw err; } };
   const removeFolder = async (folder: ProjectFolder) => { try { await deleteFolder(owner, folder); if (alive.current) { setFolders(fs => fs.filter(f => f.id !== folder.id)); setProjects(ps => ps.map(p => p.folderId === folder.id ? { ...p, folderId: null } : p)); } } catch (err) { report(err); throw err; } };
   const move = (id: string | null) => {

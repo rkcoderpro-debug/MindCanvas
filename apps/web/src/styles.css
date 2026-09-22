@@ -598,12 +598,17 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .manage-folders-button:hover { background: var(--soft); color: var(--accent); }
 .folder-manager { display: flex; flex: 1; min-height: 500px; margin: 24px 8px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 12px 35px var(--shadow); }
 .folder-manager-side { flex: 0 0 220px; padding: 18px 10px; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--soft) 84%, var(--surface)); }
-.manager-title, .manager-folder { display: flex; align-items: center; gap: 9px; }
+.manager-title, .manager-folder-row { display: flex; align-items: center; gap: 4px; }
+.manager-folder-row { min-width: 0; border-radius: 8px; }
+.manager-folder-row:hover, .manager-folder-row.active { background: var(--surface); }
 .manager-title { justify-content: space-between; padding: 0 8px 14px; }
-.manager-folder { width: 100%; padding: 10px; border-radius: 8px; background: transparent; color: var(--muted); text-align: left; }
+.manager-folder { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 10px; border-radius: 8px; background: transparent; color: var(--muted); text-align: left; }
 .manager-folder span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .manager-folder small { margin-left: auto; }
-.manager-folder:hover, .manager-folder.active { color: var(--accent); background: var(--surface); }
+.manager-folder:hover, .manager-folder.active { color: var(--accent); background: transparent; }
+.manager-folder-actions { flex: 0 0 30px; width: 30px; height: 30px; margin-right: 3px; opacity: .72; }
+.manager-folder-row:hover .manager-folder-actions, .manager-folder-row:focus-within .manager-folder-actions, .manager-folder-row.active .manager-folder-actions { opacity: 1; }
+.manager-folder-actions:hover { color: var(--accent); background: var(--line); }
 .folder-manager-main { flex: 1; min-width: 0; padding: 28px; overflow: auto; }
 .manager-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; }
 .manager-toolbar h1 { margin-top: 4px; }
@@ -3798,7 +3803,7 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .feature-guide-focus { position: fixed; z-index: 1; pointer-events: none; border: 0; border-radius: 13px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 34%, transparent), color-mix(in srgb, var(--accent-2) 24%, transparent)); box-shadow: 0 0 0 100vmax rgb(3 9 20 / .72), 0 0 34px color-mix(in srgb, var(--accent) 72%, transparent); backdrop-filter: brightness(1.28) saturate(1.18); animation: feature-guide-focus-pulse 1.8s ease-in-out infinite; }
 .feature-guide-cursor { position: fixed; z-index: 3; display: grid; place-items: center; width: 30px; height: 30px; pointer-events: none; color: var(--accent); border: 0; border-radius: 0; background: transparent; filter: drop-shadow(0 3px 4px rgb(0 0 0 / .55)); transform-origin: center; animation: feature-guide-pointer 1.45s ease-in-out infinite; }
 .feature-guide-cursor svg { width: 30px; height: 30px; stroke-width: 2.7; }
-.feature-guide-popover { position: fixed; z-index: 4; display: grid; gap: 12px; box-sizing: border-box; padding: 16px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--accent-border)); border-radius: 18px; color: var(--text); background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 91%, var(--accent-soft)), var(--surface-raised)); box-shadow: 0 22px 65px rgb(0 0 0 / .48), 0 0 0 1px color-mix(in srgb, var(--accent) 9%, transparent); animation: feature-guide-popover-in .24s both cubic-bezier(.2,.8,.2,1); }
+.feature-guide-popover { position: fixed; z-index: 4; display: grid; gap: 12px; box-sizing: border-box; width: min(400px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; padding: 16px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--accent-border)); border-radius: 18px; color: var(--text); background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 91%, var(--accent-soft)), var(--surface-raised)); box-shadow: 0 22px 65px rgb(0 0 0 / .48), 0 0 0 1px color-mix(in srgb, var(--accent) 9%, transparent); animation: feature-guide-popover-in .24s both cubic-bezier(.2,.8,.2,1); }
 .feature-guide-popover header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .feature-guide-popover header > div { display: grid; gap: 4px; min-width: 0; }
 .feature-guide-header-actions { display: flex !important; align-items: center; gap: 3px; }
@@ -3809,7 +3814,7 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .feature-guide-target-missing { border-style: dashed; background: color-mix(in srgb, var(--surface-raised) 94%, var(--accent-soft)); }
 .feature-guide-kicker { color: var(--accent); font-size: 9px; font-weight: 850; letter-spacing: .12em; }
 .feature-guide-popover header strong { font-size: 17px; line-height: 1.2; }
-.feature-guide-popover > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.feature-guide-popover > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .feature-guide-progress { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 10px; font-weight: 800; }
 .feature-guide-progress > i { flex: 1; height: 5px; overflow: hidden; border-radius: 99px; background: var(--line); }
 .feature-guide-progress b { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }

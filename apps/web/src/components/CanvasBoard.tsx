@@ -656,7 +656,11 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     const next = { selection: s, value, fresh }; editRef.current = next; setEditing(next); setSelected(s);
   };
   const openInlineEditor = (event: ReactMouseEvent, selection: Selection) => {
-    if (readOnly || tool !== "select") return;
+    // Double-clicking visible text is an explicit edit gesture. Respect the
+    // effective temporary tool (for example while holding V) so the gesture
+    // still works when the user normally draws with another tool, but never
+    // hijack Hand/Space or drawing gestures.
+    if (readOnly || currentInputTool() !== "select") return;
     event.preventDefault(); event.stopPropagation(); edit(selection);
   };
   const pulseConnection = (ids: string[]) => {
