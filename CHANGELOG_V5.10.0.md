@@ -24,6 +24,10 @@
   active-document state, compact tabs, and a responsive upload/search header.
 - Refined the DOCX top bar, ribbon density, paper workspace, ruler, status bar,
   empty state, and responsive breakpoints without changing document behavior.
+- Rebuilt the Tools workspace as a compact two-pane work surface: PDF/DOCX
+  switching and upload stay in one header, library search/list scrolling is
+  isolated, the library can collapse, and the DOCX ribbon now has real collapse
+  behavior instead of changing tabs.
 
 ## Compatibility notes
 
