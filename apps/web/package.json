@@ -1,7 +1,7 @@
 {
   "name": "@mindcanvas/web",
   "private": true,
-  "version": "5.7.4",
+  "version": "5.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

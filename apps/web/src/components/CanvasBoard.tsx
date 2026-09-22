@@ -873,6 +873,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     }
     if (!cancel) {
       if (["draw", "line", "shape"].includes(g.mode)) emitGuideAction("canvas:draw");
+      if (g.mode === "shape" && g.next.shapes.at(-1)?.kind === "rect") emitGuideAction("canvas:rectangle");
       if (g.mode === "erase") emitGuideAction("canvas:erase");
       if (g.mode === "marquee") emitGuideAction("canvas:select");
       if (g.mode === "move") emitGuideAction("canvas:move");

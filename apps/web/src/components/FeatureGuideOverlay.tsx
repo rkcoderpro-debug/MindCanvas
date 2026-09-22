@@ -91,7 +91,7 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
   const [decisionError, setDecisionError] = useState("");
   const step = guide.steps[stepIndex] ?? guide.steps[0];
   const canvasToolbarStepIndex = guide.id === "canvas-controls"
-    ? guide.steps.findIndex(value => value.target === ".drawing-toolbar")
+    ? guide.steps.findIndex(value => value.target === '[data-tool="pen"]')
     : -1;
   const isPractice = step.kind === "practice" || !step.target;
   const completion = completionForStep(step, isPractice);
@@ -166,6 +166,10 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
     void readinessTick;
     if (routeSkipped) return true;
     if (isPractice) return actionsReady || requiredActions.length === 0;
+    // Successful actions often close their dialog or replace the current
+    // page. Keep the step completed after its original target unmounts.
+    if (completion.type === "action" && actionsReady) return true;
+    if (completion.type === "route" && currentRoute === completion.route) return true;
     if (!targetFound) return false;
     if (completion.type === "click") return targetActivated;
     if (completion.type === "input") return readInputReady(completion);
@@ -226,8 +230,9 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
   const statusText = isPractice
     ? actionsReady ? t("guidePracticeReady") : t("guidePracticeNeedsActions")
     : routeSkipped ? t("guideRouteAlreadyOpen")
-      : !targetFound ? `${t("guideWaitingForTarget")} · ${title}`
-        : ready ? t("guideStepReady") : completion.type === "action" ? t("guideWaitingForAction") : t("guideWaitingForClick");
+      : ready ? t("guideStepReady")
+        : !targetFound ? `${t("guideWaitingForTarget")} · ${title}`
+          : completion.type === "action" ? t("guideWaitingForAction") : t("guideWaitingForClick");
   const panelClass = ["feature-guide-popover", isPractice ? "feature-guide-practice-panel" : "", targetMissing ? "feature-guide-target-missing" : ""].filter(Boolean).join(" ");
   const panelStyle = isPractice || targetMissing ? { left: popover.left, top: popover.top, width: popover.width } : { left: popover.left, top: popover.top, width: popover.width };
 

@@ -23,6 +23,15 @@ describe("Workspace UI", () => {
     await act(async () => (host.querySelector(".workspace-expand") as HTMLButtonElement).click());
     expect(host.querySelector(".workspace-subnav")?.textContent).toContain("Thùng rác");
   });
+  it("unlocks contextual page help only after the matching guide is completed", async () => {
+    localStorage.setItem("mindcanvas:feature-guides:v5:guest", JSON.stringify({ "workspace-navigation": { status: "completed" } }));
+    await act(async () => root.render(<App/>));
+    const help = host.querySelector('button[aria-label="Trợ giúp trang này"]') as HTMLButtonElement;
+    expect(help).not.toBeNull();
+    await act(async () => { help.click(); await new Promise(resolve => window.requestAnimationFrame(resolve)); });
+    expect(document.body.querySelector(".page-help-panel")?.textContent).toContain("Project mới");
+    expect(document.body.querySelector(".page-help-panel")?.textContent).toContain("Tìm");
+  });
   it("favorites, duplicates, trashes and restores real projects from cards", async()=>{
     const board=blankBoard("Keep me");cacheProject(null,{id:board.id,title:board.title,board,folderId:null,updatedAt:board.updatedAt,pending:false});
     await act(async()=>root.render(<App/>));
@@ -203,7 +212,7 @@ describe("Workspace UI", () => {
     const board = { ...blankBoard("Biology"), texts: [{ id: "fact", text: "Mitochondria produces ATP", x: 20, y: 40, width: 240 }] };
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".beta")?.textContent).toBe("V5.7.4");
+    expect(host.querySelector(".beta")?.textContent).toBe("V5.8.0");
     expect(host.querySelector(".brand-copy .brand-name")?.textContent).toBe("MindCanvas");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true })));
     const input = host.querySelector('dialog[open] input[aria-label="Tìm project và thao tác…"]') as HTMLInputElement;

@@ -49,6 +49,19 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps an action step complete after its dialog target unmounts", async () => {
+    const complete = vi.fn();
+    const definition = guide([{ target: ".create-submit", completion: { type: "action", actions: [{ id: "created", labelVi: "Đã tạo", labelEn: "Created" }] }, titleVi: "Tạo", titleEn: "Create", bodyVi: "", bodyEn: "" }]);
+    const target = document.createElement("button"); target.className = "create-submit"; target.getBoundingClientRect = rect; host.append(target);
+    await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, onComplete: complete, onSkip: vi.fn() })));
+    await act(async () => { window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "created" } })); target.remove(); await new Promise(resolve => window.setTimeout(resolve, 220)); });
+    const next = document.body.querySelector<HTMLButtonElement>(".feature-guide-next")!;
+    expect(next.disabled).toBe(false);
+    expect(document.body.textContent).toContain("Đã hoàn tất bước");
+    await act(async () => next.click());
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
   it("requires every declared practice action before completing", async () => {
     const complete = vi.fn();
     const definition = guide([{ kind: "practice", titleVi: "Thực hành", titleEn: "Practice", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "one", labelVi: "Một", labelEn: "One" }, { id: "two", labelVi: "Hai", labelEn: "Two" }] } }]);
@@ -85,7 +98,7 @@ describe("FeatureGuideOverlay strict completion", () => {
       { target: ".workspace-create-button", titleVi: "Tạo", titleEn: "Create", bodyVi: "", bodyEn: "" },
       { target: ".guide-project-name-input", completion: { type: "input", selector: ".guide-project-name-input", minLength: 1 }, titleVi: "Tên", titleEn: "Name", bodyVi: "", bodyEn: "" },
       { target: ".guide-project-create-submit", titleVi: "Mở", titleEn: "Open", bodyVi: "", bodyEn: "" },
-      { target: ".drawing-toolbar", titleVi: "Mở thanh công cụ", titleEn: "Open toolbar", bodyVi: "", bodyEn: "" },
+      { target: '[data-tool="pen"]', titleVi: "Chọn Pen", titleEn: "Choose Pen", bodyVi: "", bodyEn: "" },
     ], "canvas-controls");
     const workspace = document.createElement("div");
     workspace.className = "workspace-nav-row";
@@ -93,14 +106,17 @@ describe("FeatureGuideOverlay strict completion", () => {
     workspaceButton.textContent = "Workspace";
     workspaceButton.getBoundingClientRect = rect;
     workspace.append(workspaceButton);
-    const toolbar = document.createElement("button");
+    const toolbar = document.createElement("div");
     toolbar.className = "drawing-toolbar";
-    toolbar.textContent = "Toolbar";
-    toolbar.getBoundingClientRect = rect;
+    const pen = document.createElement("button");
+    pen.dataset.tool = "pen";
+    pen.textContent = "Pen";
+    pen.getBoundingClientRect = rect;
+    toolbar.append(pen);
     await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, currentRoute: "canvas", onComplete: complete, onSkip: vi.fn() })));
     host.append(workspace, toolbar);
     await act(async () => { workspaceButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); await new Promise(resolve => window.setTimeout(resolve, 220)); });
-    expect(document.body.textContent).toContain("Mở thanh công cụ");
+    expect(document.body.textContent).toContain("Chọn Pen");
     expect(document.body.querySelector(".feature-guide-progress")?.getAttribute("aria-label")).toBe("5/5");
   });
 });

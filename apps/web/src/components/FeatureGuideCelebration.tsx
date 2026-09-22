@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles, X } from "lucide-react";
+import { CheckCircle2, CircleHelp, Sparkles, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { CSSProperties } from "react";
 import { useLanguage } from "../lib/i18n";
@@ -17,6 +17,7 @@ export default function FeatureGuideCelebration({ guide, onClose }: Props) {
   const { language, t } = useLanguage();
   const title = language === "vi" ? guide.titleVi : guide.titleEn;
   const outcome = language === "vi" ? guide.outcomeVi : guide.outcomeEn;
+  const unlocksPageHelp = ["workspace-navigation", "canvas-controls", "learning-hub", "folder-manager"].includes(guide.id);
   return createPortal(<div className="feature-guide-celebration-root" role="dialog" aria-modal="true" aria-label={t("guideCompletedTitle")}>
     <div className="feature-guide-celebration-backdrop" aria-hidden="true" onClick={onClose}/>
     <section className="feature-guide-celebration-card">
@@ -26,6 +27,7 @@ export default function FeatureGuideCelebration({ guide, onClose }: Props) {
       <h2>{t("guideCompletedTitle")}</h2>
       <p>{t("guideCompletedBody", { guide: title })}</p>
       {outcome && <div className="feature-guide-celebration-outcome"><Sparkles size={15}/>{outcome}</div>}
+      {unlocksPageHelp && <div className="feature-guide-help-unlocked"><span><CircleHelp size={18}/></span><p>{language === "vi" ? "Bạn muốn biết cách sử dụng các công cụ khác? Hãy bấm nút ? trên thanh đầu. Trợ giúp sẽ tự hiển thị đúng các nút của trang hoặc tab bạn đang mở." : "Want to learn the other tools? Use the ? button in the top bar. Help automatically shows controls for the page or tab you are viewing."}</p></div>}
       <div className="feature-guide-celebration-actions"><button type="button" className="primary-button" onClick={onClose}>{t("guideCompletedNext")}</button></div>
     </section>
   </div>, document.body);

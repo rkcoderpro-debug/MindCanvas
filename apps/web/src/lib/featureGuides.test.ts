@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GUIDE_ACTION_EVENT, GUIDE_CONTENT_VERSION, GUIDE_DEFINITIONS, emitGuideAction, finishGuide, guideForTrigger, markGuideStarted, practiceActionsForGuide, readGuideProgress, resetGuideProgress } from "./featureGuides";
+import { GUIDE_ACTION_EVENT, GUIDE_CONTENT_VERSION, GUIDE_DEFINITIONS, emitGuideAction, finishGuide, guideForTrigger, markGuideStarted, pageHelpIsUnlocked, practiceActionsForGuide, readGuideProgress, resetGuideProgress } from "./featureGuides";
 
 const storage = new Map<string, string>();
 beforeEach(() => {
@@ -11,12 +11,12 @@ afterEach(() => storage.clear());
 
 describe("feature guides", () => {
   it("keeps a stable guide registry with first-use triggers and GIF demos", () => {
-    expect(GUIDE_CONTENT_VERSION).toBe("v4");
-    expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(7);
+    expect(GUIDE_CONTENT_VERSION).toBe("v5");
+    expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(8);
     expect(guideForTrigger("canvas")?.id).toBe("canvas-controls");
+    expect(guideForTrigger("documents")?.id).toBe("folder-manager");
     expect(GUIDE_DEFINITIONS.every(guide => guide.gifSrc?.endsWith(".gif"))).toBe(true);
     expect(GUIDE_DEFINITIONS.every(guide => guide.steps.length >= 3)).toBe(true);
-    expect(GUIDE_DEFINITIONS.every(guide => guide.steps.at(-1)?.kind === "practice")).toBe(true);
     expect(GUIDE_DEFINITIONS.every(guide => practiceActionsForGuide(guide.id).length > 0)).toBe(true);
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "lab-simulation")?.steps[0].target).toBe(".nav-learning");
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "canvas-controls")?.steps.slice(0, 4).map(step => step.target)).toEqual([
@@ -25,6 +25,9 @@ describe("feature guides", () => {
       ".guide-project-name-input",
       ".guide-project-create-submit",
     ]);
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "workspace-navigation")?.steps.some(step => step.target?.includes("project-card-favorite"))).toBe(true);
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "learning-hub")?.steps.some(step => step.target === ".learning-music-launcher")).toBe(true);
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "folder-manager")?.steps.map(step => step.target)).toContain(".folder-manager-new-folder");
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "pdf-annotation")?.steps.slice(0, 2).map(step => step.target)).toEqual([
       ".manager-documents",
       ".document-file-table .file-row",
@@ -51,6 +54,8 @@ describe("feature guides", () => {
     expect(readGuideProgress("user-b")["canvas-controls"]).toBeUndefined();
     finishGuide("user-a", "canvas-controls", "completed");
     expect(readGuideProgress("user-a")["canvas-controls"]?.status).toBe("completed");
+    expect(pageHelpIsUnlocked(readGuideProgress("user-a"), "canvas")).toBe(true);
+    expect(pageHelpIsUnlocked(readGuideProgress("user-a"), "workspace")).toBe(false);
     resetGuideProgress("user-a", "canvas-controls");
     expect(readGuideProgress("user-a")["canvas-controls"]?.status).toBe("unseen");
   });

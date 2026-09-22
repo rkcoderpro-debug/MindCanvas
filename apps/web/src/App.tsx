@@ -2,7 +2,7 @@ import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { ArrowLeft, CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
 import FloatingTimer from "./components/FloatingTimer";
@@ -35,7 +35,8 @@ import WebBackgroundControls from "./components/WebBackgroundControls";
 import { readWebBackground, saveWebBackground, type WebBackground } from "./lib/webBackground";
 import { listDocuments, saveDocument, type UploadedDocument } from "./lib/documentStore";
 import FeatureGuideManager from "./components/FeatureGuideManager";
-import { emitGuideAction } from "./lib/featureGuides";
+import PageHelpPanel from "./components/PageHelpPanel";
+import { emitGuideAction, GUIDE_PROGRESS_EVENT, pageHelpIsUnlocked, readGuideProgress, type PageHelpScope } from "./lib/featureGuides";
 const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 const CanvasBoard = lazy(() => import("./components/CanvasBoard"));
 const FolderManager = lazy(() => import("./components/FolderManager"));
@@ -115,9 +116,17 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const [learningInviteError, setLearningInviteError] = useState("");
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [manualGuideId, setManualGuideId] = useState<string | null>(null);
+  const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
+  const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const message = ws.error || authError;
   useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
+  useEffect(() => {
+    const sync = () => setGuideProgress(readGuideProgress(user?.id ?? null));
+    sync();
+    window.addEventListener(GUIDE_PROGRESS_EVENT, sync);
+    return () => window.removeEventListener(GUIDE_PROGRESS_EVENT, sync);
+  }, [user?.id]);
   const saveCanvasDocument = async (file: { name: string; mimeType: string; kind: UploadedDocument["kind"]; size: number; dataUrl: string }) => {
     try { const project = ws.projects.find(item => item.id === ws.board?.id); const saved = await saveDocument(user?.id ?? null, { ...file, folderId: project?.folderId ?? null }); setDocuments(rows => [saved, ...rows.filter(item => item.id !== saved.id)]); }
     catch (err) { ws.setError(errorMessage(err, "Không thể lưu tài liệu vào thư viện.")); }
@@ -135,7 +144,11 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       if (modal === "project") {
         const created = await ws.create(name.trim(), undefined, filter && !filter.startsWith("__") ? filter : null);
         emitGuideAction("canvas:practice-created", { projectId: created.id, title: created.title });
-      } else await ws.newFolder(name.trim());
+        emitGuideAction("workspace:project-created", { projectId: created.id, title: created.title });
+      } else {
+        await ws.newFolder(name.trim());
+        emitGuideAction("folder:created", { name: name.trim() });
+      }
       setModal(null);
     }
     finally { setWorking(false); }
@@ -285,9 +298,6 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     setManualGuideId(guideId);
     setRecent(false);
     switch (guideId) {
-      case "learning-hub":
-        void ws.home(); setFilter("__learning");
-        break;
       case "lab-simulation":
         void ws.home(); setFilter("__lab");
         break;
@@ -297,6 +307,11 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
         break;
       case "workspace-navigation":
       case "canvas-controls":
+      case "learning-hub":
+      case "folder-manager":
+        // These core guides begin at a visible sidebar control so the user
+        // learns the real navigation path instead of being teleported.
+        break;
       case "ai-workflow":
       case "tool-hold-shortcuts":
       default:
@@ -310,6 +325,9 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   };
   useEffect(() => { saveWebBackground(webBackground); }, [webBackground]);
   const guideTrigger = ws.board ? "canvas" : filter === "__learning" || filter === "__flashcards" ? "learning" : filter === "__lab" ? "lab" : filter === "__manager" ? "documents" : !recent && !filter ? "workspace" : null;
+  const pageHelpScope: PageHelpScope | null = ws.board ? "canvas" : filter === "__manager" ? "folders" : filter === "__learning" || filter === "__flashcards" || filter === "__lab" ? "learning" : filter === "__guides" || filter === "__admin" ? null : "workspace";
+  const pageHelpUnlocked = pageHelpScope ? pageHelpIsUnlocked(guideProgress, pageHelpScope) : false;
+  useEffect(() => setPageHelpOpen(false), [pageHelpScope]);
 
   useEffect(() => { setMobileProjectMenuOpen(false); }, [ws.board?.id, canvasFullscreen]);
   useEffect(() => {
@@ -340,6 +358,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="breadcrumbs"><button onClick={home}>{ws.board ? <ArrowLeft size={17}/> : <LayoutGrid size={17}/>} {t("workspace")}</button>{ws.board && <span>/ {ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
+        {pageHelpScope && pageHelpUnlocked && <button type="button" className="icon-button page-help-trigger" aria-label={language === "vi" ? "Trợ giúp trang này" : "Help for this page"} title={language === "vi" ? "Trợ giúp trang này" : "Help for this page"} aria-expanded={pageHelpOpen} onClick={() => setPageHelpOpen(value => !value)}><CircleHelp size={19}/></button>}
         <div className="topbar-account-actions">{plusTrial?.eligible && !plusTrial.consumed && !plusTrial.active && <button type="button" className="topbar-trial-button" aria-label="Kích hoạt 3 ngày Plus miễn phí" title="3 ngày Plus miễn phí" onClick={() => { setTrialActivated(false); setTrialError(""); setTrialOpen(true); }}><Gift size={15}/><span>3 ngày Plus</span></button>}<button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
       </header>
       {ws.board && <header className="mobile-canvas-header">
@@ -388,10 +407,11 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
     <MusicIsland/>
     <PetCompanion visible={petVisible} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
     <FeatureGuideManager key={user?.id ?? "guest"} ownerId={user?.id ?? null} trigger={guideTrigger} manualGuideId={manualGuideId} onManualConsumed={() => setManualGuideId(null)} onPracticeDecision={decideCanvasPractice} blocked={focusMode || modal !== null}/>
+    {pageHelpOpen && pageHelpScope && pageHelpUnlocked && <PageHelpPanel scope={pageHelpScope} onClose={() => setPageHelpOpen(false)}/>}
    {trialOpen && plusTrial && <PlusTrialPopup trial={plusTrial} working={trialWorking} activated={trialActivated} error={trialError} onActivate={() => void startTrial()} onClose={closeTrial}/>}
    {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
-      <label>{t("name")}<input className={modal === "project" ? "guide-project-name-input" : undefined} autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
-      <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className={`primary-button ${modal === "project" ? "guide-project-create-submit" : ""}`} disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}
+      <label>{t("name")}<input className={modal === "project" ? "guide-project-name-input" : "guide-folder-name-input"} autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
+      <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className={`primary-button ${modal === "project" ? "guide-project-create-submit" : "guide-folder-create-submit"}`} disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => setFolderAction(null)); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
     {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
