@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { buildDocx } from "./DocumentToolsPage";
+import { shouldRequestPdfGuide } from "./DocumentViewer";
 
 describe("DOCX editor export", () => {
   it("writes a readable OOXML package instead of renaming HTML", async () => {
@@ -16,5 +17,11 @@ describe("DOCX editor export", () => {
     expect(await zip.file("[Content_Types].xml")?.async("text")).toContain("wordprocessingml.document.main+xml");
     expect(await zip.file("word/numbering.xml")?.async("text")).toContain("w:numFmt w:val=\"bullet\"");
     expect(await zip.file("word/document.xml")?.async("text")).toContain("Lesson");
+  });
+
+  it("does not start the PDF guide for a DOCX that appears first", () => {
+    const orderedKinds = ["docx", "pdf"] as const;
+    expect(orderedKinds.map(kind => shouldRequestPdfGuide(kind))).toEqual([false, true]);
+    expect(shouldRequestPdfGuide("pdf", true, true)).toBe(false);
   });
 });

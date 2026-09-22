@@ -151,10 +151,15 @@ export default function FeatureGuideOverlay({ guide, guideSessionId = null, curr
 
   useEffect(() => {
     const handleGuideAction = (event: Event) => {
-      const detail = (event as CustomEvent<{ name?: string; guideSessionId?: string | null }>).detail;
+      const detail = (event as CustomEvent<{ name?: string; payload?: unknown; guideSessionId?: string | null }>).detail;
       if (guideSessionId && detail?.guideSessionId !== guideSessionId) return;
       const name = detail?.name;
       if (!name) return;
+      if (name.startsWith("docx:")) {
+        const activeDocumentId = document.querySelector<HTMLElement>("[data-docx-editor]")?.dataset.documentId;
+        const eventDocumentId = detail.payload && typeof detail.payload === "object" ? (detail.payload as { documentId?: unknown }).documentId : undefined;
+        if (activeDocumentId && eventDocumentId !== activeDocumentId) return;
+      }
 
       // Creation actions can replace the dialog (and even navigate to another
       // page) before the user has had a chance to press the overlay's

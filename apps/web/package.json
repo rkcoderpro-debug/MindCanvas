@@ -1,13 +1,13 @@
 {
   "name": "@mindcanvas/web",
   "private": true,
-  "version": "5.9.0",
+  "version": "5.10.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b",
-    "test": "vitest run"
+    "dev": "node ../../node_modules/vite/bin/vite.js",
+    "build": "node ../../node_modules/typescript/bin/tsc -b && node ../../node_modules/vite/bin/vite.js build",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc -b",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --testTimeout=15000"
   },
   "dependencies": {
     "@mindcanvas/shared": "*",

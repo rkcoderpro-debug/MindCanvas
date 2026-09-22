@@ -62,7 +62,7 @@ export type PageHelpScope = "workspace" | "canvas" | "learning" | "folders";
 export const GUIDE_PROGRESS_EVENT = "mindcanvas:feature-guide-progress";
 export const GUIDE_REQUEST_EVENT = "mindcanvas:feature-guide-request";
 export const GUIDE_ACTION_EVENT = "mindcanvas:feature-guide-action";
-export const GUIDE_CONTENT_VERSION = "v5.9";
+export const GUIDE_CONTENT_VERSION = "v5.10";
 const STORAGE_PREFIX = `mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}`;
 let activeGuideSessionId: string | null = null;
 
@@ -203,7 +203,14 @@ export function practiceActionsForGuide(
     "document-tools": [
       { id: "pdf:draw", labelVi: "Vẽ một nét trên PDF", labelEn: "Draw on the PDF" },
       { id: "pdf:export", labelVi: "Xuất PDF mới", labelEn: "Export a new PDF" },
-      { id: "docx:save", labelVi: "Xuất một DOCX", labelEn: "Export a DOCX" },
+      { id: "docx:open", labelVi: "Mở tài liệu DOCX", labelEn: "Open the DOCX" },
+      { id: "docx:focus", labelVi: "Bấm vào vùng soạn thảo", labelEn: "Focus the editor" },
+      { id: "docx:text", labelVi: "Nhập hoặc sửa văn bản", labelEn: "Enter or edit text" },
+      { id: "docx:selection", labelVi: "Chọn một đoạn văn", labelEn: "Select a passage" },
+      { id: "docx:format", labelVi: "Áp dụng định dạng", labelEn: "Apply formatting" },
+      { id: "docx:table", labelVi: "Chèn bảng", labelEn: "Insert a table" },
+      { id: "docx:save", labelVi: "Lưu bản chỉnh sửa", labelEn: "Save the edited copy" },
+      { id: "docx:export", labelVi: "Xuất một DOCX", labelEn: "Export a DOCX" },
     ],
     "pdf-annotation": [
       {
@@ -1081,7 +1088,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
       { target: ".document-tool-list button", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu chưa có, hãy tải file lên.", bodyEn: "Choose a PDF from the list. Upload one first if the list is empty." },
       { target: ".document-annotation-tools", titleVi: "Chọn công cụ annotation", titleEn: "Choose an annotation tool", bodyVi: "Bật Vẽ trên PDF rồi thử bút, highlight hoặc eraser. Nét hiển thị ngay khi kéo.", bodyEn: "Enable Draw on PDF and try pen, highlight or eraser. Strokes render while you drag." },
       { target: ".document-tools-tabs button:nth-child(2)", completion: { type: "click" }, titleVi: "Mở Soạn thảo DOCX", titleEn: "Open DOCX editor", bodyVi: "Chuyển sang tab DOCX để mở và sửa tài liệu Word ở mức cơ bản.", bodyEn: "Switch to the DOCX tab to open and edit a document with basic Word features." },
-      { target: ".docx-editable", kind: "practice", titleVi: "Tự chỉnh sửa và xuất DOCX", titleEn: "Edit and export a DOCX", bodyVi: "Hãy sửa một đoạn, dùng một nút định dạng và bấm Xuất DOCX. File gốc được giữ lại.", bodyEn: "Edit a paragraph, use one formatting control and export DOCX. The original stays intact." },
+      { target: ".docx-editable", completion: { type: "action", actions: [{ id: "docx:focus", labelVi: "Bấm vào vùng soạn thảo", labelEn: "Focus the editor" }] }, titleVi: "Bắt đầu trong vùng giấy", titleEn: "Start in the page", bodyVi: "Bấm vào vùng giấy để đặt con trỏ. Guide sẽ nhận đúng phiên DOCX đang mở rồi mới sang bước nhập.", bodyEn: "Click the page to place the caret. The guide verifies the active DOCX session before moving to typing." },
+      { target: ".docx-editable", completion: { type: "action", actions: [{ id: "docx:text", labelVi: "Nhập hoặc sửa văn bản", labelEn: "Enter or edit text" }] }, titleVi: "Nhập nội dung", titleEn: "Enter content", bodyVi: "Gõ thêm một câu hoặc sửa chữ trong tài liệu. Nội dung được giữ trong mô hình DOCX có cấu trúc.", bodyEn: "Type a sentence or edit text. The content is kept in the structured DOCX model." },
+      { target: ".docx-editable", completion: { type: "action", actions: [{ id: "docx:selection", labelVi: "Chọn một đoạn văn", labelEn: "Select a passage" }] }, titleVi: "Chọn vùng chữ", titleEn: "Select text", bodyVi: "Kéo chọn một đoạn chữ trong vùng giấy để các công cụ định dạng áp dụng đúng selection.", bodyEn: "Drag across text in the page so formatting applies to the selection." },
+      { target: '.docx-mark-group button[title="bold"]', completion: { type: "action", actions: [{ id: "docx:format", labelVi: "Áp dụng định dạng", labelEn: "Apply formatting" }] }, titleVi: "Định dạng vùng đã chọn", titleEn: "Format the selection", bodyVi: "Bấm nút B đậm đang sáng để áp dụng bold cho vùng chữ đã chọn.", bodyEn: "Click the highlighted B button to apply bold to the selected text." },
+      { target: ".docx-ribbon-tabs button:nth-child(2)", completion: { type: "click" }, titleVi: "Mở nhóm Chèn", titleEn: "Open Insert", bodyVi: "Mở tab Chèn để thêm bảng hoặc ảnh vào tài liệu.", bodyEn: "Open Insert to add a table or image." },
+      { target: '[data-docx-action="insert-table"]', completion: { type: "action", actions: [{ id: "docx:table", labelVi: "Chèn bảng", labelEn: "Insert a table" }] }, titleVi: "Chèn bảng", titleEn: "Insert a table", bodyVi: "Chọn số hàng/cột rồi bấm Bảng. Một bảng thật sẽ được thêm vào mô hình DOCX.", bodyEn: "Choose rows and columns, then click Table. A real table is added to the DOCX model." },
+      { target: '[data-docx-action="save"]', completion: { type: "action", actions: [{ id: "docx:save", labelVi: "Lưu bản chỉnh sửa", labelEn: "Save the edited copy" }] }, titleVi: "Lưu bản chỉnh sửa", titleEn: "Save the edited copy", bodyVi: "Bấm Lưu để tạo/cập nhật bản chỉnh sửa riêng; file gốc không bị ghi đè.", bodyEn: "Click Save to create or update a separate edited copy; the original is not overwritten." },
+      { target: '[data-docx-action="export"]', kind: "practice", completion: { type: "action", actions: [{ id: "docx:export", labelVi: "Xuất một DOCX", labelEn: "Export a DOCX" }] }, titleVi: "Xuất DOCX", titleEn: "Export DOCX", bodyVi: "Bấm Xuất DOCX để tải gói OOXML hợp lệ. Khi hoàn tất, bạn có thể giữ hoặc xóa tài liệu thực hành.", bodyEn: "Click Export DOCX to download a valid OOXML package. When done, you can keep or delete the practice document." },
     ],
   },
   {

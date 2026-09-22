@@ -25,6 +25,9 @@ function bytesFromDataUrl(dataUrl: string): Uint8Array {
 }
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]!)); }
 function kindFor(source: Source): DocumentKind { return source.kind; }
+export function shouldRequestPdfGuide(kind: DocumentKind, enableGuide = true, dedicated = false) {
+  return kind === "pdf" && enableGuide && !dedicated;
+}
 function colorParts(value: string) { const match = /^#([0-9a-f]{6})$/i.exec(value); if (!match) return [0.16, 0.42, 0.82] as const; const number = Number.parseInt(match[1], 16); return [((number >> 16) & 255) / 255, ((number >> 8) & 255) / 255, (number & 255) / 255] as const; }
 function sanitizeOfficeHtml(value: string): string {
   if (typeof DOMParser === "undefined") return value.replace(/<(?:script|iframe|object|embed|link|style)\b[\s\S]*?<\/[^>]+>/gi, "").replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
@@ -89,7 +92,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
   const kind = kindFor(source);
   const viewerSessionId = useMemo(() => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`, [source.dataUrl, source.id]);
   useEffect(() => {
-    if (kind !== "pdf" || !enableGuide || dedicated) return;
+    if (!shouldRequestPdfGuide(kind, enableGuide, dedicated)) return;
     const timer = window.setTimeout(() => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "pdf-annotation", viewerSessionId, documentId: source.id, kind } })), 0);
     return () => window.clearTimeout(timer);
   }, [dedicated, enableGuide, kind, source.dataUrl, source.id, viewerSessionId]);

@@ -3811,6 +3811,129 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .pptx-slide { display: grid; align-content: center; min-height: 260px; margin: 18px; padding: 40px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(135deg, var(--surface-raised), var(--accent-soft)); box-shadow: 0 8px 24px var(--shadow); font-size: clamp(16px, 2vw, 27px); line-height: 1.45; }
 @media (max-width: 700px) { .document-viewer-header { align-items: flex-start; flex-direction: column; } .document-viewer-actions { width: 100%; justify-content: flex-start; } .document-annotation-tools button span { display: none; } .document-viewer-embedded { min-height: 390px; } .document-pdf-body { padding: 8px; } .office-html { padding: 10px; } .pptx-slide { margin: 10px; padding: 24px; } }
 
+/* v5.10 practical DOCX editor.  The paper surface is intentionally separate
+   from application/theme colors so imported document colors stay intact. */
+.docx-editor-panel { position: relative; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; gap: 0; height: 100%; min-height: 720px; overflow: hidden; padding: 0; color: var(--text); background: var(--surface); }
+.docx-editor-panel:fullscreen { width: 100vw; height: 100vh; min-height: 100vh; background: var(--surface); }
+.docx-editor-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
+.docx-editor-title, .docx-editor-status { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.docx-editor-title { color: var(--accent); }
+.docx-editor-title > div { display: grid; min-width: 0; gap: 2px; }
+.docx-title-button { max-width: min(38vw, 440px); overflow: hidden; padding: 0; border: 0; color: var(--text); background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-weight: 800; }
+.docx-title-button:hover { color: var(--accent); }
+.docx-editor-title input { width: min(38vw, 440px); min-height: 28px; padding: 4px 7px; border: 1px solid var(--accent-border); border-radius: 6px; color: var(--text); background: var(--surface); font: inherit; font-weight: 800; }
+.docx-editor-title small { color: var(--muted); font-size: 10px; }
+.docx-editor-status { justify-content: flex-end; flex-wrap: wrap; }
+.docx-editor-status > button:not(.primary-button):not(.secondary-button), .docx-ribbon-group > button, .docx-ribbon-group label > button { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 6px; color: var(--muted); background: transparent; }
+.docx-editor-status > button:hover:not(:disabled), .docx-ribbon-group > button:hover:not(:disabled), .docx-ribbon-group label > button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.docx-editor-status > button:disabled { opacity: .4; cursor: not-allowed; }
+.docx-editor-status svg, .docx-ribbon svg { width: 16px; height: 16px; }
+.docx-save-state { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 4px 7px; border-radius: 999px; color: var(--muted); background: var(--soft); font-size: 10px; white-space: nowrap; }
+.docx-save-state.saved { color: var(--success); background: var(--rating-good-bg); }
+.docx-save-state.failed { color: var(--danger); background: var(--danger-soft); }
+.docx-ribbon-tabs { display: flex; align-items: center; gap: 2px; min-height: 35px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
+.docx-ribbon-tabs button { min-height: 34px; padding: 7px 13px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font: inherit; font-size: 11px; font-weight: 800; }
+.docx-ribbon-tabs button:hover, .docx-ribbon-tabs button.active { border-bottom-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.docx-ribbon-tabs .docx-ribbon-collapse { margin-left: auto; width: 30px; padding-inline: 5px; }
+.docx-ribbon { min-height: 84px; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--soft); scrollbar-width: thin; }
+.docx-ribbon-groups { display: flex; align-items: stretch; gap: 8px; min-height: 82px; padding: 8px 12px; }
+.docx-ribbon-group { position: relative; display: flex; align-items: center; gap: 4px; min-height: 63px; padding: 5px 8px 18px; border-right: 1px solid var(--line); }
+.docx-ribbon-group:last-child { border-right: 0; }
+.docx-ribbon-group > small, .docx-ribbon-group::after { position: absolute; right: 7px; bottom: 3px; left: 7px; color: var(--muted); font-size: 9px; text-align: center; white-space: nowrap; }
+.docx-ribbon-group::after { content: ""; }
+.docx-ribbon-action { display: inline-grid !important; align-content: center; gap: 3px; width: auto !important; min-width: 48px; height: 47px !important; padding: 5px 7px !important; }
+.docx-ribbon-action span { font-size: 9px; white-space: nowrap; }
+.docx-ribbon-group label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 9px; }
+.docx-ribbon-group label select, .docx-ribbon-group label input:not([type="color"]) { min-height: 28px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface); font: inherit; font-size: 10px; }
+.docx-style-group label, .docx-font-group label { display: grid; align-content: center; gap: 4px; }
+.docx-style-group select { width: 128px; }
+.docx-font-group select { width: 116px; }
+.docx-font-group input { width: 52px; }
+.docx-font-group button, .docx-mark-group button, .docx-align-group button { position: relative; }
+.docx-mark-group button.active { color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 -2px 0 var(--accent); }
+.docx-mark-group label { min-width: 28px; height: 30px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.docx-mark-group label input[type="color"] { width: 14px; height: 14px; padding: 0; border: 0; }
+.docx-align-group { flex-wrap: wrap; max-width: 190px; }
+.docx-inline-number { display: grid !important; gap: 2px !important; }
+.docx-inline-number input { width: 38px; }
+.docx-ribbon-field { display: grid !important; align-content: center; gap: 4px !important; }
+.docx-ribbon-field select { min-width: 90px; }
+.docx-margin-group { display: grid; grid-template-columns: repeat(4, auto); align-content: center; gap: 4px 7px; }
+.docx-margin-group strong { grid-column: 1 / -1; color: var(--muted); font-size: 9px; }
+.docx-margin-group label { display: grid !important; gap: 2px !important; text-align: center; }
+.docx-margin-group input { width: 42px; }
+.docx-check-field { display: flex !important; align-items: center; gap: 6px !important; }
+.docx-check-field input { accent-color: var(--accent); }
+.docx-zoom-output { min-width: 42px; color: var(--text); font-size: 11px; font-weight: 800; text-align: center; }
+.docx-link-group { min-width: 225px; flex-wrap: wrap; }
+.docx-link-group label { width: 100%; }
+.docx-link-group label input { flex: 1; min-width: 0; }
+.docx-ribbon-action.compact { width: auto !important; min-width: 0; height: 28px !important; }
+.docx-table-context { flex-wrap: wrap; max-width: 560px; }
+.docx-table-context label { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.docx-table-context label input[type="color"] { width: 18px; height: 18px; padding: 0; border: 0; }
+.docx-table-context label select { min-height: 23px !important; padding: 2px 4px !important; }
+.docx-image-context { flex-wrap: wrap; max-width: 620px; }
+.docx-image-context label { display: grid !important; gap: 2px !important; min-width: 62px; }
+.docx-image-context label input:not([type="color"]), .docx-image-context label select { width: 62px; min-height: 25px; padding: 3px 5px; }
+.docx-image-context .docx-image-alt { min-width: 145px; }
+.docx-image-context .docx-image-alt input { width: 145px; }
+.document-tool-new { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 5px; padding: 8px; border: 1px dashed var(--accent-border); border-radius: 8px; color: var(--accent); background: var(--accent-soft); text-align: left; font: inherit; font-size: 11px; }
+.document-tool-new span { display: grid; gap: 2px; }
+.document-tool-new small { color: var(--muted); font-size: 9px; }
+.docx-symbol-button { width: auto !important; padding-inline: 8px !important; font: inherit; font-size: 11px; }
+.docx-symbols { display: inline-flex; flex-wrap: wrap; gap: 2px; }
+.docx-findbar { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
+.docx-findbar input { min-width: 0; width: min(220px, 25vw); min-height: 28px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface); font: inherit; font-size: 11px; }
+.docx-findbar span, .docx-findbar small { color: var(--muted); font-size: 10px; }
+.docx-findbar button:not(.icon-button) { min-height: 28px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface); font: inherit; font-size: 10px; }
+.docx-compatibility { margin: 8px 14px 0; padding: 7px 10px; border: 1px solid var(--warning-line); border-radius: 8px; color: var(--warning); background: var(--warning-soft); font-size: 10px; }
+.docx-compatibility summary { cursor: pointer; font-weight: 700; }
+.docx-compatibility ul { margin: 7px 0 0 18px; padding: 0; line-height: 1.5; }
+.docx-editor-notice { margin: 8px 14px 0; padding: 7px 10px; border: 1px solid var(--accent-border); border-radius: 8px; color: var(--accent); background: var(--accent-soft); font-size: 10px; }
+.docx-editor-error { margin: 8px 14px 0; }
+.docx-draft-choice { display: flex; align-items: center; gap: 8px; margin: 8px 14px 0; padding: 8px 10px; border: 1px solid var(--accent-border); border-radius: 8px; background: var(--accent-soft); }
+.docx-draft-choice > div { display: grid; flex: 1; gap: 2px; }
+.docx-draft-choice strong { font-size: 11px; }
+.docx-draft-choice span { color: var(--muted); font-size: 10px; }
+.docx-draft-choice button:not(.text-button) { min-height: 28px; padding: 5px 9px; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent-contrast); background: var(--accent); font: inherit; font-size: 10px; font-weight: 700; }
+.docx-editor-viewport { min-height: 0; overflow: auto; background: color-mix(in srgb, var(--app-bg) 78%, #7f8ea3); }
+.docx-editor-viewport.continuous { background: var(--canvas); }
+.docx-editor-scroll { min-height: 100%; padding: 26px 26px 38px; }
+.docx-paper-stage { --paper-width: 794px; --paper-height: 1122px; width: calc(var(--paper-width) * var(--docx-zoom)); min-height: calc(var(--paper-height) * var(--docx-zoom)); margin: 0 auto; transform-origin: top center; }
+.docx-ruler { display: flex; align-items: flex-end; justify-content: space-between; width: calc(var(--paper-width) * var(--docx-zoom)); height: 24px; padding: 0 18px 3px; box-sizing: border-box; color: var(--muted); background: repeating-linear-gradient(to right, transparent 0, transparent 37px, var(--line) 38px, transparent 39px), var(--surface-raised); border: 1px solid var(--line); border-bottom: 0; font-size: 9px; }
+.docx-page-stack { width: calc(var(--paper-width) * var(--docx-zoom)); min-height: calc(var(--paper-height) * var(--docx-zoom)); box-sizing: border-box; padding: calc(76px * var(--docx-zoom)) calc(76px * var(--docx-zoom)); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); background: #fff; box-shadow: 0 13px 34px var(--shadow-strong); color: #1f2937; transform-origin: top center; }
+.docx-editor-viewport.continuous .docx-page-stack { box-shadow: none; border-color: var(--line); }
+.docx-page-header, .docx-page-footer { min-height: 12px; color: #6b7280; font-size: 10px; }
+.docx-page-header { margin-bottom: 15px; text-align: center; }
+.docx-page-footer { margin-top: 15px; text-align: center; }
+.docx-page-header:empty::before, .docx-page-footer:empty::before { content: attr(data-placeholder); color: #a5afbd; opacity: .8; }
+.docx-page-header:focus, .docx-page-footer:focus { outline: 1px dashed var(--accent-border); outline-offset: 3px; }
+.docx-editable { min-height: 850px; outline: 0; font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.45; white-space: normal; }
+.docx-editable:focus { outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 5px; }
+.docx-editable p, .docx-editable h1, .docx-editable h2, .docx-editable h3, .docx-editable h4, .docx-editable h5, .docx-editable h6, .docx-editable blockquote { min-height: 1.3em; margin: 0 0 .65em; }
+.docx-editable h1 { font-size: 24pt; margin-top: .45em; }
+.docx-editable h2 { font-size: 18pt; margin-top: .4em; }
+.docx-editable h3 { font-size: 14pt; margin-top: .35em; }
+.docx-editable h4, .docx-editable h5, .docx-editable h6 { font-size: 12pt; }
+.docx-editable blockquote { padding-left: 12px; border-left: 3px solid #9ca3af; color: #4b5563; font-style: italic; }
+.docx-editable ul, .docx-editable ol { margin: 0 0 .65em; padding-left: 30px; }
+.docx-editable li { min-height: 1.3em; }
+.docx-editable table { width: 100%; margin: 12px 0; border-collapse: collapse; table-layout: fixed; }
+.docx-editable th, .docx-editable td { min-width: 35px; padding: 6px 7px; border: 1px solid #9aa4b2; vertical-align: top; color: #1f2937; background: #fff; }
+.docx-editable th { background: #eef2f7; font-weight: 800; }
+.docx-editable figure { margin: 12px 0; text-align: center; }
+.docx-editable img { max-width: 100%; height: auto; resize: both; }
+.docx-editable a { color: #2563eb; text-decoration: underline; }
+.docx-page-break { display: flex; align-items: center; gap: 8px; min-height: 28px; margin: 16px 0; border-top: 1px dashed #94a3b8; color: #64748b; font-size: 9px; }
+.docx-page-break span { padding: 2px 6px; background: #e2e8f0; }
+.docx-statusbar { display: flex; align-items: center; gap: 12px; min-height: 30px; padding: 4px 12px; border-top: 1px solid var(--line); color: var(--muted); background: var(--surface-raised); font-size: 10px; }
+.docx-statusbar button { display: inline-flex; align-items: center; gap: 3px; min-height: 23px; padding: 3px 6px; border: 1px solid transparent; border-radius: 5px; color: var(--muted); background: transparent; font: inherit; font-size: 10px; }
+.docx-statusbar button:hover { border-color: var(--line); color: var(--accent); background: var(--accent-soft); }
+.docx-status-spacer { flex: 1; }
+@media (max-width: 900px) { .docx-editor-topbar { align-items: flex-start; flex-direction: column; } .docx-editor-status { width: 100%; justify-content: flex-start; } .docx-title-button, .docx-editor-title input { max-width: 70vw; width: 70vw; } }
+@media (max-width: 620px) { .docx-ribbon-groups { min-width: max-content; } .docx-findbar { flex-wrap: wrap; } .docx-findbar input { width: calc(50vw - 25px); } .docx-editor-scroll { padding: 12px 5px 28px; } .docx-paper-stage, .docx-ruler, .docx-page-stack { transform: scale(.82); transform-origin: top center; margin-bottom: -200px; } .docx-statusbar { gap: 7px; overflow-x: auto; white-space: nowrap; } .docx-statusbar span:nth-child(3) { display: none; } }
+
 /* v5.7 multi-step feature wiki and first-use guides */
 .feature-guide-page { display: grid; gap: 20px; width: min(1180px, 100%); margin: 0 auto; padding: 25px clamp(14px, 3vw, 32px) 42px; color: var(--text); }
 .feature-guide-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }

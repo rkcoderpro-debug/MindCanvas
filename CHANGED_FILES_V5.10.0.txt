@@ -1,0 +1,34 @@
+# MindCanvas v5.10.0 changed-files manifest
+#
+# Paths below are the v5.10.0 implementation/release files only. They keep the
+# original mindcanvas-v1/ prefix and are intended to be applied on top of the
+# existing v5.9 worktree. No node_modules, dist, cache, .env, secrets or
+# private fixture files are included.
+
+mindcanvas-v1/README.md
+mindcanvas-v1/CHANGELOG_V5.10.0.md
+mindcanvas-v1/CHANGED_FILES_V5.10.0.txt
+mindcanvas-v1/V5.10.0_IMPLEMENTATION_PLAN.md
+mindcanvas-v1/V5.10.0_RELEASE_REPORT_VI.md
+mindcanvas-v1/package.json
+mindcanvas-v1/package-lock.json
+mindcanvas-v1/apps/server/package.json
+mindcanvas-v1/apps/server/src/index.ts
+mindcanvas-v1/apps/web/package.json
+mindcanvas-v1/apps/web/public/sw.js
+mindcanvas-v1/apps/web/src/App.test.tsx
+mindcanvas-v1/apps/web/src/components/AppSidebar.tsx
+mindcanvas-v1/apps/web/src/components/DocumentToolsPage.tsx
+mindcanvas-v1/apps/web/src/components/DocumentToolsPage.test.tsx
+mindcanvas-v1/apps/web/src/components/DocumentViewer.tsx
+mindcanvas-v1/apps/web/src/components/DocxEditor.tsx
+mindcanvas-v1/apps/web/src/components/FeatureGuideOverlay.tsx
+mindcanvas-v1/apps/web/src/components/FeatureGuideOverlay.test.tsx
+mindcanvas-v1/apps/web/src/lib/aiSupport.ts
+mindcanvas-v1/apps/web/src/lib/docxModel.ts
+mindcanvas-v1/apps/web/src/lib/docxModel.test.ts
+mindcanvas-v1/apps/web/src/lib/docxDraftStore.ts
+mindcanvas-v1/apps/web/src/lib/docxDraftStore.test.ts
+mindcanvas-v1/apps/web/src/lib/featureGuides.ts
+mindcanvas-v1/apps/web/src/lib/featureGuides.test.ts
+mindcanvas-v1/apps/web/src/styles.css
