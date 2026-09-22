@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
@@ -25,11 +25,11 @@ import { getMindMapHierarchy } from "../lib/mindMapGraph";
 import MobileQuickActions from "./MobileQuickActions";
 import { clampDrawingSize, DRAWING_SIZE_RANGES, eraseDrawingPaths, readDrawingSizes, saveDrawingSizes, type DrawingToolName, type DrawingToolSizes } from "../lib/drawingTools";
 import DocumentViewer from "./DocumentViewer";
-import { DOCUMENT_ACCEPT, documentKindFor, fileToDataUrl, MAX_DOCUMENT_BYTES, type DocumentKind } from "../lib/documentStore";
+import { DOCUMENT_ACCEPT, documentKindFor, fileToDataUrl, MAX_DOCUMENT_BYTES, type DocumentKind, type UploadedDocument } from "../lib/documentStore";
 import { TOOL_HOLD_THRESHOLD_MS, toolAfterRelease } from "../lib/toolActivation";
 import { emitGuideAction } from "../lib/featureGuides";
 
-type Props = { board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean; onDocumentSaved?: (document: { name: string; mimeType: string; kind: DocumentKind; size: number; dataUrl: string }) => void };
+type Props = { board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean; documents?: UploadedDocument[]; onDocumentSaved?: (document: { name: string; mimeType: string; kind: DocumentKind; size: number; dataUrl: string }) => Promise<UploadedDocument | void> | UploadedDocument | void };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "zoom" | "draw" | "erase" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle; eraseRadius?: number; erasePoints?: Vec2[]; zoomAnchor?: Vec2 };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -212,7 +212,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
 const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
-export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, onDocumentSaved }: Props) {
+export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, documents = [], onDocumentSaved }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
@@ -269,6 +269,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const [iosMediaSources, setIOSMediaSources] = useState<Record<string, string>>({});
   const [iosOverlayItems, setIOSOverlayItems] = useState<Array<IOSOverlayItem & { left: number; top: number; screenWidth: number; screenHeight: number }>>([]);
   const [embedOpen, setEmbedOpen] = useState(false), [embedUrl, setEmbedUrl] = useState(""), [embedTitle, setEmbedTitle] = useState("");
+  const [documentPanelOpen, setDocumentPanelOpen] = useState(false), [documentQuery, setDocumentQuery] = useState(""), [documentKindFilter, setDocumentKindFilter] = useState<DocumentKind | "all">("all");
   const editRef = useRef<Editing | null>(null), [space, setSpace] = useState(false), [heldTool, setHeldTool] = useState<ToolMode | null>(null);
   const spaceRef = useRef(false), ctrlRef = useRef(false), heldToolRef = useRef<ToolMode | null>(null);
   const keyboardToolPresses = useRef(new Map<string, { tool: ToolMode; previous: ToolMode; startedAt: number }>());
@@ -281,6 +282,9 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const iosMedia = board.media.filter(media => media.src.startsWith("data:") && ["image", "video", "audio"].includes(media.kind));
   const iosMediaSignature = iosTouchFallback ? JSON.stringify(iosMedia.map(media => [media.id, media.src])) : "";
   const b = preview ?? editing?.fresh ?? board;
+  const libraryDocumentFor = (embed: CanvasEmbed) => embed.kind === "document" && embed.documentId ? documents.find(document => document.id === embed.documentId) ?? null : null;
+  const documentUrlFor = (embed: CanvasEmbed) => libraryDocumentFor(embed)?.dataUrl || embed.url;
+  const documentKindForEmbed = (embed: CanvasEmbed) => libraryDocumentFor(embed)?.kind ?? (documentKindFor(embed.fileName || embed.title || "", embed.mimeType || "") || "pdf");
   useEffect(() => {
     if (!iosTouchFallback || !iosMediaSignature || typeof fetch !== "function" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
       setIOSMediaSources(current => Object.keys(current).length ? {} : current);
@@ -560,15 +564,24 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       try {
         const dataUrl = await fileToDataUrl(file);
         const size = { width: 620, height: 520 };
-        const documentEmbed: CanvasEmbed = { id: crypto.randomUUID(), kind: "document", url: dataUrl, title: file.name, fileName: file.name, mimeType: file.type || undefined, x: center.x - size.width / 2 + index * 26, y: center.y - size.height / 2 + index * 26, ...size };
+        const saved = await onDocumentSaved?.({ name: file.name, mimeType: file.type || "application/octet-stream", kind, size: file.size, dataUrl });
+        const documentEmbed: CanvasEmbed = { id: crypto.randomUUID(), kind: "document", url: saved?.id ? "" : dataUrl, documentId: saved?.id, revisionId: saved?.updatedAt, title: file.name, fileName: file.name, mimeType: file.type || undefined, x: center.x - size.width / 2 + index * 26, y: center.y - size.height / 2 + index * 26, ...size };
         additions.push(documentEmbed);
-        onDocumentSaved?.({ name: file.name, mimeType: file.type || "application/octet-stream", kind, size: file.size, dataUrl });
       } catch { setMediaError("Không thể đọc tài liệu."); }
     }
     if (!additions.length) return;
     const latest = boardRef.current;
     onChange({ ...latest, embeds: [...latest.embeds, ...additions] });
     setTool("select"); setSelections(additions.map(embed => ({ kind: "embeds" as const, id: embed.id })));
+  };
+  const insertLibraryDocument = (document: UploadedDocument) => {
+    const rect = svg.current?.getBoundingClientRect();
+    const center = rect ? point(rect.left + rect.width / 2, rect.top + rect.height / 2) : { x: 320, y: 240 };
+    const size = { width: 620, height: 520 };
+    const embed: CanvasEmbed = { id: crypto.randomUUID(), kind: "document", documentId: document.id, revisionId: document.updatedAt, url: "", title: document.name, fileName: document.name, mimeType: document.mimeType, x: center.x - size.width / 2, y: center.y - size.height / 2, ...size };
+    onChange({ ...boardRef.current, embeds: [...boardRef.current.embeds, embed] });
+    setTool("select"); setSelections([{ kind: "embeds", id: embed.id }]); setDocumentPanelOpen(false);
+    emitGuideAction("canvas:document-inserted", { documentId: document.id, kind: document.kind, embedId: embed.id });
   };
   const addCanvasFiles = (files: File[]) => {
     const documents = files.filter(file => !!documentKindFor(file.name, file.type));
@@ -1326,6 +1339,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
           <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter", "eraser"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} {...toolbarToolEvents(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/><button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>
         <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
+        <button className={`mobile-extra-action ${documentPanelOpen ? "selected" : ""}`} aria-pressed={documentPanelOpen} aria-label="Tài liệu" title="Chọn tài liệu đã tải lên" onClick={() => setDocumentPanelOpen(true)}><FileSpreadsheet size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("pasteImage")} title={t("pasteImageHint")} onClick={() => void addClipboardImage()}><ClipboardPaste size={18}/></button>
         <button className={`${isRecording ? "selected recording-button" : ""} mobile-extra-action`} aria-pressed={isRecording} aria-label={t(isRecording ? "stopRecording" : "recordAudio")} title={t(isRecording ? "stopRecording" : "recordAudio")} onClick={() => isRecording ? stopRecording() : void startRecording()}>{isRecording ? <Square size={17}/> : <Mic size={19}/>}</button>
@@ -1367,7 +1381,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
                 <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-embed ${embed.kind}`} aria-label={`${t("embed")}: ${embed.title || embed.url}`}>
                   <div className="canvas-embed-header" onPointerDown={selectEmbed}><Globe2 size={14}/><span title={embed.url}>{embed.title || (embed.kind === "youtube" ? t("youtube") : embed.kind === "video" ? t("video") : t("webPage"))}</span></div>
                   <div className="canvas-embed-body" onPointerDown={allowCanvasPointer}>
-                    {embed.kind === "document" ? <DocumentViewer embedded source={{ dataUrl: embed.url, name: embed.fileName || embed.title || "Tài liệu", mimeType: embed.mimeType || "application/octet-stream", kind: documentKindFor(embed.fileName || embed.title || "", embed.mimeType || "") || "pdf" }} /> : embed.kind === "video" ? <video src={embed.url} controls playsInline preload="metadata" aria-label={embed.title || embed.url}/> : <iframe src={embed.url} title={embed.title || embed.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
+                    {embed.kind === "document" ? documentUrlFor(embed) ? <DocumentViewer embedded source={{ dataUrl: documentUrlFor(embed), name: embed.fileName || embed.title || "Tài liệu", mimeType: libraryDocumentFor(embed)?.mimeType || embed.mimeType || "application/octet-stream", kind: documentKindForEmbed(embed) }} /> : <div className="canvas-embed-missing">Tài liệu không còn trong thư viện trên thiết bị này.</div> : embed.kind === "video" ? <video src={embed.url} controls playsInline preload="metadata" aria-label={embed.title || embed.url}/> : <iframe src={embed.url} title={embed.title || embed.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
                   </div>
                 </div>
               </foreignObject>}
@@ -1462,7 +1476,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
             {item.source === "media" && "src" in element ? renderCanvasMedia(element, iosMediaSources[element.id] ?? element.src) : "url" in element ? <div {...{ xmlns: "http://www.w3.org/1999/xhtml" }} className={`canvas-embed ${element.kind}`} aria-label={`${t("embed")}: ${element.title || element.url}`}>
               <div className="canvas-embed-header" onPointerDown={event => selectIOSOverlayElement(event, selection)}><Globe2 size={14}/><span title={element.url}>{element.title || (element.kind === "youtube" ? t("youtube") : element.kind === "video" ? t("video") : t("webPage"))}</span></div>
               <div className="canvas-embed-body" onPointerDown={event => event.stopPropagation()}>
-                {element.kind === "document" ? <DocumentViewer embedded source={{ dataUrl: element.url, name: element.fileName || element.title || "Tài liệu", mimeType: element.mimeType || "application/octet-stream", kind: documentKindFor(element.fileName || element.title || "", element.mimeType || "") || "pdf" }} /> : element.kind === "video" ? <video src={element.url} controls playsInline preload="metadata" aria-label={element.title || element.url}/> : <iframe src={element.url} title={element.title || element.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
+                {element.kind === "document" ? documentUrlFor(element) ? <DocumentViewer embedded source={{ dataUrl: documentUrlFor(element), name: element.fileName || element.title || "Tài liệu", mimeType: libraryDocumentFor(element)?.mimeType || element.mimeType || "application/octet-stream", kind: documentKindForEmbed(element) }} /> : <div className="canvas-embed-missing">Tài liệu không còn trong thư viện trên thiết bị này.</div> : element.kind === "video" ? <video src={element.url} controls playsInline preload="metadata" aria-label={element.title || element.url}/> : <iframe src={element.url} title={element.title || element.url} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
               </div>
             </div> : null}
           </div>;
@@ -1473,6 +1487,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
         <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>
           <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
+          <button onClick={() => { setDocumentPanelOpen(true); setMobileMoreOpen(false); }}><FileSpreadsheet size={19}/><span>Tài liệu</span></button>
           <button onClick={() => { setEmbedOpen(true); setMobileMoreOpen(false); }}><Globe2 size={19}/><span>{t("embedWeb")}</span></button>
           {iosTouchFallback && <button onClick={() => { void paste(); setMobileMoreOpen(false); }}><ClipboardPaste size={19}/><span>{t("pasteImage")}</span></button>}
           {iosTouchFallback && <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} onClick={() => { if (isRecording) stopRecording(); else void startRecording(); setMobileMoreOpen(false); }}>{isRecording ? <Square size={19}/> : <Mic size={19}/>}<span>{t(isRecording ? "stopRecording" : "recordAudio")}</span></button>}
@@ -1571,7 +1586,15 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       {mindMapLayoutPreview && <div className="mind-map-layout-preview"><strong>{t("mindMapLayoutPreview")}</strong><small>{mindMapLayoutPreview.sides.map(side => `${side.index + 1}: ${side.branches.reduce((sum, branch) => sum + branch.nodeIds.length, 0)}`).join(" · ")} · {mindMapLayoutPreview.sideCount} {t("mindMapSide").toLocaleLowerCase()}</small></div>}
       <footer className="actions"><button type="button" className="secondary-button" onClick={() => setMindMapLayoutOpen(false)}>{t("cancel")}</button><button className="primary-button">{t("mindMapLayoutApply")}</button></footer>
     </form></Dialog>}
-    {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>} 
+    {sourceView && <SourceDocumentPanel source={sourceView} onClose={() => setSourceView(null)}/>}
+    {documentPanelOpen && <Dialog title="Tài liệu đã tải lên" onClose={() => setDocumentPanelOpen(false)}>
+      <div className="canvas-document-picker">
+        <p className="dialog-hint">Chọn tài liệu để chèn vào tâm vùng canvas đang nhìn thấy. Xóa phần tử trên canvas không xóa file trong thư viện.</p>
+        <label className="document-search"><Search size={16}/><input autoFocus value={documentQuery} onChange={event => setDocumentQuery(event.target.value)} placeholder="Tìm tài liệu…"/></label>
+        <div className="canvas-document-filter"><button type="button" className={documentKindFilter === "all" ? "active" : ""} onClick={() => setDocumentKindFilter("all")}>Tất cả</button>{(["pdf", "docx", "pptx", "xlsx"] as DocumentKind[]).map(kind => <button type="button" key={kind} className={documentKindFilter === kind ? "active" : ""} onClick={() => setDocumentKindFilter(kind)}>{kind.toUpperCase()}</button>)}</div>
+        <div className="canvas-document-list">{documents.filter(document => (documentKindFilter === "all" || document.kind === documentKindFilter) && (!documentQuery.trim() || document.name.toLocaleLowerCase().includes(documentQuery.trim().toLocaleLowerCase()))).map(document => <button type="button" className="canvas-document-option" key={document.id} onClick={() => insertLibraryDocument(document)}><FileSpreadsheet size={18}/><span><strong>{document.name}</strong><small>{document.kind.toUpperCase()} · {new Date(document.updatedAt).toLocaleDateString()}</small></span><Plus size={16}/></button>)}{!documents.length && <div className="empty-state"><FileSpreadsheet size={30}/><p>Chưa có tài liệu. Hãy upload trong Quản lý thư mục trước.</p></div>}</div>
+      </div>
+    </Dialog>}
     {embedOpen && <Dialog title={t("embedWeb")} onClose={() => setEmbedOpen(false)}><form onSubmit={event => { event.preventDefault(); insertEmbed(); }}>
       <label>{t("embedUrl")}<input autoFocus required type="url" placeholder={t("embedPlaceholder")} value={embedUrl} onChange={event => setEmbedUrl(event.target.value)}/></label>
       <label>{t("embedTitle")}<input maxLength={500} value={embedTitle} onChange={event => setEmbedTitle(event.target.value)}/></label>

@@ -1301,6 +1301,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .planner-task-settings label { max-width: 180px; }
 .planner-task-settings > small { padding-bottom: 9px; color: var(--muted); font-size: 11px; }
 .form-success { margin: 0; padding: 10px 12px; color: var(--success); border-radius: 9px; background: var(--success-soft); font-size: 12px; }
+.form-warning { margin: 0; padding: 10px 12px; color: var(--warning, #b7791f); border-radius: 9px; background: color-mix(in srgb, var(--warning, #b7791f) 12%, transparent); font-size: 12px; line-height: 1.45; }
 .progress-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .progress-kpi-grid article { display: grid; gap: 5px; padding: 16px; color: var(--accent); border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: 0 8px 22px var(--shadow); }
 .progress-kpi-grid strong { color: var(--text); font-size: 27px; letter-spacing: -.04em; }
@@ -3707,6 +3708,58 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 
 /* v5.5 document library and canvas viewers */
 .manager-documents { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px !important; }
+.manager-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.manager-local-storage-note { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.document-library-controls { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.document-search { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 160px; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: var(--surface); }
+.document-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--text); background: transparent; font: inherit; font-size: 12px; }
+.document-library-controls select { min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--surface); font: inherit; font-size: 11px; }
+.document-row-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.document-viewer-footer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.document-viewer-footer-actions .text-danger-button { margin-left: auto; }
+.canvas-document-picker { display: grid; gap: 10px; min-width: min(500px, 80vw); }
+.canvas-document-picker .dialog-hint { margin: 0; }
+.canvas-document-filter { display: flex; gap: 5px; flex-wrap: wrap; }
+.canvas-document-filter button { min-height: 28px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font: inherit; font-size: 10px; font-weight: 750; }
+.canvas-document-filter button.active, .canvas-document-filter button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.canvas-document-list { display: grid; gap: 5px; max-height: min(420px, 50vh); overflow: auto; }
+.canvas-document-option { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--surface); text-align: left; font: inherit; }
+.canvas-document-option:hover { border-color: var(--accent-border); background: var(--accent-soft); }
+.canvas-document-option > span { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.canvas-document-option strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.canvas-document-option small { color: var(--muted); font-size: 10px; }
+.document-tools-page { display: grid; gap: 16px; padding: 24px clamp(12px, 3vw, 30px) 40px; }
+.tool-page-heading, .tool-editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.tool-page-heading h1, .tool-editor-heading h2 { margin: 5px 0; }
+.tool-page-heading p, .tool-editor-heading p { max-width: 680px; margin: 0; color: var(--muted); line-height: 1.5; font-size: 12px; }
+.tool-page-heading > div:last-child, .tool-editor-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.document-tools-tabs { display: flex; gap: 7px; overflow-x: auto; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised); }
+.document-tools-tabs button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 8px 12px; border: 1px solid transparent; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.document-tools-tabs button.active, .document-tools-tabs button:hover { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
+.tool-document-search { max-width: 620px; }
+.document-tool-layout { display: grid; grid-template-columns: minmax(190px, 260px) minmax(0, 1fr); gap: 14px; min-height: min(650px, 68vh); }
+.document-tool-list { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-raised); }
+.document-tool-list h3 { margin: 0 0 4px; font-size: 13px; }
+.document-tool-list button { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px; border: 1px solid transparent; border-radius: 9px; color: var(--text); background: transparent; text-align: left; font: inherit; }
+.document-tool-list button:hover, .document-tool-list button.active { border-color: var(--accent-border); background: var(--accent-soft); }
+.document-tool-list button > span { display: grid; min-width: 0; gap: 2px; }
+.document-tool-list button strong, .document-tool-list button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-tool-list button small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.document-tool-workspace { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.document-tool-workspace > .document-viewer { height: 100%; min-height: 600px; border: 0; border-radius: 0; }
+.tool-empty-state { display: grid; place-items: center; align-content: center; gap: 8px; height: 100%; min-height: 380px; padding: 20px; color: var(--muted); text-align: center; }
+.tool-empty-state h2, .tool-empty-state p { margin: 0; }
+.tool-empty-state h2 { color: var(--text); font-size: 18px; }
+.docx-editor-panel { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 12px; height: 100%; min-height: 600px; padding: 18px; box-sizing: border-box; }
+.docx-editor-toolbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-raised); }
+.docx-editor-toolbar button, .docx-editor-toolbar select { display: inline-grid; place-items: center; min-height: 29px; padding: 5px 7px; border: 1px solid transparent; border-radius: 6px; color: var(--muted); background: transparent; font: inherit; font-size: 11px; }
+.docx-editor-toolbar button:hover, .docx-editor-toolbar select:hover { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
+.docx-font-size { display: inline-flex; align-items: center; gap: 5px; margin-left: 5px; color: var(--muted); font-size: 10px; }
+.docx-editable { min-height: 360px; overflow: auto; padding: 45px 52px; outline: 0; border: 1px solid var(--line); border-radius: 10px; color: #172033; background: #fff; box-shadow: 0 8px 24px var(--shadow-soft); font-family: Arial, sans-serif; line-height: 1.55; }
+.docx-editable:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 8px 24px var(--shadow-soft); }
+.docx-editable h1, .docx-editable h2, .docx-editable h3 { margin: 1em 0 .45em; }
+.docx-editable p { margin: 0 0 .7em; }
+@media (max-width: 760px) { .tool-page-heading, .tool-editor-heading { flex-direction: column; } .document-tool-layout { grid-template-columns: 1fr; min-height: 0; } .document-tool-list { max-height: 220px; overflow: auto; } .document-tool-workspace > .document-viewer, .docx-editor-panel { min-height: 520px; } .docx-editable { padding: 24px 18px; } }
 .manager-count { color: var(--muted); font-size: 12px; }
 .document-file-table .file-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .manager-document-viewer { display: grid; gap: 10px; min-width: 0; }
@@ -3725,6 +3778,11 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .document-annotation-tools button.active, .document-annotation-tools button:hover { color: var(--accent); background: var(--accent-soft); }
 .document-annotation-tools button span { white-space: nowrap; }
 .document-viewer-actions > button:disabled { opacity: .42; cursor: not-allowed; }
+.document-pdf-zoom-control { display: inline-flex; align-items: center; gap: 5px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); font-size: 10px; font-weight: 800; }
+.document-pdf-zoom-control button { display: inline-grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text); }
+.document-pdf-zoom-control button:hover { color: var(--accent); background: var(--accent-soft); }
+.document-pdf-zoom-control button:disabled { opacity: .4; cursor: not-allowed; }
+.document-pdf-zoom-control span { min-width: 42px; text-align: center; }
 .document-draw-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; cursor: pointer; }
 .document-draw-toggle:has(input:disabled) { opacity: .62; cursor: not-allowed; }
 .document-width { display: inline-flex; align-items: center; gap: 4px; }
@@ -3835,6 +3893,7 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .feature-guide-practice-decision > div { display: flex; gap: 7px; flex-wrap: wrap; }
 .feature-guide-practice-decision .secondary-button, .feature-guide-practice-decision .primary-button { min-height: 31px; padding: 6px 9px; font-size: 11px; }
 .feature-guide-decision-hint { color: var(--muted); font-size: 10px; }
+.canvas-embed-missing { display: grid; place-items: center; min-height: 180px; padding: 20px; color: var(--muted); background: var(--surface); text-align: center; }
 .feature-guide-next:disabled { cursor: not-allowed; opacity: .42; filter: grayscale(.3); }
 @keyframes feature-guide-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes feature-guide-focus-pulse { 0%,100% { opacity: .94; filter: saturate(1); } 50% { opacity: 1; filter: saturate(1.18) brightness(1.1); } }

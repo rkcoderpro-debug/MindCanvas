@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import FeatureGuideOverlay from "./FeatureGuideOverlay";
 import FeatureGuideCelebration from "./FeatureGuideCelebration";
-import { finishGuide, GUIDE_ACTION_EVENT, GUIDE_REQUEST_EVENT, guideForId, guideForTrigger, markGuideStarted, readGuideProgress } from "../lib/featureGuides";
+import { beginGuideSession, endGuideSession, finishGuide, GUIDE_ACTION_EVENT, GUIDE_REQUEST_EVENT, guideForId, guideForTrigger, markGuideStarted, readGuideProgress } from "../lib/featureGuides";
 
 type Props = {
   ownerId: string | null;
@@ -14,6 +14,7 @@ type Props = {
 
 export default function FeatureGuideManager({ ownerId, trigger = null, manualGuideId = null, onManualConsumed, onPracticeDecision, blocked = false }: Props) {
   const [activeGuideId, setActiveGuideId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeManual, setActiveManual] = useState(false);
   const [requestedGuideId, setRequestedGuideId] = useState<string | null>(null);
   const [celebrationGuideId, setCelebrationGuideId] = useState<string | null>(null);
@@ -23,8 +24,9 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
 
   useEffect(() => {
     const handleGuideAction = (event: Event) => {
-      const detail = (event as CustomEvent<{ name?: string; payload?: unknown }>).detail;
+      const detail = (event as CustomEvent<{ name?: string; payload?: unknown; guideSessionId?: string | null }>).detail;
       if (detail?.name !== "canvas:practice-created" || activeGuideId !== "canvas-controls") return;
+      if (activeSessionId && detail.guideSessionId !== activeSessionId) return;
       const payload = detail.payload;
       if (!payload || typeof payload !== "object") return;
       const projectId = (payload as { projectId?: unknown }).projectId;
@@ -32,7 +34,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     };
     window.addEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
     return () => window.removeEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
-  }, [activeGuideId]);
+  }, [activeGuideId, activeSessionId]);
 
   useEffect(() => {
     const request = (event: Event) => {
@@ -49,8 +51,10 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     setRequestedGuideId(null);
     if (!guide || readGuideProgress(ownerId)[guide.id]?.status && readGuideProgress(ownerId)[guide.id]?.status !== "unseen") return;
     markGuideStarted(ownerId, guide.id);
+    const sessionId = beginGuideSession();
     setActiveManual(false);
     setPracticeResourceId(null);
+    setActiveSessionId(sessionId);
     setActiveGuideId(guide.id);
   }, [activeGuideId, activeManual, blocked, ownerId, requestedGuideId]);
 
@@ -72,8 +76,10 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
       settled = true;
       manualConsumed.current = manualGuideId;
       markGuideStarted(ownerId, guide.id);
+      const sessionId = beginGuideSession();
       setActiveManual(true);
       setPracticeResourceId(null);
+      setActiveSessionId(sessionId);
       setActiveGuideId(guide.id);
       onManualConsumed?.();
     };
@@ -104,7 +110,9 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     if (!guide || (status && status !== "unseen")) return;
     const timer = window.setTimeout(() => {
       markGuideStarted(ownerId, guide.id);
+      const sessionId = beginGuideSession();
       setPracticeResourceId(null);
+      setActiveSessionId(sessionId);
       setActiveGuideId(guide.id);
       setActiveManual(false);
     }, 650);
@@ -120,16 +128,18 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     if (!activeGuideId) return;
     const completedId = activeGuideId;
     finishGuide(ownerId, completedId, status);
+    endGuideSession(activeSessionId);
     setActiveGuideId(null);
     setActiveManual(false);
     setPracticeResourceId(null);
+    setActiveSessionId(null);
     if (status === "completed") setCelebrationGuideId(completedId);
   };
   const guide = guideForId(activeGuideId);
   const celebrationGuide = guideForId(celebrationGuideId);
   if (!guide && !celebrationGuide) return null;
   return <>
-    {guide && <FeatureGuideOverlay guide={guide} currentRoute={trigger} practiceResourceId={practiceResourceId} onPracticeDecision={onPracticeDecision} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
+    {guide && <FeatureGuideOverlay guide={guide} guideSessionId={activeSessionId} currentRoute={trigger} practiceResourceId={practiceResourceId} onPracticeDecision={onPracticeDecision} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
     {celebrationGuide && <FeatureGuideCelebration guide={celebrationGuide} onClose={() => setCelebrationGuideId(null)}/>} 
   </>;
 }

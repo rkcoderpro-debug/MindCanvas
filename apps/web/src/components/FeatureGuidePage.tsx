@@ -14,6 +14,7 @@ const categories: Array<{ id: "all" | GuideCategory; vi: string; en: string }> =
   { id: "canvas", vi: "Canvas", en: "Canvas" },
   { id: "learning", vi: "Học tập", en: "Learning" },
   { id: "documents", vi: "Tài liệu", en: "Documents" },
+  { id: "tools", vi: "Công cụ", en: "Tools" },
   { id: "ai", vi: "AI", en: "AI" },
 ];
 

@@ -76,6 +76,23 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(document.body.querySelector(".feature-guide-progress")?.getAttribute("aria-label")).toBe("3/3");
   });
 
+  it("keeps the PDF guide on PDF when DOCX is listed first", async () => {
+    const complete = vi.fn();
+    const definition = guide([
+      { target: '.document-file-table .file-row[data-document-kind="pdf"]', completion: { type: "action", actions: [{ id: "documents:open:pdf", labelVi: "Mở PDF", labelEn: "Open PDF" }] }, titleVi: "Mở PDF", titleEn: "Open PDF", bodyVi: "", bodyEn: "" },
+      { target: ".document-fullscreen-toggle", titleVi: "Toàn màn hình", titleEn: "Fullscreen", bodyVi: "", bodyEn: "" },
+    ], "pdf-annotation");
+    const table = document.createElement("div"); table.className = "document-file-table";
+    const docx = document.createElement("div"); docx.className = "file-row"; docx.dataset.documentKind = "docx"; docx.getBoundingClientRect = rect;
+    const pdf = document.createElement("div"); pdf.className = "file-row"; pdf.dataset.documentKind = "pdf"; pdf.getBoundingClientRect = rect;
+    table.append(docx, pdf); host.append(table);
+    await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, onComplete: complete, onSkip: vi.fn() })));
+    await act(async () => { window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "documents:open" } })); await new Promise(resolve => window.setTimeout(resolve, 160)); });
+    expect(document.body.querySelector(".feature-guide-progress")?.getAttribute("aria-label")).toBe("1/2");
+    await act(async () => { window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "documents:open:pdf", payload: { kind: "pdf" } } })); await new Promise(resolve => window.setTimeout(resolve, 160)); });
+    expect(document.body.querySelector(".feature-guide-progress")?.getAttribute("aria-label")).toBe("2/2");
+  });
+
   it("requires every declared practice action before completing", async () => {
     const complete = vi.fn();
     const definition = guide([{ kind: "practice", titleVi: "Thực hành", titleEn: "Practice", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "one", labelVi: "Một", labelEn: "One" }, { id: "two", labelVi: "Hai", labelEn: "Two" }] } }]);
@@ -90,6 +107,15 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(next().disabled).toBe(false);
     await act(async () => next().click());
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores actions from an older guide session", async () => {
+    const definition = guide([{ kind: "practice", titleVi: "Phiên", titleEn: "Session", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "fresh", labelVi: "Mới", labelEn: "Fresh" }] } }]);
+    await act(async () => root.render(createElement(FeatureGuideOverlay, { guide: definition, guideSessionId: "guide-new", onComplete: vi.fn(), onSkip: vi.fn() })));
+    await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "fresh", guideSessionId: "guide-old" } })));
+    expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).not.toBeNull();
+    await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "fresh", guideSessionId: "guide-new" } })));
+    expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).toBeNull();
   });
 
   it("requires an explicit keep-or-trash choice for a practice canvas", async () => {

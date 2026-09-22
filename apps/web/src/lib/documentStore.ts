@@ -14,7 +14,7 @@ export type UploadedDocument = {
 export const DOCUMENT_ACCEPT = ".pdf,.docx,.pptx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 export const MAX_DOCUMENT_BYTES = 40 * 1024 * 1024;
 const DB_NAME = "mindcanvas-documents-v1";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = "documents";
 
 export function documentKindFor(name: string, mimeType = ""): DocumentKind | null {
@@ -51,6 +51,15 @@ function openDatabase(): Promise<IDBDatabase> {
         const store = database.createObjectStore(STORE, { keyPath: "id" });
         store.createIndex("owner", "owner", { unique: false });
         store.createIndex("ownerUpdated", ["owner", "updatedAt"], { unique: false });
+        // Guest documents used to live in localStorage. Migrate them while
+        // the new object store is being created so a quota failure cannot
+        // silently replace the old data.
+        try {
+          const legacy = JSON.parse(localStorage.getItem("mindcanvas:documents:guest") || "[]");
+          if (Array.isArray(legacy)) legacy.forEach(row => { if (row && typeof row === "object") store.put({ ...row, owner: "guest" }); });
+        } catch { /* The old records remain available through the fallback reader. */ }
+      } else if (open.transaction && !open.transaction.objectStore(STORE).indexNames.contains("owner")) {
+        open.transaction.objectStore(STORE).createIndex("owner", "owner", { unique: false });
       }
     };
     open.onsuccess = () => resolve(open.result);
@@ -59,12 +68,14 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 export async function listDocuments(owner: string | null): Promise<UploadedDocument[]> {
-  if (!owner) return readGuestDocuments();
-  const database = await openDatabase();
+  const ownerKey = owner ?? "guest";
+  let database: IDBDatabase;
+  try { database = await openDatabase(); } catch { return owner ? [] : readGuestDocuments(); }
   try {
-    const rows = await request(database.transaction(STORE).objectStore(STORE).index("owner").getAll(owner));
+    const rows = await request(database.transaction(STORE).objectStore(STORE).index("owner").getAll(ownerKey));
     return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  } finally { database.close(); }
+  } catch { return owner ? [] : readGuestDocuments(); }
+  finally { database.close(); }
 }
 
 function readGuestDocuments(): UploadedDocument[] {
@@ -82,8 +93,11 @@ export async function saveDocument(owner: string | null, input: Omit<UploadedDoc
   if (!kind) throw new Error("Chỉ hỗ trợ PDF, DOCX, PPTX và XLSX.");
   if (input.size > MAX_DOCUMENT_BYTES) throw new Error("Tài liệu vượt quá 40 MB.");
   const document: UploadedDocument = { ...input, id: input.id ?? crypto.randomUUID(), owner: owner ?? "guest", kind, folderId: input.folderId ?? null, updatedAt: input.updatedAt ?? new Date().toISOString() };
-  if (!owner) { const rows = readGuestDocuments(); writeGuestDocuments([document, ...rows.filter(row => row.id !== document.id)]); return document; }
-  const database = await openDatabase();
+  let database: IDBDatabase;
+  try { database = await openDatabase(); } catch {
+    if (!owner) { const rows = readGuestDocuments(); writeGuestDocuments([document, ...rows.filter(row => row.id !== document.id)]); return document; }
+    throw new Error("Không thể mở kho tài liệu trên thiết bị này.");
+  }
   try {
     const tx = database.transaction(STORE, "readwrite");
     tx.objectStore(STORE).put(document);
@@ -93,8 +107,11 @@ export async function saveDocument(owner: string | null, input: Omit<UploadedDoc
 }
 
 export async function deleteDocument(owner: string | null, id: string): Promise<void> {
-  if (!owner) { writeGuestDocuments(readGuestDocuments().filter(row => row.id !== id)); return; }
-  const database = await openDatabase();
+  let database: IDBDatabase;
+  try { database = await openDatabase(); } catch {
+    if (!owner) { writeGuestDocuments(readGuestDocuments().filter(row => row.id !== id)); return; }
+    throw new Error("Không thể mở kho tài liệu trên thiết bị này.");
+  }
   try {
     const tx = database.transaction(STORE, "readwrite"); tx.objectStore(STORE).delete(id);
     await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error ?? new Error("Không thể xóa tài liệu.")); });
@@ -102,8 +119,11 @@ export async function deleteDocument(owner: string | null, id: string): Promise<
 }
 
 export async function readDocument(owner: string | null, id: string): Promise<UploadedDocument | null> {
-  if (!owner) return readGuestDocuments().find(row => row.id === id) ?? null;
-  const database = await openDatabase();
-  try { return (await request(database.transaction(STORE).objectStore(STORE).get(id))) ?? null; }
+  let database: IDBDatabase;
+  try { database = await openDatabase(); } catch { return !owner ? readGuestDocuments().find(row => row.id === id) ?? null : null; }
+  try {
+    const row = (await request(database.transaction(STORE).objectStore(STORE).get(id))) ?? null;
+    return row?.owner === (owner ?? "guest") ? row : null;
+  }
   finally { database.close(); }
 }

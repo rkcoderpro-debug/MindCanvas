@@ -11,7 +11,7 @@ afterEach(() => storage.clear());
 
 describe("feature guides", () => {
   it("keeps a stable guide registry with first-use triggers and GIF demos", () => {
-    expect(GUIDE_CONTENT_VERSION).toBe("v5");
+    expect(GUIDE_CONTENT_VERSION).toBe("v5.9");
     expect(GUIDE_DEFINITIONS.length).toBeGreaterThanOrEqual(8);
     expect(guideForTrigger("canvas")?.id).toBe("canvas-controls");
     expect(guideForTrigger("documents")?.id).toBe("folder-manager");
@@ -30,7 +30,7 @@ describe("feature guides", () => {
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "folder-manager")?.steps.map(step => step.target)).toContain(".folder-manager-new-folder");
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "pdf-annotation")?.steps.slice(0, 2).map(step => step.target)).toEqual([
       ".manager-documents",
-      ".document-file-table .file-row",
+      '.document-file-table .file-row[data-document-kind="pdf"]',
     ]);
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "tool-hold-shortcuts")?.steps.slice(0, 4).map(step => step.target)).toEqual([
       ".workspace-nav-row > button:first-child",

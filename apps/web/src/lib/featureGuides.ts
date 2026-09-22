@@ -1,5 +1,5 @@
 export type GuideCategory =
-  "workspace" | "canvas" | "learning" | "documents" | "ai";
+  "workspace" | "canvas" | "learning" | "documents" | "tools" | "ai";
 
 export type GuideDemo =
   "navigation" | "canvas" | "learning" | "lab" | "pdf" | "ai";
@@ -62,8 +62,22 @@ export type PageHelpScope = "workspace" | "canvas" | "learning" | "folders";
 export const GUIDE_PROGRESS_EVENT = "mindcanvas:feature-guide-progress";
 export const GUIDE_REQUEST_EVENT = "mindcanvas:feature-guide-request";
 export const GUIDE_ACTION_EVENT = "mindcanvas:feature-guide-action";
-export const GUIDE_CONTENT_VERSION = "v5";
+export const GUIDE_CONTENT_VERSION = "v5.9";
 const STORAGE_PREFIX = `mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}`;
+let activeGuideSessionId: string | null = null;
+
+function newSessionId() {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `guide-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function beginGuideSession() {
+  activeGuideSessionId = newSessionId();
+  return activeGuideSessionId;
+}
+
+export function endGuideSession(sessionId: string | null) {
+  if (!sessionId || activeGuideSessionId === sessionId) activeGuideSessionId = null;
+}
 
 /**
  * Components publish meaningful user actions instead of letting a guide infer
@@ -74,7 +88,7 @@ export function emitGuideAction(name: string, payload?: unknown) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent(GUIDE_ACTION_EVENT, {
-      detail: { name, payload, at: Date.now() },
+      detail: { name, payload, guideSessionId: activeGuideSessionId, at: Date.now() },
     }),
   );
 }
@@ -142,6 +156,7 @@ export function practiceActionsForGuide(
         labelEn: "Open Shared with me",
       },
       { id: "learning:tab:music", labelVi: "Mở Nhạc", labelEn: "Open Music" },
+      { id: "learning:tab:tools", labelVi: "Mở Công cụ", labelEn: "Open Tools" },
     ],
     "folder-manager": [
       {
@@ -184,6 +199,11 @@ export function practiceActionsForGuide(
         labelVi: "Quay lại danh sách",
         labelEn: "Return to the list",
       },
+    ],
+    "document-tools": [
+      { id: "pdf:draw", labelVi: "Vẽ một nét trên PDF", labelEn: "Draw on the PDF" },
+      { id: "pdf:export", labelVi: "Xuất PDF mới", labelEn: "Export a new PDF" },
+      { id: "docx:save", labelVi: "Xuất một DOCX", labelEn: "Export a DOCX" },
     ],
     "pdf-annotation": [
       {
@@ -732,6 +752,21 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         bodyEn:
           "Add a file or YouTube, YouTube Music, Spotify or SoundCloud link, then use play, pause, volume, repeat and Dynamic Island.",
       },
+      {
+        target: '.learning-hub-nav button[data-guide-tab="tools"]',
+        titleVi: "Mở Công cụ",
+        titleEn: "Open Tools",
+        bodyVi: "Bấm Công cụ để mở các editor tài liệu dùng chung thư viện đã tải lên.",
+        bodyEn: "Click Tools to open the document editors backed by the shared uploaded library.",
+      },
+      {
+        target: ".document-tools-page",
+        completion: { type: "manual" },
+        titleVi: "Bộ công cụ tài liệu",
+        titleEn: "Document tools",
+        bodyVi: "Vẽ trên PDF hoặc chọn DOCX để chỉnh sửa cơ bản và lưu thành bản sao.",
+        bodyEn: "Annotate a PDF or choose a DOCX for basic editing and save it as a copy.",
+      },
     ],
   },
   {
@@ -1029,6 +1064,27 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     ],
   },
   {
+    id: "document-tools",
+    category: "tools",
+    titleVi: "Công cụ tài liệu",
+    titleEn: "Document tools",
+    summaryVi: "Mở công cụ PDF hoặc DOCX và thực hành một thao tác thật.",
+    summaryEn: "Open the PDF or DOCX tool and complete a real action.",
+    // Reuse the shipped PDF annotation animation until a separate combined
+    // PDF/DOCX recording is authored; this keeps the guide card free of a
+    // broken image while the CSS demo communicates the two-tool flow.
+    gifSrc: "/guides/pdf-annotation.gif",
+    demo: "pdf",
+    steps: [
+      { target: ".learning-tools-tab", completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Trung tâm học tập, bấm Công cụ để mở các editor tài liệu.", bodyEn: "In Learning Hub, click Tools to open the document editors." },
+      { target: ".document-tools-tabs button:first-child", completion: { type: "click" }, titleVi: "Chọn Vẽ trên PDF", titleEn: "Choose PDF drawing", bodyVi: "Chọn Vẽ trên PDF để viết, highlight, tẩy và xuất bản mới.", bodyEn: "Choose PDF drawing to write, highlight, erase and export a new copy." },
+      { target: ".document-tool-list button", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu chưa có, hãy tải file lên.", bodyEn: "Choose a PDF from the list. Upload one first if the list is empty." },
+      { target: ".document-annotation-tools", titleVi: "Chọn công cụ annotation", titleEn: "Choose an annotation tool", bodyVi: "Bật Vẽ trên PDF rồi thử bút, highlight hoặc eraser. Nét hiển thị ngay khi kéo.", bodyEn: "Enable Draw on PDF and try pen, highlight or eraser. Strokes render while you drag." },
+      { target: ".document-tools-tabs button:nth-child(2)", completion: { type: "click" }, titleVi: "Mở Soạn thảo DOCX", titleEn: "Open DOCX editor", bodyVi: "Chuyển sang tab DOCX để mở và sửa tài liệu Word ở mức cơ bản.", bodyEn: "Switch to the DOCX tab to open and edit a document with basic Word features." },
+      { target: ".docx-editable", kind: "practice", titleVi: "Tự chỉnh sửa và xuất DOCX", titleEn: "Edit and export a DOCX", bodyVi: "Hãy sửa một đoạn, dùng một nút định dạng và bấm Xuất DOCX. File gốc được giữ lại.", bodyEn: "Edit a paragraph, use one formatting control and export DOCX. The original stays intact." },
+    ],
+  },
+  {
     id: "pdf-annotation",
     category: "documents",
     titleVi: "Vẽ trên PDF",
@@ -1060,23 +1116,23 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "The guide takes you to Folder Manager first. Click Uploaded documents to choose the PDF you want to annotate.",
       },
       {
-        target: ".document-file-table .file-row",
+        target: '.document-file-table .file-row[data-document-kind="pdf"]',
         completion: {
           type: "action",
           actions: [
             {
-              id: "documents:open",
-              labelVi: "Mở một tài liệu",
-              labelEn: "Open a document",
+              id: "documents:open:pdf",
+              labelVi: "Mở một file PDF",
+              labelEn: "Open a PDF file",
             },
           ],
         },
         titleVi: "Mở file PDF",
         titleEn: "Open the PDF",
         bodyVi:
-          "Bấm vào dòng PDF hoặc nút con mắt. Khi viewer mở, guide mới chỉ nút toàn màn hình thật.",
+          "Bấm đúng dòng PDF hoặc nút con mắt của PDF. DOCX, PPTX và XLSX không hoàn thành bước này.",
         bodyEn:
-          "Click the PDF row or its eye button. Once the viewer opens, the guide points to the real fullscreen button.",
+          "Click the PDF row or its eye button. DOCX, PPTX and XLSX do not complete this step.",
       },
       {
         target: ".document-fullscreen-toggle",

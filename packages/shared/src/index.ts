@@ -124,12 +124,15 @@ export type CanvasEmbedKind = "web" | "youtube" | "video" | "document";
 export type CanvasEmbed = {
   id: string;
   kind: CanvasEmbedKind;
-  /** A validated http(s) URL, normalized to a YouTube embed URL when applicable. */
+  /** A validated http(s) URL, normalized to a YouTube embed URL when applicable. Document references may leave this empty. */
   url: string;
   title?: string;
   /** Data URL and original filename metadata for embedded PDF/Office files. */
   mimeType?: string;
   fileName?: string;
+  /** Stable local document reference. The document bytes live in the shared local repository, not in each board. */
+  documentId?: string;
+  revisionId?: string;
   x: number;
   y: number;
   width: number;

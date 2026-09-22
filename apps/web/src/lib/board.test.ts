@@ -66,6 +66,12 @@ describe("Editable canvas model", () => {
     expect(() => parseBoard({ ...blankBoard(), embeds: [{ ...documentEmbed, url: "data:text/html;base64,AA==" }] })).toThrow("Invalid embedded document");
     expect(() => parseBoard({ ...blankBoard(), embeds: [{ ...documentEmbed, kind: "document", url: "https://example.com/file.pdf" }] })).toThrow("Invalid embedded document");
   });
+  it("persists a shared-library document reference without copying its bytes into the board", () => {
+    const reference = { id: "doc-ref", kind: "document" as const, url: "", documentId: "library-pdf", revisionId: "2026-09-22T00:00:00.000Z", title: "notes.pdf", fileName: "notes.pdf", mimeType: "application/pdf", x: 20, y: 30, width: 620, height: 520 };
+    const parsed = parseBoard({ ...blankBoard(), embeds: [reference] });
+    expect(parsed.embeds[0]).toMatchObject({ documentId: "library-pdf", url: "" });
+    expect(exportCanvasSvg(parsed)).toContain("notes.pdf");
+  });
   it("collapses descendants safely even with cycles", () => { const b = connect(connect(board(), "a", "b"), "b", "a"); b.nodes[0] = { ...b.nodes[0], collapsed: true } as typeof b.nodes[0]; expect([...hiddenNodes(b)]).toEqual(["b"]); });
   it("keeps relation edges out of collapse and selected-branch layout", () => {
     const before = { ...blankBoard(), nodes: [

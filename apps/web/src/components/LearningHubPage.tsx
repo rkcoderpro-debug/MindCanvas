@@ -1,7 +1,7 @@
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles } from "lucide-react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles, Wrench } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -17,9 +17,11 @@ import { generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcard
 import { MAX_FILE_BYTES } from "../lib/board";
 import { saveDocumentToStorage } from "../lib/supabase";
 import type { AiGenerationOptions } from "../lib/aiOptions";
-import { emitGuideAction } from "../lib/featureGuides";
+import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
+import DocumentToolsPage from "./DocumentToolsPage";
+import type { UploadedDocument } from "../lib/documentStore";
 
-type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "music";
+type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "music" | "tools";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -40,7 +42,7 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-export default function LearningHubPage({ owner, projects, accountPlan, initialTab }: { owner: string | null; projects: Project[]; accountPlan?: AccountPlan; initialTab?: HubTab }) {
+export default function LearningHubPage({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialTab }: { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab }) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
@@ -94,18 +96,20 @@ export default function LearningHubPage({ owner, projects, accountPlan, initialT
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
+    { id: "tools", label: "Công cụ", icon: Wrench },
     { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
   ];
 
   return <section className="learning-hub-page">
     <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-actions"><button type="button" className={`learning-music-launcher ${tab === "music" ? "active" : ""}`} onClick={() => { setTab("music"); emitGuideAction("learning:tab:music"); }}><Music2 size={17}/><span>Nhạc</span></button><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div></header>
-    <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} data-guide-tab={id} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""}`} onClick={() => { setTab(id); emitGuideAction(`learning:tab:${id}`); }}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
+    <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} data-guide-tab={id} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""} ${id === "tools" ? "learning-tools-tab" : ""}`} onClick={() => { setTab(id); emitGuideAction(`learning:tab:${id}`); if (id === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } })); }}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
     {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
     {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}
     {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}
     {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
+    {tab === "tools" && <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged}/>}
     {tab === "music" && <MusicPage/>}
     {tab === "shared" && <SharedLearningPage owner={owner}/>}
   </section>;

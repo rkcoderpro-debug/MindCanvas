@@ -638,18 +638,23 @@ export function parseBoard(value: unknown): BoardState {
           || (el.trimStart !== undefined && el.trimEnd !== undefined && el.trimEnd <= el.trimStart)) throw new Error("Invalid media trim");
       }
       if (kind === "embeds") {
-        if (!string(el.url, MAX_DOCUMENT_DATA_URL_LENGTH) || !string(el.title ?? "", 500) || el.kind === undefined || !["web", "youtube", "video", "document"].includes(el.kind)) throw new Error("Invalid embed");
+        const hasDocumentReference = el.kind === "document" && typeof el.documentId === "string" && el.documentId.length > 0;
+        const hasUrl = typeof el.url === "string" && el.url.length > 0;
+        if ((!hasUrl && !hasDocumentReference) || (hasUrl && !string(el.url, el.kind === "document" ? MAX_DOCUMENT_DATA_URL_LENGTH : 4000)) || !string(el.title ?? "", 500) || el.kind === undefined || !["web", "youtube", "video", "document"].includes(el.kind)) throw new Error("Invalid embed");
         if (el.kind === "document") {
-          if (!/^data:application\/(pdf|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet));base64,/i.test(el.url)) throw new Error("Invalid embedded document");
+          const validDocumentData = hasUrl && /^data:application\/(pdf|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet));base64,/i.test(el.url);
+          if (!validDocumentData && !hasDocumentReference) throw new Error("Invalid embedded document");
+          if (el.documentId !== undefined && (!string(el.documentId, 200) || !hasDocumentReference)) throw new Error("Invalid embedded document reference");
           if (el.mimeType !== undefined && !string(el.mimeType, 160)) throw new Error("Invalid embedded document type");
           if (el.fileName !== undefined && !string(el.fileName, 500)) throw new Error("Invalid embedded document name");
         }
       }
       if (kind === "embeds") {
         let validUrl = false;
-        try { const parsed = new URL(el.url); validUrl = parsed.protocol === "http:" || parsed.protocol === "https:"; } catch { /* invalid URL */ }
-        const validDocument = el.kind === "document" && /^data:application\/(pdf|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet));base64,/i.test(el.url);
-        if ((! ["web", "youtube", "video"].includes(el.kind) && !validDocument) || !string(el.url, el.kind === "document" ? MAX_DOCUMENT_DATA_URL_LENGTH : 4000) || (!validUrl && !validDocument)
+        try { const parsed = typeof el.url === "string" ? new URL(el.url) : null; validUrl = !!parsed && (parsed.protocol === "http:" || parsed.protocol === "https:"); } catch { /* invalid URL */ }
+        const validDocument = el.kind === "document" && typeof el.url === "string" && /^data:application\/(pdf|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet));base64,/i.test(el.url);
+        const validDocumentReference = el.kind === "document" && typeof el.documentId === "string" && el.documentId.length > 0;
+        if ((! ["web", "youtube", "video"].includes(el.kind) && !validDocument && !validDocumentReference) || (typeof el.url === "string" && el.url.length > 0 && !string(el.url, el.kind === "document" ? MAX_DOCUMENT_DATA_URL_LENGTH : 4000)) || (!validUrl && !validDocument && !validDocumentReference)
           || (el.title !== undefined && !string(el.title, 500))) throw new Error("Invalid embed");
       }
       if (!number(el.x) || !number(el.y) || !number(el.width) || el.width <= 0 || (kind !== "texts" && (!number(el.height) || el.height <= 0))) throw new Error("Invalid geometry");

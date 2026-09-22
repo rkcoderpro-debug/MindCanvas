@@ -14,6 +14,7 @@ function categoryLabel(category: GuideCategory, language: "vi" | "en") {
     canvas: ["Canvas", "Canvas"],
     learning: ["Học tập", "Learning"],
     documents: ["Tài liệu", "Documents"],
+    tools: ["Công cụ", "Tools"],
     ai: ["AI", "AI"],
   };
   return labels[category][language === "vi" ? 0 : 1];

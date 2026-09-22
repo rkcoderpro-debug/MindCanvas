@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Eraser, FileSpreadsheet, FileText, Highlighter, Maximize2, Minimize2, PenLine, RotateCcw, RotateCw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eraser, FileSpreadsheet, FileText, Highlighter, Maximize2, Minimize2, Minus, PenLine, Plus, RotateCcw, RotateCw, X } from "lucide-react";
 import type { UploadedDocument, DocumentKind } from "../lib/documentStore";
 import { useLanguage } from "../lib/i18n";
 import { PDFDocument, rgb } from "pdf-lib";
@@ -8,12 +8,13 @@ import { annotationMapsEqual, cloneAnnotationMap, eraseAnnotationStrokes, type A
 import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
+type ViewerReadyDetail = { sessionId: string; documentId?: string; kind: DocumentKind };
 type Point = { x: number; y: number };
 type Stroke = AnnotationStroke;
 type AnnotationMode = AnnotationTool | "eraser";
 type ActiveStroke = Stroke & { page: number };
 
-type Props = { source: Source; embedded?: boolean; onClose?: () => void };
+type Props = { source: Source; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
 
 function bytesFromDataUrl(dataUrl: string): Uint8Array {
   const raw = dataUrl.split(",", 2)[1] ?? "";
@@ -38,7 +39,7 @@ function sanitizeOfficeHtml(value: string): string {
   return document.body.innerHTML;
 }
 
-function OfficeViewer({ source }: { source: Source }) {
+function OfficeViewer({ source, onReady }: { source: Source; onReady?: () => void }) {
   const { t } = useLanguage();
   const [html, setHtml] = useState("");
   const [sheets, setSheets] = useState<string[]>([]);
@@ -56,11 +57,11 @@ function OfficeViewer({ source }: { source: Source }) {
           const arrayBuffer = new ArrayBuffer(bytes.byteLength);
           new Uint8Array(arrayBuffer).set(bytes);
           const result = await mammoth.convertToHtml({ arrayBuffer });
-          if (alive) setHtml(sanitizeOfficeHtml(result.value));
+          if (alive) { setHtml(sanitizeOfficeHtml(result.value)); onReady?.(); }
         } else if (source.kind === "xlsx") {
           const XLSX = await import("xlsx");
           const workbook = XLSX.read(bytes, { type: "array" });
-          if (alive) { setSheets(workbook.SheetNames); setHtml(workbook.SheetNames.length ? sanitizeOfficeHtml(XLSX.utils.sheet_to_html(workbook.Sheets[workbook.SheetNames[0]])) : "<p>Không có trang tính.</p>"); }
+          if (alive) { setSheets(workbook.SheetNames); setHtml(workbook.SheetNames.length ? sanitizeOfficeHtml(XLSX.utils.sheet_to_html(workbook.Sheets[workbook.SheetNames[0]])) : "<p>Không có trang tính.</p>"); onReady?.(); }
         } else {
           const JSZip = (await import("jszip")).default;
           const zip = await JSZip.loadAsync(bytes);
@@ -71,7 +72,7 @@ function OfficeViewer({ source }: { source: Source }) {
             const texts = [...xml.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g)].map(match => match[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
             parsed.push(texts.length ? texts.map(escapeHtml).join("<br/>") : "<em>Trang chiếu không có văn bản.</em>");
           }
-          if (alive) setSlides(parsed);
+          if (alive) { setSlides(parsed); onReady?.(); }
         }
       } catch (cause) { if (alive) setError(cause instanceof Error ? cause.message : "Không thể xem tài liệu."); }
     })();
@@ -83,14 +84,15 @@ function OfficeViewer({ source }: { source: Source }) {
   return <div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc tài liệu…</p>" }}/>;
 }
 
-export default function DocumentViewer({ source, embedded = false, onClose }: Props) {
+export default function DocumentViewer({ source, embedded = false, dedicated = false, enableGuide = true, onClose, onReady }: Props) {
   const { t } = useLanguage();
   const kind = kindFor(source);
+  const viewerSessionId = useMemo(() => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`, [source.dataUrl, source.id]);
   useEffect(() => {
-    if (kind !== "pdf") return;
-    const timer = window.setTimeout(() => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "pdf-annotation" } })), 0);
+    if (kind !== "pdf" || !enableGuide || dedicated) return;
+    const timer = window.setTimeout(() => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "pdf-annotation", viewerSessionId, documentId: source.id, kind } })), 0);
     return () => window.clearTimeout(timer);
-  }, [kind, source.dataUrl, source.id]);
+  }, [dedicated, enableGuide, kind, source.dataUrl, source.id, viewerSessionId]);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [pdf, setPdf] = useState<any>(null);
@@ -128,7 +130,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
   const pdfBytes = useMemo(() => kind === "pdf" ? bytesFromDataUrl(source.dataUrl) : null, [kind, source.dataUrl]);
   strokesRef.current = strokes;
   const effectiveAnnotationMode = heldAnnotationMode ?? annotationMode;
-  const annotationActive = fullscreen && (drawing || heldAnnotationMode !== null);
+  const annotationActive = (fullscreen || dedicated) && (drawing || heldAnnotationMode !== null);
 
   useEffect(() => {
     if (kind !== "pdf" || !pdfBytes) return;
@@ -144,10 +146,10 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
       module.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
       // Pass a copy because the worker may transfer (and detach) the input
       // buffer; exportPdf still needs the original bytes later.
-      return module.getDocument({ data: pdfBytes.slice() }).promise.then((document) => { if (alive) { setPdf(document); setPageCount(document.numPages); } });
+      return module.getDocument({ data: pdfBytes.slice() }).promise.then((document) => { if (alive) { setPdf(document); setPageCount(document.numPages); onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind }); } });
     }).catch((cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : "Không thể mở PDF."); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [kind, pdfBytes]);
+  }, [kind, pdfBytes, source.id, viewerSessionId]);
 
   useEffect(() => {
     if (!pdf || kind !== "pdf" || !pageCanvas.current || !annotationCanvas.current) return;
@@ -352,6 +354,26 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
     if (pdfPanGesture.current?.pointerId === event.pointerId) pdfPanGesture.current = null;
     if (body?.hasPointerCapture?.(event.pointerId)) body.releasePointerCapture(event.pointerId);
   };
+  const zoomPdfAt = (nextZoom: number, clientX: number, clientY: number) => {
+    const shell = pdfPageShell.current;
+    if (!shell) return;
+    const rect = shell.getBoundingClientRect();
+    const currentZoom = Math.max(.01, pdfZoom);
+    const origin = { x: pdfZoomOrigin.x + (clientX - rect.left - pdfZoomOrigin.x) / currentZoom, y: pdfZoomOrigin.y + (clientY - rect.top - pdfZoomOrigin.y) / currentZoom };
+    setPdfZoomOrigin(origin);
+    setPdfZoom(Math.min(4, Math.max(.5, nextZoom)));
+  };
+  const zoomPdfAtCenter = (factor: number) => {
+    const body = pdfBody.current;
+    if (!body) return;
+    const rect = body.getBoundingClientRect();
+    zoomPdfAt(pdfZoom * factor, rect.left + body.clientWidth / 2, rect.top + body.clientHeight / 2);
+  };
+  const zoomPdfWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!(event.ctrlKey || event.metaKey) || !pdfPageShell.current) return;
+    event.preventDefault();
+    zoomPdfAt(pdfZoom * Math.exp(-event.deltaY * .0015), event.clientX, event.clientY);
+  };
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!fullscreen) return;
@@ -426,12 +448,17 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
         <div className="document-viewer-actions">
           {kind === "pdf" && (
             <>
+              <div className="document-pdf-zoom-control" role="group" aria-label="PDF zoom">
+                <button type="button" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomPdfAtCenter(.8)} disabled={pdfZoom <= .5}><Minus size={14}/></button>
+                <span>{Math.round(pdfZoom * 100)}%</span>
+                <button type="button" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomPdfAtCenter(1.25)} disabled={pdfZoom >= 4}><Plus size={14}/></button>
+              </div>
               <label className="document-draw-toggle">
-                <input type="checkbox" checked={drawing} disabled={!fullscreen} onChange={event => setDrawing(event.target.checked)} />
+                <input type="checkbox" checked={drawing} disabled={!fullscreen && !dedicated} onChange={event => setDrawing(event.target.checked)} />
                 <PenLine size={15} />
-                {fullscreen ? t("drawOnPdf") : t("pdfDrawFullscreenOnly")}
+                {fullscreen || dedicated ? t("drawOnPdf") : t("pdfDrawFullscreenOnly")}
               </label>
-              {drawing && fullscreen && (
+              {drawing && (fullscreen || dedicated) && (
                 <>
                   <div className="document-annotation-tools" role="toolbar" aria-label={t("pdfAnnotationTools")}>
                     <button type="button" className={annotationMode === "pen" ? "active" : ""} aria-pressed={annotationMode === "pen"} title={t("pdfPen")} onClick={() => chooseAnnotationMode("pen")}><PenLine size={14} /><span>{t("pdfPen")}</span></button>
@@ -461,7 +488,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
         </div>
       </header>
       {kind === "pdf" ? (
-          <div ref={pdfBody} className={`document-pdf-body ${spaceHeld ? "pdf-hand-active" : ""}`} onPointerDown={beginPdfPointer} onPointerMove={movePdfPointer} onPointerUp={finishPdfPointer} onPointerCancel={finishPdfPointer} style={{ touchAction: fullscreen ? "none" : "auto" }}>
+          <div ref={pdfBody} className={`document-pdf-body ${spaceHeld ? "pdf-hand-active" : ""}`} onWheel={zoomPdfWheel} onPointerDown={beginPdfPointer} onPointerMove={movePdfPointer} onPointerUp={finishPdfPointer} onPointerCancel={finishPdfPointer} style={{ touchAction: fullscreen ? "none" : "auto" }}>
           {loading && <div className="document-loading">Đang render PDF…</div>}
           {error && <div className="document-error">{error}</div>}
           {!loading && !error && (
@@ -480,7 +507,7 @@ export default function DocumentViewer({ source, embedded = false, onClose }: Pr
             </>
           )}
         </div>
-      ) : <OfficeViewer source={source} />}
+      ) : <OfficeViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })} />}
     </section>
   );
 }
