@@ -6,7 +6,6 @@ import { GUIDE_ACTION_EVENT, practiceActionsForGuide, type GuideDefinition, type
 
 type Box = { left: number; top: number; width: number; height: number };
 type CursorPlacement = { left: number; top: number; angle: number };
-type TargetHintPlacement = { left: number; top: number; above: boolean };
 
 type Props = {
   guide: GuideDefinition;
@@ -50,15 +49,6 @@ function cursorPlacement(box: Box): CursorPlacement {
   if (spaceLeft >= size + gap) return { left: box.left - size - gap, top: vertical, angle: 135 };
   if (spaceRight >= size + gap) return { left: box.left + box.width + gap, top: vertical, angle: -45 };
   return { left: horizontal, top: clamp(box.top - size - gap, 12, Math.max(12, window.innerHeight - size - 12)), angle: -135 };
-}
-
-function targetHintPlacement(box: Box): TargetHintPlacement {
-  const width = Math.min(214, window.innerWidth - 24);
-  const height = 30;
-  const gap = 12;
-  const left = clamp(box.left + box.width / 2 - width / 2, 12, Math.max(12, window.innerWidth - width - 12));
-  const above = box.top >= height + gap + 8;
-  return { left, top: above ? box.top - gap : box.top + box.height + gap, above };
 }
 
 function actionsForStep(guide: GuideDefinition, step: GuideStep, isPractice: boolean): GuideRequiredAction[] {
@@ -233,7 +223,6 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
   }, [box, isPractice]);
 
   const pointer = showBackdrop && box ? cursorPlacement(box) : null;
-  const targetHint = showBackdrop && box ? targetHintPlacement(box) : null;
   const statusText = isPractice
     ? actionsReady ? t("guidePracticeReady") : t("guidePracticeNeedsActions")
     : routeSkipped ? t("guideRouteAlreadyOpen")
@@ -245,7 +234,6 @@ export default function FeatureGuideOverlay({ guide, currentRoute = null, practi
   const overlay = <div className={`feature-guide-root ${isPractice ? "feature-guide-practice-mode" : ""} ${targetMissing ? "feature-guide-target-missing-mode" : ""}`} role="dialog" aria-modal="false" aria-label={title}>
     {showBackdrop && <div className="feature-guide-backdrop" aria-hidden="true"/>}
     {showBackdrop && box && <div className="feature-guide-focus" data-spotlight="full-region" aria-hidden="true" style={{ left: box.left - 10, top: box.top - 10, width: box.width + 20, height: box.height + 20 }}/>} 
-    {targetHint && <div className="feature-guide-target-hint" aria-hidden="true" style={{ left: targetHint.left, top: targetHint.top, transform: targetHint.above ? "translateY(-100%)" : undefined }}><MousePointer2 size={14}/><span>{language === "vi" ? "Bấm vào toàn bộ vùng đang sáng" : "Click anywhere in the highlighted area"}</span></div>}
     {pointer && <div className="feature-guide-cursor" aria-hidden="true" style={{ left: pointer.left, top: pointer.top, "--cursor-angle": `${pointer.angle}deg` } as CSSProperties}><MousePointer2 size={27}/></div>}
     <section className={panelClass} style={panelStyle}>
       <header className={isPractice ? "feature-guide-drag-handle" : undefined}><div><span className="feature-guide-kicker">{guide.titleVi === guide.titleEn ? guide.titleEn : language === "vi" ? "HƯỚNG DẪN TÍNH NĂNG" : "FEATURE GUIDE"}</span><strong>{title}</strong></div><div className="feature-guide-header-actions">{isPractice && <button type="button" className="icon-button" aria-label={practicePanelCollapsed ? t("guidePracticeExpand") : t("guidePracticeCollapse")} onClick={() => setPracticePanelCollapsed(value => !value)}>{practicePanelCollapsed ? <ChevronUp size={17}/> : <ChevronDown size={17}/>}</button>}<button type="button" className="icon-button" aria-label={t("close")} onClick={onSkip}><X size={17}/></button></div></header>

@@ -44,7 +44,7 @@ describe("FeatureGuideOverlay strict completion", () => {
     await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 220)); });
     expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).not.toBeNull();
     expect(document.body.querySelector(".feature-guide-focus")?.getAttribute("data-spotlight")).toBe("full-region");
-    expect(document.body.querySelector(".feature-guide-target-hint")).not.toBeNull();
+    expect(document.body.querySelector(".feature-guide-target-hint")).toBeNull();
     await act(async () => { target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); await new Promise(resolve => window.setTimeout(resolve, 220)); });
     expect(complete).toHaveBeenCalledTimes(1);
   });
