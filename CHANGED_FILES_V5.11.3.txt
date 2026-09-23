@@ -3,6 +3,13 @@ package-lock.json
 apps/web/package.json
 apps/server/package.json
 apps/web/public/sw.js
+apps/web/src/lib/appVersion.ts
+apps/web/src/components/AppSidebar.tsx
+apps/web/src/lib/aiSupport.ts
+apps/web/src/lib/aiSupport.test.ts
+apps/web/src/App.test.tsx
+apps/server/src/index.ts
+README.md
 supabase/migrations/0018_v4_9_learning_shares.sql
 supabase/migrations/0021_v5_11_3_learning_version_trigger_fix.sql
 supabase/migrations/README.md

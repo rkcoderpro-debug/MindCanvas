@@ -1,3 +1,5 @@
+import { APP_VERSION_LABEL } from "./appVersion";
+
 export type AiSupportKind = "aiAuto" | "manualPlan";
 
 export type AiSupportContext = {
@@ -28,7 +30,7 @@ export function createAiSupportIssue(kind: AiSupportKind, context: AiSupportCont
     `Issue: ${code}`,
     `Type: ${kind === "aiAuto" ? "AI Auto result or quota" : "AI Manual plan activation or quota"}`,
     `Time: ${createdAt}`,
-    `App: v5.10.1`,
+    `App: ${APP_VERSION_LABEL}`,
     `Account email: ${context.email?.trim() || "not provided"}`,
     `Plan: ${context.plan?.trim() || "unknown"}`,
     `Provider: ${context.provider?.trim() || "not available"}`,
