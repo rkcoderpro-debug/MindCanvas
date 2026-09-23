@@ -1,4 +1,4 @@
-export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "eraser" | "line" | "rect" | "ellipse" | "triangle" | "connector";
+export type ToolMode = "select" | "hand" | "text" | "pen" | "highlighter" | "eraser" | "line" | "rect" | "ellipse" | "triangle" | "connector" | "frame";
 
 export { LenientJsonError, parseLenientJson } from "./json.js";
 
@@ -56,12 +56,16 @@ export type DrawingPath = {
 
 export type CanvasShape = {
   id: string;
-  kind: "rect" | "ellipse" | "triangle";
+  kind: "rect" | "ellipse" | "triangle" | "frame";
   x: number;
   y: number;
   width: number;
   height: number;
   color: string;
+  /** Structured frame metadata keeps presets editable after creation. */
+  frameTemplate?: "a4" | "a5" | "b5";
+  frameName?: string;
+  clipContent?: boolean;
   rotation?: number;
   opacity?: number;
   hidden?: boolean;

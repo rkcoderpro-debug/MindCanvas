@@ -6,7 +6,7 @@ import { CANVAS_TOOL_IDS, normalizeVisibleToolIds } from "../lib/toolbarPreferen
 const GROUPS: Array<{ labelKey: MessageKey; ids: readonly ToolMode[] }> = [
   { labelKey: "toolbarGroupNavigation", ids: ["select", "hand"] },
   { labelKey: "toolbarGroupDrawing", ids: ["pen", "highlighter", "eraser", "line"] },
-  { labelKey: "toolbarGroupShapes", ids: ["rect", "ellipse", "triangle"] },
+  { labelKey: "toolbarGroupShapes", ids: ["rect", "ellipse", "triangle", "frame"] },
   { labelKey: "toolbarGroupInsert", ids: ["text", "connector"] },
 ];
 

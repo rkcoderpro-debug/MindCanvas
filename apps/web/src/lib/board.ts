@@ -13,6 +13,22 @@ export const MAX_DOCUMENT_DATA_URL_LENGTH = 55 * 1024 * 1024;
 export const CANVAS_BACKGROUNDS: CanvasBackgroundPattern[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
 export const MAX_BACKGROUND_MEDIA_DATA_URL_LENGTH = 20 * 1024 * 1024;
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+export type CanvasFrameTemplate = "a4" | "a5" | "b5";
+/** World-unit presets at 96 CSS px/in. They are layout guides, not a claim of print-perfect pagination. */
+export const CANVAS_FRAME_TEMPLATES: Record<CanvasFrameTemplate, { label: string; widthMm: number; heightMm: number; width: number; height: number }> = {
+  a4: { label: "A4", widthMm: 210, heightMm: 297, width: 794, height: 1123 },
+  a5: { label: "A5", widthMm: 148, heightMm: 210, width: 559, height: 794 },
+  b5: { label: "B5", widthMm: 176, heightMm: 250, width: 665, height: 945 },
+};
+export function frameSizeForTemplate(template: CanvasFrameTemplate, orientation: "portrait" | "landscape" = "portrait") {
+  const preset = CANVAS_FRAME_TEMPLATES[template];
+  return orientation === "landscape" ? { width: preset.height, height: preset.width } : { width: preset.width, height: preset.height };
+}
+export function createFrameShape(template: CanvasFrameTemplate, x: number, y: number, orientation: "portrait" | "landscape" = "portrait") {
+  const size = frameSizeForTemplate(template, orientation);
+  const preset = CANVAS_FRAME_TEMPLATES[template];
+  return { id: crypto.randomUUID(), kind: "frame" as const, x, y, ...size, color: "#ffffff", frameTemplate: template, frameName: `${preset.label} ${orientation === "landscape" ? "ngang" : "dọc"}`, clipContent: false, opacity: .94 };
+}
 export const pathData = (points: Vec2[]) => points.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ") + (points.length === 1 ? " l0.01,0.01" : "");
 const xml = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&apos;" }[char]!));
 const color = (value: unknown, fallback: string) => typeof value === "string" && /^(#[0-9a-f]{6}|none)$/i.test(value) ? value : fallback;
@@ -224,6 +240,11 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
     if (selection.kind === "shapes") {
       if (item.kind === "rect") return `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="6" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>`;
       if (item.kind === "ellipse") return `<ellipse cx="${item.x + item.width / 2}" cy="${item.y + item.height / 2}" rx="${item.width / 2}" ry="${item.height / 2}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}"${opacity}${rotation}/>`;
+      if (item.kind === "frame") {
+        const template = typeof item.frameTemplate === "string" && item.frameTemplate in CANVAS_FRAME_TEMPLATES ? item.frameTemplate as CanvasFrameTemplate : undefined;
+        const frameLabel = item.frameName || (template ? CANVAS_FRAME_TEMPLATES[template].label : "Frame") || "Frame";
+        return `<g${rotation}${opacity}><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="8" fill="${color(item.color, palette.surface)}" fill-opacity=".28" stroke="${palette.elementStroke}" stroke-width="3" stroke-dasharray="10 6"/><text x="${item.x + 16}" y="${item.y + 26}" font-family="Inter,Arial,Helvetica,sans-serif" font-size="14" font-weight="600" fill="${palette.muted}">${xml(frameLabel)}</text></g>`;
+      }
       return `<polygon points="${item.x + item.width / 2},${item.y} ${item.x + item.width},${item.y + item.height} ${item.x},${item.y + item.height}" fill="${color(item.color, palette.nodeFill)}" stroke="${palette.elementStroke}" stroke-linejoin="round"${opacity}${rotation}/>`;
     }
     if (selection.kind === "drawings") return `<path d="${pathData(item.points)}" fill="none" stroke="${color(item.color, "#4562df")}" stroke-width="${item.width}" opacity="${item.opacity}" stroke-linecap="round" stroke-linejoin="round"${rotation}/>`;
@@ -663,7 +684,8 @@ export function parseBoard(value: unknown): BoardState {
         || (el.bold !== undefined && typeof el.bold !== "boolean") || (el.italic !== undefined && typeof el.italic !== "boolean")
         || (el.underline !== undefined && typeof el.underline !== "boolean") || (el.textAlign !== undefined && !["left", "center", "right"].includes(el.textAlign)))) throw new Error("Invalid text");
       if (kind === "nodes" && (!string(el.label) || (el.sourceDocumentId !== undefined && !string(el.sourceDocumentId, 200)))) throw new Error("Invalid label");
-      if (kind === "shapes" && !["rect", "ellipse", "triangle"].includes(el.kind)) throw new Error("Invalid shape");
+      if (kind === "shapes" && !["rect", "ellipse", "triangle", "frame"].includes(el.kind)) throw new Error("Invalid shape");
+      if (kind === "shapes" && el.kind === "frame" && ((el.frameTemplate !== undefined && !["a4", "a5", "b5"].includes(el.frameTemplate)) || (el.frameName !== undefined && !string(el.frameName, 100)) || (el.clipContent !== undefined && typeof el.clipContent !== "boolean"))) throw new Error("Invalid frame");
     }
   }
   if (points > 200000 || b.edges.some((e: any) => !ids.has(e.source) || !ids.has(e.target))) throw new Error("Invalid graph");

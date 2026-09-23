@@ -1,42 +1,113 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Crosshair, Search, X } from "lucide-react";
+import {
+  AlignLeft,
+  BookOpen,
+  CircleHelp,
+  CircleUserRound,
+  Crosshair,
+  Eraser,
+  FilePlus2,
+  FileText,
+  FolderCog,
+  FolderPlus,
+  Hand,
+  Maximize2,
+  MoreHorizontal,
+  MousePointer2,
+  Music2,
+  PenLine,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Table2,
+  Upload,
+  X,
+  ZoomIn,
+  type LucideIcon,
+} from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import type { PageHelpScope } from "../lib/featureGuides";
 
-type HelpControl = {
-  element: HTMLElement;
-  key: string;
-  label: string;
-  description: string;
-  instruction: string;
+/**
+ * The help panel deliberately uses a fixed catalogue. It must never use
+ * button text, input values, project names, file names, or document contents
+ * as help copy. A selector only locates the real control to highlight.
+ */
+type HelpCatalogueEntry = {
+  id: string;
+  selector: string;
+  icon: LucideIcon;
+  vi: { name: string; description: string };
+  en: { name: string; description: string };
   shortcut?: string;
 };
 
-const TOOL_HELP: Record<string, { vi: string; en: string; shortcut: string }> = {
-  select: { vi: "Chọn một phần tử, kéo phần tử hoặc kéo từ vùng trống để chọn nhiều phần tử.", en: "Select or drag an element, or drag from empty space to select multiple elements.", shortcut: "V" },
-  hand: { vi: "Kéo để di chuyển góc nhìn canvas. Giữ Space để dùng tạm rồi quay về tool trước.", en: "Drag to pan the canvas. Hold Space to use it temporarily and return to the previous tool.", shortcut: "Space" },
-  text: { vi: "Bấm lên canvas để tạo và nhập nội dung chữ.", en: "Click the canvas to create and edit text.", shortcut: "T" },
-  pen: { vi: "Vẽ tự do; nét xuất hiện ngay trong lúc kéo chuột hoặc bút.", en: "Draw freely; the stroke appears while the mouse or pen moves.", shortcut: "P" },
-  highlighter: { vi: "Tạo nét đánh dấu trong suốt và có thể điều chỉnh độ dày.", en: "Create translucent highlights with an adjustable width.", shortcut: "H" },
-  eraser: { vi: "Xóa chính xác phần nét vẽ chạm vào đầu tẩy.", en: "Precisely erase the part of a drawing touched by the eraser.", shortcut: "E" },
-  line: { vi: "Nhấn và kéo để tạo một đường thẳng.", en: "Press and drag to create a straight line.", shortcut: "L" },
-  rect: { vi: "Nhấn và kéo để tạo hình chữ nhật.", en: "Press and drag to create a rectangle.", shortcut: "R" },
-  ellipse: { vi: "Nhấn và kéo để tạo hình tròn hoặc elip.", en: "Press and drag to create a circle or ellipse.", shortcut: "O" },
-  triangle: { vi: "Nhấn và kéo để tạo hình tam giác.", en: "Press and drag to create a triangle.", shortcut: "G" },
-  connector: { vi: "Nối hai phần tử và giữ liên kết khi phần tử di chuyển.", en: "Connect two elements and keep the link while they move.", shortcut: "C" },
-};
+type HelpControl = HelpCatalogueEntry & { element: HTMLElement };
 
-const TAB_HELP: Record<string, { vi: string; en: string }> = {
-  overview: { vi: "Xem kế hoạch hôm nay, mục tiêu, chuỗi học và lối tắt.", en: "See today's plan, goals, streak and shortcuts." },
-  flashcards: { vi: "Tạo bộ thẻ, chỉnh sửa và bắt đầu phiên ôn tập.", en: "Create decks, edit cards and start a review session." },
-  quiz: { vi: "Tạo Quiz, chọn chế độ học và xem kết quả.", en: "Create a Quiz, choose a study mode and review results." },
-  plan: { vi: "Lập kế hoạch thủ công hoặc nhờ AI gợi ý lịch học.", en: "Build a manual plan or ask AI to suggest a schedule." },
-  progress: { vi: "Theo dõi chuỗi học, số thẻ đã ôn và điểm Quiz.", en: "Track streaks, reviewed cards and Quiz scores." },
-  lab: { vi: "Tạo, chạy thử, lưu và tải mô phỏng HTML.", en: "Create, run, save and download HTML simulations." },
-  shared: { vi: "Mở học liệu mà người khác đã chia sẻ với bạn.", en: "Open learning material shared with you." },
-  music: { vi: "Quản lý nhạc học tập và Dynamic Island.", en: "Manage study music and Dynamic Island." },
-};
+const common: HelpCatalogueEntry[] = [
+  { id: "topbar:command", selector: ".topbar .command-trigger", icon: Search, vi: { name: "Tìm nhanh", description: "Mở tìm kiếm nhanh cho tính năng và nội dung." }, en: { name: "Quick search", description: "Open quick search for features and content." }, shortcut: "Ctrl/⌘ K" },
+  { id: "topbar:focus", selector: ".topbar .focus-mode-toggle", icon: Maximize2, vi: { name: "Chế độ tập trung", description: "Thu gọn phần phụ để tập trung vào vùng đang làm việc." }, en: { name: "Focus mode", description: "Reduce secondary UI while you work." }, shortcut: "Ctrl/⌘ Shift F" },
+  { id: "topbar:account", selector: ".topbar .account-menu-trigger, .topbar .profile-menu-trigger", icon: CircleUserRound, vi: { name: "Tài khoản", description: "Mở cài đặt tài khoản và phiên làm việc." }, en: { name: "Account", description: "Open account and session settings." } },
+];
+
+const canvasTools: HelpCatalogueEntry[] = [
+  { id: "canvas:select", selector: '[data-tool="select"]', icon: MousePointer2, vi: { name: "Chọn", description: "Chọn, kéo hoặc khoanh vùng các phần tử trên canvas." }, en: { name: "Select", description: "Select, move, or marquee-select canvas elements." }, shortcut: "V" },
+  { id: "canvas:hand", selector: '[data-tool="hand"]', icon: Hand, vi: { name: "Bàn tay", description: "Kéo để di chuyển góc nhìn canvas." }, en: { name: "Hand", description: "Drag to pan the canvas." }, shortcut: "Space" },
+  { id: "canvas:text", selector: '[data-tool="text"]', icon: FileText, vi: { name: "Văn bản", description: "Bấm vào canvas để tạo hoặc sửa một đoạn chữ." }, en: { name: "Text", description: "Click the canvas to create or edit text." }, shortcut: "T" },
+  { id: "canvas:pen", selector: '[data-tool="pen"]', icon: PenLine, vi: { name: "Bút", description: "Vẽ nét tự do bằng chuột, cảm ứng hoặc bút stylus." }, en: { name: "Pen", description: "Draw freehand with a mouse, touch, or stylus." }, shortcut: "P" },
+  { id: "canvas:highlighter", selector: '[data-tool="highlighter"]', icon: PenLine, vi: { name: "Đánh dấu", description: "Tạo nét đánh dấu trong suốt với độ dày đã chọn." }, en: { name: "Highlighter", description: "Create a translucent highlight with the selected width." }, shortcut: "H" },
+  { id: "canvas:eraser", selector: '[data-tool="eraser"]', icon: Eraser, vi: { name: "Tẩy", description: "Xóa phần nét vẽ chạm vào đầu tẩy." }, en: { name: "Eraser", description: "Erase drawing segments touched by the eraser." }, shortcut: "E" },
+  { id: "canvas:line", selector: '[data-tool="line"]', icon: AlignLeft, vi: { name: "Đường thẳng", description: "Kéo trên canvas để tạo một đường thẳng." }, en: { name: "Line", description: "Drag on the canvas to create a straight line." }, shortcut: "L" },
+  { id: "canvas:rect", selector: '[data-tool="rect"]', icon: Table2, vi: { name: "Chữ nhật", description: "Kéo trên canvas để tạo hình chữ nhật." }, en: { name: "Rectangle", description: "Drag on the canvas to create a rectangle." }, shortcut: "R" },
+  { id: "canvas:ellipse", selector: '[data-tool="ellipse"]', icon: CircleHelp, vi: { name: "Elip", description: "Kéo trên canvas để tạo hình tròn hoặc elip." }, en: { name: "Ellipse", description: "Drag on the canvas to create a circle or ellipse." }, shortcut: "O" },
+  { id: "canvas:triangle", selector: '[data-tool="triangle"]', icon: Plus, vi: { name: "Tam giác", description: "Kéo trên canvas để tạo hình tam giác." }, en: { name: "Triangle", description: "Drag on the canvas to create a triangle." }, shortcut: "G" },
+  { id: "canvas:connector", selector: '[data-tool="connector"]', icon: Sparkles, vi: { name: "Đường nối", description: "Nối hai phần tử và giữ liên kết khi chúng di chuyển." }, en: { name: "Connector", description: "Connect two elements and keep the link as they move." }, shortcut: "C" },
+  { id: "canvas:frame", selector: '[data-tool="frame"]', icon: Table2, vi: { name: "Frame", description: "Tạo một khung bố cục với kích thước mẫu A4, A5 hoặc B5." }, en: { name: "Frame", description: "Create a layout frame using an A4, A5, or B5 preset." }, shortcut: "F" },
+  { id: "canvas:frame-a4", selector: '[data-help-id="canvas-frame-template-a4"]', icon: Table2, vi: { name: "Frame A4", description: "Chọn khung A4 dọc cho bố cục canvas." }, en: { name: "A4 frame", description: "Choose a portrait A4 canvas frame." } },
+  { id: "canvas:frame-a5", selector: '[data-help-id="canvas-frame-template-a5"]', icon: Table2, vi: { name: "Frame A5", description: "Chọn khung A5 dọc cho bố cục canvas." }, en: { name: "A5 frame", description: "Choose a portrait A5 canvas frame." } },
+  { id: "canvas:frame-b5", selector: '[data-help-id="canvas-frame-template-b5"]', icon: Table2, vi: { name: "Frame B5", description: "Chọn khung B5 dọc cho bố cục canvas." }, en: { name: "B5 frame", description: "Choose a portrait B5 canvas frame." } },
+  { id: "canvas:toolbar", selector: ".editor-layout .toolbar-toggle", icon: MoreHorizontal, vi: { name: "Thanh công cụ", description: "Mở rộng hoặc thu gọn thanh công cụ canvas." }, en: { name: "Toolbar", description: "Expand or collapse the canvas toolbar." } },
+  { id: "canvas:more-tools", selector: ".editor-layout .canvas-more-tools-trigger", icon: MoreHorizontal, vi: { name: "Thêm công cụ", description: "Mở các công cụ phụ trên màn hình nhỏ." }, en: { name: "More tools", description: "Open secondary tools on small screens." } },
+  { id: "canvas:properties", selector: ".editor-layout .inspector-toggle", icon: SlidersHorizontal, vi: { name: "Thuộc tính", description: "Mở bảng thuộc tính của canvas hoặc phần tử đang chọn." }, en: { name: "Properties", description: "Open properties for the canvas or selected element." } },
+  { id: "canvas:fullscreen", selector: ".editor-layout .canvas-fullscreen-toggle", icon: Maximize2, vi: { name: "Toàn màn hình", description: "Mở hoặc thoát chế độ toàn màn hình của canvas." }, en: { name: "Fullscreen", description: "Enter or exit canvas fullscreen mode." } },
+  { id: "canvas:zoom", selector: ".editor-layout .zoom-control", icon: ZoomIn, vi: { name: "Thu phóng", description: "Điều chỉnh mức phóng to của canvas." }, en: { name: "Zoom", description: "Adjust the canvas zoom level." } },
+];
+
+const workspace: HelpCatalogueEntry[] = [
+  { id: "workspace:import", selector: ".workspace-home .home-heading .secondary-button", icon: Upload, vi: { name: "Nhập project", description: "Nhập project MindCanvas hoặc JSON từ thiết bị." }, en: { name: "Import project", description: "Import a MindCanvas project or JSON from this device." } },
+  { id: "workspace:create", selector: ".workspace-home .workspace-create-button", icon: FilePlus2, vi: { name: "Project mới", description: "Tạo một project canvas mới." }, en: { name: "New project", description: "Create a new canvas project." } },
+  { id: "workspace:search", selector: ".workspace-home .search-field", icon: Search, vi: { name: "Tìm project", description: "Lọc project theo tiêu đề hoặc nội dung đã lập chỉ mục." }, en: { name: "Search projects", description: "Filter projects by indexed title or content." } },
+  { id: "workspace:sort", selector: ".workspace-home select", icon: AlignLeft, vi: { name: "Sắp xếp project", description: "Sắp xếp theo lần chỉnh sửa hoặc tên." }, en: { name: "Sort projects", description: "Sort by recent update or name." } },
+  { id: "workspace:open", selector: ".workspace-home .project-open", icon: FileText, vi: { name: "Mở project", description: "Mở project trong canvas." }, en: { name: "Open project", description: "Open a project in the canvas." } },
+  { id: "workspace:favorite", selector: ".workspace-home .project-card-favorite", icon: Star, vi: { name: "Yêu thích", description: "Thêm hoặc bỏ project khỏi danh sách yêu thích." }, en: { name: "Favorite", description: "Add or remove a project from Favorites." } },
+  { id: "workspace:project-menu", selector: ".workspace-home .project-card-menu-trigger", icon: MoreHorizontal, vi: { name: "Thao tác project", description: "Mở Đổi tên, Chuyển thư mục, Nhân đôi hoặc Thùng rác." }, en: { name: "Project actions", description: "Open Rename, Move, Duplicate, or Trash actions." } },
+];
+
+const folders: HelpCatalogueEntry[] = [
+  { id: "folders:new", selector: ".folder-manager .folder-manager-new-folder", icon: FolderPlus, vi: { name: "Thư mục mới", description: "Tạo một thư mục để sắp xếp project." }, en: { name: "New folder", description: "Create a folder to organize projects." } },
+  { id: "folders:navigate", selector: ".folder-manager .manager-folder", icon: FolderCog, vi: { name: "Điều hướng thư mục", description: "Mở Workspace, thư mục hoặc thư viện tài liệu." }, en: { name: "Folder navigation", description: "Open Workspace, a folder, or the document library." } },
+  { id: "folders:actions", selector: ".folder-manager .manager-folder-actions", icon: MoreHorizontal, vi: { name: "Thao tác thư mục", description: "Đổi tên hoặc xóa thư mục đã chọn." }, en: { name: "Folder actions", description: "Rename or delete the selected folder." } },
+  { id: "folders:upload", selector: ".folder-manager .manager-toolbar-actions .primary-button", icon: Upload, vi: { name: "Tải tài liệu lên", description: "Lưu PDF, DOCX, PPTX hoặc XLSX vào thư viện cục bộ." }, en: { name: "Upload documents", description: "Store PDF, DOCX, PPTX, or XLSX in the local library." } },
+  { id: "folders:search", selector: ".folder-manager .manager-document-search, .folder-manager input[placeholder*='ìm'], .folder-manager input[placeholder*='earch']", icon: Search, vi: { name: "Tìm tài liệu", description: "Lọc tài liệu trong thư viện theo tên." }, en: { name: "Search documents", description: "Filter library documents by name." } },
+  { id: "folders:documents", selector: ".folder-manager .manager-documents", icon: FileText, vi: { name: "Tài liệu đã tải lên", description: "Mở thư viện tài liệu được lưu trên thiết bị." }, en: { name: "Uploaded documents", description: "Open documents stored on this device." } },
+];
+
+const learning: HelpCatalogueEntry[] = [
+  { id: "learning:overview", selector: '[data-guide-tab="overview"]', icon: BookOpen, vi: { name: "Tổng quan", description: "Xem kế hoạch hôm nay, mục tiêu và lối tắt học tập." }, en: { name: "Overview", description: "See today's plan, goals, and study shortcuts." } },
+  { id: "learning:flashcards", selector: '[data-guide-tab="flashcards"]', icon: BookOpen, vi: { name: "Flashcard", description: "Tạo bộ thẻ và bắt đầu phiên ôn tập." }, en: { name: "Flashcards", description: "Create decks and start a review session." } },
+  { id: "learning:quiz", selector: '[data-guide-tab="quiz"]', icon: FileText, vi: { name: "Quiz", description: "Tạo bài kiểm tra và xem kết quả." }, en: { name: "Quiz", description: "Create a quiz and review results." } },
+  { id: "learning:plan", selector: '[data-guide-tab="plan"]', icon: AlignLeft, vi: { name: "Kế hoạch học", description: "Lập kế hoạch thủ công hoặc dùng gợi ý AI." }, en: { name: "Study plan", description: "Build a plan manually or use AI suggestions." } },
+  { id: "learning:progress", selector: '[data-guide-tab="progress"]', icon: AlignLeft, vi: { name: "Tiến độ", description: "Theo dõi chuỗi học và kết quả ôn tập." }, en: { name: "Progress", description: "Track streaks and review results." } },
+  { id: "learning:lab", selector: '[data-guide-tab="lab"]', icon: Sparkles, vi: { name: "Lab", description: "Tạo, chạy thử, lưu và tải mô phỏng HTML." }, en: { name: "Lab", description: "Create, run, save, and download HTML simulations." } },
+  { id: "learning:tools", selector: '[data-guide-tab="tools"]', icon: FileText, vi: { name: "Công cụ", description: "Mở trình xem tài liệu và công cụ vẽ PDF." }, en: { name: "Tools", description: "Open document viewers and PDF drawing tools." } },
+  { id: "learning:tools-upload", selector: ".document-tools-page .document-tools-upload", icon: Upload, vi: { name: "Tải tài liệu", description: "Thêm PDF, DOCX, PPTX hoặc XLSX vào thư viện cục bộ." }, en: { name: "Upload document", description: "Add a PDF, DOCX, PPTX, or XLSX to the local library." } },
+  { id: "learning:tools-filter", selector: ".document-tools-page .document-tools-tabs", icon: FileText, vi: { name: "Lọc loại tài liệu", description: "Chọn nhóm file muốn hiển thị trong thư viện." }, en: { name: "Filter file type", description: "Choose which file type to show in the library." } },
+  { id: "learning:shared", selector: '[data-guide-tab="shared"]', icon: CircleUserRound, vi: { name: "Được chia sẻ với tôi", description: "Mở học liệu người khác đã chia sẻ với bạn." }, en: { name: "Shared with me", description: "Open learning material shared with you." } },
+  { id: "learning:music", selector: '[data-help-id="learning-music"]', icon: Music2, vi: { name: "Nhạc", description: "Mở thư viện nhạc học tập và điều khiển phát." }, en: { name: "Music", description: "Open study music and playback controls." } },
+];
 
 const ROOTS: Record<PageHelpScope, string[]> = {
   workspace: [".topbar", ".workspace-home"],
@@ -45,132 +116,38 @@ const ROOTS: Record<PageHelpScope, string[]> = {
   folders: [".topbar", ".folder-manager"],
 };
 
-function readableLabel(element: HTMLElement, language: string) {
-  const input = element as HTMLInputElement;
-  const raw = element.getAttribute("aria-label") || element.getAttribute("title") || input.placeholder || element.textContent || "";
-  const label = raw.replace(/\s+/g, " ").trim();
-  return label || (language === "vi" ? "Điều khiển" : "Control");
+function catalogueFor(scope: PageHelpScope) {
+  if (scope === "canvas") return [...common, ...canvasTools];
+  if (scope === "workspace") return [...common, ...workspace];
+  if (scope === "folders") return [...common, ...folders];
+  return [...common, ...learning];
 }
 
-function explain(element: HTMLElement, label: string, language: string) {
-  const vi = language === "vi";
-  const tool = element.dataset.tool;
-  if (tool && TOOL_HELP[tool]) return { description: TOOL_HELP[tool][vi ? "vi" : "en"], shortcut: TOOL_HELP[tool].shortcut };
-  const tab = element.dataset.guideTab;
-  if (tab && TAB_HELP[tab]) return { description: TAB_HELP[tab][vi ? "vi" : "en"] };
-  const classes = element.className?.toString() ?? "";
-  const value = `${label} ${classes}`.toLocaleLowerCase();
-  const rules: Array<[RegExp, string, string]> = [
-    [/search|tìm/, "Tìm nhanh nội dung đang có trên trang.", "Search the content available on this page."],
-    [/workspace-create|project mới|new project/, "Tạo một project canvas mới và mở ngay sau khi lưu.", "Create a new canvas project and open it after saving."],
-    [/import|nhập/, "Nhập project từ file MindCanvas hoặc JSON trên thiết bị.", "Import a MindCanvas or JSON project from this device."],
-    [/favorite|yêu thích|ngôi sao/, "Thêm hoặc bỏ project khỏi danh sách Yêu thích.", "Add or remove the project from Favorites."],
-    [/project-card-menu|thao tác project|project actions/, "Mở các thao tác Đổi tên, Chuyển thư mục, Nhân đôi và Thùng rác.", "Open Rename, Move, Duplicate and Trash actions."],
-    [/project-open/, "Mở project này trong canvas.", "Open this project on the canvas."],
-    [/newfolder|thư mục mới|tạo thư mục/, "Tạo một thư mục mới để sắp xếp project.", "Create a new folder to organize projects."],
-    [/manager-documents|tài liệu đã tải|uploaded documents/, "Mở lại PDF, DOCX, PPTX và Excel đã tải lên từ canvas.", "Reopen PDF, DOCX, PPTX and Excel files uploaded from a canvas."],
-    [/manager-folder/, "Chuyển vùng nội dung sang Workspace hoặc thư mục tương ứng.", "Switch the content area to Workspace or the selected folder."],
-    [/learning-music|nhạc|music/, "Mở thư viện nhạc học tập và các điều khiển phát.", "Open the study music library and playback controls."],
-    [/fullscreen|toàn màn hình|phóng to/, "Mở hoặc thoát chế độ toàn màn hình.", "Enter or exit fullscreen mode."],
-    [/undo|hoàn tác/, "Quay lại thay đổi gần nhất trên canvas.", "Undo the most recent canvas change."],
-    [/redo|làm lại/, "Khôi phục thay đổi vừa hoàn tác.", "Redo the most recently undone change."],
-    [/save|lưu/, "Lưu trạng thái hiện tại.", "Save the current state."],
-    [/share|chia sẻ/, "Mở thiết lập chia sẻ và quyền truy cập.", "Open sharing and access settings."],
-    [/export|xuất|tải file/, "Xuất nội dung theo định dạng được ghi trên nút.", "Export content in the format named by the button."],
-    [/duplicate|nhân đôi/, "Tạo một bản sao độc lập của mục đang chọn.", "Create an independent copy of the selected item."],
-    [/move|chuyển/, "Chuyển mục đang chọn sang một thư mục khác.", "Move the selected item to another folder."],
-    [/delete|xóa|thùng rác/, "Xóa mục hoặc đưa mục vào Thùng rác theo nội dung nút.", "Delete the item or move it to Trash as indicated."],
-    [/ai|sparkle|tạo sơ đồ/, "Mở công cụ AI và xem trước kết quả trước khi áp dụng.", "Open AI tools and preview results before applying them."],
-    [/toolbar-toggle|mở rộng|thu gọn/, "Mở rộng hoặc thu gọn khu vực công cụ.", "Expand or collapse the tool area."],
-    [/zoom|100%|\+|−/, "Điều chỉnh mức phóng to của vùng đang xem.", "Adjust the zoom level of the current view."],
-    [/properties|thuộc tính/, "Mở bảng chỉnh màu, độ dày và thuộc tính của phần tử.", "Open color, stroke and element properties."],
-    [/copy|sao chép/, "Sao chép mục đang chọn.", "Copy the selected item."],
-    [/paste|dán/, "Dán nội dung đã sao chép.", "Paste copied content."],
-  ];
-  const matched = rules.find(([pattern]) => pattern.test(value));
-  return { description: matched ? (vi ? matched[1] : matched[2]) : vi ? `Thực hiện chức năng “${label}” trên trang hiện tại.` : `Use “${label}” on the current page.` };
+function isVisible(element: HTMLElement) {
+  if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+  if (element.closest(".page-help-root, .feature-guide-root, .feature-guide-celebration-root")) return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
 }
 
-function instructionFor(element: HTMLElement, language: string) {
-  const vi = language === "vi";
-  if (element instanceof HTMLSelectElement) return vi ? "Bấm để mở danh sách rồi chọn một giá trị." : "Open the list and choose a value.";
-  if (element instanceof HTMLInputElement) {
-    if (element.type === "range") return vi ? "Kéo thanh trượt để thay đổi giá trị." : "Drag the slider to change the value.";
-    if (element.type === "file") return vi ? "Bấm để chọn file từ thiết bị." : "Click to choose a file from the device.";
-    if (element.type === "checkbox") return vi ? "Bấm để bật hoặc tắt tùy chọn." : "Click to turn the option on or off.";
-    return vi ? "Bấm vào ô rồi nhập nội dung." : "Click the field and enter text.";
-  }
-  return vi ? "Bấm một lần để sử dụng." : "Click once to use it.";
+function inScope(element: HTMLElement, scope: PageHelpScope) {
+  return ROOTS[scope].some(root => element.closest(root));
 }
 
-function helpIdentity(element: HTMLElement, label: string, description: string) {
-  const explicit = element.dataset.helpId?.trim();
-  if (explicit) return `help:${explicit}`;
-  const tool = element.dataset.tool?.trim();
-  if (tool) return `tool:${tool}`;
-  const tab = element.dataset.guideTab?.trim();
-  if (tab) return `tab:${tab}`;
-  // The same action is often rendered once as an icon and once as a text
-  // button. Use its resolved explanation as the stable identity instead of
-  // the HTML tag or the full visible label, so it appears only once in ?.
-  const normalizedDescription = description
-    .toLocaleLowerCase()
-    .replace(/[\u2026:·]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  // Concrete explanations describe the business action, so the icon and its
-  // text counterpart collapse into one row even when their visible labels
-  // differ. Unknown controls retain their label to avoid collapsing every
-  // generic button into one entry.
-  if (!normalizedDescription.startsWith("thực hiện chức năng") && !normalizedDescription.startsWith("use ")) return `semantic:${normalizedDescription}`;
-  return `semantic:${normalizedDescription} ${label.toLocaleLowerCase().replace(/\s+/g, " ").trim()}`;
-}
-
-function scanControls(scope: PageHelpScope, language: string): HelpControl[] {
-  const candidates = ROOTS[scope].flatMap(selector => [...document.querySelectorAll<HTMLElement>(`${selector} button, ${selector} input:not([type=hidden]), ${selector} select, ${selector} a[href]`)]);
+function scanControls(scope: PageHelpScope): HelpControl[] {
   const seen = new Set<string>();
   const controls: HelpControl[] = [];
-  for (const element of candidates) {
-    if (element.closest(".page-help-root, .feature-guide-root, .feature-guide-celebration-root") || element.matches(".page-help-trigger, .page-help-locate")) continue;
-    if (element.hidden || element.getAttribute("aria-hidden") === "true") continue;
-    const style = window.getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden") continue;
-    const label = readableLabel(element, language);
-    const info = explain(element, label, language);
-    const semantic = helpIdentity(element, label, info.description);
-    if (seen.has(semantic)) continue;
-    seen.add(semantic);
-    controls.push({ element, key: `${semantic}:${controls.length}`, label, description: info.description, instruction: instructionFor(element, language), shortcut: info.shortcut });
-    if (controls.length >= 60) break;
+  for (const item of catalogueFor(scope)) {
+    const element = [...document.querySelectorAll<HTMLElement>(item.selector)].find(candidate => isVisible(candidate) && inScope(candidate, scope));
+    if (!element || seen.has(item.id)) continue;
+    seen.add(item.id);
+    controls.push({ ...item, element });
   }
   return controls;
 }
 
-function copyVisualStyle(source: HTMLElement, target: HTMLElement) {
-  const style = window.getComputedStyle(source);
-  const properties = ["color", "background", "backgroundColor", "border", "borderColor", "borderRadius", "boxShadow", "font", "fontSize", "fontWeight", "lineHeight", "padding", "minWidth", "minHeight", "height", "display", "alignItems", "justifyContent", "gap", "opacity"];
-  for (const property of properties) target.style.setProperty(property, style.getPropertyValue(property));
-  target.style.maxWidth = "210px";
-  target.style.pointerEvents = "none";
-  target.style.margin = "0";
-}
-
-function ControlPreview({ element }: { element: HTMLElement }) {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const host = root.current;
-    if (!host) return;
-    const clone = element.cloneNode(true) as HTMLElement;
-    clone.removeAttribute("id");
-    clone.removeAttribute("name");
-    clone.setAttribute("aria-hidden", "true");
-    clone.setAttribute("tabindex", "-1");
-    if (clone instanceof HTMLButtonElement || clone instanceof HTMLInputElement || clone instanceof HTMLSelectElement) clone.disabled = true;
-    copyVisualStyle(element, clone);
-    host.replaceChildren(clone);
-    return () => host.replaceChildren();
-  }, [element]);
-  return <div className="page-help-control-preview" ref={root}/>;
+function IconPreview({ icon: Icon }: { icon: LucideIcon }) {
+  return <span className="page-help-icon-preview" aria-hidden="true"><Icon size={18}/></span>;
 }
 
 export default function PageHelpPanel({ scope, onClose }: { scope: PageHelpScope; onClose: () => void }) {
@@ -178,9 +155,9 @@ export default function PageHelpPanel({ scope, onClose }: { scope: PageHelpScope
   const [query, setQuery] = useState("");
   const [controls, setControls] = useState<HelpControl[]>([]);
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setControls(scanControls(scope, language)));
+    const frame = window.requestAnimationFrame(() => setControls(scanControls(scope)));
     return () => window.cancelAnimationFrame(frame);
-  }, [language, scope]);
+  }, [scope, language]);
   useEffect(() => {
     const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", close);
@@ -188,9 +165,10 @@ export default function PageHelpPanel({ scope, onClose }: { scope: PageHelpScope
   }, [onClose]);
   const filtered = useMemo(() => {
     const value = query.trim().toLocaleLowerCase();
-    return value ? controls.filter(item => `${item.label} ${item.description}`.toLocaleLowerCase().includes(value)) : controls;
+    return value ? controls.filter(item => `${item.vi.name} ${item.en.name} ${item.vi.description} ${item.en.description}`.toLocaleLowerCase().includes(value)) : controls;
   }, [controls, query]);
-  const title = language === "vi" ? "Trợ giúp trang này" : "Help for this page";
+  const vi = language === "vi";
+  const title = vi ? "Trợ giúp trang này" : "Help for this page";
   const locate = (control: HelpControl) => {
     onClose();
     window.setTimeout(() => {
@@ -200,15 +178,15 @@ export default function PageHelpPanel({ scope, onClose }: { scope: PageHelpScope
     }, 80);
   };
   return createPortal(<div className="page-help-root" role="dialog" aria-modal="true" aria-label={title}>
-    <button className="page-help-backdrop" aria-label={language === "vi" ? "Đóng trợ giúp" : "Close help"} onClick={onClose}/>
+    <button className="page-help-backdrop" aria-label={vi ? "Đóng trợ giúp" : "Close help"} onClick={onClose}/>
     <aside className="page-help-panel">
-      <header><div><span>{language === "vi" ? "MINDCANVAS · HƯỚNG DẪN" : "MINDCANVAS · GUIDE"}</span><h2>{title}</h2><p>{language === "vi" ? "Chỉ hiển thị những điều khiển thuộc trang hoặc tab đang mở. Hình minh họa dùng đúng kiểu và màu hiện tại." : "Only controls from the current page or tab are shown. Previews use the current shape and colors."}</p></div><button type="button" className="icon-button" aria-label={language === "vi" ? "Đóng" : "Close"} onClick={onClose}><X size={19}/></button></header>
-      <label className="page-help-search"><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={language === "vi" ? "Tìm công cụ hoặc nút…" : "Find a tool or button…"}/></label>
-      <div className="page-help-list">{filtered.map(control => <article className="page-help-row" key={control.key}>
-        <ControlPreview element={control.element}/>
-        <div className="page-help-copy"><div><strong>{control.label}</strong>{control.shortcut && <kbd>{control.shortcut}</kbd>}</div><p>{control.description}</p><small>{control.instruction}</small></div>
-        <button type="button" className="secondary-button page-help-locate" onClick={() => locate(control)}><Crosshair size={15}/>{language === "vi" ? "Chỉ vị trí" : "Show me"}</button>
-      </article>)}{!filtered.length && <div className="page-help-empty">{language === "vi" ? "Không tìm thấy điều khiển phù hợp trên trang này." : "No matching control is visible on this page."}</div>}</div>
+      <header><div><span>{vi ? "MINDCANVAS · HƯỚNG DẪN" : "MINDCANVAS · GUIDE"}</span><h2>{title}</h2><p>{vi ? "Chỉ hiển thị công cụ của trang đang mở. Nội dung tài liệu, tên project và tên file không được đưa vào đây." : "Only tools from the open page are shown. Document contents, project names, and file names are never included."}</p></div><button type="button" className="icon-button" aria-label={vi ? "Đóng" : "Close"} onClick={onClose}><X size={19}/></button></header>
+      <label className="page-help-search"><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={vi ? "Tìm công cụ…" : "Find a tool…"}/></label>
+      <div className="page-help-list">{filtered.map(control => { const Icon = control.icon; const copy = vi ? control.vi : control.en; return <article className="page-help-row" key={control.id}>
+        <IconPreview icon={Icon}/>
+        <div className="page-help-copy"><div><strong>{copy.name}</strong>{control.shortcut && <kbd>{control.shortcut}</kbd>}</div><p>{copy.description}</p></div>
+        <button type="button" className="secondary-button page-help-locate" onClick={() => locate(control)}><Crosshair size={15}/>{vi ? "Chỉ vị trí" : "Show me"}</button>
+      </article>; })}{!filtered.length && <div className="page-help-empty">{vi ? "Không có công cụ nào đang hiển thị trên trang này." : "No tools from this page are visible."}</div>}</div>
     </aside>
   </div>, document.body);
 }

@@ -1,7 +1,7 @@
 import type { ToolMode } from "@mindcanvas/shared";
 
 export const CANVAS_TOOL_IDS = [
-  "select", "hand", "text", "pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle", "connector",
+  "select", "hand", "text", "pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle", "connector", "frame",
 ] as const satisfies readonly ToolMode[];
 
 export const TOOLBAR_VISIBILITY_KEY = "mindcanvas:toolbar-tools:v2";
@@ -26,7 +26,7 @@ export function readToolbarToolVisibility(): ToolMode[] {
     // Older saved toolbars predate the visible Eraser. Migrate them once so
     // existing users see the tool without changing the canonical ordering.
     const legacy = normalizeVisibleToolIds(JSON.parse(legacyRaw));
-    const migrated = legacy.includes("eraser") ? legacy : normalizeVisibleToolIds([...legacy, "eraser"]);
+    const migrated = normalizeVisibleToolIds([...legacy, "eraser", "frame"]);
     localStorage.setItem(TOOLBAR_VISIBILITY_KEY, JSON.stringify(migrated));
     return migrated;
   } catch {

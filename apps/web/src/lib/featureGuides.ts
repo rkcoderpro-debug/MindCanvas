@@ -135,6 +135,11 @@ export function practiceActionsForGuide(
         labelVi: "Tạo hình chữ nhật",
         labelEn: "Create a rectangle",
       },
+      {
+        id: "canvas:frame-created",
+        labelVi: "Tạo một Frame",
+        labelEn: "Create a frame",
+      },
     ],
     "learning-hub": [
       {
@@ -207,14 +212,6 @@ export function practiceActionsForGuide(
     "document-tools": [
       { id: "pdf:draw", labelVi: "Vẽ một nét trên PDF", labelEn: "Draw on the PDF" },
       { id: "pdf:export", labelVi: "Xuất PDF mới", labelEn: "Export a new PDF" },
-      { id: "docx:open", labelVi: "Mở tài liệu DOCX", labelEn: "Open the DOCX" },
-      { id: "docx:focus", labelVi: "Bấm vào vùng soạn thảo", labelEn: "Focus the editor" },
-      { id: "docx:text", labelVi: "Nhập hoặc sửa văn bản", labelEn: "Enter or edit text" },
-      { id: "docx:selection", labelVi: "Chọn một đoạn văn", labelEn: "Select a passage" },
-      { id: "docx:format", labelVi: "Áp dụng định dạng", labelEn: "Apply formatting" },
-      { id: "docx:table", labelVi: "Chèn bảng", labelEn: "Insert a table" },
-      { id: "docx:save", labelVi: "Lưu bản chỉnh sửa", labelEn: "Save the edited copy" },
-      { id: "docx:export", labelVi: "Xuất một DOCX", labelEn: "Export a DOCX" },
     ],
     "pdf-annotation": [
       {
@@ -425,14 +422,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     category: "canvas",
     titleVi: "Điều khiển canvas",
     titleEn: "Canvas controls",
-    summaryVi: "Tạo canvas thực hành rồi dùng Pen, Hand, Eraser và Rectangle.",
+    summaryVi: "Tạo canvas thực hành rồi dùng Pen, Hand, Eraser, Rectangle và Frame.",
     summaryEn:
-      "Create a practice canvas, then use Pen, Hand, Eraser and Rectangle.",
+      "Create a practice canvas, then use Pen, Hand, Eraser, Rectangle and Frame.",
     gifSrc: "/guides/canvas-controls.gif",
     demo: "canvas",
     outcomeVi:
-      "Vẽ, di chuyển góc nhìn, tẩy nét và tạo hình chữ nhật trên canvas.",
-    outcomeEn: "Draw, pan, erase and create a rectangle on the canvas.",
+      "Vẽ, di chuyển góc nhìn, tẩy nét, tạo hình chữ nhật và khung bố cục trên canvas.",
+    outcomeEn: "Draw, pan, erase, create a rectangle and add a layout frame on the canvas.",
     steps: [
       {
         target: ".workspace-nav-row > button:first-child",
@@ -587,6 +584,30 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Nhấn và kéo trên canvas để tạo một hình chữ nhật có kích thước tùy ý.",
         bodyEn:
           "Press and drag on the canvas to create a rectangle of any size.",
+      },
+      {
+        target: '[data-tool="frame"]',
+        titleVi: "Chọn Frame",
+        titleEn: "Choose Frame",
+        bodyVi: "Bấm Frame rồi chọn preset A4, A5 hoặc B5. Bấm vào canvas để đặt khung bố cục.",
+        bodyEn: "Click Frame, choose an A4, A5, or B5 preset, then click the canvas to place a layout frame.",
+      },
+      {
+        target: ".canvas-svg",
+        completion: {
+          type: "action",
+          actions: [
+            {
+              id: "canvas:frame-created",
+              labelVi: "Tạo một Frame",
+              labelEn: "Create a frame",
+            },
+          ],
+        },
+        titleVi: "Đặt Frame lên canvas",
+        titleEn: "Place the Frame",
+        bodyVi: "Bấm một vị trí trống trên canvas để đặt Frame. Bạn có thể chọn, kéo hoặc xóa khung sau đó.",
+        bodyEn: "Click an empty spot on the canvas to place the Frame. You can select, move, or delete it afterwards.",
       },
       {
         kind: "practice",
@@ -767,16 +788,16 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         target: '.learning-hub-nav button[data-guide-tab="tools"]',
         titleVi: "Mở Công cụ",
         titleEn: "Open Tools",
-        bodyVi: "Bấm Công cụ để mở các editor tài liệu dùng chung thư viện đã tải lên.",
-        bodyEn: "Click Tools to open the document editors backed by the shared uploaded library.",
+        bodyVi: "Bấm Công cụ để mở trình xem tài liệu dùng chung thư viện đã tải lên.",
+        bodyEn: "Click Tools to open the document viewer backed by the shared uploaded library.",
       },
       {
         target: ".document-tools-page",
         completion: { type: "manual" },
         titleVi: "Bộ công cụ tài liệu",
         titleEn: "Document tools",
-        bodyVi: "Vẽ trên PDF hoặc chọn DOCX để chỉnh sửa cơ bản và lưu thành bản sao.",
-        bodyEn: "Annotate a PDF or choose a DOCX for basic editing and save it as a copy.",
+        bodyVi: "Xem tài liệu trong thư viện; PDF có thể chú thích và xuất thành bản sao.",
+        bodyEn: "View documents from the library; PDFs can be annotated and exported as copies.",
       },
     ],
   },
@@ -1079,27 +1100,21 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     category: "tools",
     titleVi: "Công cụ tài liệu",
     titleEn: "Document tools",
-    summaryVi: "Mở công cụ PDF hoặc DOCX và thực hành một thao tác thật.",
-    summaryEn: "Open the PDF or DOCX tool and complete a real action.",
-    // Reuse the shipped PDF annotation animation until a separate combined
-    // PDF/DOCX recording is authored; this keeps the guide card free of a
-    // broken image while the CSS demo communicates the two-tool flow.
+    summaryVi: "Mở trình xem tài liệu và thực hành chú thích PDF.",
+    summaryEn: "Open the document viewer and complete a real PDF annotation.",
+    // Reuse the shipped PDF annotation animation; the Tools page is a viewer
+    // hub and no longer exposes the removed DOCX editor route.
     gifSrc: "/guides/pdf-annotation.gif",
     demo: "pdf",
     steps: [
-      { target: ".learning-tools-tab", completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Trung tâm học tập, bấm Công cụ để mở các editor tài liệu.", bodyEn: "In Learning Hub, click Tools to open the document editors." },
-      { target: ".document-tools-tabs button:first-child", completion: { type: "click" }, titleVi: "Chọn Vẽ trên PDF", titleEn: "Choose PDF drawing", bodyVi: "Chọn Vẽ trên PDF để viết, highlight, tẩy và xuất bản mới.", bodyEn: "Choose PDF drawing to write, highlight, erase and export a new copy." },
-      { target: ".document-tool-list button", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu chưa có, hãy tải file lên.", bodyEn: "Choose a PDF from the list. Upload one first if the list is empty." },
-      { target: ".document-annotation-tools", titleVi: "Chọn công cụ annotation", titleEn: "Choose an annotation tool", bodyVi: "Bật Vẽ trên PDF rồi thử bút, highlight hoặc eraser. Nét hiển thị ngay khi kéo.", bodyEn: "Enable Draw on PDF and try pen, highlight or eraser. Strokes render while you drag." },
-      { target: ".document-tools-tabs button:nth-child(2)", completion: { type: "click" }, titleVi: "Mở Soạn thảo DOCX", titleEn: "Open DOCX editor", bodyVi: "Chuyển sang tab DOCX để mở và sửa tài liệu Word ở mức cơ bản.", bodyEn: "Switch to the DOCX tab to open and edit a document with basic Word features." },
-      { target: ".docx-editable", completion: { type: "action", actions: [{ id: "docx:focus", labelVi: "Bấm vào vùng soạn thảo", labelEn: "Focus the editor" }] }, titleVi: "Bắt đầu trong vùng giấy", titleEn: "Start in the page", bodyVi: "Bấm vào vùng giấy để đặt con trỏ. Guide sẽ nhận đúng phiên DOCX đang mở rồi mới sang bước nhập.", bodyEn: "Click the page to place the caret. The guide verifies the active DOCX session before moving to typing." },
-      { target: ".docx-editable", completion: { type: "action", actions: [{ id: "docx:text", labelVi: "Nhập hoặc sửa văn bản", labelEn: "Enter or edit text" }] }, titleVi: "Nhập nội dung", titleEn: "Enter content", bodyVi: "Gõ thêm một câu hoặc sửa chữ trong tài liệu. Nội dung được giữ trong mô hình DOCX có cấu trúc.", bodyEn: "Type a sentence or edit text. The content is kept in the structured DOCX model." },
-      { target: ".docx-editable", completion: { type: "action", actions: [{ id: "docx:selection", labelVi: "Chọn một đoạn văn", labelEn: "Select a passage" }] }, titleVi: "Chọn vùng chữ", titleEn: "Select text", bodyVi: "Kéo chọn một đoạn chữ trong vùng giấy để các công cụ định dạng áp dụng đúng selection.", bodyEn: "Drag across text in the page so formatting applies to the selection." },
-      { target: '.docx-mark-group button[title="bold"]', completion: { type: "action", actions: [{ id: "docx:format", labelVi: "Áp dụng định dạng", labelEn: "Apply formatting" }] }, titleVi: "Định dạng vùng đã chọn", titleEn: "Format the selection", bodyVi: "Bấm nút B đậm đang sáng để áp dụng bold cho vùng chữ đã chọn.", bodyEn: "Click the highlighted B button to apply bold to the selected text." },
-      { target: ".docx-ribbon-tabs button:nth-child(2)", completion: { type: "click" }, titleVi: "Mở nhóm Chèn", titleEn: "Open Insert", bodyVi: "Mở tab Chèn để thêm bảng hoặc ảnh vào tài liệu.", bodyEn: "Open Insert to add a table or image." },
-      { target: '[data-docx-action="insert-table"]', completion: { type: "action", actions: [{ id: "docx:table", labelVi: "Chèn bảng", labelEn: "Insert a table" }] }, titleVi: "Chèn bảng", titleEn: "Insert a table", bodyVi: "Chọn số hàng/cột rồi bấm Bảng. Một bảng thật sẽ được thêm vào mô hình DOCX.", bodyEn: "Choose rows and columns, then click Table. A real table is added to the DOCX model." },
-      { target: '[data-docx-action="save"]', completion: { type: "action", actions: [{ id: "docx:save", labelVi: "Lưu bản chỉnh sửa", labelEn: "Save the edited copy" }] }, titleVi: "Lưu bản chỉnh sửa", titleEn: "Save the edited copy", bodyVi: "Bấm Lưu để tạo/cập nhật bản chỉnh sửa riêng; file gốc không bị ghi đè.", bodyEn: "Click Save to create or update a separate edited copy; the original is not overwritten." },
-      { target: '[data-docx-action="export"]', kind: "practice", completion: { type: "action", actions: [{ id: "docx:export", labelVi: "Xuất một DOCX", labelEn: "Export a DOCX" }] }, titleVi: "Xuất DOCX", titleEn: "Export DOCX", bodyVi: "Bấm Xuất DOCX để tải gói OOXML hợp lệ. Khi hoàn tất, bạn có thể giữ hoặc xóa tài liệu thực hành.", bodyEn: "Click Export DOCX to download a valid OOXML package. When done, you can keep or delete the practice document." },
+      { target: ".learning-tools-tab", completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Trung tâm học tập, bấm Công cụ để mở trình xem tài liệu.", bodyEn: "In Learning Hub, click Tools to open the document viewer." },
+      { target: ".document-tools-tabs [data-tool-tab=\"pdf\"]", completion: { type: "click" }, titleVi: "Lọc tài liệu PDF", titleEn: "Filter PDF documents", bodyVi: "Chọn bộ lọc PDF để chỉ hiển thị những tài liệu có thể chú thích.", bodyEn: "Choose the PDF filter to show documents that can be annotated." },
+      { target: ".document-tool-list button[data-document-kind=\"pdf\"]", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu thư viện trống, hãy tải một file PDF lên trước.", bodyEn: "Choose a PDF from the list. If the library is empty, upload a PDF first." },
+      { target: ".document-tools-page .document-tool-workspace", completion: { type: "action", actions: [{ id: "tools:viewer-ready", labelVi: "Mở viewer tài liệu", labelEn: "Open the document viewer" }] }, titleVi: "Mở viewer tài liệu", titleEn: "Open the document viewer", bodyVi: "Viewer đã sẵn sàng. DOCX, PPTX và XLSX chỉ được xem; PDF có thể chú thích.", bodyEn: "The viewer is ready. DOCX, PPTX and XLSX are view-only; PDFs support annotation." },
+      { target: ".document-draw-toggle", completion: { type: "click" }, titleVi: "Bật vẽ trên PDF", titleEn: "Enable PDF drawing", bodyVi: "Bật công tắc Vẽ trên PDF để hiện các công cụ bút, highlight và tẩy.", bodyEn: "Enable Draw on PDF to reveal the pen, highlighter and eraser tools." },
+      { target: ".document-annotation-tools", completion: { type: "click" }, titleVi: "Chọn công cụ annotation", titleEn: "Choose an annotation tool", bodyVi: "Chọn bút hoặc highlight trong thanh công cụ annotation.", bodyEn: "Choose pen or highlighter from the annotation toolbar." },
+      { target: ".document-pdf-body", completion: { type: "action", actions: [{ id: "pdf:draw", labelVi: "Vẽ một nét trên PDF", labelEn: "Draw on the PDF" }] }, titleVi: "Chú thích PDF", titleEn: "Annotate the PDF", bodyVi: "Kéo trong trang PDF để tạo một nét. Bản gốc trong thư viện vẫn được giữ nguyên.", bodyEn: "Drag on the PDF page to create a stroke. The library original remains unchanged." },
+      { target: ".document-export-pdf", completion: { type: "action", actions: [{ id: "pdf:export", labelVi: "Xuất PDF mới", labelEn: "Export a new PDF" }] }, kind: "practice", titleVi: "Xuất bản sao PDF", titleEn: "Export a PDF copy", bodyVi: "Xuất bản sao sau khi chú thích xong. Khi tải xong, bấm nút hoàn thành.", bodyEn: "Export a copy after annotating. When the download finishes, complete the guide." },
     ],
   },
   {

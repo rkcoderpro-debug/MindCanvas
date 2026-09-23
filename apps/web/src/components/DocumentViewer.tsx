@@ -512,7 +512,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
                   <button type="button" title={t("clearDrawing")} disabled={!strokesRef.current[page]?.length} onClick={clearPage}><Eraser size={15} /></button>
                 </>
               )}
-              <button className="primary-button" title={t("exportAnnotatedPdf")} onClick={() => void exportPdf()}>
+              <button className="primary-button document-export-pdf" title={t("exportAnnotatedPdf")} onClick={() => void exportPdf()}>
                 <Download size={15} />
                 {t("exportPdf")}
               </button>

@@ -646,6 +646,10 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .drawing-size-control label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawing-size-control label input { grid-column: 1 / -1; width: 100%; }
 .drawing-size-control output { min-width: 35px; color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
+.frame-template-control { position: absolute; z-index: 12; top: 60px; left: 8px; display: flex; align-items: center; gap: 6px; min-height: 42px; padding: 7px 9px; color: var(--accent); background: var(--control-bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px var(--shadow); backdrop-filter: blur(14px); }
+.frame-template-control .frame-template-label { color: var(--muted); font-size: 11px; font-weight: 700; }
+.frame-template-control button { min-width: 35px; min-height: 28px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: 11px; font-weight: 700; }
+.frame-template-control button:hover, .frame-template-control button.selected { border-color: var(--accent); color: var(--accent-contrast); background: var(--accent); }
 .drawing-size-sample { display: block; flex: 0 0 auto; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
 .eraser-cursor { opacity: .5; vector-effect: non-scaling-stroke; }
 .canvas-hint { pointer-events: none; position: absolute; bottom: 14px; left: 16px; right: 150px; color: var(--muted); background: var(--control-bg); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); font-size: 12px; line-height: 1.5; width: fit-content; padding: 6px 8px; border-radius: 7px; }
@@ -4120,6 +4124,7 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .page-help-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 88px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--surface) 91%, transparent); }
 .page-help-row:hover { border-color: var(--accent-border); background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface)); }
 .page-help-control-preview { display: flex; align-items: center; min-width: 0; min-height: 46px; overflow: hidden; }
+.page-help-icon-preview { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--accent-border); border-radius: 10px; color: var(--accent); background: var(--accent-soft); }
 .page-help-control-preview > * { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-help-copy { display: grid; gap: 4px; min-width: 0; }
 .page-help-copy > div { display: flex; align-items: center; gap: 7px; }

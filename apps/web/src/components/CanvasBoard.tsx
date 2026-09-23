@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, Film, Frame as FrameIcon, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
-import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
+import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, CANVAS_FRAME_TEMPLATES, clamp, connect, connectorGeometry, createFrameShape, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type CanvasFrameTemplate, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
@@ -209,7 +209,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "text", icon: Type, key: "T" }, { id: "pen", icon: PenLine, key: "P" },
   { id: "highlighter", icon: Highlighter, key: "H" }, { id: "eraser", icon: Eraser, key: "E" }, { id: "line", icon: Minus, key: "L" },
   { id: "rect", icon: Square, key: "R" }, { id: "ellipse", icon: Circle, key: "O" },
-  { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
+  { id: "triangle", icon: Triangle, key: "G" }, { id: "frame", icon: FrameIcon, key: "F" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
 const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
 export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, documents = [], onDocumentSaved }: Props) {
@@ -255,6 +255,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false), [connectorSource, setConnectorSource] = useState<Selection | null>(null), [connectorPulse, setConnectorPulse] = useState<string[]>([]);
+  const [frameTemplate, setFrameTemplate] = useState<CanvasFrameTemplate>("a4");
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
   const [toolbarExpanded, setToolbarExpanded] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
   const [toolbarOverflowing, setToolbarOverflowing] = useState(false);
@@ -794,6 +795,14 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       autoPanPointer.current = { x: input.clientX, y: input.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
     } else if (effectiveTool === "connector") {
       setConnectorSource(null); setSelected(null); return;
+    } else if (effectiveTool === "frame") {
+      const frameShape = createFrameShape(frameTemplate, p.x, p.y);
+      const next = { ...base, shapes: [...base.shapes, frameShape] };
+      setSelected({ kind: "shapes", id: frameShape.id });
+      onChange(next);
+      emitGuideAction("canvas:frame-created");
+      setTool("select");
+      return;
     } else if (effectiveTool === "text") {
       const id = crypto.randomUUID();
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
@@ -1354,6 +1363,10 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       {!readOnly && drawingTool && drawingSizeRange && <div className={`drawing-size-control drawing-size-${drawingTool}`} role="group" aria-label={t(drawingSizeLabelKey[drawingTool])}>
         <ActiveToolIcon size={14}/><span className="drawing-size-label">{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} style={{ "--range-progress": drawingSizeProgress } as CSSProperties} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(18, Math.max(6, drawingSize / 3))}px`, height: `${Math.min(18, Math.max(6, drawingSize / 3))}px` }}/>
       </div>}
+      {!readOnly && activeToolMode === "frame" && <div className="frame-template-control" role="group" aria-label="Mẫu Frame">
+        <FrameIcon size={14}/><span className="frame-template-label">Frame</span>
+        {(Object.entries(CANVAS_FRAME_TEMPLATES) as Array<[CanvasFrameTemplate, typeof CANVAS_FRAME_TEMPLATES[CanvasFrameTemplate]]>).map(([id, preset]) => <button key={id} type="button" data-help-id={`canvas-frame-template-${id}`} className={frameTemplate === id ? "selected" : ""} aria-pressed={frameTemplate === id} onClick={() => setFrameTemplate(id)}>{preset.label}</button>)}
+      </div>}
       <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={`${iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"},${DOCUMENT_ACCEPT}`} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addCanvasFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" data-selection-tool={activeToolMode === "select" ? "pointer" : undefined} className={`canvas-svg tool-${activeToolMode} ${activeToolMode === "select" ? "selection-pointer" : ""}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e); }} onPointerCancelCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e, true); }}
@@ -1372,7 +1385,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
             const allowCanvasPointer = (event: ReactPointerEvent) => {
               const target = event.target instanceof Element ? event.target : null;
               const onPdfPage = !!target?.closest(".pdf-page-stack, .pdf-page-shell, .document-pdf-body");
-              const drawingMode = ["pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle"].includes(activeToolMode);
+              const drawingMode = ["pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle", "frame"].includes(activeToolMode);
               if (activeToolMode === "hand" || event.ctrlKey || event.metaKey || (drawingMode && onPdfPage) || ((activeToolMode === "select" || activeToolMode === "connector") && onPdfPage)) return;
               event.stopPropagation();
             };
@@ -1420,7 +1433,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
             </g>;
           })}
           {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} className={`canvas-connectable ${connectorSource?.id === s.id ? "connector-source" : ""} ${connectorPulseIds.has(s.id) ? "connector-pulse" : ""}`} opacity={s.opacity ?? 1} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
-            {s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="var(--element-stroke)"/> : s.kind === "ellipse" ? <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="var(--element-stroke)"/> : <polygon points={`${s.x + s.width / 2},${s.y} ${s.x + s.width},${s.y + s.height} ${s.x},${s.y + s.height}`} fill={s.color} stroke="var(--element-stroke)" strokeLinejoin="round"/>}</g>)}
+            {s.kind === "frame" ? <g className="canvas-frame-shape"><rect x={s.x} y={s.y} width={s.width} height={s.height} rx="8" fill="var(--surface)" fillOpacity=".24" stroke="var(--accent)" strokeWidth="3" strokeDasharray="10 6"/><text x={s.x + 16} y={s.y + 26} fill="var(--muted)" fontSize="14" fontWeight="600">{s.frameName ?? "Frame"}</text></g> : s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="var(--element-stroke)"/> : s.kind === "ellipse" ? <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="var(--element-stroke)"/> : <polygon points={`${s.x + s.width / 2},${s.y} ${s.x + s.width},${s.y + s.height} ${s.x},${s.y + s.height}`} fill={s.color} stroke="var(--element-stroke)" strokeLinejoin="round"/>}</g>)}
           {b.drawings.filter(p => !hiddenElements.has(p.id)).map(p => { const r = elementBounds(b, { kind: "drawings", id: p.id })!; return <g key={p.id} data-element={p.id} transform={`rotate(${p.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "drawings", id: p.id })}>
             <path d={pathData(p.points)} fill="none" stroke={p.color} strokeWidth={p.width} opacity={p.opacity} strokeLinecap="round" strokeLinejoin="round"/>
             <path d={pathData(p.points)} fill="none" stroke="transparent" strokeWidth={Math.max(12 / b.viewport.scale, p.width)} pointerEvents={interactive ? "stroke" : "none"}/></g>; })}
@@ -1484,7 +1497,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       </div>}
       {mobileMoreOpen && !readOnly && <div className="canvas-tools-sheet-backdrop" onClick={() => setMobileMoreOpen(false)}><aside className="canvas-tools-sheet" aria-label={t("moreTools")} onClick={event => event.stopPropagation()}>
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
-        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
+        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "frame", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>
           <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
           <button onClick={() => { setDocumentPanelOpen(true); setMobileMoreOpen(false); }}><FileSpreadsheet size={19}/><span>Tài liệu</span></button>
@@ -1504,7 +1517,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
       {((inputMode === "drawing" || inputMode === "erasing") && ["pen", "highlighter", "eraser"].includes(activeToolMode)) && <div className="pen-mode-badge" role="status">{activeToolMode === "eraser" ? <Eraser size={14}/> : <PenLine size={14}/>}<span>{t(activeToolMode)}</span></div>}
       {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
-      <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div>
+      <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle", "frame"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div>
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <div className="canvas-mobile-dock">
         <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>

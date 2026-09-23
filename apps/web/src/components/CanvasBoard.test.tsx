@@ -532,6 +532,19 @@ describe("Canvas interactions", () => {
     expect(host.querySelector('[data-element] polygon')).not.toBeNull();
   });
 
+  it("creates a preset frame and exposes A4/A5/B5 choices", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    const frameButton = host.querySelector('[aria-label="Frame"]') as HTMLButtonElement;
+    expect(frameButton).not.toBeNull();
+    await act(async () => frameButton.click());
+    expect(host.querySelector('[data-help-id="canvas-frame-template-a4"]')).not.toBeNull();
+    await act(async () => (host.querySelector('[data-help-id="canvas-frame-template-b5"]') as HTMLButtonElement).click());
+    await act(async () => pointer(svg, "pointerdown", 30, 40));
+    expect(current.shapes[0]).toMatchObject({ kind: "frame", frameTemplate: "b5", frameName: "B5 dọc", x: 30, y: 40, width: 665, height: 945 });
+    expect(host.querySelector('.canvas-frame-shape')).not.toBeNull();
+  });
+
   it("lets XPen use shape tools even when a barrel button is reported", async () => {
     await act(async () => root.render(<Harness initial={blankBoard()}/>));
     const svg = host.querySelector("svg.canvas-svg")!;

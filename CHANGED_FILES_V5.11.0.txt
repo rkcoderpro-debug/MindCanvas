@@ -1,0 +1,12 @@
+MindCanvas v5.11.0 — changed-file handoff manifest
+
+The release ZIP is generated from the current worktree changes while preserving the mindcanvas-v1/ prefix. Historical release notes and old handoff manifests are excluded from the ZIP; current v5.11.0 notes, tests, source, package manifests and lockfile are included.
+
+Included categories:
+- contextual help catalog and App integration
+- viewer-only document tools and viewer guide updates
+- Canvas Frame model, parser, renderer, thumbnail/export, toolbar and tests
+- i18n, styles, package/version metadata and service-worker cache version
+- v5.11.0 changelog/release report
+
+Excluded: node_modules, dist, caches, tsbuildinfo, .env/secrets, and historical release ZIPs.

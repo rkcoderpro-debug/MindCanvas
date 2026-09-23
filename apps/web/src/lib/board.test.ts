@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGraph, applyMindMapAiOperations, applySelectionAi, arrangeMindMapMultiSided, blankBoard, connect, connectorGeometry, connectorPath, duplicateElement, elementBounds, exportCanvasSvg, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement, selectionToStudyText } from "./board";
+import { applyGraph, applyMindMapAiOperations, applySelectionAi, arrangeMindMapMultiSided, blankBoard, connect, connectorGeometry, connectorPath, createFrameShape, duplicateElement, elementBounds, exportCanvasSvg, frameSizeForTemplate, hiddenNodes, moveElement, parseBoard, removeElement, resizeElement, selectionToStudyText } from "./board";
 import { en, vi } from "./i18n";
 const board = () => ({ ...blankBoard(), nodes: [{ id: "a", label: "A", x: 0, y: 0, width: 150, height: 60 }, { id: "b", label: "B", x: 250, y: 0, width: 150, height: 60 }] });
 describe("Editable canvas model", () => {
@@ -35,6 +35,15 @@ describe("Editable canvas model", () => {
     const parsed = parseBoard({ ...blankBoard(), shapes: [triangle] });
     expect(parsed.shapes[0]).toEqual(triangle);
     expect(exportCanvasSvg(parsed)).toContain('<polygon points="70,20 130,120 10,120"');
+  });
+  it("persists preset frames with their paper metadata and exports a labeled guide", () => {
+    const frame = createFrameShape("b5", 80, 90, "landscape");
+    expect(frameSizeForTemplate("b5", "landscape")).toEqual({ width: 945, height: 665 });
+    const parsed = parseBoard({ ...blankBoard(), shapes: [frame] });
+    expect(parsed.shapes[0]).toMatchObject({ kind: "frame", frameTemplate: "b5", frameName: "B5 ngang", width: 945, height: 665 });
+    expect(exportCanvasSvg(parsed)).toContain("stroke-dasharray=\"10 6\"");
+    expect(exportCanvasSvg(parsed)).toContain("B5 ngang");
+    expect(() => parseBoard({ ...blankBoard(), shapes: [{ ...frame, frameTemplate: "legal" }] })).toThrow("Invalid frame");
   });
   it("persists, moves, resizes and exports embedded media", () => {
     const media = { id: "image", kind: "image" as const, src: "data:image/png;base64,iVBORw0KGgo=", name: "diagram.png", mimeType: "image/png", x: 20, y: 30, width: 240, height: 160, crop: { top: 5, right: 10, bottom: 15, left: 20 } };

@@ -20,7 +20,7 @@ describe("toolbar visibility preferences", () => {
 
   it("migrates an old toolbar preference so the Eraser becomes visible", () => {
     localStorage.setItem(LEGACY_TOOLBAR_VISIBILITY_KEY, JSON.stringify(["select", "pen", "highlighter", "rect"]));
-    expect(readToolbarToolVisibility()).toEqual(["select", "pen", "highlighter", "eraser", "rect"]);
+    expect(readToolbarToolVisibility()).toEqual(["select", "pen", "highlighter", "eraser", "rect", "frame"]);
     expect(localStorage.getItem(TOOLBAR_VISIBILITY_KEY)).toContain("eraser");
   });
 });
