@@ -440,6 +440,23 @@ function requirePersistentLocalList(saved: boolean) {
   if (!saved) throw new Error("Dung lượng lưu trữ của trình duyệt đã đầy. Dữ liệu chưa được lưu bền vững; hãy giải phóng dung lượng rồi thử lại.");
 }
 
+// Keep server rejection diagnostics when a second, local write also fails.
+// Do not include server details: they can contain the full rejected card row.
+function finishFlashcardFallback(saved: boolean, cloudError: unknown): FlashcardStorage {
+  const error = cloudError && typeof cloudError === "object"
+    ? cloudError as { code?: unknown; message?: unknown } : null;
+  const code = typeof error?.code === "string" ? error.code : "";
+  if (cloudError && (!saved || code)) {
+    const reason = typeof error?.message === "string" ? error.message.slice(0, 500) : "Không kết nối được dịch vụ cloud.";
+    const recovery = saved
+      ? "Đã lưu bản dự phòng trên trình duyệt; thay đổi chưa đồng bộ lên cloud."
+      : "Không ghi được bản dự phòng trên trình duyệt. Dữ liệu chưa được lưu bền vững; giữ trang này mở và sao lưu nội dung trước khi tải lại.";
+    throw new Error(`Không lưu được flashcard lên cloud${code ? ` [${code}]` : ""}: ${reason}. ${recovery}`);
+  }
+  requirePersistentLocalList(saved);
+  return "local";
+}
+
 function deckFromRow(row: any, source: FlashcardStorage): FlashcardDeck | null {
   if (!row || typeof row.id !== "string" || typeof row.name !== "string") return null;
   const timestamp = typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString();
@@ -508,6 +525,7 @@ export async function fetchFlashcards(owner: string | null, deckId: string): Pro
 }
 
 export async function upsertFlashcardDeck(owner: string | null, deck: FlashcardDeck): Promise<FlashcardStorage> {
+  let cloudError: unknown;
   if (owner) {
     try {
       const client = await clientFor(owner);
@@ -515,12 +533,12 @@ export async function upsertFlashcardDeck(owner: string | null, deck: FlashcardD
       if (error) throw error;
       cacheDeck(owner, { ...deck, source: "cloud" });
       return "cloud";
-    } catch {
+    } catch (error) {
+      cloudError = error;
       // A missing migration or unavailable network keeps the edit usable locally.
     }
   }
-  requirePersistentLocalList(cacheDeck(owner, { ...deck, source: "local" }));
-  return "local";
+  return finishFlashcardFallback(cacheDeck(owner, { ...deck, source: "local" }), cloudError);
 }
 
 export async function deleteFlashcardDeck(owner: string | null, deckId: string): Promise<FlashcardStorage> {
@@ -542,6 +560,7 @@ export async function deleteFlashcardDeck(owner: string | null, deckId: string):
 }
 
 export async function upsertFlashcard(owner: string | null, card: Flashcard): Promise<FlashcardStorage> {
+  let cloudError: unknown;
   if (owner) {
     try {
       const client = await clientFor(owner);
@@ -549,17 +568,18 @@ export async function upsertFlashcard(owner: string | null, card: Flashcard): Pr
       if (error) throw error;
       cacheCard(owner, { ...card, source: "cloud" });
       return "cloud";
-    } catch {
+    } catch (error) {
+      cloudError = error;
       // A missing migration or unavailable network keeps the edit usable locally.
     }
   }
-  requirePersistentLocalList(cacheCard(owner, { ...card, source: "local" }));
-  return "local";
+  return finishFlashcardFallback(cacheCard(owner, { ...card, source: "local" }), cloudError);
 }
 
 export async function upsertFlashcards(owner: string | null, cards: Flashcard[]): Promise<FlashcardStorage> {
   if (!cards.length) return owner ? "cloud" : "local";
   if (new Set(cards.map(card => card.deckId)).size !== 1) throw new Error("Cards must belong to one deck.");
+  let cloudError: unknown;
   if (owner) {
     try {
       const client = await clientFor(owner);
@@ -571,13 +591,13 @@ export async function upsertFlashcards(owner: string | null, cards: Flashcard[])
       const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
       writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "cloud" as const }))].slice(0, 1000));
       return "cloud";
-    } catch {
+    } catch (error) {
+      cloudError = error;
       // Preserve the complete batch locally for retry/import when cloud is unavailable.
     }
   }
   const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
-  requirePersistentLocalList(writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000)));
-  return "local";
+  return finishFlashcardFallback(writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000)), cloudError);
 }
 
 export async function deleteFlashcard(owner: string | null, card: Flashcard): Promise<FlashcardStorage> {
