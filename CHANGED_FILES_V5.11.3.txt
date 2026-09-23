@@ -1,0 +1,11 @@
+package.json
+package-lock.json
+apps/web/package.json
+apps/server/package.json
+apps/web/public/sw.js
+supabase/migrations/0018_v4_9_learning_shares.sql
+supabase/migrations/0021_v5_11_3_learning_version_trigger_fix.sql
+supabase/migrations/README.md
+CHANGELOG_V5.11.3.md
+V5.11.3_IMPLEMENTATION_REPORT_VI.md
+CHANGED_FILES_V5.11.3.txt

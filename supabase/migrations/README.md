@@ -18,12 +18,13 @@ See [PROJECT_HANDOFF.md](./PROJECT_HANDOFF.md) for architecture, setup, credenti
 
 ## v5.0 — thú cưng học tập và chia sẻ học liệu
 
-Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sql` đã được sửa lỗi PostgreSQL `42601` ở các điều kiện phân hạng gói và có thể chạy lại an toàn trên môi trường đã áp dụng một phần. File `0019_v5_0_pets.sql` thêm hồ sơ thú cưng và nhật ký thời gian học.
+Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sql` đã được sửa lỗi PostgreSQL `42601` ở các điều kiện phân hạng gói và có thể chạy lại an toàn trên môi trường đã áp dụng một phần. File `0019_v5_0_pets.sql` thêm hồ sơ thú cưng và nhật ký thời gian học. File `0021_v5_11_3_learning_version_trigger_fix.sql` sửa lỗi `42703` do trigger dùng chung đọc `OLD.questions` trên bảng `flashcards`; cần chạy file này trên các project đã áp dụng `0018`.
 
 ```sql
 -- Supabase SQL Editor
 -- 1) chạy toàn bộ 0018_v4_9_learning_shares.sql đã cập nhật
 -- 2) chạy 0019_v5_0_pets.sql
+-- 3) chạy 0021_v5_11_3_learning_version_trigger_fix.sql nếu database đã có 0018
 ```
 
 Chủ học liệu vẫn là người duy nhất quản lý lời mời; người nhận chỉ đọc nội dung đã được cấp quyền và ghi tiến độ riêng. Pet lưu dự phòng trên trình duyệt khách, còn tài khoản đăng nhập đồng bộ qua `get_my_pet`, `update_my_pet` và `record_pet_activity`. Thời gian chỉ được ghi khi trang đang hiển thị và có tương tác gần đây; không tự động tải Lab cục bộ lên tài khoản.

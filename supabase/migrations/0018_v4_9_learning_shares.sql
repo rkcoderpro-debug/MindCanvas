@@ -92,23 +92,46 @@ grant execute on function public.learning_share_allowed(text,uuid) to authentica
 
 alter table public.quiz_tests add column if not exists content_version integer not null default 1;
 alter table public.flashcards add column if not exists content_version integer not null default 1;
-create or replace function public.learning_bump_version() returns trigger language plpgsql set search_path = public as $$
+
+-- Keep each trigger function tied to one table. A shared trigger function that
+-- reads OLD.questions can be invoked for flashcards, whose record has no such
+-- field, which raises PostgreSQL 42703 before the upsert reaches the table.
+create or replace function public.learning_bump_quiz_version() returns trigger
+language plpgsql set search_path = public as $$
 begin
-  if tg_table_name='quiz_tests' and (old.questions is distinct from new.questions or old.title is distinct from new.title) then
-    new.content_version := old.content_version+1;
-  elsif tg_table_name='flashcards' and (old.front is distinct from new.front or old.back is distinct from new.back) then
-    new.content_version := old.content_version+1;
-  elsif tg_table_name='lab_projects' and (old.program_html is distinct from new.program_html or old.title is distinct from new.title) then
-    new.content_version := old.content_version+1;
+  if old.questions is distinct from new.questions or old.title is distinct from new.title then
+    new.content_version := old.content_version + 1;
   end if;
   return new;
 end $$;
+
+create or replace function public.learning_bump_card_version() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if old.front is distinct from new.front or old.back is distinct from new.back then
+    new.content_version := old.content_version + 1;
+  end if;
+  return new;
+end $$;
+
+create or replace function public.learning_bump_lab_version() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if old.program_html is distinct from new.program_html or old.title is distinct from new.title then
+    new.content_version := old.content_version + 1;
+  end if;
+  return new;
+end $$;
+
 drop trigger if exists learning_quiz_version on public.quiz_tests;
-create trigger learning_quiz_version before update on public.quiz_tests for each row execute function public.learning_bump_version();
+create trigger learning_quiz_version before update on public.quiz_tests
+  for each row execute function public.learning_bump_quiz_version();
 drop trigger if exists learning_card_version on public.flashcards;
-create trigger learning_card_version before update on public.flashcards for each row execute function public.learning_bump_version();
+create trigger learning_card_version before update on public.flashcards
+  for each row execute function public.learning_bump_card_version();
 drop trigger if exists learning_lab_version on public.lab_projects;
-create trigger learning_lab_version before update on public.lab_projects for each row execute function public.learning_bump_version();
+create trigger learning_lab_version before update on public.lab_projects
+  for each row execute function public.learning_bump_lab_version();
 
 alter table public.lab_projects enable row level security;
 alter table public.learning_share_invitations enable row level security;
