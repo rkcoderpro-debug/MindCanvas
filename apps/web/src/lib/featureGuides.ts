@@ -1462,8 +1462,10 @@ export function guideIdForHelpScope(scope: PageHelpScope) {
   return ({ workspace: "workspace-navigation", canvas: "canvas-controls", learning: "learning-hub", folders: "folder-manager" } as const)[scope];
 }
 
-export function pageHelpIsUnlocked(progress: GuideProgress, scope: PageHelpScope) {
-  return progress[guideIdForHelpScope(scope)]?.status === "completed";
+export function pageHelpIsUnlocked(_progress: GuideProgress, _scope: PageHelpScope) {
+  // Contextual reference is available from the first visit, independently
+  // of whether the user has started, skipped, or completed a guide.
+  return true;
 }
 
 export function markGuideStarted(

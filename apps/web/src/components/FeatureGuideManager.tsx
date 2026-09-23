@@ -66,15 +66,8 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     if (blocked || !manualGuideId || manualConsumed.current === manualGuideId) return;
     const guide = guideForId(manualGuideId);
     if (!guide) return;
-    // Manual launches from the Wiki follow the same once-only rule as
-    // contextual launches. A completed or skipped guide is intentionally not
-    // mounted again; resetGuideProgress is the explicit opt-in for a replay.
-    const status = readGuideProgress(ownerId)[guide.id]?.status;
-    if (status && status !== "unseen") {
-      manualConsumed.current = manualGuideId;
-      onManualConsumed?.();
-      return;
-    }
+    // An explicit Wiki launch is an opt-in replay, regardless of stored
+    // progress. Only automatic/contextual launches use the once-only guard.
     const firstStep = guide.steps[0];
     const targetReady = !firstStep?.target || Boolean(firstStep.skipWhenRoute && trigger === firstStep.skipWhenRoute) || (() => {
       try { return Boolean(document.querySelector(firstStep.target)); } catch { return false; }
@@ -84,6 +77,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
       if (settled || manualConsumed.current === manualGuideId) return;
       settled = true;
       manualConsumed.current = manualGuideId;
+      setCelebrationGuideId(null);
       markGuideStarted(ownerId, guide.id);
       const sessionId = beginGuideSession();
       setActiveManual(true);
@@ -112,7 +106,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
   }, [blocked, manualGuideId, onManualConsumed, ownerId, trigger]);
 
   useEffect(() => {
-    if (blocked || activeGuideId || activeManual || !trigger || lastTrigger.current === trigger) return;
+    if (blocked || manualGuideId || activeGuideId || activeManual || !trigger || lastTrigger.current === trigger) return;
     lastTrigger.current = trigger;
     const guide = guideForTrigger(trigger);
     const status = guide ? readGuideProgress(ownerId)[guide.id]?.status : undefined;
@@ -126,7 +120,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
       setActiveManual(false);
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [activeGuideId, activeManual, blocked, ownerId, trigger]);
+  }, [activeGuideId, activeManual, blocked, manualGuideId, ownerId, trigger]);
 
   useEffect(() => {
     if (trigger !== lastTrigger.current) return;

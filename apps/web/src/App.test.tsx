@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { cacheProject } from "./lib/projectStore";
 import { blankBoard } from "./lib/board";
-import { GUIDE_CONTENT_VERSION } from "./lib/featureGuides";
 let root: Root, host: HTMLDivElement;
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
@@ -24,8 +23,7 @@ describe("Workspace UI", () => {
     await act(async () => (host.querySelector(".workspace-expand") as HTMLButtonElement).click());
     expect(host.querySelector(".workspace-subnav")?.textContent).toContain("Thùng rác");
   });
-  it("unlocks contextual page help only after the matching guide is completed", async () => {
-    localStorage.setItem(`mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}:guest`, JSON.stringify({ "workspace-navigation": { status: "completed" } }));
+  it("shows contextual page help on the first visit without completing a guide", async () => {
     await act(async () => root.render(<App/>));
     const help = host.querySelector('button[aria-label="Trợ giúp trang này"]') as HTMLButtonElement;
     expect(help).not.toBeNull();
@@ -33,13 +31,9 @@ describe("Workspace UI", () => {
     expect(document.body.querySelector(".page-help-panel")?.textContent).toContain("Project mới");
     expect(document.body.querySelector(".page-help-panel")?.textContent).toContain("Tìm");
   });
-  it("keeps contextual help available on canvas and Learning Hub after their guides", async () => {
+  it("shows contextual help on canvas and Learning Hub without guide progress", async () => {
     const board = blankBoard("Help canvas");
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
-    localStorage.setItem(`mindcanvas:feature-guides:${GUIDE_CONTENT_VERSION}:guest`, JSON.stringify({
-      "canvas-controls": { status: "completed" },
-      "learning-hub": { status: "completed" },
-    }));
     await import("./components/CanvasBoard");
     await act(async () => root.render(<App/>));
     await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());

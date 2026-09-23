@@ -55,7 +55,7 @@ describe("feature guides", () => {
     finishGuide("user-a", "canvas-controls", "completed");
     expect(readGuideProgress("user-a")["canvas-controls"]?.status).toBe("completed");
     expect(pageHelpIsUnlocked(readGuideProgress("user-a"), "canvas")).toBe(true);
-    expect(pageHelpIsUnlocked(readGuideProgress("user-a"), "workspace")).toBe(false);
+    expect(pageHelpIsUnlocked(readGuideProgress("user-a"), "workspace")).toBe(true);
     resetGuideProgress("user-a", "canvas-controls");
     expect(readGuideProgress("user-a")["canvas-controls"]?.status).toBe("unseen");
   });
@@ -67,6 +67,6 @@ describe("feature guides", () => {
     expect(pageHelpIsUnlocked(readGuideProgress(null), "workspace")).toBe(true);
     resetGuideProgress(null, "workspace-navigation");
     expect(readGuideProgress(null)["workspace-navigation"]?.status).toBe("unseen");
-    expect(pageHelpIsUnlocked(readGuideProgress(null), "workspace")).toBe(false);
+    expect(pageHelpIsUnlocked(readGuideProgress(null), "workspace")).toBe(true);
   });
 });
