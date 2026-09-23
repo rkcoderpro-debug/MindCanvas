@@ -3,10 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FeatureGuideManager from "./FeatureGuideManager";
-import { GUIDE_CONTENT_VERSION, guideForId, readGuideProgress } from "../lib/featureGuides";
+import { GUIDE_CONTENT_VERSION, GUIDE_REQUEST_EVENT, guideForId, readGuideProgress } from "../lib/featureGuides";
 
-vi.mock("./FeatureGuideOverlay", () => ({ default: ({ guide, onSkip }: any) =>
-  <button data-testid="guide" onClick={onSkip}>{guide.id}</button> }));
+vi.mock("./FeatureGuideOverlay", () => ({ default: ({ guide, onSkip, expectedDocumentId, expectedViewerSessionId }: any) =>
+  <button data-testid="guide" data-document-id={expectedDocumentId ?? ""} data-viewer-session-id={expectedViewerSessionId ?? ""} onClick={onSkip}>{guide.id}</button> }));
 vi.mock("./FeatureGuideCelebration", () => ({ default: () => null }));
 let root: Root;
 let host: HTMLDivElement;
@@ -48,3 +48,25 @@ for (const id of ["workspace-navigation", "canvas-controls", "learning-hub", "fo
     expect(host.querySelector("button")).toBeNull();
   });
 }
+
+it("starts a PDF guide only for the viewer session that is still mounted", async () => {
+  await act(async () => root.render(<FeatureGuideManager ownerId={null}/>));
+  const viewer = document.createElement("section");
+  viewer.className = "document-viewer";
+  viewer.dataset.documentId = "doc-current";
+  viewer.dataset.documentKind = "pdf";
+  viewer.dataset.viewerSessionId = "viewer-current";
+  document.body.append(viewer);
+
+  await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: {
+    guideId: "pdf-annotation", documentId: "doc-old", viewerSessionId: "viewer-old", kind: "pdf",
+  } })));
+  expect(host.querySelector("[data-testid=guide]")).toBeNull();
+
+  await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: {
+    guideId: "pdf-annotation", documentId: "doc-current", viewerSessionId: "viewer-current", kind: "pdf",
+  } })));
+  expect(host.querySelector<HTMLButtonElement>("[data-testid=guide]")?.dataset.documentId).toBe("doc-current");
+  expect(host.querySelector<HTMLButtonElement>("[data-testid=guide]")?.dataset.viewerSessionId).toBe("viewer-current");
+  viewer.remove();
+});

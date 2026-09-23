@@ -70,11 +70,17 @@ function openDatabase(): Promise<IDBDatabase> {
 export async function listDocuments(owner: string | null): Promise<UploadedDocument[]> {
   const ownerKey = owner ?? "guest";
   let database: IDBDatabase;
-  try { database = await openDatabase(); } catch { return owner ? [] : readGuestDocuments(); }
+  try { database = await openDatabase(); } catch (error) {
+    if (!owner) return readGuestDocuments();
+    throw new Error("Không thể mở thư viện tài liệu trên thiết bị này.", { cause: error });
+  }
   try {
     const rows = await request(database.transaction(STORE).objectStore(STORE).index("owner").getAll(ownerKey));
     return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  } catch { return owner ? [] : readGuestDocuments(); }
+  } catch (error) {
+    if (!owner) return readGuestDocuments();
+    throw new Error("Không thể đọc thư viện tài liệu trên thiết bị này.", { cause: error });
+  }
   finally { database.close(); }
 }
 

@@ -12,11 +12,23 @@ type Props = {
   blocked?: boolean;
 };
 
+type ViewerContext = { documentId: string; viewerSessionId: string; kind: string };
+
+function isViewerMounted(context: ViewerContext) {
+  return Array.from(document.querySelectorAll<HTMLElement>(".document-viewer")).some(viewer =>
+    viewer.dataset.documentId === context.documentId &&
+    viewer.dataset.viewerSessionId === context.viewerSessionId &&
+    viewer.dataset.documentKind === context.kind,
+  );
+}
+
 export default function FeatureGuideManager({ ownerId, trigger = null, manualGuideId = null, onManualConsumed, onPracticeDecision, blocked = false }: Props) {
   const [activeGuideId, setActiveGuideId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeManual, setActiveManual] = useState(false);
   const [requestedGuideId, setRequestedGuideId] = useState<string | null>(null);
+  const [requestedViewerContext, setRequestedViewerContext] = useState<ViewerContext | null>(null);
+  const [activeViewerContext, setActiveViewerContext] = useState<ViewerContext | null>(null);
   const [celebrationGuideId, setCelebrationGuideId] = useState<string | null>(null);
   const [practiceResourceId, setPracticeResourceId] = useState<string | null>(null);
   const lastTrigger = useRef<string | null>(null);
@@ -38,8 +50,18 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
 
   useEffect(() => {
     const request = (event: Event) => {
-      const id = (event as CustomEvent<{ guideId?: string }>).detail?.guideId;
-      if (id && !activeGuideId && !activeManual) setRequestedGuideId(id);
+      const detail = (event as CustomEvent<Partial<ViewerContext> & { guideId?: string }>).detail;
+      const id = detail?.guideId;
+      if (!id || activeGuideId || activeManual) return;
+      if (id === "pdf-annotation") {
+        if (detail.kind !== "pdf" || !detail.documentId || !detail.viewerSessionId) return;
+        const context = { documentId: detail.documentId, viewerSessionId: detail.viewerSessionId, kind: detail.kind };
+        if (!isViewerMounted(context)) return;
+        setRequestedViewerContext(context);
+      } else {
+        setRequestedViewerContext(null);
+      }
+      setRequestedGuideId(id);
     };
     window.addEventListener(GUIDE_REQUEST_EVENT, request);
     return () => window.removeEventListener(GUIDE_REQUEST_EVENT, request);
@@ -49,14 +71,18 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     if (blocked || !requestedGuideId || activeGuideId || activeManual) return;
     const guide = guideForId(requestedGuideId);
     setRequestedGuideId(null);
+    const viewerContext = requestedViewerContext;
+    setRequestedViewerContext(null);
+    if (viewerContext && !isViewerMounted(viewerContext)) return;
     if (!guide || readGuideProgress(ownerId)[guide.id]?.status && readGuideProgress(ownerId)[guide.id]?.status !== "unseen") return;
     markGuideStarted(ownerId, guide.id);
     const sessionId = beginGuideSession();
     setActiveManual(false);
+    setActiveViewerContext(viewerContext);
     setPracticeResourceId(null);
     setActiveSessionId(sessionId);
     setActiveGuideId(guide.id);
-  }, [activeGuideId, activeManual, blocked, ownerId, requestedGuideId]);
+  }, [activeGuideId, activeManual, blocked, ownerId, requestedGuideId, requestedViewerContext]);
 
   useEffect(() => {
     if (!manualGuideId) {
@@ -81,6 +107,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
       markGuideStarted(ownerId, guide.id);
       const sessionId = beginGuideSession();
       setActiveManual(true);
+      setActiveViewerContext(null);
       setPracticeResourceId(null);
       setActiveSessionId(sessionId);
       setActiveGuideId(guide.id);
@@ -115,6 +142,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
       markGuideStarted(ownerId, guide.id);
       const sessionId = beginGuideSession();
       setPracticeResourceId(null);
+      setActiveViewerContext(null);
       setActiveSessionId(sessionId);
       setActiveGuideId(guide.id);
       setActiveManual(false);
@@ -135,6 +163,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
     setActiveGuideId(null);
     setActiveManual(false);
     setPracticeResourceId(null);
+    setActiveViewerContext(null);
     setActiveSessionId(null);
     if (status === "completed") setCelebrationGuideId(completedId);
   };
@@ -142,7 +171,7 @@ export default function FeatureGuideManager({ ownerId, trigger = null, manualGui
   const celebrationGuide = guideForId(celebrationGuideId);
   if (!guide && !celebrationGuide) return null;
   return <>
-    {guide && <FeatureGuideOverlay guide={guide} guideSessionId={activeSessionId} currentRoute={trigger} practiceResourceId={practiceResourceId} onPracticeDecision={onPracticeDecision} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
+    {guide && <FeatureGuideOverlay guide={guide} guideSessionId={activeSessionId} currentRoute={trigger} practiceResourceId={practiceResourceId} expectedDocumentId={activeViewerContext?.documentId ?? null} expectedViewerSessionId={activeViewerContext?.viewerSessionId ?? null} expectedDocumentKind={activeViewerContext?.kind ?? null} onPracticeDecision={onPracticeDecision} onComplete={() => close("completed")} onSkip={() => close("skipped")}/>} 
     {celebrationGuide && <FeatureGuideCelebration guide={celebrationGuide} onClose={() => setCelebrationGuideId(null)}/>} 
   </>;
 }

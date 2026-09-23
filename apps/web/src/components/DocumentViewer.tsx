@@ -25,8 +25,8 @@ function bytesFromDataUrl(dataUrl: string): Uint8Array {
 }
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]!)); }
 function kindFor(source: Source): DocumentKind { return source.kind; }
-export function shouldRequestPdfGuide(kind: DocumentKind, enableGuide = true, dedicated = false) {
-  return kind === "pdf" && enableGuide && !dedicated;
+export function shouldRequestPdfGuide(kind: DocumentKind, enableGuide = true, dedicated = false, embedded = false) {
+  return kind === "pdf" && enableGuide && !dedicated && !embedded;
 }
 /**
  * Pointer moves from a hovering mouse/pen must never mutate annotations. A
@@ -104,10 +104,10 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
   const kind = kindFor(source);
   const viewerSessionId = useMemo(() => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`, [source.dataUrl, source.id]);
   useEffect(() => {
-    if (!shouldRequestPdfGuide(kind, enableGuide, dedicated)) return;
+    if (!shouldRequestPdfGuide(kind, enableGuide, dedicated, embedded)) return;
     const timer = window.setTimeout(() => window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "pdf-annotation", viewerSessionId, documentId: source.id, kind } })), 0);
     return () => window.clearTimeout(timer);
-  }, [dedicated, enableGuide, kind, source.dataUrl, source.id, viewerSessionId]);
+  }, [dedicated, embedded, enableGuide, kind, source.dataUrl, source.id, viewerSessionId]);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [pdf, setPdf] = useState<any>(null);
@@ -306,7 +306,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
       const committedStroke: Stroke = { points: stroke.points, color: stroke.color, width: stroke.width, tool: stroke.tool };
       const next = { ...strokesRef.current, [stroke.page]: [...(strokesRef.current[stroke.page] ?? []), committedStroke] };
       recordStrokes(next);
-      emitGuideAction("pdf:draw");
+      emitGuideAction("pdf:draw", { documentId: source.id, viewerSessionId, kind });
     }
     redraw(page);
   };
@@ -343,7 +343,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
   };
   const chooseAnnotationMode = (mode: AnnotationMode) => {
     setAnnotationMode(mode);
-    emitGuideAction(`pdf:tool:${mode}`);
+    emitGuideAction(`pdf:tool:${mode}`, { documentId: source.id, viewerSessionId, kind });
     if (mode !== "eraser") eraserCursor.current = null;
     redraw(page);
   };
@@ -468,14 +468,14 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
       }
       const savedBytes = await pdfDocument.save();
       const blob = new Blob([new Uint8Array(savedBytes)], { type: "application/pdf" }); const url = URL.createObjectURL(blob); const anchor = window.document.createElement("a"); anchor.href = url; anchor.download = `${source.name.replace(/\.pdf$/i, "")}-annotated.pdf`; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      emitGuideAction("pdf:export");
+      emitGuideAction("pdf:export", { documentId: source.id, viewerSessionId, kind });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể xuất PDF mới."); }
   };
   const toggleFullscreen = async () => { if (!viewer.current) return; try { if (document.fullscreenElement === viewer.current) await document.exitFullscreen(); else await viewer.current.requestFullscreen(); } catch { setFullscreen(value => !value); } };
   useEffect(() => { const sync = () => setFullscreen(document.fullscreenElement === viewer.current); document.addEventListener("fullscreenchange", sync); return () => document.removeEventListener("fullscreenchange", sync); }, []);
 
   return (
-    <section ref={viewer} className={`document-viewer ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`} aria-label={`${t("documentViewer")} ${source.name}`}>
+    <section ref={viewer} className={`document-viewer ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`} data-document-id={source.id} data-document-kind={kind} data-viewer-session-id={viewerSessionId} aria-label={`${t("documentViewer")} ${source.name}`}>
       <header className="document-viewer-header">
         <div className="document-viewer-title">
           {kind === "xlsx" ? <FileSpreadsheet size={16} /> : <FileText size={16} />}

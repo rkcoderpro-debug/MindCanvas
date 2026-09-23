@@ -118,6 +118,23 @@ describe("FeatureGuideOverlay strict completion", () => {
     expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).toBeNull();
   });
 
+  it("ignores PDF actions from another document or viewer session", async () => {
+    const definition = guide([{ kind: "practice", titleVi: "Vẽ", titleEn: "Draw", bodyVi: "", bodyEn: "", completion: { type: "manual", actions: [{ id: "pdf:draw", labelVi: "Đã vẽ", labelEn: "Drawn" }] } }], "pdf-annotation");
+    await act(async () => root.render(createElement(FeatureGuideOverlay, {
+      guide: definition,
+      guideSessionId: "guide-current",
+      expectedDocumentId: "doc-current",
+      expectedViewerSessionId: "viewer-current",
+      expectedDocumentKind: "pdf",
+      onComplete: vi.fn(),
+      onSkip: vi.fn(),
+    })));
+    await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "pdf:draw", guideSessionId: "guide-current", payload: { documentId: "doc-old", viewerSessionId: "viewer-old", kind: "pdf" } } })));
+    expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).not.toBeNull();
+    await act(async () => window.dispatchEvent(new CustomEvent(GUIDE_ACTION_EVENT, { detail: { name: "pdf:draw", guideSessionId: "guide-current", payload: { documentId: "doc-current", viewerSessionId: "viewer-current", kind: "pdf" } } })));
+    expect(document.body.querySelector(".feature-guide-next")?.getAttribute("disabled")).toBeNull();
+  });
+
   it("requires an explicit keep-or-trash choice for a practice canvas", async () => {
     const complete = vi.fn();
     const decision = vi.fn();

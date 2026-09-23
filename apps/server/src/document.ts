@@ -14,6 +14,8 @@ export type ExtractedDocument = {
 
 const TEXT_LIMIT = 120_000;
 const MAX_ZIP_ENTRY_BYTES = 15 * 1024 * 1024;
+const MAX_ZIP_TOTAL_BYTES = 40 * 1024 * 1024;
+const MAX_ZIP_ENTRIES = 10_000;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export class UnsupportedDocumentError extends Error {
@@ -50,7 +52,7 @@ function decodeXml(value: string) {
 type ZipEntry = { name: string; data: Buffer };
 
 /** Read the small subset of ZIP needed for DOCX/PPTX without a native binary dependency. */
-function readZipEntries(buffer: Buffer): ZipEntry[] {
+function readZipEntries(buffer: Buffer, shouldRead: (name: string) => boolean = () => true): ZipEntry[] {
   if (buffer.length < 22) throw new UnsupportedDocumentError("Gói Office quá ngắn hoặc không hợp lệ.");
   const signature = 0x06054b50;
   let end = -1;
@@ -58,33 +60,56 @@ function readZipEntries(buffer: Buffer): ZipEntry[] {
     if (buffer.readUInt32LE(offset) === signature) { end = offset; break; }
   }
   if (end < 0) throw new UnsupportedDocumentError("Không đọc được gói Office này.");
-  const count = buffer.readUInt16LE(end + 10), centralOffset = buffer.readUInt32LE(end + 16);
+  const commentLength = buffer.readUInt16LE(end + 20);
+  if (end + 22 + commentLength > buffer.length) throw new UnsupportedDocumentError("Phần kết thúc ZIP không hợp lệ.");
+  const count = buffer.readUInt16LE(end + 10), centralSize = buffer.readUInt32LE(end + 12), centralOffset = buffer.readUInt32LE(end + 16);
+  const centralEnd = centralOffset + centralSize;
+  if (count > MAX_ZIP_ENTRIES || centralOffset < 0 || centralEnd > end || centralEnd < centralOffset) {
+    throw new UnsupportedDocumentError("Danh mục ZIP vượt giới hạn an toàn hoặc không hợp lệ.");
+  }
   const entries: ZipEntry[] = [];
+  let totalExpandedBytes = 0;
   let offset = centralOffset;
   for (let index = 0; index < count; index += 1) {
+    if (offset + 46 > centralEnd) throw new UnsupportedDocumentError("Danh mục ZIP bị thiếu dữ liệu.");
     if (buffer.readUInt32LE(offset) !== 0x02014b50) throw new UnsupportedDocumentError("Cấu trúc ZIP của file Office không hợp lệ.");
     const method = buffer.readUInt16LE(offset + 10), compressedSize = buffer.readUInt32LE(offset + 20);
     const uncompressedSize = buffer.readUInt32LE(offset + 24), nameLength = buffer.readUInt16LE(offset + 28);
     const extraLength = buffer.readUInt16LE(offset + 30), commentLength = buffer.readUInt16LE(offset + 32), localOffset = buffer.readUInt32LE(offset + 42);
+    const recordEnd = offset + 46 + nameLength + extraLength + commentLength;
+    if (recordEnd > centralEnd) throw new UnsupportedDocumentError("Bản ghi ZIP vượt quá danh mục.");
     const name = buffer.toString("utf8", offset + 46, offset + 46 + nameLength);
-    if (uncompressedSize > MAX_ZIP_ENTRY_BYTES) throw new UnsupportedDocumentError("Nội dung Office sau giải nén vượt giới hạn an toàn.");
+    if (!shouldRead(name)) {
+      offset = recordEnd;
+      continue;
+    }
+    const remainingBudget = MAX_ZIP_TOTAL_BYTES - totalExpandedBytes;
+    if (uncompressedSize > MAX_ZIP_ENTRY_BYTES || uncompressedSize > remainingBudget) {
+      throw new UnsupportedDocumentError("Nội dung Office sau giải nén vượt giới hạn an toàn.");
+    }
+    if (localOffset + 30 > centralOffset || buffer.readUInt32LE(localOffset) !== 0x04034b50) {
+      throw new UnsupportedDocumentError("Header ZIP của file Office không hợp lệ.");
+    }
     const localNameLength = buffer.readUInt16LE(localOffset + 26), localExtraLength = buffer.readUInt16LE(localOffset + 28);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength, dataEnd = dataStart + compressedSize;
-    if (dataEnd > buffer.length) throw new UnsupportedDocumentError("File Office bị thiếu dữ liệu.");
+    if (dataEnd > centralOffset || dataEnd < dataStart) throw new UnsupportedDocumentError("File Office bị thiếu dữ liệu.");
     const compressed = buffer.subarray(dataStart, dataEnd);
     let data: Buffer;
     if (method === 0) data = compressed;
-    else if (method === 8) data = inflateRawSync(compressed);
+    else if (method === 8) data = inflateRawSync(compressed, { maxOutputLength: Math.max(1, Math.min(MAX_ZIP_ENTRY_BYTES, remainingBudget)) });
     else throw new UnsupportedDocumentError("File Office dùng kiểu nén chưa được hỗ trợ.");
-    if (data.length > MAX_ZIP_ENTRY_BYTES) throw new UnsupportedDocumentError("Nội dung Office sau giải nén vượt giới hạn an toàn.");
+    if (data.length !== uncompressedSize || data.length > MAX_ZIP_ENTRY_BYTES || data.length > remainingBudget) {
+      throw new UnsupportedDocumentError("Kích thước nội dung ZIP không khớp hoặc vượt giới hạn an toàn.");
+    }
+    totalExpandedBytes += data.length;
     entries.push({ name, data });
-    offset += 46 + nameLength + extraLength + commentLength;
+    offset = recordEnd;
   }
   return entries;
 }
 
 function extractDocx(buffer: Buffer) {
-  const entry = readZipEntries(buffer).find(item => item.name === "word/document.xml");
+  const entry = readZipEntries(buffer, name => name === "word/document.xml").find(item => item.name === "word/document.xml");
   if (!entry) throw new UnsupportedDocumentError("DOCX không có nội dung văn bản chính.");
   const paragraphs = [...entry.data.toString("utf8").matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/gi)]
     .map(match => [...match[1].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/gi)].map(text => decodeXml(text[1])).join(""))
@@ -93,7 +118,7 @@ function extractDocx(buffer: Buffer) {
 }
 
 function extractPptx(buffer: Buffer) {
-  const entries = readZipEntries(buffer)
+  const entries = readZipEntries(buffer, name => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
     .filter(item => /^ppt\/slides\/slide\d+\.xml$/i.test(item.name))
     .sort((a, b) => Number(a.name.match(/slide(\d+)/i)?.[1] ?? 0) - Number(b.name.match(/slide(\d+)/i)?.[1] ?? 0));
   const slides = entries.map((entry, index) => {

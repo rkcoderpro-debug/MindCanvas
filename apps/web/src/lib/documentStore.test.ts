@@ -17,4 +17,10 @@ describe("document library", () => {
     expect(await readDocument("alice", saved.id)).not.toBeNull();
     expect(await readDocument("bob", saved.id)).toBeNull();
   });
+  it("reports signed-in storage failures instead of presenting an empty library", async () => {
+    Object.defineProperty(globalThis, "indexedDB", { configurable: true, get: () => { throw new Error("blocked"); } });
+    await expect(listDocuments("alice")).rejects.toThrow("Không thể mở thư viện tài liệu");
+    localStorage.setItem("mindcanvas:documents:guest", JSON.stringify([{ id: "guest-doc", name: "lesson.pdf" }]));
+    await expect(listDocuments(null)).resolves.toMatchObject([{ id: "guest-doc" }]);
+  });
 });

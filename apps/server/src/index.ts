@@ -16,7 +16,17 @@ import { aiOptionsSchema, mindMapDetailSchema, mindMapOptionsSchema } from "./ai
 import { aiScheduler } from "./aiScheduler.js";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: config.MAX_DOCUMENT_BYTES,
+    files: 1,
+    fields: 8,
+    fieldSize: 1024,
+    fieldNameSize: 100,
+    parts: 9,
+  },
+});
 app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use(express.json({ limit: "1mb" }));
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
@@ -237,6 +247,15 @@ app.post("/api/ai/selection", requireUser, async (req, res) => {
   const parsed = selectionInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid selection input." });
   try { const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateSelectionWithGemini(parsed.data))); await recordUsage(req.userId!, "ai_selection", 1, 0, { source: "selection", action: parsed.data.action }); return res.json(result); }
   catch (error) { return sendAiError(res, error, "Selection AI failed."); }
+});
+
+app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (error instanceof multer.MulterError) {
+    const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    return res.status(status).json({ error: "Upload request exceeds the allowed limits.", code: error.code });
+  }
+  if (res.headersSent) return next(error);
+  return next(error);
 });
 
 app.listen(config.PORT, () => console.log(`MindCanvas API listening on ${config.PORT}`));

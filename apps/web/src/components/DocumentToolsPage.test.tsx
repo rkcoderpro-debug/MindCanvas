@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import JSZip from "jszip";
-import { buildDocx } from "./DocumentToolsPage";
+import DocumentToolsPage, { buildDocx } from "./DocumentToolsPage";
 import { shouldHandleAnnotationMove, shouldRequestPdfGuide } from "./DocumentViewer";
+import { LanguageProvider } from "../lib/i18n";
 
 describe("DOCX editor export", () => {
   it("writes a readable OOXML package instead of renaming HTML", async () => {
@@ -23,6 +26,7 @@ describe("DOCX editor export", () => {
     const orderedKinds = ["docx", "pdf"] as const;
     expect(orderedKinds.map(kind => shouldRequestPdfGuide(kind))).toEqual([false, true]);
     expect(shouldRequestPdfGuide("pdf", true, true)).toBe(false);
+    expect(shouldRequestPdfGuide("pdf", true, false, true)).toBe(false);
   });
 
   it("ignores hover moves and unrelated pointers while drawing a PDF", () => {
@@ -32,5 +36,21 @@ describe("DOCX editor export", () => {
     expect(shouldHandleAnnotationMove(7, 7, 1, "mouse")).toBe(true);
     expect(shouldHandleAnnotationMove(7, 7, 0, "pen")).toBe(false);
     expect(shouldHandleAnnotationMove(7, 7, 1, "pen")).toBe(true);
+  });
+});
+
+describe("Document Tools localization", () => {
+  it("uses the selected English language for labels and empty state", async () => {
+    localStorage.setItem("mindcanvas:language", "en");
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(<LanguageProvider><DocumentToolsPage owner={null} documents={[]} onDocumentsChanged={() => {}}/></LanguageProvider>));
+    expect(host.querySelector(".document-tools-heading-inline strong")?.textContent).toBe("Document viewer");
+    expect(host.querySelector(".document-tools-upload")?.textContent).toBe("Upload document");
+    expect(host.querySelector(".tool-empty-state h2")?.textContent).toBe("Choose a document to view");
+    await act(async () => root.unmount());
+    host.remove();
+    localStorage.removeItem("mindcanvas:language");
   });
 });

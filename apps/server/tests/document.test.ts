@@ -1,15 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { deflateRawSync } from "node:zlib";
 import { extractDocument, UnsupportedDocumentError } from "../src/document.js";
 
-function zip(entries: Array<{ name: string; data: string }>) {
+function zip(entries: Array<{ name: string; data: string | Buffer; deflate?: boolean }>) {
   const local: Buffer[] = [], central: Buffer[] = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer.from(entry.name), data = Buffer.from(entry.data);
-    const header = Buffer.alloc(30); header.writeUInt32LE(0x04034b50, 0); header.writeUInt16LE(20, 4); header.writeUInt16LE(0, 6); header.writeUInt16LE(0, 8); header.writeUInt32LE(0, 10); header.writeUInt32LE(0, 14); header.writeUInt32LE(data.length, 18); header.writeUInt32LE(data.length, 22); header.writeUInt16LE(name.length, 26); header.writeUInt16LE(0, 28);
+    const name = Buffer.from(entry.name), plain = Buffer.from(entry.data), data = entry.deflate ? deflateRawSync(plain) : plain;
+    const method = entry.deflate ? 8 : 0;
+    const header = Buffer.alloc(30); header.writeUInt32LE(0x04034b50, 0); header.writeUInt16LE(20, 4); header.writeUInt16LE(0, 6); header.writeUInt16LE(method, 8); header.writeUInt32LE(0, 10); header.writeUInt32LE(0, 14); header.writeUInt32LE(data.length, 18); header.writeUInt32LE(plain.length, 22); header.writeUInt16LE(name.length, 26); header.writeUInt16LE(0, 28);
     local.push(header, name, data);
-    const directory = Buffer.alloc(46); directory.writeUInt32LE(0x02014b50, 0); directory.writeUInt16LE(20, 4); directory.writeUInt16LE(20, 6); directory.writeUInt16LE(0, 8); directory.writeUInt16LE(0, 10); directory.writeUInt32LE(0, 12); directory.writeUInt32LE(0, 16); directory.writeUInt32LE(data.length, 20); directory.writeUInt32LE(data.length, 24); directory.writeUInt16LE(name.length, 28); directory.writeUInt16LE(0, 30); directory.writeUInt16LE(0, 32); directory.writeUInt16LE(0, 34); directory.writeUInt16LE(0, 36); directory.writeUInt32LE(0, 38); directory.writeUInt32LE(offset, 42);
+    const directory = Buffer.alloc(46); directory.writeUInt32LE(0x02014b50, 0); directory.writeUInt16LE(20, 4); directory.writeUInt16LE(20, 6); directory.writeUInt16LE(0, 8); directory.writeUInt16LE(method, 10); directory.writeUInt32LE(0, 12); directory.writeUInt32LE(0, 16); directory.writeUInt32LE(data.length, 20); directory.writeUInt32LE(plain.length, 24); directory.writeUInt16LE(name.length, 28); directory.writeUInt16LE(0, 30); directory.writeUInt16LE(0, 32); directory.writeUInt16LE(0, 34); directory.writeUInt16LE(0, 36); directory.writeUInt32LE(0, 38); directory.writeUInt32LE(offset, 42);
     central.push(directory, name);
     offset += header.length + name.length + data.length;
   }
@@ -33,6 +35,26 @@ test("extracts ordered slides from PPTX XML", async () => {
     { name: "ppt/slides/slide1.xml", data: "<p:sld><a:t>First</a:t><a:t> slide</a:t></p:sld>" },
   ]), "deck.pptx", "application/octet-stream");
   assert.equal(result.kind, "pptx"); assert.equal(result.pageCount, 2); assert.match(result.text, /\[PAGE 1\]\nFirst  slide/); assert.match(result.text, /\[PAGE 2\]\nSecond/);
+});
+
+test("bounds total expanded Office XML and skips unrelated large entries", async () => {
+  const expandedSlides = zip(Array.from({ length: 3 }, (_, index) => ({
+    name: `ppt/slides/slide${index + 1}.xml`,
+    data: Buffer.alloc(14 * 1024 * 1024, 0x61),
+    deflate: true,
+  })));
+  await assert.rejects(
+    extractDocument(expandedSlides, "large-deck.pptx", "application/octet-stream"),
+    (error: unknown) => error instanceof UnsupportedDocumentError && error.message.includes("vượt giới hạn"),
+  );
+
+  const irrelevantMedia = zip([
+    { name: "ppt/media/image1.png", data: Buffer.alloc(20 * 1024 * 1024, 0), deflate: true },
+    { name: "ppt/slides/slide1.xml", data: "<p:sld><a:t>Only text is read</a:t></p:sld>" },
+  ]);
+  const result = await extractDocument(irrelevantMedia, "media-deck.pptx", "application/octet-stream");
+  assert.equal(result.pageCount, 1);
+  assert.match(result.text, /Only text is read/);
 });
 
 test("returns inline image data for multimodal AI", async () => {

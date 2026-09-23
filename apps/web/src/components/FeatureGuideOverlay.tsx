@@ -12,6 +12,9 @@ type Props = {
   guideSessionId?: string | null;
   currentRoute?: string | null;
   practiceResourceId?: string | null;
+  expectedDocumentId?: string | null;
+  expectedViewerSessionId?: string | null;
+  expectedDocumentKind?: string | null;
   onComplete: () => void;
   onSkip: () => void;
   onPracticeDecision?: (decision: "keep" | "trash", resourceId: string) => void | Promise<void>;
@@ -78,7 +81,7 @@ function readStateReady(completion: Extract<GuideStepCompletion, { type: "state"
   return element.getAttribute(completion.attribute) === (completion.value ?? "true");
 }
 
-export default function FeatureGuideOverlay({ guide, guideSessionId = null, currentRoute = null, practiceResourceId = null, onComplete, onSkip, onPracticeDecision }: Props) {
+export default function FeatureGuideOverlay({ guide, guideSessionId = null, currentRoute = null, practiceResourceId = null, expectedDocumentId = null, expectedViewerSessionId = null, expectedDocumentKind = null, onComplete, onSkip, onPracticeDecision }: Props) {
   const { language, t } = useLanguage();
   const [stepIndex, setStepIndex] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
@@ -155,6 +158,11 @@ export default function FeatureGuideOverlay({ guide, guideSessionId = null, curr
       if (guideSessionId && detail?.guideSessionId !== guideSessionId) return;
       const name = detail?.name;
       if (!name) return;
+      const viewerScoped = name === "tools:viewer-ready" || name.startsWith("pdf:");
+      const payload = detail.payload && typeof detail.payload === "object" ? detail.payload as { documentId?: unknown; viewerSessionId?: unknown; sessionId?: unknown; kind?: unknown } : null;
+      if (viewerScoped && expectedDocumentId && payload?.documentId !== expectedDocumentId) return;
+      if (viewerScoped && expectedViewerSessionId && (payload?.viewerSessionId ?? payload?.sessionId) !== expectedViewerSessionId) return;
+      if (viewerScoped && expectedDocumentKind && payload?.kind !== expectedDocumentKind) return;
       if (name.startsWith("docx:")) {
         const activeDocumentId = document.querySelector<HTMLElement>("[data-docx-editor]")?.dataset.documentId;
         const eventDocumentId = detail.payload && typeof detail.payload === "object" ? (detail.payload as { documentId?: unknown }).documentId : undefined;
@@ -197,7 +205,7 @@ export default function FeatureGuideOverlay({ guide, guideSessionId = null, curr
     };
     window.addEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
     return () => window.removeEventListener(GUIDE_ACTION_EVENT, handleGuideAction);
-  }, [guide.steps, guideSessionId, isPractice, onComplete, stepIndex]);
+  }, [expectedDocumentId, expectedDocumentKind, expectedViewerSessionId, guide.steps, guideSessionId, isPractice, onComplete, stepIndex]);
 
   const actionsReady = requiredActions.length > 0 && requiredActions.every(action => actionNames.includes(action.id));
   const ready = useMemo(() => {
