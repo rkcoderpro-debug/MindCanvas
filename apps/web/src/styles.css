@@ -908,6 +908,16 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .form-error { color: var(--danger); overflow-wrap: anywhere; }
 .dialog .form-error { padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: 9px; background: var(--danger-soft); font-size: 14px; line-height: 1.5; }
 .auth-loading { min-height: 100dvh; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--accent); }
+.auth-recovery { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: var(--app-bg); }
+.auth-recovery-card { width: min(100%, 480px); padding: 28px; border: 1px solid var(--line); border-radius: 18px; color: var(--text); background: var(--surface); box-shadow: 0 18px 55px var(--shadow); }
+.auth-recovery-card > svg { color: var(--accent); }
+.auth-recovery-card h1 { margin: 14px 0 8px; font-size: clamp(21px, 4vw, 28px); }
+.auth-recovery-card p { line-height: 1.55; overflow-wrap: anywhere; }
+.auth-recovery-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.workspace-sync-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 24px 0; padding: 10px 14px; border: 1px solid var(--warning-line, var(--line)); border-radius: 10px; color: var(--text); background: var(--warning-soft, var(--soft)); font-size: 13px; }
+.workspace-sync-notice span { min-width: 0; }
+.workspace-sync-notice button { flex: 0 0 auto; color: var(--accent); font-weight: 700; }
+@media (max-width: 620px) { .workspace-sync-notice { margin: 10px 12px 0; align-items: flex-start; } }
 .flashcards-page { padding: 32px 8px; min-height: 100%; }
 .flashcards-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 28px; }
 .flashcards-heading p { max-width: 600px; margin-bottom: 0; }

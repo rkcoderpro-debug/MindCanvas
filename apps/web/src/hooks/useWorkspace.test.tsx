@@ -35,7 +35,7 @@ beforeEach(() => {
   SVGElement.prototype.releasePointerCapture = () => {};
   localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); collaborationHarness.callback = null; vi.restoreAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); collaborationHarness.callback = null; vi.useRealTimers(); vi.restoreAllMocks(); });
 describe("Workspace lifecycle", () => {
   it("keeps the remote revision and owner when opening an invitation", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]);
@@ -172,6 +172,23 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.create("Draft"));
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
     save.mockResolvedValue({}); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
+  });
+  it("retries a transient cloud save automatically while keeping the local draft", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockRejectedValueOnce(new Error("Network failure")).mockResolvedValue({});
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Retry draft"));
+    await act(async () => api.flush());
+    expect(api.status).toBe("saveError");
+    expect(store.readCache("A")[0].pending).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(api.status).toBe("saved");
+    expect(api.error).toBe("");
+    expect(store.readCache("A")[0].pending).toBe(false);
+    vi.useRealTimers();
   });
   it("still returns to Workspace after a save timeout while retaining the pending draft", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);

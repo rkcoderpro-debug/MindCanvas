@@ -13,7 +13,17 @@ export type WorkspaceConflict = { projectId: string; local: CachedProject; remot
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
 const CONFLICT_CHECKPOINT_WAIT_MS = 4000;
 const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
+const CLOUD_SAVE_RETRY_DELAYS_MS = [1500, 5000, 12000];
 type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
+function isRetryableCloudSaveError(error: unknown) {
+  if (error instanceof ProjectConflictError) return false;
+  if (error && typeof error === "object") {
+    const status = "status" in error ? Number(error.status) : NaN;
+    if (Number.isFinite(status)) return status === 408 || status === 429 || status >= 500;
+    if ("name" in error && error.name === "TypeError") return true;
+  }
+  return /network|timeout|timed out|failed to fetch|fetch failed|connection|temporarily unavailable|econn/i.test(String(error));
+}
 function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
   return new Promise<void>(resolve => {
     const timeout = window.setTimeout(resolve, CONFLICT_CHECKPOINT_WAIT_MS);
@@ -30,6 +40,7 @@ export function useWorkspace(owner: string | null) {
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [error, setError] = useState("");
+  const cloudSaveError = useRef("");
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
@@ -39,6 +50,9 @@ export function useWorkspace(owner: string | null) {
   const pastRef = useRef<BoardState[]>([]), futureRef = useRef<BoardState[]>([]);
   const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), viewportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
+  const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const retryAttempts = useRef(new Map<string, number>());
+  const retryFlush = useRef<(projectId?: string, fromAutoRetry?: boolean) => Promise<boolean>>(async () => false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
   // Realtime UPDATE events do not carry the originating browser/session. Keep
@@ -70,7 +84,7 @@ export function useWorkspace(owner: string | null) {
     setPast(nextPast);
     setFuture([]);
   };
-  const report = useCallback((err: unknown) => { if (alive.current) setError(errorMessage(err, "Could not save this project.")); }, []);
+  const report = useCallback((err: unknown) => { if (alive.current) { cloudSaveError.current = ""; setError(errorMessage(err, "Could not save this project.")); } }, []);
   const refresh = useCallback(async () => {
     try {
       await hydrateProjectCache(owner);
@@ -204,7 +218,25 @@ export function useWorkspace(owner: string | null) {
     } finally { thumbnailRequests.current.delete(projectId); }
   }, [owner]);
 
-  const flush = useCallback(async (projectId?: string): Promise<boolean> => {
+  const clearAutoRetry = useCallback((projectId: string, resetAttempts = false) => {
+    const scheduled = retryTimers.current.get(projectId);
+    if (scheduled !== undefined) clearTimeout(scheduled);
+    retryTimers.current.delete(projectId);
+    if (resetAttempts) retryAttempts.current.delete(projectId);
+  }, []);
+  const scheduleAutoRetry = useCallback((projectId: string, error: unknown) => {
+    if (!owner || !navigator.onLine || !isRetryableCloudSaveError(error) || retryTimers.current.has(projectId)) return;
+    const attempt = retryAttempts.current.get(projectId) ?? 0;
+    if (attempt >= CLOUD_SAVE_RETRY_DELAYS_MS.length) return;
+    retryAttempts.current.set(projectId, attempt + 1);
+    const timerId = setTimeout(() => {
+      retryTimers.current.delete(projectId);
+      void retryFlush.current(projectId, true);
+    }, CLOUD_SAVE_RETRY_DELAYS_MS[attempt]);
+    retryTimers.current.set(projectId, timerId);
+  }, [owner]);
+
+  const flush = useCallback(async (projectId?: string, fromAutoRetry = false): Promise<boolean> => {
     // An explicit flush for an older project must not cancel the debounce for
     // the canvas that is currently open.
     if (!projectId || projectId === current.current?.id) clearTimeout(timer.current);
@@ -213,6 +245,7 @@ export function useWorkspace(owner: string | null) {
       ? [projectId]
       : [...new Set(cached.filter(project => project.pending).map(project => project.id))];
     if (cacheFailed.current && current.current && !targetIds.includes(current.current.id)) targetIds.push(current.current.id);
+    targetIds.forEach(id => { clearAutoRetry(id); if (!fromAutoRetry) retryAttempts.current.delete(id); });
     if (!targetIds.length) {
       if (alive.current) setStatus(owner ? "saved" : "localSaved");
       return true;
@@ -268,6 +301,7 @@ export function useWorkspace(owner: string | null) {
           };
           try {
             await save(snapshot);
+            clearAutoRetry(targetId, true);
           } catch (err) {
             if (!(err instanceof ProjectConflictError)) throw err;
             const remote = await fetchProjectSnapshot(owner, snapshot.id);
@@ -281,12 +315,18 @@ export function useWorkspace(owner: string | null) {
               continue;
             }
             const next = { projectId: snapshot.id, local, remote };
-            conflictRef.current = next; setConflict(next); setError(""); setStatus("saveError");
+            conflictRef.current = next; setConflict(next); cloudSaveError.current = ""; setError(""); setStatus("saveError");
             return false;
           }
         }
         return true;
-      } catch (err) { if (alive.current) setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false; }
+      } catch (err) {
+        const message = errorMessage(err, "Could not save this project.");
+        cloudSaveError.current = message;
+        if (alive.current) { setStatus(navigator.onLine ? "saveError" : "offline"); setError(message); }
+        scheduleAutoRetry(targetId, err);
+        return false;
+      }
     }, targetId);
 
     const outcomes = await Promise.all(targetIds.map(async id => [id, await flushProject(id)] as const));
@@ -304,19 +344,30 @@ export function useWorkspace(owner: string | null) {
       else if (!allSaved) setStatus("saveError");
       else setStatus(owner ? "saved" : "localSaved");
     }
+    if (allSaved && cloudSaveError.current && !readCache(owner).some(project => project.pending)) {
+      const recoveredMessage = cloudSaveError.current;
+      cloudSaveError.current = "";
+      if (alive.current) setError(currentError => currentError === recoveredMessage ? "" : currentError);
+    }
     return allSaved;
-  }, [owner, report]);
+  }, [clearAutoRetry, owner, report, scheduleAutoRetry]);
+  retryFlush.current = flush;
 
   useEffect(() => {
     alive.current = true; void refresh();
-    const cameOnline = () => { setOnline(true); void flush(); };
+    const cameOnline = () => {
+      setOnline(true);
+      for (const timerId of retryTimers.current.values()) clearTimeout(timerId);
+      retryTimers.current.clear(); retryAttempts.current.clear();
+      void flush();
+    };
     const wentOffline = () => { setOnline(false); setStatus(cacheFailed.current ? "saveError" : "offline"); };
     const beforeUnload = (e: BeforeUnloadEvent) => { checkpointCurrent(); if ((owner && dirty.current) || cacheFailed.current) { e.preventDefault(); e.returnValue = ""; } };
     const hidden = () => { if (document.visibilityState === "hidden") { checkpointCurrent(); void flush(); } };
     const pageHide = () => { checkpointCurrent(); void flush(); };
     window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
     window.addEventListener("beforeunload", beforeUnload); window.addEventListener("pagehide", pageHide); document.addEventListener("visibilitychange", hidden);
-    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
+    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); for (const timerId of retryTimers.current.values()) clearTimeout(timerId); retryTimers.current.clear(); retryAttempts.current.clear(); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner, checkpointCurrent]);
 
   // A shared project receives durable Postgres Changes while it is open. The

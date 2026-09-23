@@ -15,6 +15,7 @@ import CollaboratorPresence from "./components/CollaboratorPresence";
 import AppSidebar, { type SidebarView } from "./components/AppSidebar";
 import { LanguageProvider, useLanguage, useTheme, type MessageKey } from "./lib/i18n";
 import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
+import { watchAuthBootstrap, type AuthBootstrapState } from "./lib/authSession";
 import { acceptProjectInvitation } from "./lib/collaboration";
 import { acceptLearning } from "./lib/learningShare";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
@@ -53,24 +54,30 @@ const FeatureGuidePage = lazy(() => import("./components/FeatureGuidePage"));
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
 function AuthenticatedApp() {
   const { t } = useLanguage();
-  const [user, setUser] = useState<User | null>(null), [loading, setLoading] = useState(isSupabaseConfigured);
-  const [error, setError] = useState("");
+  const [authState, setAuthState] = useState<AuthBootstrapState>(() => isSupabaseConfigured ? { status: "checking" } : { status: "anonymous" });
+  const [guestOverride, setGuestOverride] = useState(false), [attempt, setAttempt] = useState(0);
+  const guestOverrideRef = useRef(false);
   useEffect(() => {
-    if (!supabase) return;
-    let alive = true, receivedEvent = false;
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      receivedEvent = true;
-      if (alive) { setUser(session?.user ?? null); setLoading(false); }
+    if (!supabase || guestOverride) return;
+    return watchAuthBootstrap(supabase.auth, getCurrentUser, state => {
+      if (!guestOverrideRef.current) setAuthState(state);
     });
-    void getCurrentUser().then(u => { if (alive && !receivedEvent) { setUser(u); setLoading(false); } })
-      .catch(err => { if (alive) { setError(errorMessage(err, t("error"))); setLoading(false); } });
-    return () => { alive = false; data.subscription.unsubscribe(); };
-  }, []);
-  if (loading) return <main className="auth-loading" role="status"><Sparkles/>{t("checking")}</main>;
+  }, [guestOverride, attempt]);
+  if (authState.status === "checking") return <main className="auth-loading" role="status"><Sparkles/>{t("checking")}</main>;
+  if (authState.status === "error") return <main className="auth-recovery"><section className="auth-recovery-card" role="alert">
+    <Sparkles size={26}/><h1>{t("authRecoveryTitle")}</h1><p>{t("authRecoveryHint")}</p>
+    <p className="form-error">{errorMessage(authState.error, t("error"))}</p>
+    <div className="auth-recovery-actions">
+      <button className="primary-button" onClick={() => { guestOverrideRef.current = false; setGuestOverride(false); setAuthState({ status: "checking" }); setAttempt(value => value + 1); }}>{t("retry")}</button>
+      <button className="secondary-button" onClick={() => { void signInWithGoogle().then(({ error }) => { if (error) setAuthState({ status: "error", error }); }).catch(error => setAuthState({ status: "error", error })); }}>{t("login")}</button>
+      <button className="secondary-button" onClick={() => { guestOverrideRef.current = true; setGuestOverride(true); setAuthState({ status: "anonymous" }); }}>{t("continueAsGuest")}</button>
+    </div>
+  </section></main>;
+  const user = authState.status === "authenticated" ? authState.user : null;
   // Keying by identity prevents account A's boards/history from appearing for account B.
-  return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user} authError={error}/></MusicProvider>;
+  return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user}/></MusicProvider>;
 }
-function Workspace({ user, authError }: { user: User | null; authError: string }) {
+function Workspace({ user }: { user: User | null }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
   const iosDevice = isIOSDevice();
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
@@ -119,7 +126,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
   const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const message = ws.error || authError;
+  const message = ws.error;
   const refreshDocuments = () => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể cập nhật thư viện tài liệu.")));
   useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
   useEffect(() => {
@@ -376,6 +383,7 @@ function Workspace({ user, authError }: { user: User | null; authError: string }
       </header>}
       {pwa.updateReady && <div className="update-banner" role="status"><span>{t("updateReady")}</span><button onClick={pwa.applyUpdate}>{t("updateNow")}</button></div>}
       {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => ws.setError("")}><X size={16}/></button></div>}
+      {!ws.board && user && ws.pendingCount > 0 && <div className="workspace-sync-notice" role="status"><span>{t("workspacePendingSave")}</span><button type="button" disabled={working} onClick={() => { setWorking(true); void ws.flush().then(saved => { if (saved) void ws.refresh(); }).finally(() => setWorking(false)); }}>{t("retry")}</button></div>}
       {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
       {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Trung tâm học tập.</div>}
