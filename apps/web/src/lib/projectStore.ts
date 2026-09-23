@@ -390,17 +390,54 @@ export async function deleteFolder(owner: string | null, folder: ProjectFolder) 
 
 export type FlashcardRepositoryResult<T> = { items: T[]; source: FlashcardStorage };
 
+const memoryLocalLists = new Map<string, unknown[]>();
+const memoryOnlyLocalLists = new Set<string>();
+
 function readLocalList<T>(key: string): T[] {
+  if (memoryOnlyLocalLists.has(key)) return (memoryLocalLists.get(key) as T[] | undefined) ?? [];
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(value) ? value : [];
+    const raw = localStorage.getItem(key);
+    if (raw === null) {
+      memoryLocalLists.delete(key);
+      return [];
+    }
+    const value: unknown = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    return value;
   } catch {
-    return [];
+    return (memoryLocalLists.get(key) as T[] | undefined) ?? [];
   }
 }
 
-function writeLocalList<T>(key: string, value: T[]) {
-  localStorage.setItem(key, JSON.stringify(value));
+function writeLocalList<T>(key: string, value: T[]): boolean {
+  const snapshot = [...value];
+  memoryLocalLists.set(key, snapshot);
+  try {
+    localStorage.setItem(key, JSON.stringify(snapshot));
+    memoryLocalLists.delete(key);
+    memoryOnlyLocalLists.delete(key);
+    return true;
+  } catch {
+    // A cache quota error must not turn a successful cloud operation into a
+    // reported network failure. Keep this owner's latest cache for the session.
+    memoryOnlyLocalLists.add(key);
+    return false;
+  }
+}
+
+function removeLocalList(key: string) {
+  memoryLocalLists.delete(key);
+  memoryOnlyLocalLists.delete(key);
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Hide an undeletable stale browser copy for the remainder of this session.
+    memoryOnlyLocalLists.add(key);
+  }
+}
+
+function requirePersistentLocalList(saved: boolean) {
+  if (!saved) throw new Error("Dung lượng lưu trữ của trình duyệt đã đầy. Dữ liệu chưa được lưu bền vững; hãy giải phóng dung lượng rồi thử lại.");
 }
 
 function deckFromRow(row: any, source: FlashcardStorage): FlashcardDeck | null {
@@ -424,14 +461,14 @@ function localCards(owner: string | null, deckId: string) {
   return readLocalList<Flashcard>(flashcardCacheKey(owner, deckId)).filter(card => typeof card?.id === "string" && card.deckId === deckId && typeof card.front === "string" && typeof card.back === "string");
 }
 
-function cacheDeck(owner: string | null, deck: FlashcardDeck) {
+function cacheDeck(owner: string | null, deck: FlashcardDeck): boolean {
   const items = localDecks(owner).filter(item => item.id !== deck.id);
-  writeLocalList(flashcardDeckCacheKey(owner), [{ ...deck }, ...items].slice(0, 200));
+  return writeLocalList(flashcardDeckCacheKey(owner), [{ ...deck }, ...items].slice(0, 200));
 }
 
-function cacheCard(owner: string | null, card: Flashcard) {
+function cacheCard(owner: string | null, card: Flashcard): boolean {
   const items = localCards(owner, card.deckId).filter(item => item.id !== card.id);
-  writeLocalList(flashcardCacheKey(owner, card.deckId), [{ ...card }, ...items].slice(0, 1000));
+  return writeLocalList(flashcardCacheKey(owner, card.deckId), [{ ...card }, ...items].slice(0, 1000));
 }
 
 export function readFlashcardDecks(owner: string | null) {
@@ -482,7 +519,7 @@ export async function upsertFlashcardDeck(owner: string | null, deck: FlashcardD
       // A missing migration or unavailable network keeps the edit usable locally.
     }
   }
-  cacheDeck(owner, { ...deck, source: "local" });
+  requirePersistentLocalList(cacheDeck(owner, { ...deck, source: "local" }));
   return "local";
 }
 
@@ -493,14 +530,14 @@ export async function deleteFlashcardDeck(owner: string | null, deckId: string):
       const { error } = await client.from("flashcard_decks").delete().eq("user_id", owner).eq("id", deckId).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
       writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
-      localStorage.removeItem(flashcardCacheKey(owner, deckId));
+      removeLocalList(flashcardCacheKey(owner, deckId));
       return "cloud";
     } catch {
       // Keep the app usable until the flashcard migration/network is available.
     }
   }
-  writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
-  localStorage.removeItem(flashcardCacheKey(owner, deckId));
+  requirePersistentLocalList(writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId)));
+  removeLocalList(flashcardCacheKey(owner, deckId));
   return "local";
 }
 
@@ -516,7 +553,7 @@ export async function upsertFlashcard(owner: string | null, card: Flashcard): Pr
       // A missing migration or unavailable network keeps the edit usable locally.
     }
   }
-  cacheCard(owner, { ...card, source: "local" });
+  requirePersistentLocalList(cacheCard(owner, { ...card, source: "local" }));
   return "local";
 }
 
@@ -539,7 +576,7 @@ export async function upsertFlashcards(owner: string | null, cards: Flashcard[])
     }
   }
   const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
-  writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000));
+  requirePersistentLocalList(writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000)));
   return "local";
 }
 
@@ -555,7 +592,7 @@ export async function deleteFlashcard(owner: string | null, card: Flashcard): Pr
       // Keep the app usable until the flashcard migration/network is available.
     }
   }
-  writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
+  requirePersistentLocalList(writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id)));
   return "local";
 }
 
@@ -683,16 +720,16 @@ function localStudyEvents(owner: string | null) {
   return readLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner)).filter(event => typeof event?.eventId === "string" && typeof event.studyDate === "string");
 }
 
-function cacheStudyPlan(owner: string | null, plan: StudyPlan) {
-  writeLocalList(flashcardStudyPlanCacheKey(owner), [plan, ...localStudyPlans(owner).filter(item => item.id !== plan.id)].slice(0, 20));
+function cacheStudyPlan(owner: string | null, plan: StudyPlan): boolean {
+  return writeLocalList(flashcardStudyPlanCacheKey(owner), [plan, ...localStudyPlans(owner).filter(item => item.id !== plan.id)].slice(0, 20));
 }
 
-function cacheStudyDay(owner: string | null, day: StudyDayProgress) {
-  writeLocalList(flashcardStudyDayCacheKey(owner), [day, ...localStudyDays(owner).filter(item => studyDayKey(item) !== studyDayKey(day))].slice(0, 730));
+function cacheStudyDay(owner: string | null, day: StudyDayProgress): boolean {
+  return writeLocalList(flashcardStudyDayCacheKey(owner), [day, ...localStudyDays(owner).filter(item => studyDayKey(item) !== studyDayKey(day))].slice(0, 730));
 }
 
-function cacheStudyEvent(owner: string | null, event: StudyEvent) {
-  writeLocalList(flashcardStudyEventQueueCacheKey(owner), [event, ...localStudyEvents(owner).filter(item => item.eventId !== event.eventId)].slice(0, 5000));
+function cacheStudyEvent(owner: string | null, event: StudyEvent): boolean {
+  return writeLocalList(flashcardStudyEventQueueCacheKey(owner), [event, ...localStudyEvents(owner).filter(item => item.eventId !== event.eventId)].slice(0, 5000));
 }
 
 function removeStudyEvent(owner: string | null, eventId: string) {
@@ -734,7 +771,7 @@ export async function upsertStudyPlan(owner: string | null, plan: StudyPlan): Pr
       // usable locally until the cloud table becomes available.
     }
   }
-  cacheStudyPlan(owner, { ...plan, source: "local" });
+  requirePersistentLocalList(cacheStudyPlan(owner, { ...plan, source: "local" }));
   return "local";
 }
 
@@ -780,7 +817,7 @@ export async function upsertStudyDay(owner: string | null, day: StudyDayProgress
     }
   }
   const saved = { ...day, source: "local" as const };
-  cacheStudyDay(owner, saved);
+  requirePersistentLocalList(cacheStudyDay(owner, saved));
   return { item: saved, source: "local" };
 }
 
@@ -802,7 +839,7 @@ export async function saveStudyDay(owner: string | null, day: StudyDayProgress):
     }
   }
   const saved = { ...day, source: "local" as const };
-  cacheStudyDay(owner, saved);
+  requirePersistentLocalList(cacheStudyDay(owner, saved));
   return { item: saved, source: "local" };
 }
 
@@ -849,9 +886,8 @@ function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForC
     updatedAt: timestamp,
   };
   const saved: StudyDayProgress = { ...applyStudyEventToTasks(base, event), source: "local" };
-  cacheStudyDay(owner, saved);
-  cacheStudyEvent(owner, event);
-  if (!queueForCloud) removeStudyEvent(owner, event.eventId);
+  requirePersistentLocalList(cacheStudyDay(owner, saved));
+  if (queueForCloud) requirePersistentLocalList(cacheStudyEvent(owner, event));
   return saved;
 }
 
