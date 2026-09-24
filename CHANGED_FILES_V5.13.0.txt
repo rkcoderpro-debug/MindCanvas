@@ -1,6 +1,7 @@
 CHANGELOG_V5.13.0.md
 CHANGED_FILES_V5.13.0.txt
 V5.13.0_RELEASE_REPORT_VI.md
+V5.13.0_DEPLOY_FIX_VI.md
 apps/server/package.json
 apps/web/package.json
 apps/web/public/sw.js
@@ -10,6 +11,8 @@ apps/web/src/components/SharedLearningPage.tsx
 apps/web/src/lib/lab.test.ts
 apps/web/src/lib/lab.ts
 apps/web/src/lib/labStorage.test.ts
+apps/web/src/lib/flashcardStorage.ts
+apps/web/src/lib/i18n.tsx
 apps/web/src/lib/learningShare.test.ts
 apps/web/src/lib/learningShare.ts
 apps/web/src/lib/learningShareUpload.test.ts
