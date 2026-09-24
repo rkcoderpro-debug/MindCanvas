@@ -54,8 +54,20 @@ describe("interactive lab helpers", () => {
     expect(validateLabHtml("<script>fetch('/data')</script>")).toMatchObject({ ok: false, code: "unsafeHtml" });
   });
 
+  it("allows only approved CDN-based Lab libraries when explicitly opted in", () => {
+    const html = `<html><head><script src="https://unpkg.com/react@18/umd/react.production.min.js"></script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css"><script src="https://cdn.tailwindcss.com"></script></head><body><div id="root"></div><iframe src={preview}></iframe><script>const top = []; fetch('https://generativelanguage.googleapis.com/v1beta/models/x');</script></body></html>`;
+    expect(validateLabHtml(html)).toMatchObject({ ok: false, code: "unsafeHtml" });
+    expect(validateLabHtml(html, { allowExternalResources: true })).toMatchObject({ ok: true, warnings: [expect.stringContaining("API/Gemini")] });
+    expect(validateLabHtml('<script src="https://unpkg.com/x.js"></script><script src="https://attacker.example/x.js"></script>', { allowExternalResources: true })).toMatchObject({ ok: false, code: "unsafeHtml", warnings: ["external URL host is not approved: attacker.example"] });
+    expect(validateLabHtml('<script>window.parent.document.body</script>', { allowExternalResources: true })).toMatchObject({ ok: false, code: "unsafeHtml", warnings: ["parent-window access"] });
+  });
+
+  it("defaults missing CDN permission to false for existing Lab backups", () => {
+    expect(saveLab("alice", { id: "legacy-cdn", title: "Legacy", subject: "other", learnerLevel: "", sourceFileName: "", sourceText: "", request: "", designPrompt: "", planPrompt: "", design: null, programPrompt: "", programHtml: "<html></html>", allowExternalResources: false }).allowExternalResources).toBe(false);
+  });
+
   it("keeps saved labs isolated by account and supports deletion", () => {
-    const saved = saveLab("alice", { id: "lab-a", title: design.title, subject: design.subject, learnerLevel: "10", sourceFileName: "", sourceText: "", request: "simulate", designPrompt: "prompt", planPrompt: "implementation plan", design, programPrompt: "implementation plan", programHtml: "<html></html>" });
+    const saved = saveLab("alice", { id: "lab-a", title: design.title, subject: design.subject, learnerLevel: "10", sourceFileName: "", sourceText: "", request: "simulate", designPrompt: "prompt", planPrompt: "implementation plan", design, programPrompt: "implementation plan", programHtml: "<html></html>", allowExternalResources: false });
     expect(readLabs("alice")).toHaveLength(2);
     expect(readLabs("bob")).toHaveLength(1);
     expect(saved.createdAt).toBeTruthy();

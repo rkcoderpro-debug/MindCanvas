@@ -45,6 +45,8 @@ export type LabProject = {
   updatedAt: string;
   /** Built-in starter content. System demos are immutable; saving creates a personal copy. */
   systemDemo?: boolean;
+  /** Load allowlisted CDN libraries when this Lab is explicitly run. */
+  allowExternalResources: boolean;
 };
 
 export type LabPromptInput = {
@@ -83,6 +85,7 @@ export const FLAPPY_BIRD_STARTER_LAB: LabProject = {
   createdAt: STARTER_LAB_RELEASED_AT,
   updatedAt: STARTER_LAB_RELEASED_AT,
   systemDemo: true,
+  allowExternalResources: false,
 };
 
 type JsonObject = Record<string, unknown>;
@@ -225,27 +228,41 @@ export function buildLabProgramPrompt(input: { language: string; design: LabDesi
 
 export type LabHtmlCheck = { ok: true; warnings: string[] } | { ok: false; code: Extract<LabValidationCode, "emptyHtml" | "htmlTooLarge" | "unsafeHtml">; warnings: string[] };
 
-export function validateLabHtml(html: string): LabHtmlCheck {
+export function validateLabHtml(html: string, options: { allowExternalResources?: boolean } = {}): LabHtmlCheck {
   const value = html.trim();
   if (!value) return { ok: false, code: "emptyHtml", warnings: [] };
   if (value.length > MAX_HTML) return { ok: false, code: "htmlTooLarge", warnings: [] };
+  const allowExternalResources = options.allowExternalResources === true;
   // SVG documents commonly declare the W3C namespace in an inline string or
   // createElementNS call. It does not load a resource, so it must not be
   // confused with a script, stylesheet, image or network URL.
-  const scanValue = value.replace(/https?:\/\/www\.w3\.org\/(?:1999\/xlink|1999\/xhtml|2000\/svg)(?=["'\s>])/gi, "");
+  const scanValue = value
+    .replace(/https?:\/\/www\.w3\.org\/(?:1999\/xlink|1999\/xhtml|2000\/svg)(?=["'\s>])/gi, "")
+    .replace(/http:\/\/www\.geogebra\.org\/apps\/5\.0\/ggb(?=["'\s>])/gi, "");
   const forbidden: Array<{ pattern: RegExp; label: string }> = [
-    { pattern: /<\/?(?:iframe|object|embed|form|base)\b/i, label: "embedded or navigation elements" },
-    { pattern: /<script\b[^>]*\bsrc\s*=|<link\b/i, label: "external resource loading" },
+    { pattern: /<\/?(?:object|embed|form|base)\b/i, label: "embedded or navigation elements" },
+    ...(!allowExternalResources ? [{ pattern: /<\/?iframe\b/i, label: "embedded or navigation elements" }] : []),
+    ...(!allowExternalResources ? [{ pattern: /<script\b[^>]*\bsrc\s*=|<link\b/i, label: "external resource loading" }] : []),
     { pattern: /(?:javascript:|vbscript:|data:text\/html)/i, label: "script URLs" },
-    { pattern: /(?:https?:\/\/|\/\/)(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#]|["']|\s|$)/i, label: "external URLs" },
-    { pattern: /\b(?:fetch|XMLHttpRequest|WebSocket|sendBeacon)\s*\(/i, label: "network APIs" },
-    { pattern: /\b(?:top|parent|opener)\s*\./i, label: "parent-window access" },
+    ...(!allowExternalResources ? [{ pattern: /(?:https?:\/\/|\/\/)(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#]|["']|\s|$)/i, label: "external URLs" }] : []),
+    ...(!allowExternalResources ? [{ pattern: /\b(?:fetch|XMLHttpRequest|WebSocket|sendBeacon)\s*\(/i, label: "network APIs" }] : []),
+    { pattern: /\b(?:window|globalThis|self)\s*\.\s*(?:top|parent|opener)\b|\b(?:top|parent|opener)\s*\.\s*(?:window|document|location|frames|opener|parent|top)\b/i, label: "parent-window access" },
   ];
   const hit = forbidden.find(item => item.pattern.test(scanValue));
   if (hit) return { ok: false, code: "unsafeHtml", warnings: [hit.label] };
+  if (allowExternalResources) {
+    const permittedCdnHosts = new Set(["unpkg.com", "cdn.jsdelivr.net", "cdn.tailwindcss.com", "cdnjs.cloudflare.com"]);
+    const permittedLiteralHosts = new Set([...permittedCdnHosts, "generativelanguage.googleapis.com", "aistudio.google.com", "www.geogebra.org"]);
+    const externalUrlPattern = /(?:https?:)?\/\/((?:[a-z0-9-]+\.)+[a-z]{2,})(?=[:/\?#"'\s`]|$)/gi;
+    for (const match of scanValue.matchAll(externalUrlPattern)) {
+      const host = match[1].toLowerCase();
+      if (!permittedLiteralHosts.has(host)) return { ok: false, code: "unsafeHtml", warnings: [`external URL host is not approved: ${host}`] };
+    }
+  }
   const warnings: string[] = [];
   if (!/<(?:html|main|body|svg|canvas)\b/i.test(value)) warnings.push("The HTML has no common document or drawing root; check the preview after running it.");
   if (!/<script\b/i.test(value)) warnings.push("No script tag was found, so the result may be a static preview.");
+  if (allowExternalResources) warnings.push("Đang cho phép thư viện từ CDN: cần Internet. API/Gemini bị chặn; localStorage chỉ lưu tạm trong phiên Lab và không đọc được dữ liệu MindCanvas.");
   return { ok: true, warnings };
 }
 
@@ -285,6 +302,7 @@ export function cleanLab(value: unknown): LabProject | null {
     createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
     systemDemo: value.systemDemo === true,
+    allowExternalResources: value.allowExternalResources === true,
   };
 }
 
@@ -333,8 +351,15 @@ export function deleteLab(owner: string | null, id: string): void {
 
 export const LAB_LIMITS = { maxSourceText: MAX_SOURCE_TEXT, maxHtml: MAX_HTML } as const;
 
-/** The sandbox supplies an opaque origin; this CSP blocks network/resource access. */
-export function labSandboxDocument(html: string): string {
-  const meta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; navigate-to 'none'">`;
-  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
+/** The sandbox supplies an opaque origin; CDN access is allowlisted per Lab and never grants API access. */
+export function labSandboxDocument(html: string, options: { allowExternalResources?: boolean } = {}): string {
+  const allowExternalResources = options.allowExternalResources === true;
+  const cdnHosts = "https://unpkg.com https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://cdnjs.cloudflare.com";
+  const scriptSources = allowExternalResources ? `'unsafe-inline' 'unsafe-eval' ${cdnHosts}` : "'unsafe-inline'";
+  const styleSources = allowExternalResources ? `'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com` : "'unsafe-inline'";
+  const fontSources = allowExternalResources ? `data: blob: https://cdn.jsdelivr.net https://unpkg.com` : "data:";
+  const frameSources = allowExternalResources ? "blob: data:" : "'none'";
+  const meta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${scriptSources}; style-src ${styleSources}; img-src data: blob:; font-src ${fontSources}; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src ${frameSources}; worker-src 'none'; media-src 'none'; manifest-src 'none'; navigate-to 'none'">`;
+  const storageShim = allowExternalResources ? `<script>(function(){var values=new Map();var storage={get length(){return values.size;},key:function(i){return Array.from(values.keys())[i]??null;},getItem:function(k){k=String(k);return values.has(k)?values.get(k):null;},setItem:function(k,v){values.set(String(k),String(v));},removeItem:function(k){values.delete(String(k));},clear:function(){values.clear();}};try{Object.defineProperty(window,'localStorage',{configurable:true,value:storage});}catch(_){}try{Object.defineProperty(window,'sessionStorage',{configurable:true,value:storage});}catch(_){}})();</script>` : "";
+  return `<!doctype html><html><head>${meta}${storageShim}</head><body>${html}</body></html>`;
 }

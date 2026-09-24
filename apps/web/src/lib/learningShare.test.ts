@@ -30,4 +30,16 @@ describe("Lab sandbox document", () => {
     expect(result).toContain("frame-src 'none'");
     expect(result).toContain(html);
   });
+
+  it("allows the supported CDN libraries without granting API, same-origin or navigation access", () => {
+    const result = labSandboxDocument("<main>CDN Lab</main>", { allowExternalResources: true });
+    expect(result).toContain("script-src 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://cdnjs.cloudflare.com");
+    expect(result).toContain("style-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com");
+    expect(result).toContain("connect-src 'none'");
+    expect(result).toContain("frame-src blob: data:");
+    expect(result).toContain("navigate-to 'none'");
+    expect(result).toContain("localStorage");
+    expect(result).not.toContain("allow-same-origin");
+    expect(result).not.toContain("generativelanguage.googleapis.com");
+  });
 });

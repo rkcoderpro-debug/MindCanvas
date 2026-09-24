@@ -51,6 +51,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   const [busy, setBusy] = useState(false);
   const [labFullscreen, setLabFullscreen] = useState(false);
   const [labFallbackFullscreen, setLabFallbackFullscreen] = useState(false);
+  const [allowSharedExternalResources, setAllowSharedExternalResources] = useState(false);
   const labShellRef = useRef<HTMLDivElement>(null);
 
   const reload = () => {
@@ -120,7 +121,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
 
   const resetDetail = () => {
     setContent(null); setQuiz(null); setQuizResult(null); setQuizFeedback({}); setCards([]); setAnswers([]); setQuestionIndex(0);
-    setLabFullscreen(false); setLabFallbackFullscreen(false); setNotice("");
+    setLabFullscreen(false); setLabFallbackFullscreen(false); setAllowSharedExternalResources(false); setNotice("");
   };
 
   const open = async (item: IncomingLearningShare) => {
@@ -240,7 +241,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
         {revealed && <div className="shared-ratings">{(["again","hard","good","easy"] as const).map(r => <button disabled={busy} key={r} onClick={() => void rate(r)}>{({ again: "Chưa nhớ", hard: "Khó", good: "Đã nhớ", easy: "Dễ" })[r]}</button>)}</div>}
       </div> : <p>Bộ thẻ chưa có thẻ.</p>)}
 
-      {active.kind === "lab" && <><p>Lab chỉ tải phiên bản mới khi bạn mở lại. Chuyển vào/ra toàn màn hình không tải lại mô phỏng.</p><div ref={labShellRef} className={`shared-lab-shell ${labFallbackFullscreen ? "shared-lab-fallback-fullscreen" : ""}`}><div className="shared-lab-toolbar"><span>Lab tương tác</span><button type="button" className="secondary-button" onClick={() => void toggleLabFullscreen()}>{labFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>} {labFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}</button></div><iframe className="shared-lab-frame" title={active.title} sandbox="allow-scripts" srcDoc={labSandboxDocument(String(content?.program_html ?? ""))}/></div></>}
+      {active.kind === "lab" && <><p>Lab chỉ tải phiên bản mới khi bạn mở lại. Chuyển vào/ra toàn màn hình không tải lại mô phỏng.</p><div ref={labShellRef} className={`shared-lab-shell ${labFallbackFullscreen ? "shared-lab-fallback-fullscreen" : ""}`}><div className="shared-lab-toolbar"><span>Lab tương tác</span><button type="button" className="secondary-button" onClick={() => void toggleLabFullscreen()}>{labFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>} {labFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}</button></div>{content?.allow_external_resources === true && !allowSharedExternalResources ? <div className="shared-lab-external-consent" role="note"><p>Lab này tải thư viện từ CDN: unpkg, jsDelivr, cdn.tailwindcss.com và cdnjs. API/Gemini bị chặn; localStorage chỉ lưu tạm trong phiên và không đọc được dữ liệu MindCanvas. Chỉ tiếp tục nếu bạn tin cậy nội dung được chia sẻ.</p><button type="button" className="primary-button" onClick={() => setAllowSharedExternalResources(true)}>Cho phép tải thư viện và chạy Lab</button></div> : <iframe className="shared-lab-frame" title={active.title} sandbox="allow-scripts" srcDoc={labSandboxDocument(String(content?.program_html ?? ""), { allowExternalResources: content?.allow_external_resources === true && allowSharedExternalResources })}/>}</div></>}
       {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small></div></div>}
     </div> : <>
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}

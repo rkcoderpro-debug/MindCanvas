@@ -55,6 +55,7 @@ function cloudLabToLocal(row: PublishedLabProject): LabProject {
     design: null,
     programPrompt: "",
     programHtml: row.program_html,
+    allowExternalResources: row.allow_external_resources === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     systemDemo: false,
@@ -73,6 +74,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   // workflow no longer asks the user to paste or validate that JSON.
   const [legacyDesign, setLegacyDesign] = useState<LabProject["design"]>(null);
   const [programHtml, setProgramHtml] = useState("");
+  const [allowExternalResources, setAllowExternalResources] = useState(false);
   const [htmlFileName, setHtmlFileName] = useState("");
   const [runnerHtml, setRunnerHtml] = useState("");
   const [runnerKey, setRunnerKey] = useState(0);
@@ -89,7 +91,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedFingerprint, setSavedFingerprint] = useState("");
-  const snapshot = JSON.stringify({ draft, designPrompt, legacyDesign, programHtml });
+  const snapshot = JSON.stringify({ draft, designPrompt, legacyDesign, programHtml, allowExternalResources });
   const dirty = ready && snapshot !== savedFingerprint;
   const ownerRef = useRef(owner); ownerRef.current = owner;
   const saveLock = useRef(false);
@@ -102,11 +104,17 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     void (async () => {
       try {
         const next = await readStoredLabs(owner);
-        const backup = await readLabDraft<{ selectedId: string | null; draft: Draft; designPrompt: string; legacyDesign: LabProject["design"]; programHtml: string; savedFingerprint: string }>(owner);
+        const backup = await readLabDraft<{ selectedId: string | null; draft: Draft; designPrompt: string; legacyDesign: LabProject["design"]; programHtml: string; allowExternalResources?: boolean; savedFingerprint: string }>(owner);
         if (!alive) return;
         setLabs(next);
         if (backup?.draft) {
-          setSelectedId(backup.selectedId); setDraft(backup.draft); setDesignPrompt(backup.designPrompt); setLegacyDesign(backup.legacyDesign); setProgramHtml(backup.programHtml); setRunnerHtml(validateLabHtml(backup.programHtml).ok ? backup.programHtml : ""); setSavedFingerprint(backup.savedFingerprint);
+          const backupAllowsExternal = backup.allowExternalResources === true;
+          let restoredFingerprint = backup.savedFingerprint;
+          try {
+            const parts = JSON.parse(backup.savedFingerprint) as Record<string, unknown>;
+            if (!("allowExternalResources" in parts)) restoredFingerprint = JSON.stringify({ ...parts, allowExternalResources: backupAllowsExternal });
+          } catch { /* An invalid older fingerprint remains dirty and can be saved explicitly. */ }
+          setSelectedId(backup.selectedId); setDraft(backup.draft); setDesignPrompt(backup.designPrompt); setLegacyDesign(backup.legacyDesign); setProgramHtml(backup.programHtml); setAllowExternalResources(backupAllowsExternal); setRunnerHtml(!backupAllowsExternal && validateLabHtml(backup.programHtml).ok ? backup.programHtml : ""); setSavedFingerprint(restoredFingerprint);
         } else {
           const initial = next.find(lab => !lab.systemDemo) ?? next[0];
           if (initial) loadLab(initial); else resetDraft();
@@ -136,7 +144,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   }, [owner]);
   useEffect(() => {
     if (!ready || loadedOwner.current !== owner) return;
-    void writeLabDraft(owner, { selectedId, draft, designPrompt, legacyDesign, programHtml, savedFingerprint }).catch(() => setError("Không thể giữ bản nháp. Hãy tải HTML xuống trước khi rời trang."));
+    void writeLabDraft(owner, { selectedId, draft, designPrompt, legacyDesign, programHtml, allowExternalResources, savedFingerprint }).catch(() => setError("Không thể giữ bản nháp. Hãy tải HTML xuống trước khi rời trang."));
   }, [ready, owner, selectedId, snapshot, savedFingerprint]);
   useEffect(() => {
     if (!dirty) return;
@@ -170,12 +178,13 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const selectedLab = useMemo(() => labs.find(item => item.id === selectedId) ?? null, [labs, selectedId]);
 
   function resetDraft() {
-    setSavedFingerprint(JSON.stringify({ draft: EMPTY_DRAFT, designPrompt: "", legacyDesign: null, programHtml: "" }));
+    setSavedFingerprint(JSON.stringify({ draft: EMPTY_DRAFT, designPrompt: "", legacyDesign: null, programHtml: "", allowExternalResources: false }));
     setSelectedId(null);
     setDraft(EMPTY_DRAFT);
     setDesignPrompt("");
     setLegacyDesign(null);
     setProgramHtml("");
+    setAllowExternalResources(false);
     setHtmlFileName("");
     setRunnerHtml("");
     setIsRunnerFullscreen(false);
@@ -186,14 +195,16 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   }
 
   function loadLab(lab: LabProject) {
-    setSavedFingerprint(JSON.stringify({ draft: { title: lab.title, subject: lab.subject, learnerLevel: lab.learnerLevel, sourceFileName: lab.sourceFileName, sourceText: lab.sourceText, request: lab.request }, designPrompt: lab.designPrompt || lab.planPrompt || lab.programPrompt, legacyDesign: lab.design, programHtml: lab.programHtml }));
+    setSavedFingerprint(JSON.stringify({ draft: { title: lab.title, subject: lab.subject, learnerLevel: lab.learnerLevel, sourceFileName: lab.sourceFileName, sourceText: lab.sourceText, request: lab.request }, designPrompt: lab.designPrompt || lab.planPrompt || lab.programPrompt, legacyDesign: lab.design, programHtml: lab.programHtml, allowExternalResources: lab.allowExternalResources }));
     setSelectedId(lab.id);
     setDraft({ title: lab.title, subject: lab.subject, learnerLevel: lab.learnerLevel, sourceFileName: lab.sourceFileName, sourceText: lab.sourceText, request: lab.request });
     setDesignPrompt(lab.designPrompt || lab.planPrompt || lab.programPrompt);
     setLegacyDesign(lab.design);
     setProgramHtml(lab.programHtml);
+    setAllowExternalResources(lab.allowExternalResources);
     setHtmlFileName("");
-    setRunnerHtml(validateLabHtml(lab.programHtml).ok ? lab.programHtml : "");
+    // Never start CDN code simply because a Lab was opened or restored.
+    setRunnerHtml(!lab.allowExternalResources && validateLabHtml(lab.programHtml).ok ? lab.programHtml : "");
     setIsRunnerFullscreen(false);
     setRunnerFallbackFullscreen(false);
     setError("");
@@ -230,8 +241,12 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
 
   const runProgram = () => {
     setError("");
-    const check = validateLabHtml(programHtml);
-    if (!check.ok) { setError(errorFor(check.code, t)); return; }
+    const check = validateLabHtml(programHtml, { allowExternalResources });
+    if (!check.ok) {
+      const needsCdnPermission = check.warnings.includes("external resource loading");
+      setError(`${errorFor(check.code, t)}${needsCdnPermission ? " Bật tùy chọn tải thư viện CDN nếu bạn tin cậy file này." : ""}`);
+      return;
+    }
     setRunnerHtml(programHtml.trim());
     setRunnerKey(value => value + 1);
     setNotice(check.warnings.length ? `${t("labRunning")} ${check.warnings.join(" ")}` : t("labRunning"));
@@ -273,6 +288,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       planPrompt: "",
       programPrompt: designPrompt,
       programHtml,
+      allowExternalResources,
       systemDemo: selectedLab?.systemDemo === true,
     };
     const saved = await saveStoredLab(owner, { ...input, id: selectedId ?? undefined });
@@ -427,7 +443,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
         {selectedLab && <div className="lab-detail-actions"><button className="secondary-button" disabled={dirty || saving || !owner || !selectedLab.programHtml || !canShare("lab", accountPlan?.effectivePlanId)} title={dirty ? "Hãy lưu thay đổi trên thiết bị trước khi tải lên cloud" : !canShare("lab", accountPlan?.effectivePlanId) ? "Cần gói Pro để đưa Lab lên cloud" : undefined} onClick={() => { if (!owner) return; setError(""); void publishLab(selectedLab, owner).then(() => { setPublishedIds(ids => [...new Set([...ids, selectedLab.id])]); setNotice("Đã lưu HTML mô phỏng lên cloud. Nếu vừa sửa Lab, hãy lưu local rồi tải lên lại."); }).catch(e => setError(e.message)); }}>Lưu Lab lên cloud</button><LearningShareButton kind="lab" id={selectedLab.id} title={selectedLab.title} plan={accountPlan} available={!dirty && publishedIds.includes(selectedLab.id)}/></div>}
         <section className="lab-card lab-step-card"><div className="lab-step-heading"><span className="lab-step-number">1</span><div><span className="eyebrow">AI MANUAL</span><h2>{t("labStepSource")}</h2><p>{t("labStepSourceHint")}</p></div></div><div className="lab-form-grid"><label>{t("labName")}<input value={draft.title} maxLength={200} onChange={event => updateDraft("title", event.target.value)} placeholder={t("labNamePlaceholder")}/></label><label>{t("labSubject")}<select value={draft.subject} onChange={event => updateDraft("subject", event.target.value as LabSubject)}><option value="physics">{t("labPhysics")}</option><option value="chemistry">{t("labChemistry")}</option><option value="other">{t("labOther")}</option></select></label><label>{t("labLearnerLevel")}<input value={draft.learnerLevel} maxLength={120} onChange={event => updateDraft("learnerLevel", event.target.value)} placeholder={t("labLearnerLevelPlaceholder")}/></label><label className="lab-upload-field"><span>{t("labSourceFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{sourceBusy ? t("labReading") : draft.sourceFileName || t("labChooseFile")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.markdown,.json,.csv" onChange={event => void chooseSource(event.target.files?.[0])}/></span><small>{t("labSourceFileHint")}</small></label></div><label>{t("labSourceText")}<textarea rows={5} value={draft.sourceText} onChange={event => updateDraft("sourceText", event.target.value)} placeholder={t("labSourceTextPlaceholder")}/></label><label>{t("labRequest")}<textarea rows={4} value={draft.request} onChange={event => updateDraft("request", event.target.value)} placeholder={t("labRequestPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={createDesignPrompt}><WandSparkles size={16}/>{t("labCreateHtmlPrompt")}</button>{designPrompt && <button className="secondary-button" type="button" onClick={() => void copy(designPrompt, "prompt")}><Clipboard size={15}/>{copied === "prompt" ? t("copiedPrompt") : t("copyPrompt")}</button>}</div>{designPrompt && <label className="lab-output-field"><span>{t("labHtmlPromptLabel")}</span><textarea rows={11} readOnly value={designPrompt}/></label>}</section>
 
-        <section className="lab-card lab-step-card lab-run-card"><div className="lab-step-heading"><span className="lab-step-number">2</span><div><span className="eyebrow">SANDBOX RUNNER</span><h2>{t("labStepRun")}</h2><p>{t("labStepRunHint")}</p></div></div><label className="lab-upload-field"><span>{t("labHtmlFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{htmlFileName || t("labHtmlFileHint")}</span><input type="file" accept=".html,.htm,text/html" onChange={event => void chooseHtmlFile(event.target.files?.[0])}/></span><small>{t("labHtmlUploadHint")}</small></label><label>{t("labHtmlInput")}<textarea rows={14} value={programHtml} onChange={event => { setProgramHtml(event.target.value); setHtmlFileName(""); setRunnerHtml(""); }} placeholder={t("labHtmlPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={runProgram}><Play size={16}/>{t("labRun")}</button><button className="secondary-button" type="button" onClick={() => { setProgramHtml(""); setHtmlFileName(""); setRunnerHtml(""); setIsRunnerFullscreen(false); setRunnerFallbackFullscreen(false); }}><RefreshCw size={15}/>{t("labClearHtml")}</button>{programHtml && <button className="secondary-button" type="button" onClick={() => void copy(programHtml, "html")}><Clipboard size={15}/>{copied === "html" ? t("copiedPrompt") : t("copyPrompt")}</button>}{programHtml && <button className="secondary-button" type="button" onClick={downloadHtml}><Download size={15}/>{t("labDownloadHtml")}</button>}</div><div className={`lab-runner-shell ${runnerFallbackFullscreen ? "lab-runner-fallback-fullscreen" : ""}`} ref={runnerRef}><div className="lab-runner-toolbar">{isRunnerFullscreen && (error || notice) && <small role={error ? "alert" : "status"}>{error || notice}</small>}<button type="button" disabled={!ready || saving} onClick={() => void saveCurrent()}><Save size={15}/>{saving ? "Đang lưu…" : t("labSave")}</button><span><span className="lab-live-dot"/> {runnerHtml ? t("labReady") : t("labWaiting")}</span>{runnerHtml && <button type="button" className="icon-button" aria-label={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} title={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} onClick={() => void toggleRunnerFullscreen()}>{isRunnerFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}</button>}</div>{runnerHtml ? <iframe key={runnerKey} className="lab-runner-frame" title={draft.title || t("labTitle")} sandbox="allow-scripts" srcDoc={labSandboxDocument(runnerHtml)}/> : <div className="lab-runner-empty"><Beaker size={32}/><p>{t("labRunnerEmpty")}</p></div>}</div></section>
+        <section className="lab-card lab-step-card lab-run-card"><div className="lab-step-heading"><span className="lab-step-number">2</span><div><span className="eyebrow">SANDBOX RUNNER</span><h2>{t("labStepRun")}</h2><p>{t("labStepRunHint")}</p></div></div><label className="lab-upload-field"><span>{t("labHtmlFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{htmlFileName || t("labHtmlFileHint")}</span><input type="file" accept=".html,.htm,text/html" onChange={event => void chooseHtmlFile(event.target.files?.[0])}/></span><small>{t("labHtmlUploadHint")}</small></label><label>{t("labHtmlInput")}<textarea rows={14} value={programHtml} onChange={event => { setProgramHtml(event.target.value); setHtmlFileName(""); setRunnerHtml(""); }} placeholder={t("labHtmlPlaceholder")}/></label><label className="lab-external-resource-option"><input type="checkbox" checked={allowExternalResources} onChange={event => { setAllowExternalResources(event.target.checked); setRunnerHtml(""); setRunnerKey(value => value + 1); }}/><span><strong>Cho phép tải thư viện CDN cho Lab này</strong><small>Chỉ cho phép unpkg, jsDelivr, cdn.tailwindcss.com và cdnjs. Cần Internet; API/Gemini bị chặn, localStorage chỉ lưu tạm trong phiên và không đọc được dữ liệu MindCanvas. Chỉ bật với file bạn tin cậy.</small></span></label><div className="lab-actions"><button className="primary-button" type="button" onClick={runProgram}><Play size={16}/>{t("labRun")}</button><button className="secondary-button" type="button" onClick={() => { setProgramHtml(""); setHtmlFileName(""); setRunnerHtml(""); setIsRunnerFullscreen(false); setRunnerFallbackFullscreen(false); }}><RefreshCw size={15}/>{t("labClearHtml")}</button>{programHtml && <button className="secondary-button" type="button" onClick={() => void copy(programHtml, "html")}><Clipboard size={15}/>{copied === "html" ? t("copiedPrompt") : t("copyPrompt")}</button>}{programHtml && <button className="secondary-button" type="button" onClick={downloadHtml}><Download size={15}/>{t("labDownloadHtml")}</button>}</div><div className={`lab-runner-shell ${runnerFallbackFullscreen ? "lab-runner-fallback-fullscreen" : ""}`} ref={runnerRef}><div className="lab-runner-toolbar">{isRunnerFullscreen && (error || notice) && <small role={error ? "alert" : "status"}>{error || notice}</small>}<button type="button" disabled={!ready || saving} onClick={() => void saveCurrent()}><Save size={15}/>{saving ? "Đang lưu…" : t("labSave")}</button><span><span className="lab-live-dot"/> {runnerHtml ? t("labReady") : t("labWaiting")}</span>{runnerHtml && <button type="button" className="icon-button" aria-label={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} title={t(isRunnerFullscreen ? "labExitFullscreen" : "labFullscreen")} onClick={() => void toggleRunnerFullscreen()}>{isRunnerFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}</button>}</div>{runnerHtml ? <iframe key={runnerKey} className="lab-runner-frame" title={draft.title || t("labTitle")} sandbox="allow-scripts" srcDoc={labSandboxDocument(runnerHtml, { allowExternalResources })}/> : <div className="lab-runner-empty"><Beaker size={32}/><p>{t("labRunnerEmpty")}</p></div>}</div></section>
         {error && <p className="form-error lab-message" role="alert">{error}</p>}{notice && !error && <p className="lab-notice" role="status">{notice}</p>}
         <footer className="lab-footer-actions"><span role="status">{saving ? "Đang lưu…" : dirty ? "Chưa lưu" : ready ? "Đã tải / đã lưu trên thiết bị" : "Đang tải…"}</span><button className="primary-button" type="button" disabled={!ready || saving} onClick={() => void saveCurrent()}><Save size={16}/>{t("labSave")}</button>{selectedLab && <button className="secondary-button" type="button" disabled={saving} onClick={() => { if (confirmReplace()) loadLab(selectedLab); }}><RefreshCw size={15}/>{t("labDiscardChanges")}</button>}</footer>
       </main>

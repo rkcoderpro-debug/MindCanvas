@@ -14,6 +14,7 @@ export type PublishedLabProject = {
   subject: LabProject["subject"];
   learner_level: string;
   program_html: string;
+  allow_external_resources: boolean;
   created_at: string;
   updated_at: string;
   content_version?: number;
@@ -36,6 +37,7 @@ async function client() {
 function learningError(error: { message?: string; code?: string } | unknown): LearningShareError {
   const raw = typeof error === "object" && error !== null ? error as { message?: string; code?: string } : {};
   const message = String(raw.message ?? error ?? "Unknown learning share error");
+  if ((raw.code === "42703" || raw.code === "PGRST204") && /allow_external_resources/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0024_v5_13_0_lab_cdn_resources.sql trên Supabase. Hãy áp dụng migration sau 0023 rồi thử lại.", raw.code);
   if (raw.code === "PGRST202" || /schema cache|could not find the function/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0023_v5_12_0_save_shared_learning.sql trên Supabase. Hãy áp dụng migration sau các migration hiện có rồi thử lại.", raw.code);
   if (/ACCESS_REVOKED|access revoked|sharing paused/i.test(message)) return new LearningShareError("ACCESS_REVOKED", "Quyền truy cập học liệu đã bị thu hồi hoặc tạm dừng.", raw.code);
   if (/RESOURCE_REMOVED|material removed/i.test(message)) return new LearningShareError("RESOURCE_REMOVED", "Học liệu gốc không còn tồn tại.", raw.code);
@@ -104,9 +106,13 @@ export async function publishLab(lab: LabProject, owner: string) {
   const c = await client();
   const valid = lab.programHtml.trim();
   if (!valid) throw new Error("Lab cần HTML mô phỏng trước khi đưa lên cloud.");
-  if (!validateLabHtml(valid).ok) throw new Error("HTML của Lab không đạt kiểm tra an toàn. Hãy kiểm tra nội dung trước khi chia sẻ.");
-  const { data, error } = await c.from("lab_projects").upsert({ id: lab.id, user_id: owner, title: lab.title, subject: lab.subject, learner_level: lab.learnerLevel, program_html: valid, updated_at: lab.updatedAt }, { onConflict: "id" }).select("id").single();
-  if (error) throw new Error(error.message);
+  if (!validateLabHtml(valid, { allowExternalResources: lab.allowExternalResources }).ok) throw new Error("HTML của Lab không đạt kiểm tra an toàn. Hãy kiểm tra nội dung trước khi chia sẻ.");
+  const { data, error } = await c.from("lab_projects").upsert({ id: lab.id, user_id: owner, title: lab.title, subject: lab.subject, learner_level: lab.learnerLevel, program_html: valid, allow_external_resources: lab.allowExternalResources, updated_at: lab.updatedAt }, { onConflict: "id" }).select("id").single();
+  if (error) {
+    const mapped = learningError(error);
+    if (mapped.code === "MIGRATION_MISSING") throw mapped;
+    throw new Error(error.message);
+  }
   return data;
 }
 export async function listPublishedLabs(owner: string) {
@@ -116,7 +122,7 @@ export async function listPublishedLabs(owner: string) {
 /** Read the complete private Lab payload for account recovery on another profile. */
 export async function listPublishedLabProjects(owner: string): Promise<PublishedLabProject[]> {
   const c = await client();
-  return checked(await c.from("lab_projects").select("id,user_id,title,subject,learner_level,program_html,created_at,updated_at,content_version").eq("user_id", owner).order("updated_at", { ascending: false })) as PublishedLabProject[];
+  return checked(await c.from("lab_projects").select("id,user_id,title,subject,learner_level,program_html,allow_external_resources,created_at,updated_at,content_version").eq("user_id", owner).order("updated_at", { ascending: false })) as PublishedLabProject[];
 }
 export async function deletePublishedLab(id: string, owner: string) {
   const c = await client();

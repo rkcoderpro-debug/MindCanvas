@@ -2,7 +2,7 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mergeStoredLabs, readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from './labStorage';
-const input = { title:'HTML only', subject:'physics' as const, learnerLevel:'', sourceFileName:'', sourceText:'', request:'', designPrompt:'', planPrompt:'', programPrompt:'', design:null, programHtml:'<html><body>saved</body></html>' };
+const input = { title:'HTML only', subject:'physics' as const, learnerLevel:'', sourceFileName:'', sourceText:'', request:'', designPrompt:'', planPrompt:'', programPrompt:'', design:null, programHtml:'<html><body>saved</body></html>', allowExternalResources:false };
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); localStorage.clear(); vi.restoreAllMocks(); });
 describe('durable Lab storage', () => {
   it('saves HTML-only labs, updates the same ID and isolates accounts', async () => {
@@ -48,5 +48,10 @@ describe('durable Lab storage', () => {
     const rows = (await readStoredLabs('a')).filter(row => !row.systemDemo);
     expect(rows.find(row => row.id === 'remote')?.programHtml).toContain('remote');
     expect(rows.find(row => row.id === 'same')?.programHtml).toContain('local');
+  });
+  it('persists the explicit external-resource permission with the Lab', async () => {
+    const saved = await saveStoredLab('cdn', { ...input, id: 'cdn-lab', allowExternalResources: true });
+    expect(saved.allowExternalResources).toBe(true);
+    expect((await readStoredLabs('cdn')).find(lab => lab.id === 'cdn-lab')?.allowExternalResources).toBe(true);
   });
 });

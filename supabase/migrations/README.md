@@ -28,6 +28,12 @@ Chạy `0023_v5_12_0_save_shared_learning.sql` sau `0022_v5_11_5_quiz_answer_rev
 
 Quiz/Flashcard cần gói Plus trở lên để chia sẻ; Lab/Tài liệu cần Pro trở lên. Người nhận vẫn có thể lưu bản sao bằng tài khoản Free. Bản sao Quiz/Flashcard/Lab xuất hiện ở tab tương ứng; Tài liệu xuất hiện trong thư viện Tài liệu. Tiến độ ôn tập của Flashcard bắt đầu riêng cho bản sao.
 
+## v5.13.0 — cho phép Lab dùng thư viện CDN có kiểm soát
+
+Chạy `0024_v5_13_0_lab_cdn_resources.sql` sau `0023_v5_12_0_save_shared_learning.sql`. Migration thêm cờ cho phép thư viện CDN, lưu cờ này cùng Lab trên cloud và khi người nhận lưu bản sao, đồng thời đưa thay đổi cờ vào bộ đếm phiên bản Lab.
+
+Trong Lab, bật **Cho phép tải thư viện CDN** trước khi chạy HTML dùng React/Babel/Tailwind/MathJax. Chỉ các miền CDN được nêu trong giao diện mới được tải. Kết nối mạng của nội dung, gồm Gemini/API, vẫn bị chặn; iframe giữ sandbox không cùng nguồn. Người nhận Lab được chia sẻ sẽ phải đồng ý trước khi tải CDN. Bản sao đính kèm có thể nhập từ `examples/labs/PHANMEMDAYHOC_3D_KHOI_CUTV2_LAB_BACKUP.json`.
+
 ## v5.0 — thú cưng học tập và chia sẻ học liệu
 
 Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sql` đã sửa lỗi `42601` và `42P13`; nếu cần chạy lại sau `0020`, bản sửa vẫn giữ đáp án Quiz riêng tư. File `0019_v5_0_pets.sql` thêm hồ sơ thú cưng và nhật ký thời gian học. File `0020` giới hạn quyền đọc đáp án Quiz trước khi nộp. File `0021_v5_11_3_learning_version_trigger_fix.sql` sửa lỗi `42703` do trigger dùng chung đọc `OLD.questions` trên bảng `flashcards`. File `0022_v5_11_5_quiz_answer_reveal.sql` bổ sung lựa chọn xem đáp án từng câu ngay khi chọn, có ghi nhận lựa chọn trên server.
