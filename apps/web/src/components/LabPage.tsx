@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Beaker, Clipboard, Download, FileText, Maximize2, Minimize2, Play, Plus, RefreshCw, Save, Trash2, Upload, WandSparkles } from "lucide-react";
+import { Beaker, Clipboard, Cloud, Download, FileText, Maximize2, Minimize2, Play, Plus, RefreshCw, Save, Trash2, Upload, WandSparkles } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { buildLabPlanPrompt, labSandboxDocument, validateLabHtml, LAB_LIMITS, type LabProject, type LabSubject, type LabValidationCode } from "../lib/lab";
-import { canShare, deletePublishedLab, listPublishedLabs, publishLab } from "../lib/learningShare";
+import { canShare, deletePublishedLab, listPublishedLabProjects, publishLab, type PublishedLabProject } from "../lib/learningShare";
 import type { AccountPlan } from "../lib/account";
 import { LearningShareButton } from "./LearningShareDialog";
 
-import { readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from "../lib/labStorage";
+import { mergeStoredLabs, readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from "../lib/labStorage";
 import { emitGuideAction } from "../lib/featureGuides";
 
 type Draft = {
@@ -41,9 +41,30 @@ async function readTextFile(file: File): Promise<string> {
   return file.text();
 }
 
+function cloudLabToLocal(row: PublishedLabProject): LabProject {
+  return {
+    id: row.id,
+    title: row.title,
+    subject: row.subject,
+    learnerLevel: row.learner_level,
+    sourceFileName: "",
+    sourceText: "",
+    request: "",
+    designPrompt: "",
+    planPrompt: "",
+    design: null,
+    programPrompt: "",
+    programHtml: row.program_html,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    systemDemo: false,
+  };
+}
+
 export default function LabPage({ owner, onOpenLearning, embedded = false, accountPlan }: { owner: string | null; onOpenLearning?: () => void; embedded?: boolean; accountPlan?: AccountPlan }) {
   const { t, language } = useLanguage();
   const runnerRef = useRef<HTMLDivElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const [labs, setLabs] = useState<LabProject[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -91,7 +112,20 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
         }
         loadedOwner.current = owner;
         setReady(true);
-        if (owner) void listPublishedLabs(owner).then(rows => { if (alive) setPublishedIds(rows.filter(row => next.some(lab => lab.id === row.id && new Date(lab.updatedAt).getTime() === new Date(row.updated_at).getTime())).map(row => row.id)); }).catch(() => undefined);
+        if (owner) void (async () => {
+          try {
+            const remote = await listPublishedLabProjects(owner);
+            const merge = await mergeStoredLabs(owner, remote.map(cloudLabToLocal));
+            if (!alive) return;
+            const refreshed = merge.added ? await readStoredLabs(owner) : next;
+            setLabs(refreshed);
+            setPublishedIds(remote.filter(row => refreshed.some(lab => lab.id === row.id && new Date(lab.updatedAt).getTime() === new Date(row.updated_at).getTime())).map(row => row.id));
+            if (merge.conflicts) setNotice(`${merge.conflicts} Lab trên cloud có bản cục bộ khác; bản trên thiết bị được giữ nguyên.`);
+          } catch {
+            // Cloud recovery is additive. A temporary auth/network failure must
+            // not hide the Labs already stored in this browser profile.
+          }
+        })();
       } catch { if (alive) { setError("Không thể mở nơi lưu Lab. Hãy cho phép lưu dữ liệu trình duyệt và tải lại trang."); } }
     })();
     return () => { alive = false; };
@@ -250,6 +284,65 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     finally { saveLock.current = false; setSaving(false); }
   };
 
+  const syncAllToCloud = async () => {
+    if (!owner || !canShare("lab", accountPlan?.effectivePlanId) || saving) return;
+    setSaving(true); setError(""); setNotice("");
+    let uploaded = 0;
+    let failed = 0;
+    try {
+      const current = (await readStoredLabs(owner)).filter(lab => !lab.systemDemo && lab.programHtml.trim());
+      for (const lab of current) {
+        try { await publishLab(lab, owner); uploaded += 1; }
+        catch { failed += 1; }
+      }
+      const remote = await listPublishedLabProjects(owner);
+      setPublishedIds(remote.filter(row => current.some(lab => lab.id === row.id && new Date(lab.updatedAt).getTime() === new Date(row.updated_at).getTime())).map(row => row.id));
+      setNotice(failed ? `Đã đồng bộ ${uploaded} Lab; ${failed} Lab chưa tải được. Dữ liệu trên thiết bị vẫn được giữ.` : `Đã đồng bộ ${uploaded} Lab lên cloud.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Không thể đồng bộ Lab lên cloud. Dữ liệu trên thiết bị vẫn được giữ.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const exportLabBackup = async () => {
+    try {
+      const personal = (await readStoredLabs(owner)).filter(lab => !lab.systemDemo);
+      const payload = { format: "mindcanvas-labs-backup", version: 1, exportedAt: new Date().toISOString(), labs: personal };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "mindcanvas-labs-backup.json";
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice(`Đã xuất ${personal.length} Lab để sao lưu.`);
+    } catch {
+      setError("Không thể xuất bản sao lưu Lab.");
+    }
+  };
+
+  const importLabBackup = async (file: File | undefined) => {
+    if (!file) return;
+    setError(""); setNotice("");
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      const labs = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object" && "format" in parsed && parsed.format === "mindcanvas-labs-backup" && "version" in parsed && parsed.version === 1 && "labs" in parsed && Array.isArray(parsed.labs)
+          ? parsed.labs
+          : null;
+      if (!labs) throw new Error("File không đúng định dạng sao lưu MindCanvas.");
+      const result = await mergeStoredLabs(owner, labs);
+      const next = await readStoredLabs(owner);
+      setLabs(next);
+      setNotice(`Đã nhập ${result.added} Lab mới${result.conflicts ? `; giữ nguyên ${result.conflicts} Lab bị trùng nội dung.` : "."}`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Không thể nhập bản sao lưu Lab.");
+    } finally {
+      if (backupInputRef.current) backupInputRef.current.value = "";
+    }
+  };
+
   const removeCurrent = async () => {
     if (!selectedLab || selectedLab.systemDemo || !window.confirm(t("labDeleteConfirm"))) return;
     if (owner) {
@@ -322,7 +415,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   return <section className={`lab-page ${embedded ? "lab-page-embedded" : ""}`}>
     <header className="lab-header">
       <div className="lab-header-copy"><span className="eyebrow">LEARNING HUB · LAB</span><h1><Beaker size={28}/>{t("labTitle")}</h1><p>{t("labHint")}</p></div>
-      <div className="lab-header-actions">{!embedded && onOpenLearning && <button className="secondary-button" type="button" onClick={onOpenLearning}><FileText size={16}/>{t("backToLearningHub")}</button>}<button className="primary-button" type="button" disabled={!ready || saving} onClick={() => { if (confirmReplace()) resetDraft(); }}><Plus size={16}/>{t("labNew")}</button></div>
+      <div className="lab-header-actions">{!embedded && onOpenLearning && <button className="secondary-button" type="button" onClick={onOpenLearning}><FileText size={16}/>{t("backToLearningHub")}</button>}<button className="secondary-button" type="button" disabled={!ready || saving} onClick={() => void exportLabBackup()} title="Xuất toàn bộ Lab trên thiết bị thành một file JSON"><Download size={16}/>Xuất Lab</button><button className="secondary-button" type="button" disabled={!ready || saving} onClick={() => backupInputRef.current?.click()} title="Nhập Lab từ file sao lưu JSON"><Upload size={16}/>Nhập Lab</button><input ref={backupInputRef} type="file" accept="application/json,.json" hidden onChange={event => void importLabBackup(event.target.files?.[0])}/>{owner && canShare("lab", accountPlan?.effectivePlanId) && <button className="secondary-button" type="button" disabled={!ready || saving} onClick={() => void syncAllToCloud()} title="Đưa các Lab đã lưu trên thiết bị lên cloud để khôi phục ở profile khác"><Cloud size={16}/>Đồng bộ Lab</button>}<button className="primary-button" type="button" disabled={!ready || saving} onClick={() => { if (confirmReplace()) resetDraft(); }}><Plus size={16}/>{t("labNew")}</button></div>
     </header>
     <div className="lab-layout">
       <aside className="lab-saved-panel"><div className="lab-panel-heading"><div><span className="eyebrow">LABS</span><h2>{t("labSavedTitle")}</h2></div><span>{labs.length}</span></div>{labs.length ? <div className="lab-saved-list">{labs.map(lab => <div key={lab.id} className="lab-saved-entry"><button type="button" className={`lab-saved-row ${lab.id === selectedId ? "active" : ""}`} disabled={saving} onClick={() => { if (confirmReplace()) loadLab(lab); }}><span className="lab-saved-icon"><Beaker size={16}/></span><span><strong>{lab.title}{lab.systemDemo ? " · Demo" : ""}</strong><small>{lab.subject} · {new Date(lab.updatedAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US")}</small></span></button></div>)}</div> : <div className="lab-empty-saved"><Beaker size={23}/><p>{t("labNoSaved")}</p></div>}{selectedLab && !selectedLab.systemDemo && <button type="button" className="text-danger-button lab-delete-button" onClick={removeCurrent}><Trash2 size={14}/>{t("labDelete")}</button>}</aside>

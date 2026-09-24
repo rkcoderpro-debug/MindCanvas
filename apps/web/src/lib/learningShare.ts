@@ -6,6 +6,17 @@ export type LearningKind = "quiz" | "flashcard" | "lab";
 export type IncomingLearningShare = { kind: LearningKind; resource_id: string; owner_name: string; title: string; updated_at: string; status: "active" | "paused" | "removed" };
 export type LearningInvite = { id: string; email: string; status: string; expires_at: string; recipient_id: string | null };
 export type LearningMember = { user_id: string; created_at: string };
+export type PublishedLabProject = {
+  id: string;
+  user_id: string;
+  title: string;
+  subject: LabProject["subject"];
+  learner_level: string;
+  program_html: string;
+  created_at: string;
+  updated_at: string;
+  content_version?: number;
+};
 export type SharedQuizQuestion = { id: string; prompt: string; options: string[]; correctIndex?: number; explanation?: string };
 export type SharedQuizSession = { id: string; questions: SharedQuizQuestion[]; version: number };
 export type SharedQuizResult = { score: number; total: number; version: number; questions: Array<Required<Pick<SharedQuizQuestion, "id" | "prompt" | "options">> & { correctIndex: number; explanation?: string }> };
@@ -95,6 +106,11 @@ export async function publishLab(lab: LabProject, owner: string) {
 export async function listPublishedLabs(owner: string) {
   const c = await client();
   return checked(await c.from("lab_projects").select("id,updated_at").eq("user_id", owner)) as Array<{ id: string; updated_at: string }>;
+}
+/** Read the complete private Lab payload for account recovery on another profile. */
+export async function listPublishedLabProjects(owner: string): Promise<PublishedLabProject[]> {
+  const c = await client();
+  return checked(await c.from("lab_projects").select("id,user_id,title,subject,learner_level,program_html,created_at,updated_at,content_version").eq("user_id", owner).order("updated_at", { ascending: false })) as PublishedLabProject[];
 }
 export async function deletePublishedLab(id: string, owner: string) {
   const c = await client();

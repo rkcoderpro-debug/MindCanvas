@@ -14,8 +14,7 @@ import TopbarProfile from "./components/TopbarProfile";
 import CollaboratorPresence from "./components/CollaboratorPresence";
 import AppSidebar, { type SidebarView } from "./components/AppSidebar";
 import { LanguageProvider, useLanguage, useTheme, type MessageKey } from "./lib/i18n";
-import { getCurrentUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
-import { watchAuthBootstrap, type AuthBootstrapState } from "./lib/authSession";
+import { getCurrentSession, hasRememberedAuthUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
 import { acceptProjectInvitation } from "./lib/collaboration";
 import { acceptLearning } from "./lib/learningShare";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
@@ -54,30 +53,61 @@ const FeatureGuidePage = lazy(() => import("./components/FeatureGuidePage"));
 export default function App() { return <LanguageProvider><AuthenticatedApp/></LanguageProvider>; }
 function AuthenticatedApp() {
   const { t } = useLanguage();
-  const [authState, setAuthState] = useState<AuthBootstrapState>(() => isSupabaseConfigured ? { status: "checking" } : { status: "anonymous" });
-  const [guestOverride, setGuestOverride] = useState(false), [attempt, setAttempt] = useState(0);
-  const guestOverrideRef = useRef(false);
+  const [user, setUser] = useState<User | null>(null), [loading, setLoading] = useState(isSupabaseConfigured);
+  const [error, setError] = useState("");
   useEffect(() => {
-    if (!supabase || guestOverride) return;
-    return watchAuthBootstrap(supabase.auth, getCurrentUser, state => {
-      if (!guestOverrideRef.current) setAuthState(state);
+    if (!supabase) return;
+    let alive = true;
+    let initialEventSeen = false;
+    let sessionChecked = false;
+    let settled = false;
+    const hadPreviousSession = hasRememberedAuthUser();
+    const settle = () => {
+      if (!alive || settled || !initialEventSeen || !sessionChecked) return;
+      settled = true;
+      setLoading(false);
+    };
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!alive) return;
+      if (session?.user) {
+        setUser(session.user);
+        setError("");
+      } else if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
+        setUser(null);
+        if (event === "INITIAL_SESSION" && hadPreviousSession) {
+          setError("Phiên đăng nhập trước đó chưa được khôi phục sau khi tải lại. Hãy đăng nhập lại; dữ liệu Lab trên thiết bị vẫn được giữ.");
+        }
+      }
+      if (event === "INITIAL_SESSION") initialEventSeen = true;
+      settle();
     });
-  }, [guestOverride, attempt]);
-  if (authState.status === "checking") return <main className="auth-loading" role="status"><Sparkles/>{t("checking")}</main>;
-  if (authState.status === "error") return <main className="auth-recovery"><section className="auth-recovery-card" role="alert">
-    <Sparkles size={26}/><h1>{t("authRecoveryTitle")}</h1><p>{t("authRecoveryHint")}</p>
-    <p className="form-error">{errorMessage(authState.error, t("error"))}</p>
-    <div className="auth-recovery-actions">
-      <button className="primary-button" onClick={() => { guestOverrideRef.current = false; setGuestOverride(false); setAuthState({ status: "checking" }); setAttempt(value => value + 1); }}>{t("retry")}</button>
-      <button className="secondary-button" onClick={() => { void signInWithGoogle().then(({ error }) => { if (error) setAuthState({ status: "error", error }); }).catch(error => setAuthState({ status: "error", error })); }}>{t("login")}</button>
-      <button className="secondary-button" onClick={() => { guestOverrideRef.current = true; setGuestOverride(true); setAuthState({ status: "anonymous" }); }}>{t("continueAsGuest")}</button>
-    </div>
-  </section></main>;
-  const user = authState.status === "authenticated" ? authState.user : null;
+    // Supabase emits INITIAL_SESSION while it is restoring local storage, but
+    // an early null event can race with getSession in some Chromium profiles.
+    // Wait for both observations before rendering the Guest workspace so a
+    // valid account does not appear logged out for one refresh.
+    void getCurrentSession().then(session => {
+      if (alive && session?.user) { setUser(session.user); setError(""); }
+      else if (alive && hadPreviousSession) setError("Phiên đăng nhập trước đó chưa được khôi phục. Hãy đăng nhập lại; dữ liệu Lab trên thiết bị vẫn được giữ.");
+    }).catch(err => {
+      if (alive) setError(errorMessage(err, t("error")));
+    }).finally(() => {
+      if (!alive) return;
+      sessionChecked = true;
+      settle();
+    });
+    const timeout = window.setTimeout(() => {
+      if (!alive || settled) return;
+      settled = true;
+      setLoading(false);
+      setError("Không thể khôi phục phiên đăng nhập sau khi tải lại. Hãy thử đăng nhập lại; dữ liệu Lab trên thiết bị vẫn được giữ.");
+    }, 10_000);
+    return () => { alive = false; window.clearTimeout(timeout); data.subscription.unsubscribe(); };
+  }, []);
+  if (loading) return <main className="auth-loading" role="status"><Sparkles/>{t("checking")}</main>;
   // Keying by identity prevents account A's boards/history from appearing for account B.
-  return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user}/></MusicProvider>;
+  return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user} authError={error} onClearAuthError={() => setError("")}/></MusicProvider>;
 }
-function Workspace({ user }: { user: User | null }) {
+function Workspace({ user, authError, onClearAuthError }: { user: User | null; authError: string; onClearAuthError: () => void }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
   const iosDevice = isIOSDevice();
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
@@ -126,8 +156,7 @@ function Workspace({ user }: { user: User | null }) {
   const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const message = ws.error;
-  const refreshDocuments = () => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể cập nhật thư viện tài liệu.")));
+  const message = ws.error || authError;
   useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
   useEffect(() => {
     const sync = () => setGuideProgress(readGuideProgress(user?.id ?? null));
@@ -382,8 +411,7 @@ function Workspace({ user }: { user: User | null }) {
         <button type="button" className="icon-button mobile-project-menu-trigger" aria-label={t("projectActions")} aria-expanded={mobileProjectMenuOpen} title={t("projectActions")} onClick={() => setMobileProjectMenuOpen(value => !value)}><MoreHorizontal size={21}/></button>
       </header>}
       {pwa.updateReady && <div className="update-banner" role="status"><span>{t("updateReady")}</span><button onClick={pwa.applyUpdate}>{t("updateNow")}</button></div>}
-      {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => ws.setError("")}><X size={16}/></button></div>}
-      {!ws.board && user && ws.pendingCount > 0 && <div className="workspace-sync-notice" role="status"><span>{t("workspacePendingSave")}</span><button type="button" disabled={working} onClick={() => { setWorking(true); void ws.flush().then(saved => { if (saved) void ws.refresh(); }).finally(() => setWorking(false)); }}>{t("retry")}</button></div>}
+      {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button></div>}
       {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
       {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Trung tâm học tập.</div>}
@@ -415,7 +443,7 @@ function Workspace({ user }: { user: User | null }) {
           </div>
         </aside></div>}
         <CanvasBoard key={ws.board.id} board={ws.board} documents={documents} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds} onDocumentSaved={saveCanvasDocument}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__manager" ? <FolderManager owner={user?.id ?? null} projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={refreshDocuments} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={refreshDocuments} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={refreshDocuments} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__manager" ? <FolderManager owner={user?.id ?? null} projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>

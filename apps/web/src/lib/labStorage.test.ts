@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from './labStorage';
+import { mergeStoredLabs, readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from './labStorage';
 const input = { title:'HTML only', subject:'physics' as const, learnerLevel:'', sourceFileName:'', sourceText:'', request:'', designPrompt:'', planPrompt:'', programPrompt:'', design:null, programHtml:'<html><body>saved</body></html>' };
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); localStorage.clear(); vi.restoreAllMocks(); });
 describe('durable Lab storage', () => {
@@ -37,5 +37,16 @@ describe('durable Lab storage', () => {
     localStorage.setItem('mindcanvas:labs:v1:b','broken');
     await expect(saveStoredLab('b',input)).rejects.toThrow();
     expect(localStorage.getItem('mindcanvas:labs:v1:b')).toBe('broken');
+  });
+  it('imports cloud Labs that are missing in a profile and keeps a conflicting local copy', async () => {
+    const local = await saveStoredLab('a', { ...input, id: 'same', programHtml: '<html><body>local</body></html>' });
+    const result = await mergeStoredLabs('a', [
+      { ...input, id: 'remote', updatedAt: '2026-09-24T00:00:00.000Z', createdAt: '2026-09-24T00:00:00.000Z', programHtml: '<html><body>remote</body></html>' },
+      { ...input, id: local.id, updatedAt: '2026-09-25T00:00:00.000Z', programHtml: '<html><body>newer cloud</body></html>' },
+    ]);
+    expect(result).toEqual({ added: 1, conflicts: 1 });
+    const rows = (await readStoredLabs('a')).filter(row => !row.systemDemo);
+    expect(rows.find(row => row.id === 'remote')?.programHtml).toContain('remote');
+    expect(rows.find(row => row.id === 'same')?.programHtml).toContain('local');
   });
 });

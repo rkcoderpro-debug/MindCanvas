@@ -1,7 +1,7 @@
 {
   "name": "@mindcanvas/server",
   "private": true,
-  "version": "5.11.3",
+  "version": "5.11.4",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/index.ts",

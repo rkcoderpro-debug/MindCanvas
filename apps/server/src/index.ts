@@ -21,7 +21,7 @@ app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use
 app.get("/api/health", (_req, res) => res.json({
   ok: true,
   mode: "server",
-  release: "5.11.3",
+  release: "5.11.4",
   ai: "gemini",
   aiConfigured: Boolean(config.GEMINI_API_KEY),
   aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,

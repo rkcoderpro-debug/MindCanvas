@@ -7,6 +7,16 @@ export const supabase: SupabaseClient | null = url && anonKey ? createClient(url
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 }) : null;
 export const isSupabaseConfigured = Boolean(supabase);
+export const LAST_AUTH_USER_KEY = "mindcanvas:last-auth-user";
+
+export function hasRememberedAuthUser(): boolean {
+  try { return Boolean(localStorage.getItem(LAST_AUTH_USER_KEY)); } catch { return false; }
+}
+
+function rememberAuthUser(userId: string | undefined): void {
+  if (!userId) return;
+  try { localStorage.setItem(LAST_AUTH_USER_KEY, userId); } catch { /* storage is optional */ }
+}
 
 /**
  * Safari/WebViews that predate AbortSignal.timeout throw before a Supabase
@@ -43,7 +53,9 @@ export async function signInWithGoogle() {
 
 export async function getCurrentSession() {
   if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  rememberAuthUser(data.session?.user.id);
   return data.session;
 }
 
@@ -51,6 +63,7 @@ export async function getCurrentUser() {
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
+  rememberAuthUser(data.session?.user.id);
   return data.session?.user ?? null;
 }
 
@@ -118,6 +131,7 @@ export async function signOut() {
   // user's other devices when a local canvas save is being recovered.
   const { error } = await supabase.auth.signOut({ scope: "local" });
   if (error) throw error;
+  try { localStorage.removeItem(LAST_AUTH_USER_KEY); } catch {}
 }
 
 export async function loadLatestBoardNote() {

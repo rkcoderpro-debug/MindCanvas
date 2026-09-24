@@ -1,4 +1,4 @@
-import { cleanLab, FLAPPY_BIRD_STARTER_LAB, readLabs, type LabProject } from './lab';
+import { cleanLab, FLAPPY_BIRD_STARTER_LAB, LAB_LIMITS, readLabs, type LabProject } from './lab';
 
 function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -51,6 +51,35 @@ export async function saveStoredLab(owner: string | null, input: Omit<LabProject
   });
   return saved;
 }
+
+/**
+ * Add Labs recovered from the user's cloud account without replacing a local
+ * copy. A profile can contain edits that have not been uploaded yet, so an
+ * automatic cloud refresh must never silently overwrite that work.
+ */
+export async function mergeStoredLabs(owner: string | null, incoming: unknown[]): Promise<{ added: number; conflicts: number }> {
+  await migrate(owner);
+  let added = 0;
+  let conflicts = 0;
+  await access<LabProject[]>('labs', owner, (rows = []) => {
+    const current = [...rows];
+    for (const raw of incoming) {
+      const lab = cleanLab(raw);
+      if (!lab || lab.systemDemo || lab.programHtml.length > LAB_LIMITS.maxHtml) continue;
+      const existing = current.find(row => row.id === lab.id);
+      if (!existing) {
+        current.push({ ...lab, systemDemo: false });
+        added += 1;
+        continue;
+      }
+      const same = existing.updatedAt === lab.updatedAt && existing.programHtml === lab.programHtml;
+      if (!same) conflicts += 1;
+    }
+    return current;
+  });
+  return { added, conflicts };
+}
+
 export async function deleteStoredLab(owner: string | null, id: string) {
   await migrate(owner);
   await access<LabProject[]>('labs', owner, (rows = []) => rows.filter(row => row.id !== id));
