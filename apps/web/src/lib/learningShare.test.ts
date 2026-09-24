@@ -8,11 +8,15 @@ describe("learning share plan gates", () => {
       expect(canShare("quiz", plan)).toBe(false);
       expect(canShare("flashcard", plan)).toBe(false);
       expect(canShare("lab", plan)).toBe(false);
+      expect(canShare("document", plan)).toBe(false);
     }
     expect(canShare("quiz", "plus")).toBe(true);
     expect(canShare("flashcard", "plus")).toBe(true);
     expect(canShare("lab", "plus")).toBe(false);
-    for (const plan of ["pro", "max"]) expect(canShare("lab", plan)).toBe(true);
+    for (const plan of ["pro", "max"]) {
+      expect(canShare("lab", plan)).toBe(true);
+      expect(canShare("document", plan)).toBe(true);
+    }
   });
 });
 

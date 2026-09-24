@@ -2,8 +2,9 @@ import { getCurrentSession, supabase } from "./supabase";
 import { hashInvitationToken, normalizeInviteEmail } from "./collaboration";
 import { validateLabHtml, type LabProject } from "./lab";
 
-export type LearningKind = "quiz" | "flashcard" | "lab";
+export type LearningKind = "quiz" | "flashcard" | "lab" | "document";
 export type IncomingLearningShare = { kind: LearningKind; resource_id: string; owner_name: string; title: string; updated_at: string; status: "active" | "paused" | "removed" };
+export type LearningCopySource = { kind: LearningKind; copy_id: string; source_id: string; source_title: string; owner_name: string; saved_at: string };
 export type LearningInvite = { id: string; email: string; status: string; expires_at: string; recipient_id: string | null };
 export type LearningMember = { user_id: string; created_at: string };
 export type PublishedLabProject = {
@@ -20,9 +21,10 @@ export type PublishedLabProject = {
 export type SharedQuizQuestion = { id: string; prompt: string; options: string[]; correctIndex?: number; explanation?: string };
 export type SharedQuizSession = { id: string; questions: SharedQuizQuestion[]; version: number };
 export type SharedQuizResult = { score: number; total: number; version: number; questions: Array<Required<Pick<SharedQuizQuestion, "id" | "prompt" | "options">> & { correctIndex: number; explanation?: string }> };
+export type SharedQuizAnswerFeedback = { correctIndex: number; explanation?: string };
 export type LearningShareErrorCode = "MIGRATION_MISSING" | "ACCESS_REVOKED" | "RESOURCE_REMOVED" | "ATTEMPT_NOT_FOUND" | "ATTEMPT_ALREADY_COMPLETED" | "INVALID_ANSWERS" | "NETWORK_ERROR" | "UNKNOWN";
 export class LearningShareError extends Error {
-  constructor(public code: LearningShareErrorCode, message: string) { super(message); this.name = "LearningShareError"; }
+  constructor(public code: LearningShareErrorCode, message: string, public postgresCode?: string) { super(message); this.name = "LearningShareError"; }
 }
 
 
@@ -34,21 +36,21 @@ async function client() {
 function learningError(error: { message?: string; code?: string } | unknown): LearningShareError {
   const raw = typeof error === "object" && error !== null ? error as { message?: string; code?: string } : {};
   const message = String(raw.message ?? error ?? "Unknown learning share error");
-  if (raw.code === "PGRST202" || /schema cache|could not find the function/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0020_v5_3_reliability_trial.sql trên Supabase.");
-  if (/ACCESS_REVOKED|access revoked|sharing paused/i.test(message)) return new LearningShareError("ACCESS_REVOKED", "Quyền truy cập học liệu đã bị thu hồi hoặc tạm dừng.");
-  if (/RESOURCE_REMOVED|material removed/i.test(message)) return new LearningShareError("RESOURCE_REMOVED", "Học liệu gốc không còn tồn tại.");
-  if (/ATTEMPT_NOT_FOUND/i.test(message)) return new LearningShareError("ATTEMPT_NOT_FOUND", "Không tìm thấy lượt làm bài hiện tại.");
-  if (/ATTEMPT_ALREADY_COMPLETED/i.test(message)) return new LearningShareError("ATTEMPT_ALREADY_COMPLETED", "Lượt làm bài này đã được nộp trước đó.");
-  if (/INVALID_ANSWERS|Invalid answers/i.test(message)) return new LearningShareError("INVALID_ANSWERS", "Dữ liệu câu trả lời không hợp lệ.");
-  if (/failed to fetch|network|fetch/i.test(message)) return new LearningShareError("NETWORK_ERROR", "Không thể kết nối. Dữ liệu trên màn hình vẫn được giữ lại.");
-  return new LearningShareError("UNKNOWN", message);
+  if (raw.code === "PGRST202" || /schema cache|could not find the function/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0023_v5_12_0_save_shared_learning.sql trên Supabase. Hãy áp dụng migration sau các migration hiện có rồi thử lại.", raw.code);
+  if (/ACCESS_REVOKED|access revoked|sharing paused/i.test(message)) return new LearningShareError("ACCESS_REVOKED", "Quyền truy cập học liệu đã bị thu hồi hoặc tạm dừng.", raw.code);
+  if (/RESOURCE_REMOVED|material removed/i.test(message)) return new LearningShareError("RESOURCE_REMOVED", "Học liệu gốc không còn tồn tại.", raw.code);
+  if (/ATTEMPT_NOT_FOUND/i.test(message)) return new LearningShareError("ATTEMPT_NOT_FOUND", "Không tìm thấy lượt làm bài hiện tại.", raw.code);
+  if (/ATTEMPT_ALREADY_COMPLETED/i.test(message)) return new LearningShareError("ATTEMPT_ALREADY_COMPLETED", "Lượt làm bài này đã được nộp trước đó.", raw.code);
+  if (/INVALID_ANSWERS|Invalid answers/i.test(message)) return new LearningShareError("INVALID_ANSWERS", "Dữ liệu câu trả lời không hợp lệ.", raw.code);
+  if (/failed to fetch|network|fetch/i.test(message)) return new LearningShareError("NETWORK_ERROR", "Không thể kết nối. Dữ liệu trên màn hình vẫn được giữ lại.", raw.code);
+  return new LearningShareError("UNKNOWN", message, raw.code);
 }
 function checked<T>(result: { data: T; error: { message: string; code?: string } | null }): T {
   if (result.error) throw learningError(result.error);
   return result.data;
 }
 export function canShare(kind: LearningKind, plan?: string): boolean {
-  return kind === "lab" ? plan === "pro" || plan === "max" : plan === "plus" || plan === "pro" || plan === "max";
+  return kind === "lab" || kind === "document" ? plan === "pro" || plan === "max" : plan === "plus" || plan === "pro" || plan === "max";
 }
 
 export async function inviteLearning(kind: LearningKind, id: string, email: string, days: number) {
@@ -68,6 +70,10 @@ export async function acceptLearning(token: string) {
 export async function listLearningShares(): Promise<IncomingLearningShare[]> {
   const c = await client();
   return checked(await c.rpc("list_learning_shares")) as IncomingLearningShare[];
+}
+export async function listMyLearningCopySources(): Promise<LearningCopySource[]> {
+  const c = await client();
+  return checked(await c.rpc("list_my_learning_copy_sources")) as LearningCopySource[];
 }
 export async function listPendingLearningInvites() {
   const c = await client();
@@ -121,6 +127,55 @@ export async function getSharedContent(kind: LearningKind, id: string) {
   const c = await client();
   return checked(await c.rpc("get_learning_shared_content", { p_kind: kind, p_id: id })) as Record<string, unknown>;
 }
+export async function saveSharedLearningCopy(kind: LearningKind, id: string): Promise<{ copyId: string; alreadySaved: boolean }> {
+  const c = await client();
+  const existing = checked(await c.rpc("get_saved_learning_copy", { p_kind: kind, p_source_id: id })) as string | null;
+  if (existing) return { copyId: existing, alreadySaved: true };
+  if (kind !== "document") {
+    const result = checked(await c.rpc("save_learning_copy", { p_kind: kind, p_id: id })) as string;
+    return { copyId: result, alreadySaved: false };
+  }
+
+  const source = await getSharedContent("document", id);
+  const sourcePath = String(source.file_path ?? "");
+  const fileName = String(source.file_name ?? source.title ?? "");
+  if (!sourcePath || !fileName) throw new Error("Không tìm thấy tệp tài liệu được chia sẻ.");
+  const copyId = crypto.randomUUID();
+  const extension = (sourcePath.toLowerCase().match(/\.([a-z0-9]{1,8})$/)?.[1] ?? "bin").replace(/[^a-z0-9]/g, "");
+  const userId = (await getCurrentSession())?.user.id;
+  if (!userId) throw new Error("Đăng nhập để lưu tài liệu được chia sẻ.");
+  const targetPath = `${userId}/${copyId}.${extension}`;
+  const copied = await c.storage.from("documents").copy(sourcePath, targetPath);
+  if (copied.error) throw learningError(copied.error);
+  const finalize = async () => checked(await c.rpc("save_shared_document_copy", { p_source_id: id, p_copy_id: copyId })) as { copy_id: string; already_saved: boolean };
+  const finish = async (result: { copy_id: string; already_saved: boolean }) => {
+    if (result.copy_id !== copyId) await c.storage.from("documents").remove([targetPath]);
+    return { copyId: result.copy_id, alreadySaved: Boolean(result.already_saved || result.copy_id !== copyId) };
+  };
+  const readMarker = async () => checked(await c.rpc("get_saved_learning_copy", { p_kind: kind, p_source_id: id })) as string | null;
+  const isConfirmedDatabaseFailure = (error: unknown) => error instanceof LearningShareError
+    && (error.code === "MIGRATION_MISSING" || !!error.postgresCode && /^[0-9A-Z]{5}$/.test(error.postgresCode));
+  try {
+    return await finish(await finalize());
+  } catch (error) {
+    // A network timeout can hide a committed RPC. The SQL function takes the
+    // same advisory lock before checking access, so a retry waits for any
+    // in-flight attempt and then returns its idempotent result.
+    let committed: string | null;
+    try { committed = await readMarker(); }
+    catch { throw error; } // Keep the object if commit state cannot be verified.
+    if (committed) return await finish({ copy_id: committed, already_saved: true });
+    try { return await finish(await finalize()); }
+    catch (retryError) {
+      try {
+        committed = await readMarker();
+        if (committed) return await finish({ copy_id: committed, already_saved: true });
+      } catch { throw error; } // An unverified object is safer than a broken saved row.
+      if (isConfirmedDatabaseFailure(retryError)) await c.storage.from("documents").remove([targetPath]);
+      throw retryError;
+    }
+  }
+}
 export async function getSharedCards(id: string) {
   const c = await client();
   const cards = checked(await c.from("flashcards").select("id,front,back,content_version").eq("deck_id", id).order("created_at")) as Array<{ id: string; front: string; back: string; content_version: number }>;
@@ -134,6 +189,16 @@ export async function rateSharedCard(id: string, rating: "again" | "hard" | "goo
 export async function startSharedQuiz(id: string): Promise<SharedQuizSession> {
   const c = await client();
   return checked(await c.rpc("start_learning_quiz", { p_id: id })) as SharedQuizSession;
+}
+export async function startSharedQuizImmediate(id: string): Promise<SharedQuizSession> {
+  const c = await client();
+  return checked(await c.rpc("start_learning_quiz_immediate", { p_id: id })) as SharedQuizSession;
+}
+export async function revealSharedQuizAnswer(attemptId: string, questionIndex: number, answer: number): Promise<SharedQuizAnswerFeedback> {
+  const c = await client();
+  return checked(await c.rpc("reveal_learning_quiz_answer", {
+    p_attempt: attemptId, p_question_index: questionIndex, p_answer: answer,
+  })) as SharedQuizAnswerFeedback;
 }
 export async function finishSharedQuiz(attemptId: string, answers: Array<number | null>): Promise<SharedQuizResult> {
   const c = await client();

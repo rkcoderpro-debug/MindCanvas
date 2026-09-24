@@ -1,7 +1,7 @@
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles, Wrench } from "lucide-react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, FileText, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -96,7 +96,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
-    { id: "tools", label: "Công cụ", icon: Wrench },
+    { id: "tools", label: "Tài liệu", icon: FileText },
     { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
   ];
 
@@ -109,9 +109,13 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
-    {tab === "tools" && <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} onBack={() => setTab("overview")}/>}
+    {tab === "tools" && <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan} onBack={() => setTab("overview")}/>}
     {tab === "music" && <MusicPage/>}
-    {tab === "shared" && <SharedLearningPage owner={owner}/>}
+    {tab === "shared" && <SharedLearningPage owner={owner} onSaved={kind => {
+      if (kind === "quiz") void quizzes.refresh();
+      if (kind === "flashcard") void flashcards.refreshDecks();
+      if (kind === "document") onDocumentsChanged();
+    }}/>}
   </section>;
 }
 

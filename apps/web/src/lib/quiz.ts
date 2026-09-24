@@ -23,6 +23,7 @@ export type QuizTest = {
   createdAt: string;
   updatedAt: string;
   source?: "cloud" | "local";
+  savedFrom?: { title: string; ownerName: string };
 };
 
 export type QuizAttempt = {

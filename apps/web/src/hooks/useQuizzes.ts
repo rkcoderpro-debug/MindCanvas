@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createQuizTest, type QuizAttempt, type QuizQuestion, type QuizTest } from "../lib/quiz";
 import { deleteQuizTest, fetchQuizAttempts, fetchQuizTests, recordQuizAttempt, upsertQuizTest } from "../lib/quizStore";
+import { listMyLearningCopySources } from "../lib/learningShare";
 
 export function useQuizzes(owner: string | null) {
   const [quizzes, setQuizzes] = useState<QuizTest[]>([]);
@@ -14,8 +15,12 @@ export function useQuizzes(owner: string | null) {
     setLoading(true);
     setError("");
     try {
-      const [tests, quizAttempts] = await Promise.all([fetchQuizTests(owner), fetchQuizAttempts(owner)]);
-      setQuizzes(tests.items);
+      const [tests, quizAttempts, savedSources] = await Promise.all([
+        fetchQuizTests(owner), fetchQuizAttempts(owner),
+        owner ? listMyLearningCopySources().catch(() => []) : Promise.resolve([]),
+      ]);
+      const sources = new Map(savedSources.filter(item => item.kind === "quiz").map(item => [item.copy_id, { title: item.source_title, ownerName: item.owner_name }]));
+      setQuizzes(tests.items.map(item => ({ ...item, savedFrom: sources.get(item.id) })));
       setAttempts(quizAttempts.items);
       setSource(tests.source === "cloud" || quizAttempts.source === "cloud" ? "cloud" : "local");
     } catch (err) {

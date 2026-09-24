@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Beaker, Clipboard, Cloud, Download, FileText, Maximize2, Minimize2, Play, Plus, RefreshCw, Save, Trash2, Upload, WandSparkles } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { buildLabPlanPrompt, labSandboxDocument, validateLabHtml, LAB_LIMITS, type LabProject, type LabSubject, type LabValidationCode } from "../lib/lab";
-import { canShare, deletePublishedLab, listPublishedLabProjects, publishLab, type PublishedLabProject } from "../lib/learningShare";
+import { canShare, deletePublishedLab, listMyLearningCopySources, listPublishedLabProjects, publishLab, type PublishedLabProject } from "../lib/learningShare";
 import type { AccountPlan } from "../lib/account";
 import { LearningShareButton } from "./LearningShareDialog";
 
@@ -83,6 +83,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const [copied, setCopied] = useState<"prompt" | "html" | null>(null);
   const [sourceBusy, setSourceBusy] = useState(false);
   const [publishedIds, setPublishedIds] = useState<string[]>([]);
+  const [savedLabSources, setSavedLabSources] = useState<Record<string, { title: string; ownerName: string }>>({});
 
   const loadedOwner = useRef<string | null | undefined>(undefined);
   const [ready, setReady] = useState(false);
@@ -97,7 +98,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   }, [programHtml]);
   useEffect(() => {
     let alive = true;
-    setReady(false); setPublishedIds([]);
+    setReady(false); setPublishedIds([]); setSavedLabSources({});
     void (async () => {
       try {
         const next = await readStoredLabs(owner);
@@ -114,7 +115,10 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
         setReady(true);
         if (owner) void (async () => {
           try {
-            const remote = await listPublishedLabProjects(owner);
+            const [remote, copySources] = await Promise.all([
+              listPublishedLabProjects(owner), listMyLearningCopySources().catch(() => []),
+            ]);
+            setSavedLabSources(Object.fromEntries(copySources.filter(item => item.kind === "lab").map(item => [item.copy_id, { title: item.source_title, ownerName: item.owner_name }])));
             const merge = await mergeStoredLabs(owner, remote.map(cloudLabToLocal));
             if (!alive) return;
             const refreshed = merge.added ? await readStoredLabs(owner) : next;
@@ -418,7 +422,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
       <div className="lab-header-actions">{!embedded && onOpenLearning && <button className="secondary-button" type="button" onClick={onOpenLearning}><FileText size={16}/>{t("backToLearningHub")}</button>}<button className="secondary-button" type="button" disabled={!ready || saving} onClick={() => void exportLabBackup()} title="Xuất toàn bộ Lab trên thiết bị thành một file JSON"><Download size={16}/>Xuất Lab</button><button className="secondary-button" type="button" disabled={!ready || saving} onClick={() => backupInputRef.current?.click()} title="Nhập Lab từ file sao lưu JSON"><Upload size={16}/>Nhập Lab</button><input ref={backupInputRef} type="file" accept="application/json,.json" hidden onChange={event => void importLabBackup(event.target.files?.[0])}/>{owner && canShare("lab", accountPlan?.effectivePlanId) && <button className="secondary-button" type="button" disabled={!ready || saving} onClick={() => void syncAllToCloud()} title="Đưa các Lab đã lưu trên thiết bị lên cloud để khôi phục ở profile khác"><Cloud size={16}/>Đồng bộ Lab</button>}<button className="primary-button" type="button" disabled={!ready || saving} onClick={() => { if (confirmReplace()) resetDraft(); }}><Plus size={16}/>{t("labNew")}</button></div>
     </header>
     <div className="lab-layout">
-      <aside className="lab-saved-panel"><div className="lab-panel-heading"><div><span className="eyebrow">LABS</span><h2>{t("labSavedTitle")}</h2></div><span>{labs.length}</span></div>{labs.length ? <div className="lab-saved-list">{labs.map(lab => <div key={lab.id} className="lab-saved-entry"><button type="button" className={`lab-saved-row ${lab.id === selectedId ? "active" : ""}`} disabled={saving} onClick={() => { if (confirmReplace()) loadLab(lab); }}><span className="lab-saved-icon"><Beaker size={16}/></span><span><strong>{lab.title}{lab.systemDemo ? " · Demo" : ""}</strong><small>{lab.subject} · {new Date(lab.updatedAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US")}</small></span></button></div>)}</div> : <div className="lab-empty-saved"><Beaker size={23}/><p>{t("labNoSaved")}</p></div>}{selectedLab && !selectedLab.systemDemo && <button type="button" className="text-danger-button lab-delete-button" onClick={removeCurrent}><Trash2 size={14}/>{t("labDelete")}</button>}</aside>
+      <aside className="lab-saved-panel"><div className="lab-panel-heading"><div><span className="eyebrow">LABS</span><h2>{t("labSavedTitle")}</h2></div><span>{labs.length}</span></div>{labs.length ? <div className="lab-saved-list">{labs.map(lab => <div key={lab.id} className="lab-saved-entry"><button type="button" className={`lab-saved-row ${lab.id === selectedId ? "active" : ""}`} disabled={saving} onClick={() => { if (confirmReplace()) loadLab(lab); }}><span className="lab-saved-icon"><Beaker size={16}/></span><span><strong>{lab.title}{lab.systemDemo ? " · Demo" : ""}</strong><small>{lab.subject} · {new Date(lab.updatedAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US")}</small>{savedLabSources[lab.id] && <small className="learning-copy-provenance">Đã lưu từ {savedLabSources[lab.id].ownerName}</small>}</span></button></div>)}</div> : <div className="lab-empty-saved"><Beaker size={23}/><p>{t("labNoSaved")}</p></div>}{selectedLab && !selectedLab.systemDemo && <button type="button" className="text-danger-button lab-delete-button" onClick={removeCurrent}><Trash2 size={14}/>{t("labDelete")}</button>}</aside>
       <main className="lab-main">
         {selectedLab && <div className="lab-detail-actions"><button className="secondary-button" disabled={dirty || saving || !owner || !selectedLab.programHtml || !canShare("lab", accountPlan?.effectivePlanId)} title={dirty ? "Hãy lưu thay đổi trên thiết bị trước khi tải lên cloud" : !canShare("lab", accountPlan?.effectivePlanId) ? "Cần gói Pro để đưa Lab lên cloud" : undefined} onClick={() => { if (!owner) return; setError(""); void publishLab(selectedLab, owner).then(() => { setPublishedIds(ids => [...new Set([...ids, selectedLab.id])]); setNotice("Đã lưu HTML mô phỏng lên cloud. Nếu vừa sửa Lab, hãy lưu local rồi tải lên lại."); }).catch(e => setError(e.message)); }}>Lưu Lab lên cloud</button><LearningShareButton kind="lab" id={selectedLab.id} title={selectedLab.title} plan={accountPlan} available={!dirty && publishedIds.includes(selectedLab.id)}/></div>}
         <section className="lab-card lab-step-card"><div className="lab-step-heading"><span className="lab-step-number">1</span><div><span className="eyebrow">AI MANUAL</span><h2>{t("labStepSource")}</h2><p>{t("labStepSourceHint")}</p></div></div><div className="lab-form-grid"><label>{t("labName")}<input value={draft.title} maxLength={200} onChange={event => updateDraft("title", event.target.value)} placeholder={t("labNamePlaceholder")}/></label><label>{t("labSubject")}<select value={draft.subject} onChange={event => updateDraft("subject", event.target.value as LabSubject)}><option value="physics">{t("labPhysics")}</option><option value="chemistry">{t("labChemistry")}</option><option value="other">{t("labOther")}</option></select></label><label>{t("labLearnerLevel")}<input value={draft.learnerLevel} maxLength={120} onChange={event => updateDraft("learnerLevel", event.target.value)} placeholder={t("labLearnerLevelPlaceholder")}/></label><label className="lab-upload-field"><span>{t("labSourceFile")}</span><span className="lab-file-control"><Upload size={16}/><span>{sourceBusy ? t("labReading") : draft.sourceFileName || t("labChooseFile")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.markdown,.json,.csv" onChange={event => void chooseSource(event.target.files?.[0])}/></span><small>{t("labSourceFileHint")}</small></label></div><label>{t("labSourceText")}<textarea rows={5} value={draft.sourceText} onChange={event => updateDraft("sourceText", event.target.value)} placeholder={t("labSourceTextPlaceholder")}/></label><label>{t("labRequest")}<textarea rows={4} value={draft.request} onChange={event => updateDraft("request", event.target.value)} placeholder={t("labRequestPlaceholder")}/></label><div className="lab-actions"><button className="primary-button" type="button" onClick={createDesignPrompt}><WandSparkles size={16}/>{t("labCreateHtmlPrompt")}</button>{designPrompt && <button className="secondary-button" type="button" onClick={() => void copy(designPrompt, "prompt")}><Clipboard size={15}/>{copied === "prompt" ? t("copiedPrompt") : t("copyPrompt")}</button>}</div>{designPrompt && <label className="lab-output-field"><span>{t("labHtmlPromptLabel")}</span><textarea rows={11} readOnly value={designPrompt}/></label>}</section>

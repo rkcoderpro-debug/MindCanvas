@@ -34,6 +34,7 @@ import {
   upsertFlashcards,
   upsertFlashcardDeck,
 } from "../lib/projectStore";
+import { listMyLearningCopySources } from "../lib/learningShare";
 
 export type FlashcardPatch = Partial<Pick<Flashcard, "front" | "back" | "sourcePage">>;
 
@@ -64,10 +65,14 @@ export function useFlashcards(owner: string | null) {
     setLoading(true);
     setError("");
     try {
-      const result = await fetchFlashcardDecks(owner);
-      setDecks(result.items);
+      const [result, savedSources] = await Promise.all([
+        fetchFlashcardDecks(owner), owner ? listMyLearningCopySources().catch(() => []) : Promise.resolve([]),
+      ]);
+      const sources = new Map(savedSources.filter(item => item.kind === "flashcard").map(item => [item.copy_id, { title: item.source_title, ownerName: item.owner_name }]));
+      const decksWithSources = result.items.map(item => ({ ...item, savedFrom: sources.get(item.id) }));
+      setDecks(decksWithSources);
       setStorageMode(result.source);
-      setSelectedDeckId(current => result.items.some(deck => deck.id === current) ? current : result.items[0]?.id ?? null);
+      setSelectedDeckId(current => decksWithSources.some(deck => deck.id === current) ? current : decksWithSources[0]?.id ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load flashcards.");
     } finally {

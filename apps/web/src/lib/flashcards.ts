@@ -29,6 +29,7 @@ export type FlashcardDeck = {
   createdAt: string;
   updatedAt: string;
   source?: FlashcardStorage;
+  savedFrom?: { title: string; ownerName: string };
 };
 
 export type Flashcard = {

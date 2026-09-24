@@ -16,15 +16,28 @@ See [PROJECT_HANDOFF.md](./PROJECT_HANDOFF.md) for architecture, setup, credenti
 
 Để cấu hình Supabase, Google OAuth và deploy hai service lên Render, làm theo [DEPLOY_V1_VI.md](./DEPLOY_V1_VI.md).
 
+## v5.12.0 — lưu bản sao học liệu được chia sẻ
+
+Chạy `0023_v5_12_0_save_shared_learning.sql` sau `0022_v5_11_5_quiz_answer_reveal.sql`. Migration này thêm quyền chia sẻ Tài liệu, thao tác lưu Quiz/Flashcard/Lab thành bản sao thuộc tài khoản nhận, và sao chép object Storage cho Tài liệu. Bản sao giữ độc lập khi người chia sẻ sửa, thu hồi quyền hoặc xóa bản gốc. Tài liệu được sao chép sẽ tính vào quota Storage của người nhận.
+
+```sql
+-- Supabase SQL Editor, chạy một lần sau khi database đã có migration 0022
+-- Nếu database còn thiếu migration trước đó, chạy lần lượt các migration còn thiếu trước 0023.
+-- Chạy toàn bộ file 0023_v5_12_0_save_shared_learning.sql
+```
+
+Quiz/Flashcard cần gói Plus trở lên để chia sẻ; Lab/Tài liệu cần Pro trở lên. Người nhận vẫn có thể lưu bản sao bằng tài khoản Free. Bản sao Quiz/Flashcard/Lab xuất hiện ở tab tương ứng; Tài liệu xuất hiện trong thư viện Tài liệu. Tiến độ ôn tập của Flashcard bắt đầu riêng cho bản sao.
+
 ## v5.0 — thú cưng học tập và chia sẻ học liệu
 
-Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sql` đã được sửa lỗi PostgreSQL `42601` ở các điều kiện phân hạng gói và có thể chạy lại an toàn trên môi trường đã áp dụng một phần. File `0019_v5_0_pets.sql` thêm hồ sơ thú cưng và nhật ký thời gian học. File `0021_v5_11_3_learning_version_trigger_fix.sql` sửa lỗi `42703` do trigger dùng chung đọc `OLD.questions` trên bảng `flashcards`; cần chạy file này trên các project đã áp dụng `0018`.
+Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sql` đã sửa lỗi `42601` và `42P13`; nếu cần chạy lại sau `0020`, bản sửa vẫn giữ đáp án Quiz riêng tư. File `0019_v5_0_pets.sql` thêm hồ sơ thú cưng và nhật ký thời gian học. File `0020` giới hạn quyền đọc đáp án Quiz trước khi nộp. File `0021_v5_11_3_learning_version_trigger_fix.sql` sửa lỗi `42703` do trigger dùng chung đọc `OLD.questions` trên bảng `flashcards`. File `0022_v5_11_5_quiz_answer_reveal.sql` bổ sung lựa chọn xem đáp án từng câu ngay khi chọn, có ghi nhận lựa chọn trên server.
 
 ```sql
 -- Supabase SQL Editor
 -- 1) chạy toàn bộ 0018_v4_9_learning_shares.sql đã cập nhật
 -- 2) chạy 0019_v5_0_pets.sql
--- 3) chạy 0021_v5_11_3_learning_version_trigger_fix.sql nếu database đã có 0018
+-- 3) chạy 0020, 0021, 0022, rồi 0023 theo thứ tự trên database chưa có các migration này
+-- Nếu database đang ở 0022, chỉ cần chạy 0023 để bật lưu bản sao học liệu được chia sẻ.
 ```
 
 Chủ học liệu vẫn là người duy nhất quản lý lời mời; người nhận chỉ đọc nội dung đã được cấp quyền và ghi tiến độ riêng. Pet lưu dự phòng trên trình duyệt khách, còn tài khoản đăng nhập đồng bộ qua `get_my_pet`, `update_my_pet` và `record_pet_activity`. Thời gian chỉ được ghi khi trang đang hiển thị và có tương tác gần đây; không tự động tải Lab cục bộ lên tài khoản.
