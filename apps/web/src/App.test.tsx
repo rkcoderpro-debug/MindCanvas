@@ -4,10 +4,17 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { cacheProject } from "./lib/projectStore";
+import { cacheProject, waitForProjectCache } from "./lib/projectStore";
 import { blankBoard } from "./lib/board";
 import { APP_VERSION_LABEL } from "./lib/appVersion";
 let root: Root, host: HTMLDivElement;
+async function waitForUI(check: () => void) {
+  for (let attempt = 0; attempt < 75; attempt++) {
+    try { check(); return; } catch { /* wait for IndexedDB and React to settle */ }
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  }
+  check();
+}
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear();
@@ -15,7 +22,7 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); await waitForProjectCache(null); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace UI", () => {
   it("starts new users at 280px and keeps workspace shortcuts collapsed", async () => {
     await act(async () => root.render(<App/>));
@@ -47,13 +54,15 @@ describe("Workspace UI", () => {
     const board=blankBoard("Keep me");cacheProject(null,{id:board.id,title:board.title,board,folderId:null,updatedAt:board.updatedAt,pending:false});
     await act(async()=>root.render(<App/>));
     await act(async()=>(host.querySelector('[aria-label="Thêm yêu thích"]') as HTMLButtonElement).click());
-    expect(host.querySelector('[aria-label="Bỏ yêu thích"]')).not.toBeNull();
+    await waitForUI(() => expect(host.querySelector('[aria-label="Bỏ yêu thích"]')).not.toBeNull());
     const menu=()=>host.querySelector('[aria-label="Thao tác project: Keep me"]') as HTMLButtonElement;
+    await waitForUI(() => expect(menu().disabled).toBe(false));
     await act(async()=>menu().click());
     await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Nhân đôi")?.dispatchEvent(new MouseEvent("click",{bubbles:true})));
-    expect(host.querySelectorAll(".project-card")).toHaveLength(2);
+    await waitForUI(() => expect(host.querySelectorAll(".project-card")).toHaveLength(2));
+    await waitForUI(() => expect(menu().disabled).toBe(false));
     await act(async()=>menu().click());await act(async()=>[...host.querySelectorAll(".project-menu button")].find(b=>b.textContent==="Đưa vào thùng rác")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
-    expect(host.querySelectorAll(".project-card")).toHaveLength(1);
+    await waitForUI(() => expect(host.querySelectorAll(".project-card")).toHaveLength(1));
     await act(async () => (host.querySelector(".workspace-expand") as HTMLButtonElement).click());
     await act(async()=>[...host.querySelectorAll("nav button")].find(b=>b.textContent==="Thùng rác")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
     expect(host.querySelector(".project-card")?.textContent).toContain("Keep me");
@@ -69,7 +78,7 @@ describe("Workspace UI", () => {
     await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());
     expect(host.querySelector("svg.canvas-svg")).not.toBeNull();
     await act(async () => (host.querySelector(".brand") as HTMLButtonElement).click());
-    expect(host.querySelector(".project-card")).not.toBeNull();
+    await waitForUI(() => expect(host.querySelector(".project-card")).not.toBeNull());
   });
   it("uses an in-app form for a new project, never window.prompt", async () => {
     const prompt = vi.spyOn(window, "prompt");
@@ -154,7 +163,10 @@ describe("Workspace UI", () => {
     const flashcardTab = [...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(item => item.textContent === "Flashcard")!;
     await act(async () => flashcardTab.click());
     expect(host.textContent).toContain("Bộ thẻ");
-    expect(host.textContent).toContain("Chưa có bộ thẻ");
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(host.textContent).toContain("Chưa có bộ thẻ");
+    });
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
   it("opens the interactive Lab and runs self-contained HTML in a sandbox", async () => {

@@ -1,0 +1,16 @@
+apps/web/src/lib/projectStore.ts
+apps/web/src/lib/offlineProjectCache.ts
+apps/web/src/hooks/useWorkspace.ts
+apps/web/src/components/SyncCenter.tsx
+apps/web/src/lib/projectStore.test.ts
+apps/web/src/lib/sharedPersistence.test.ts
+apps/web/src/hooks/useWorkspace.test.tsx
+apps/web/src/App.test.tsx
+apps/web/src/lib/aiSupport.test.ts
+apps/web/public/sw.js
+apps/web/package.json
+apps/server/package.json
+package.json
+package-lock.json
+V5.11.6_CANVAS_QUOTA_FIX_VI.md
+CHANGED_FILES_V5.11.6.txt

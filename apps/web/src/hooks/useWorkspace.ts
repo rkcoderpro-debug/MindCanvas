@@ -5,7 +5,7 @@ import { normalizeEditor } from "../lib/editorCommands";
 import { errorMessage } from "../lib/errors";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { subscribeToProject } from "../lib/collaboration";
-import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 import { createCanvasThumbnail } from "../lib/canvasThumbnail";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
@@ -13,17 +13,7 @@ export type WorkspaceConflict = { projectId: string; local: CachedProject; remot
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
 const CONFLICT_CHECKPOINT_WAIT_MS = 4000;
 const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
-const CLOUD_SAVE_RETRY_DELAYS_MS = [1500, 5000, 12000];
 type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
-function isRetryableCloudSaveError(error: unknown) {
-  if (error instanceof ProjectConflictError) return false;
-  if (error && typeof error === "object") {
-    const status = "status" in error ? Number(error.status) : NaN;
-    if (Number.isFinite(status)) return status === 408 || status === 429 || status >= 500;
-    if ("name" in error && error.name === "TypeError") return true;
-  }
-  return /network|timeout|timed out|failed to fetch|fetch failed|connection|temporarily unavailable|econn/i.test(String(error));
-}
 function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
   return new Promise<void>(resolve => {
     const timeout = window.setTimeout(resolve, CONFLICT_CHECKPOINT_WAIT_MS);
@@ -40,7 +30,6 @@ export function useWorkspace(owner: string | null) {
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [error, setError] = useState("");
-  const cloudSaveError = useRef("");
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
@@ -50,9 +39,6 @@ export function useWorkspace(owner: string | null) {
   const pastRef = useRef<BoardState[]>([]), futureRef = useRef<BoardState[]>([]);
   const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), viewportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
-  const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const retryAttempts = useRef(new Map<string, number>());
-  const retryFlush = useRef<(projectId?: string, fromAutoRetry?: boolean) => Promise<boolean>>(async () => false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
   // Realtime UPDATE events do not carry the originating browser/session. Keep
@@ -84,9 +70,16 @@ export function useWorkspace(owner: string | null) {
     setPast(nextPast);
     setFuture([]);
   };
-  const report = useCallback((err: unknown) => { if (alive.current) { cloudSaveError.current = ""; setError(errorMessage(err, "Could not save this project.")); } }, []);
+  const report = useCallback((err: unknown) => { if (alive.current) setError(errorMessage(err, "Could not save this project.")); }, []);
   const refresh = useCallback(async () => {
     try {
+      // Show an already available device draft immediately; an IndexedDB
+      // transaction can finish after React's first paint.
+      const immediate = readCache(owner);
+      if (alive.current) {
+        setProjects(immediate);
+        if (immediate.length) setLoading(false);
+      }
       await hydrateProjectCache(owner);
       const cache = readCache(owner);
       dirty.current = cache.some(p => p.pending);
@@ -117,7 +110,7 @@ export function useWorkspace(owner: string | null) {
       // CanvasBoard can checkpoint an in-progress pen/eraser gesture directly
       // into the durable cache. Never replace that newer draft with the last
       // React-committed board while leaving the canvas or hiding the page.
-      if (existing && existing.board.updatedAt > active.updatedAt && JSON.stringify(existing.board) !== JSON.stringify(active)) {
+      if (existing?.pending && existing.board.updatedAt >= active.updatedAt && JSON.stringify(existing.board) !== JSON.stringify(active)) {
         dirty.current = dirty.current || !!existing.pending;
         return;
       }
@@ -178,6 +171,7 @@ export function useWorkspace(owner: string | null) {
       };
       cacheProject(owner, snapshot);
       cacheFailed.current = false;
+      void waitForProjectCache(owner).catch(err => { cacheFailed.current = true; if (alive.current) setStatus("saveError"); report(err); });
       dirty.current = !!owner || dirty.current;
       if (alive.current) {
         upsertSummary(snapshot);
@@ -218,25 +212,7 @@ export function useWorkspace(owner: string | null) {
     } finally { thumbnailRequests.current.delete(projectId); }
   }, [owner]);
 
-  const clearAutoRetry = useCallback((projectId: string, resetAttempts = false) => {
-    const scheduled = retryTimers.current.get(projectId);
-    if (scheduled !== undefined) clearTimeout(scheduled);
-    retryTimers.current.delete(projectId);
-    if (resetAttempts) retryAttempts.current.delete(projectId);
-  }, []);
-  const scheduleAutoRetry = useCallback((projectId: string, error: unknown) => {
-    if (!owner || !navigator.onLine || !isRetryableCloudSaveError(error) || retryTimers.current.has(projectId)) return;
-    const attempt = retryAttempts.current.get(projectId) ?? 0;
-    if (attempt >= CLOUD_SAVE_RETRY_DELAYS_MS.length) return;
-    retryAttempts.current.set(projectId, attempt + 1);
-    const timerId = setTimeout(() => {
-      retryTimers.current.delete(projectId);
-      void retryFlush.current(projectId, true);
-    }, CLOUD_SAVE_RETRY_DELAYS_MS[attempt]);
-    retryTimers.current.set(projectId, timerId);
-  }, [owner]);
-
-  const flush = useCallback(async (projectId?: string, fromAutoRetry = false): Promise<boolean> => {
+  const flush = useCallback(async (projectId?: string): Promise<boolean> => {
     // An explicit flush for an older project must not cancel the debounce for
     // the canvas that is currently open.
     if (!projectId || projectId === current.current?.id) clearTimeout(timer.current);
@@ -245,8 +221,14 @@ export function useWorkspace(owner: string | null) {
       ? [projectId]
       : [...new Set(cached.filter(project => project.pending).map(project => project.id))];
     if (cacheFailed.current && current.current && !targetIds.includes(current.current.id)) targetIds.push(current.current.id);
-    targetIds.forEach(id => { clearAutoRetry(id); if (!fromAutoRetry) retryAttempts.current.delete(id); });
     if (!targetIds.length) {
+      if (!owner) {
+        void waitForProjectCache(owner).catch(err => { cacheFailed.current = true; if (alive.current) setStatus("saveError"); report(err); });
+        if (alive.current) setStatus("localSaved");
+        return true;
+      }
+      try { await waitForProjectCache(owner); }
+      catch (err) { cacheFailed.current = true; if (alive.current) setStatus("saveError"); report(err); return false; }
       if (alive.current) setStatus(owner ? "saved" : "localSaved");
       return true;
     }
@@ -264,6 +246,8 @@ export function useWorkspace(owner: string | null) {
       cacheProject(owner, { ...existing, id: b.id, title: b.title, updatedAt: b.updatedAt, board: b, thumbnail: createCanvasThumbnail(b), folderId: folderId.current, pending: !!owner, revision: existing?.revision, ownerId: existing?.ownerId ?? owner ?? undefined, accessRole: existing?.accessRole ?? (owner ? "owner" : undefined), shared: existing?.shared ?? false });
           cacheFailed.current = false;
         }
+        await waitForProjectCache(owner);
+        let heldSharedDraft = false;
         const pending = readCache(owner).filter(p => {
           if (p.id !== targetId) return false;
           if (!p.pending) return false;
@@ -272,11 +256,15 @@ export function useWorkspace(owner: string | null) {
           // upload itself before this session has fetched its cloud revision.
           // The active project may still flush a legitimate editor change.
           if (shared && p.id !== current.current?.id) {
-            cacheProject(owner, { ...p, pending: false, cloudOffline: false });
+            heldSharedDraft = true;
             return false;
           }
           return true;
         });
+        if (heldSharedDraft) {
+          setError("Có bản nháp project chia sẻ chưa đối chiếu với cloud. Hãy mở project để xem và chọn cách khôi phục.");
+          return false;
+        }
         if (!owner) { if (current.current?.id === targetId) setStatus("localSaved"); return true; }
         if (!navigator.onLine) { if (current.current?.id === targetId) setStatus("offline"); return false; }
         if (pending.length && current.current?.id === targetId) setStatus("saving");
@@ -290,8 +278,9 @@ export function useWorkspace(owner: string | null) {
             try {
               const saved = await persistProject(owner, candidate);
               marker.expectedRevision = saved?.revision;
-              rememberAcknowledged(marker);
               acknowledge(owner, candidate, saved?.revision);
+              await waitForProjectCache(owner);
+              rememberAcknowledged(marker);
               const cached = readCache(owner).find(item => item.id === candidate.id);
               if (alive.current && cached) setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
             } catch (err) {
@@ -301,7 +290,6 @@ export function useWorkspace(owner: string | null) {
           };
           try {
             await save(snapshot);
-            clearAutoRetry(targetId, true);
           } catch (err) {
             if (!(err instanceof ProjectConflictError)) throw err;
             const remote = await fetchProjectSnapshot(owner, snapshot.id);
@@ -309,29 +297,26 @@ export function useWorkspace(owner: string | null) {
             // Viewport-only saves from another device are safe to rebase. Real
             // content/folder differences require an explicit user decision.
             if (remote.revision !== undefined && local.folderId === remote.folderId && sameBoardContent(local.board, remote.board)) {
-              const rebased = { ...local, revision: remote.revision, pending: true };
-              cacheProject(owner, rebased);
-              await save(rebased);
+              // The previous write may have succeeded but its response or
+              // readback timed out. Confirm its content instead of resending.
+              acknowledge(owner, local, remote.revision);
+              await waitForProjectCache(owner);
+              const confirmed = readCache(owner).find(item => item.id === local.id);
+              if (confirmed && alive.current) setProjects(items => [confirmed, ...items.filter(item => item.id !== confirmed.id)]);
               continue;
             }
             const next = { projectId: snapshot.id, local, remote };
-            conflictRef.current = next; setConflict(next); cloudSaveError.current = ""; setError(""); setStatus("saveError");
+            conflictRef.current = next; setConflict(next); setError(""); setStatus("saveError");
             return false;
           }
         }
         return true;
-      } catch (err) {
-        const message = errorMessage(err, "Could not save this project.");
-        cloudSaveError.current = message;
-        if (alive.current) { setStatus(navigator.onLine ? "saveError" : "offline"); setError(message); }
-        scheduleAutoRetry(targetId, err);
-        return false;
-      }
+      } catch (err) { if (alive.current) setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false; }
     }, targetId);
 
     const outcomes = await Promise.all(targetIds.map(async id => [id, await flushProject(id)] as const));
     const resultById = new Map(outcomes);
-    const allSaved = outcomes.every(([, saved]) => saved);
+    const allSaved = outcomes.every(([, saved]) => saved) && !readCache(owner).some(p => p.pending);
     if (alive.current) {
       dirty.current = readCache(owner).some(p => p.pending);
       const activeId = current.current?.id;
@@ -344,30 +329,19 @@ export function useWorkspace(owner: string | null) {
       else if (!allSaved) setStatus("saveError");
       else setStatus(owner ? "saved" : "localSaved");
     }
-    if (allSaved && cloudSaveError.current && !readCache(owner).some(project => project.pending)) {
-      const recoveredMessage = cloudSaveError.current;
-      cloudSaveError.current = "";
-      if (alive.current) setError(currentError => currentError === recoveredMessage ? "" : currentError);
-    }
     return allSaved;
-  }, [clearAutoRetry, owner, report, scheduleAutoRetry]);
-  retryFlush.current = flush;
+  }, [owner, report]);
 
   useEffect(() => {
     alive.current = true; void refresh();
-    const cameOnline = () => {
-      setOnline(true);
-      for (const timerId of retryTimers.current.values()) clearTimeout(timerId);
-      retryTimers.current.clear(); retryAttempts.current.clear();
-      void flush();
-    };
+    const cameOnline = () => { setOnline(true); void flush(); };
     const wentOffline = () => { setOnline(false); setStatus(cacheFailed.current ? "saveError" : "offline"); };
     const beforeUnload = (e: BeforeUnloadEvent) => { checkpointCurrent(); if ((owner && dirty.current) || cacheFailed.current) { e.preventDefault(); e.returnValue = ""; } };
     const hidden = () => { if (document.visibilityState === "hidden") { checkpointCurrent(); void flush(); } };
     const pageHide = () => { checkpointCurrent(); void flush(); };
     window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
     window.addEventListener("beforeunload", beforeUnload); window.addEventListener("pagehide", pageHide); document.addEventListener("visibilitychange", hidden);
-    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); for (const timerId of retryTimers.current.values()) clearTimeout(timerId); retryTimers.current.clear(); retryAttempts.current.clear(); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
+    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner, checkpointCurrent]);
 
   // A shared project receives durable Postgres Changes while it is open. The
@@ -391,13 +365,8 @@ export function useWorkspace(owner: string | null) {
         return update.revision === undefined || update.revision === marker.snapshot.revision + 1;
       });
       if (markerIndex >= 0) {
-        const [marker] = localSaveMarkers.current.splice(markerIndex, 1);
-        acknowledge(owner, marker.snapshot, update.revision ?? marker.expectedRevision);
-        const cached = readCache(owner).find(item => item.id === projectId);
-        if (alive.current && cached) {
-          setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
-          if (!cached.pending) setStatus("saved");
-        }
+        // A realtime echo alone is not a verified cloud readback. The save
+        // request is still responsible for clearing pending after verification.
         return;
       }
       // The save response may have already removed the in-flight marker before
@@ -425,7 +394,7 @@ export function useWorkspace(owner: string | null) {
       // the same document. Those fields must never erase local history.
       if (sameBoardContent(local, update.board)) {
         const cached = readCache(owner).find(item => item.id === projectId);
-        if (cached && update.revision !== undefined) cacheProject(owner, { ...cached, revision: update.revision, pending: cached.pending });
+        if (cached && !cached.pending && update.revision !== undefined) cacheProject(owner, { ...cached, revision: update.revision });
         return;
       }
       // A pending edit in a different project should not pause this project's
@@ -460,6 +429,7 @@ export function useWorkspace(owner: string | null) {
       const accessRole = existing?.accessRole ?? (shared ? "viewer" : owner ? "owner" : undefined);
       const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, ownerId, accessRole, shared, cloudOffline: existing?.cloudOffline, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: createCanvasThumbnail(next), folderId: folderId.current, pending: !!owner };
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
+      void waitForProjectCache(owner).catch(err => { cacheFailed.current = true; if (alive.current) setStatus("saveError"); report(err); });
       const activeConflict = conflictRef.current?.projectId === next.id ? { ...conflictRef.current, local: p } : null;
       if (activeConflict) { conflictRef.current = activeConflict; setConflict(activeConflict); }
       setStatus(activeConflict ? "saveError" : !navigator.onLine ? "offline" : owner ? "pending" : "localSaved");
@@ -537,25 +507,42 @@ export function useWorkspace(owner: string | null) {
   const open = async (p: Project) => {
     if (p.deletedAt) return;
     const ticket = ++navigation.current;
-    await flush();
-    if (cacheFailed.current || ticket !== navigation.current) return;
+    if (owner) await flush();
+    else void flush();
+    if ((owner && cacheFailed.current) || ticket !== navigation.current) return;
     try {
-      const cached = readCache(owner).find(c => c.id === p.id);
+      let cached = readCache(owner).find(c => c.id === p.id);
       const shared = !!owner && !!(p.shared || (p.ownerId && p.ownerId !== owner) || cached?.shared || (cached?.ownerId && cached.ownerId !== owner));
       const offline = typeof navigator !== "undefined" && !navigator.onLine;
       // Shared projects are cloud-authoritative. A pending device cache can
       // only be used for offline viewing; it must not win an online open.
-      const local = cached && (!owner || (!shared && (cached.pending || offline)) || (shared && offline));
+      let local = !!cached && (!owner || (!shared && (cached.pending || offline)) || (shared && offline));
       const snapshot = !local && owner ? await fetchProjectSnapshot(owner, p.id) : undefined;
-      const metadata = snapshot ?? cached ?? p;
-      const next = local ? cached.board : snapshot?.board ?? cached?.board;
+      if (shared && cached?.pending && snapshot && cached.folderId === snapshot.folderId && sameBoardContent(cached.board, snapshot.board)) {
+        acknowledge(owner, cached, snapshot.revision);
+        await waitForProjectCache(owner);
+        cached = readCache(owner).find(c => c.id === p.id);
+      }
+      if (cached && snapshot && (
+        (cached.pending && !sameBoardContent(cached.board, snapshot.board)) ||
+        (cached.revision !== undefined && snapshot.revision !== undefined && snapshot.revision <= cached.revision && !sameBoardContent(cached.board, snapshot.board)) ||
+        (cached.revision !== undefined && snapshot.revision !== undefined && snapshot.revision < cached.revision)
+      )) {
+        // Do not silently replace a device draft or a confirmed newer cache
+        // with an older/inconsistent cloud read. Require a recovery choice.
+        const nextConflict = { projectId: p.id, local: cached, remote: snapshot };
+        conflictRef.current = nextConflict; setConflict(nextConflict); setStatus("saveError");
+        local = true;
+      }
+      const metadata = local && cached ? cached : snapshot ?? cached ?? p;
+      const next = local && cached ? cached.board : snapshot?.board ?? cached?.board;
       if (!next) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
       current.current = normalizeEditor(next); folderId.current = metadata.folderId; setBoard(current.current); clearHistory(); setVersions([]);
-      cacheProject(owner, { ...metadata, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
+      cacheProject(owner, { ...metadata, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: !!cached?.pending || !!(local && snapshot), cloudOffline: shared && offline });
       // Publish the access metadata immediately so a newly accepted viewer
       // cannot get one editable render while the background refresh completes.
-      upsertSummary({ ...metadata, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: shared ? false : !!cached?.pending, cloudOffline: shared && offline });
+      upsertSummary({ ...metadata, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: !!cached?.pending || !!(local && snapshot), cloudOffline: shared && offline });
       const history = await fetchProjectVersions(owner, next.id);
       if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
     } catch (err) { report(err); }
@@ -585,7 +572,8 @@ export function useWorkspace(owner: string | null) {
     // to the user, but it must not trap navigation in the current canvas. The
     // guide (and the Workspace button) must still be able to advance while a
     // retry remains available.
-    await flush();
+    if (owner) await flush();
+    else void flush();
     if (!alive.current || ticket !== navigation.current) return;
     current.current = null;
     setBoard(null);
@@ -625,7 +613,7 @@ export function useWorkspace(owner: string | null) {
       const active = current.current;
       if (!active || active.id !== next.id) return;
       const cached = readCache(owner).find(item => item.id === active.id);
-      if (cached) cacheProject(owner, { ...cached, board: active });
+      if (cached) cacheProject(owner, { ...cached, board: sameBoardContent(cached.board, active) ? active : { ...cached.board, viewport: active.viewport } });
     }, 500);
   };
   const manageProject = async (project: Project, patch: ProjectPatch) => {
@@ -640,7 +628,9 @@ export function useWorkspace(owner: string | null) {
       const source = owner ? await fetchBoard(owner, project.id) : cached?.board;
       if (!source) throw new Error("Project unavailable");
       const copy = { ...structuredClone(source), id: crypto.randomUUID(), title, updatedAt: new Date().toISOString() };
-      cacheProject(owner, { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, thumbnail: createCanvasThumbnail(copy), pending: !!owner, favorite: false, deletedAt: null, ownerId: owner ?? undefined, accessRole: owner ? "owner" : undefined, shared: false });
+      const duplicate: CachedProject = { id: copy.id, title, updatedAt: copy.updatedAt, folderId: targetFolderId, board: copy, thumbnail: createCanvasThumbnail(copy), pending: !!owner, favorite: false, deletedAt: null, ownerId: owner ?? undefined, accessRole: owner ? "owner" : undefined, shared: false };
+      cacheProject(owner, duplicate);
+      upsertSummary(duplicate);
       if (!await flush()) throw new Error("Copy is kept locally; retry saving to finish cloud sync.");
       await refresh();
     } catch (err) { report(err); throw err; }

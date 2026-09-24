@@ -4,6 +4,7 @@ import { parseBoard } from "./board";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
 import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
+import { deleteFlashcardList, readFlashcardList, writeFlashcardList } from "./flashcardStorage";
 
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; board?: BoardState; thumbnail?: CanvasThumbnail; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean };
 export type ProjectFolder = { id: string; name: string };
@@ -26,6 +27,9 @@ export const flashcardStudyEventQueueCacheKey = (owner: string | null) => `mindc
 const memoryCaches = new Map<string, CachedProject[]>();
 const memoryOnlyCaches = new Set<string>();
 const hydratedCaches = new Set<string>();
+const cacheWrites = new Map<string, Promise<void>>();
+const cacheWriteErrors = new Map<string, unknown>();
+const cacheGenerations = new Map<string, number>();
 const ownerCacheId = (owner: string | null) => owner ?? "guest";
 function parseProjectCache(value: unknown): CachedProject[] {
   if (!Array.isArray(value)) throw new Error("Invalid local cache; export your browser data before clearing it.");
@@ -39,18 +43,44 @@ function parseProjectCache(value: unknown): CachedProject[] {
 function writeProjectCache(owner: string | null, projects: CachedProject[]) {
   const key = cacheKey(owner), normalized = projects.map(project => ({ ...project, board: parseBoard(project.board) }));
   memoryCaches.set(key, normalized);
+  cacheGenerations.set(key, (cacheGenerations.get(key) ?? 0) + 1);
+  let localSaved = false;
   try {
     localStorage.setItem(key, JSON.stringify(normalized));
     memoryOnlyCaches.delete(key);
+    localSaved = true;
   } catch {
     // Keep the current session usable when a large canvas exceeds the
     // localStorage quota. IndexedDB remains the durable fallback.
     memoryOnlyCaches.add(key);
   }
-  void writeOfflineProjectCache(ownerCacheId(owner), normalized).catch(() => undefined);
+  // Each write stores the whole owner cache. Concurrent IndexedDB transactions
+  // could otherwise commit an older canvas after the latest gesture checkpoint.
+  const previous = cacheWrites.get(key) ?? Promise.resolve();
+  const write = previous.catch(() => undefined).then(async () => {
+    try {
+      await writeOfflineProjectCache(ownerCacheId(owner), normalized);
+      cacheWriteErrors.delete(key);
+    } catch (error) {
+      if (!localSaved) cacheWriteErrors.set(key, error);
+      // A successful localStorage write is still a durable fallback.
+      if (!localSaved) throw error;
+    }
+  });
+  cacheWrites.set(key, write);
+  void write.catch(() => undefined);
+}
+export async function waitForProjectCache(owner: string | null) {
+  const key = cacheKey(owner);
+  await cacheWrites.get(key);
+  if (memoryOnlyCaches.has(key) && cacheWriteErrors.has(key)) throw cacheWriteErrors.get(key);
 }
 export function readCache(owner: string | null): CachedProject[] {
   const key = cacheKey(owner);
+  // localStorage may contain yesterday's canvas if the latest setItem threw
+  // QuotaExceededError. Never let that stale value replace the in-memory edit.
+  const memory = memoryCaches.get(key);
+  if (memoryOnlyCaches.has(key) && memory) return memory;
   const raw = localStorage.getItem(key);
   if (raw) {
     const parsed = parseProjectCache(JSON.parse(raw));
@@ -60,8 +90,6 @@ export function readCache(owner: string | null): CachedProject[] {
   // A memory-only copy is intentional only after localStorage rejected a
   // write. Otherwise an empty localStorage (for example after sign-out or a
   // test reset) must not resurrect stale data from module memory.
-  const memory = memoryCaches.get(key);
-  if (memoryOnlyCaches.has(key) && memory) return memory;
   memoryCaches.delete(key);
   // Recover only the explicit v2 user cache; never import the old shared demo key.
   const legacy = localStorage.getItem(`mindcanvas:board:v2:${owner ?? "guest"}`);
@@ -77,14 +105,21 @@ export function readCache(owner: string | null): CachedProject[] {
 export async function hydrateProjectCache(owner: string | null) {
   const id = ownerCacheId(owner), key = cacheKey(owner);
   if (hydratedCaches.has(key)) return readCache(owner);
+  const generation = cacheGenerations.get(key) ?? 0;
+  await waitForProjectCache(owner);
   const local = readCache(owner);
   try {
     const stored = await readOfflineProjectCache(id);
+    // A gesture (or a second workspace mount) may have written a newer draft
+    // while this IndexedDB read was pending. Do not publish the old snapshot.
+    if ((cacheGenerations.get(key) ?? 0) !== generation) return readCache(owner);
     if (stored) {
       const indexed = parseProjectCache(stored), merged = new Map(indexed.map(project => [project.id, project]));
       for (const project of local) {
         const previous = merged.get(project.id);
-        if (!previous || project.pending || project.updatedAt >= previous.updatedAt) merged.set(project.id, project);
+        // IndexedDB is our durable large-canvas store. A stale localStorage
+        // entry must not win a same-timestamp tie after a quota failure.
+        if (!previous || project.updatedAt > previous.updatedAt || (project.pending && !previous.pending && project.updatedAt === previous.updatedAt)) merged.set(project.id, project);
       }
       writeProjectCache(owner, [...merged.values()]);
     } else writeProjectCache(owner, local);
@@ -197,7 +232,7 @@ export function mergeProjects(remote: Project[], cache: CachedProject[], owner: 
       // missing from that list is no longer accessible and must not linger as
       // a false project; offline refreshes do not call this merge function.
       const remoteProject = result.get(p.id);
-      if (remoteProject) result.set(p.id, { ...p, ...remoteProject, board: p.board, pending: false, cloudOffline: false });
+      if (remoteProject) result.set(p.id, { ...p, ...remoteProject, board: p.board, pending: p.pending, cloudOffline: false });
       else result.delete(p.id);
     } else if (p.pending) result.set(p.id, p);
     else if (result.has(p.id) && result.get(p.id)!.updatedAt === p.updatedAt) result.set(p.id, { ...p, ...result.get(p.id)!, board: p.board });
@@ -280,6 +315,13 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     throw new ProjectConflictError(project.id);
   }
   const client = await clientFor(owner);
+  const verify = async (revision?: number) => {
+    const remote = await fetchProjectSnapshot(owner, project.id);
+    if (remote.revision !== revision || remote.folderId !== project.folderId || !sameBoardContent(remote.board, project.board)) {
+      throw new Error("Cloud chưa xác nhận nội dung canvas vừa lưu. Bản nháp vẫn chờ đồng bộ; hãy kiểm tra lại trước khi đóng trang.");
+    }
+    return { revision };
+  };
   const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, thumbnail: project.thumbnail ?? createCanvasThumbnail(project.board), updated_at: project.board.updatedAt };
   const { thumbnail: _thumbnail, ...payloadWithoutThumbnail } = payload;
   if (project.revision === undefined) {
@@ -294,7 +336,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // The initial revision is known locally, so no returned column is needed.
     let modern = await client.from("notes").insert({ ...payload, user_id: owner, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
     if (modern.error && /thumbnail/i.test(String(modern.error.message ?? ""))) modern = await client.from("notes").insert({ ...payloadWithoutThumbnail, user_id: owner, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
-    if (!modern.error) return { revision: 0 };
+    if (!modern.error) return verify(0);
     const modernMessage = String(modern.error.message ?? "");
     const modernCode = String((modern.error as { code?: unknown }).code ?? "");
     const duplicate = modernCode === "23505" || /duplicate key|already exists/i.test(modernMessage);
@@ -306,7 +348,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     if (!duplicate && /revision|column/i.test(modernMessage)) {
       let legacy = await client.from("notes").insert({ ...( /thumbnail/i.test(modernMessage) ? payloadWithoutThumbnail : payload), user_id: owner }).abortSignal(requestTimeoutSignal(20000));
       if (legacy.error && /thumbnail/i.test(String(legacy.error.message ?? ""))) legacy = await client.from("notes").insert({ ...payloadWithoutThumbnail, user_id: owner }).abortSignal(requestTimeoutSignal(20000));
-      if (!legacy.error) return {};
+      if (!legacy.error) return verify(undefined);
       const legacyMessage = String(legacy.error.message ?? "");
       const legacyCode = String((legacy.error as { code?: unknown }).code ?? "");
       if (!(legacyCode === "23505" || /duplicate key|already exists/i.test(legacyMessage))) throw legacy.error;
@@ -321,7 +363,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
   if (result.error && /thumbnail/i.test(String(result.error.message ?? ""))) result = await client.from("notes").update({ ...payloadWithoutThumbnail, revision: nextRevision }).eq("id", project.id).eq("revision", project.revision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
   if (result.error) throw result.error;
   if (!result.data) throw new ProjectConflictError(project.id);
-  return { revision: Number(result.data.revision ?? nextRevision) };
+  return verify(Number(result.data.revision ?? nextRevision));
 }
 export async function fetchFolders(owner: string | null): Promise<ProjectFolder[]> {
   if (!owner) return JSON.parse(localStorage.getItem(cacheKey(null) + ":folders") ?? "[]");
@@ -425,9 +467,54 @@ function writeLocalList<T>(key: string, value: T[]): boolean {
   }
 }
 
+/**
+ * Flashcards used to rely on localStorage for guests and as the offline
+ * fallback for signed-in users. A large canvas/document cache can fill that
+ * small quota even though IndexedDB still has room. Hydrate an IndexedDB copy
+ * when one exists and use it as the durable fallback without deleting the old
+ * localStorage copy.
+ */
+async function hydrateLocalList<T>(key: string): Promise<T[]> {
+  const current = readLocalList<T>(key);
+  if (memoryOnlyLocalLists.has(key)) return current;
+  try {
+    const stored = await readFlashcardList(key);
+    if (stored) {
+      const snapshot = stored as T[];
+      memoryLocalLists.set(key, [...snapshot]);
+      memoryOnlyLocalLists.add(key);
+      return [...snapshot];
+    }
+  } catch {
+    // localStorage remains the first recovery path when IndexedDB is blocked.
+  }
+  return current;
+}
+
+async function persistLocalList<T>(key: string, value: T[]): Promise<boolean> {
+  const hadIndexedFallback = memoryOnlyLocalLists.has(key);
+  const snapshot = [...value];
+  if (writeLocalList(key, snapshot)) {
+    // Keep an existing IndexedDB fallback in sync until it can be safely
+    // removed. This prevents an older IDB copy from resurrecting after F5.
+    if (hadIndexedFallback) {
+      if (await writeFlashcardList(key, snapshot)) memoryOnlyLocalLists.add(key);
+      else void deleteFlashcardList(key);
+    }
+    return true;
+  }
+  if (await writeFlashcardList(key, snapshot)) {
+    memoryLocalLists.set(key, snapshot);
+    memoryOnlyLocalLists.add(key);
+    return true;
+  }
+  return false;
+}
+
 function removeLocalList(key: string) {
   memoryLocalLists.delete(key);
   memoryOnlyLocalLists.delete(key);
+  void deleteFlashcardList(key);
   try {
     localStorage.removeItem(key);
   } catch {
@@ -478,14 +565,16 @@ function localCards(owner: string | null, deckId: string) {
   return readLocalList<Flashcard>(flashcardCacheKey(owner, deckId)).filter(card => typeof card?.id === "string" && card.deckId === deckId && typeof card.front === "string" && typeof card.back === "string");
 }
 
-function cacheDeck(owner: string | null, deck: FlashcardDeck): boolean {
+async function cacheDeck(owner: string | null, deck: FlashcardDeck): Promise<boolean> {
+  await hydrateLocalList<FlashcardDeck>(flashcardDeckCacheKey(owner));
   const items = localDecks(owner).filter(item => item.id !== deck.id);
-  return writeLocalList(flashcardDeckCacheKey(owner), [{ ...deck }, ...items].slice(0, 200));
+  return persistLocalList(flashcardDeckCacheKey(owner), [{ ...deck }, ...items].slice(0, 200));
 }
 
-function cacheCard(owner: string | null, card: Flashcard): boolean {
+async function cacheCard(owner: string | null, card: Flashcard): Promise<boolean> {
+  await hydrateLocalList<Flashcard>(flashcardCacheKey(owner, card.deckId));
   const items = localCards(owner, card.deckId).filter(item => item.id !== card.id);
-  return writeLocalList(flashcardCacheKey(owner, card.deckId), [{ ...card }, ...items].slice(0, 1000));
+  return persistLocalList(flashcardCacheKey(owner, card.deckId), [{ ...card }, ...items].slice(0, 1000));
 }
 
 export function readFlashcardDecks(owner: string | null) {
@@ -497,13 +586,14 @@ export function readFlashcards(owner: string | null, deckId: string) {
 }
 
 export async function fetchFlashcardDecks(owner: string | null): Promise<FlashcardRepositoryResult<FlashcardDeck>> {
+  await hydrateLocalList<FlashcardDeck>(flashcardDeckCacheKey(owner));
   if (!owner) return { items: localDecks(null), source: "local" };
   try {
     const client = await clientFor(owner);
     const { data, error } = await client.from("flashcard_decks").select("id,name,project_id,folder_id,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => deckFromRow(row, "cloud")).filter((item): item is FlashcardDeck => !!item);
-    writeLocalList(flashcardDeckCacheKey(owner), items);
+    await persistLocalList(flashcardDeckCacheKey(owner), items);
     return { items, source: "cloud" };
   } catch {
     return { items: localDecks(owner), source: "local" };
@@ -511,13 +601,14 @@ export async function fetchFlashcardDecks(owner: string | null): Promise<Flashca
 }
 
 export async function fetchFlashcards(owner: string | null, deckId: string): Promise<FlashcardRepositoryResult<Flashcard>> {
+  await hydrateLocalList<Flashcard>(flashcardCacheKey(owner, deckId));
   if (!owner) return { items: localCards(null, deckId), source: "local" };
   try {
     const client = await clientFor(owner);
     const { data, error } = await client.from("flashcards").select("id,deck_id,project_id,front,back,source_page,due_at,interval_days,ease,repetitions,lapses,created_at,updated_at").eq("user_id", owner).eq("deck_id", deckId).order("created_at", { ascending: true }).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => cardFromRow(row, "cloud")).filter((item): item is Flashcard => !!item);
-    writeLocalList(flashcardCacheKey(owner, deckId), items);
+    await persistLocalList(flashcardCacheKey(owner, deckId), items);
     return { items, source: "cloud" };
   } catch {
     return { items: localCards(owner, deckId), source: "local" };
@@ -531,30 +622,31 @@ export async function upsertFlashcardDeck(owner: string | null, deck: FlashcardD
       const client = await clientFor(owner);
       const { error } = await client.from("flashcard_decks").upsert({ id: deck.id, user_id: owner, name: deck.name, project_id: deck.projectId, folder_id: deck.folderId, created_at: deck.createdAt, updated_at: deck.updatedAt }).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
-      cacheDeck(owner, { ...deck, source: "cloud" });
+      await cacheDeck(owner, { ...deck, source: "cloud" });
       return "cloud";
     } catch (error) {
       cloudError = error;
       // A missing migration or unavailable network keeps the edit usable locally.
     }
   }
-  return finishFlashcardFallback(cacheDeck(owner, { ...deck, source: "local" }), cloudError);
+  return finishFlashcardFallback(await cacheDeck(owner, { ...deck, source: "local" }), cloudError);
 }
 
 export async function deleteFlashcardDeck(owner: string | null, deckId: string): Promise<FlashcardStorage> {
+  await hydrateLocalList<FlashcardDeck>(flashcardDeckCacheKey(owner));
   if (owner) {
     try {
       const client = await clientFor(owner);
       const { error } = await client.from("flashcard_decks").delete().eq("user_id", owner).eq("id", deckId).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
-      writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
+      await persistLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId));
       removeLocalList(flashcardCacheKey(owner, deckId));
       return "cloud";
     } catch {
       // Keep the app usable until the flashcard migration/network is available.
     }
   }
-  requirePersistentLocalList(writeLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId)));
+  requirePersistentLocalList(await persistLocalList(flashcardDeckCacheKey(owner), localDecks(owner).filter(deck => deck.id !== deckId)));
   removeLocalList(flashcardCacheKey(owner, deckId));
   return "local";
 }
@@ -566,20 +658,22 @@ export async function upsertFlashcard(owner: string | null, card: Flashcard): Pr
       const client = await clientFor(owner);
       const { error } = await client.from("flashcards").upsert({ id: card.id, deck_id: card.deckId, user_id: owner, project_id: card.projectId, front: card.front, back: card.back, source_page: card.sourcePage, due_at: card.dueAt, interval_days: card.intervalDays, ease: card.ease, repetitions: card.repetitions, lapses: card.lapses, created_at: card.createdAt, updated_at: card.updatedAt }).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
-      cacheCard(owner, { ...card, source: "cloud" });
+      await cacheCard(owner, { ...card, source: "cloud" });
       return "cloud";
     } catch (error) {
       cloudError = error;
       // A missing migration or unavailable network keeps the edit usable locally.
     }
   }
-  return finishFlashcardFallback(cacheCard(owner, { ...card, source: "local" }), cloudError);
+  return finishFlashcardFallback(await cacheCard(owner, { ...card, source: "local" }), cloudError);
 }
 
 export async function upsertFlashcards(owner: string | null, cards: Flashcard[]): Promise<FlashcardStorage> {
   if (!cards.length) return owner ? "cloud" : "local";
   if (new Set(cards.map(card => card.deckId)).size !== 1) throw new Error("Cards must belong to one deck.");
   let cloudError: unknown;
+  const deckId = cards[0].deckId;
+  await hydrateLocalList<Flashcard>(flashcardCacheKey(owner, deckId));
   if (owner) {
     try {
       const client = await clientFor(owner);
@@ -588,16 +682,16 @@ export async function upsertFlashcards(owner: string | null, cards: Flashcard[])
       // an AI preview is never partially applied to the cloud deck.
       const { error } = await client.from("flashcards").upsert(rows).abortSignal(requestTimeoutSignal(30000));
       if (error) throw error;
-      const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
-      writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "cloud" as const }))].slice(0, 1000));
+      const existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
+      await persistLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "cloud" as const }))].slice(0, 1000));
       return "cloud";
     } catch (error) {
       cloudError = error;
       // Preserve the complete batch locally for retry/import when cloud is unavailable.
     }
   }
-  const deckId = cards[0].deckId, existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
-  return finishFlashcardFallback(writeLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000)), cloudError);
+  const existing = localCards(owner, deckId), ids = new Set(cards.map(card => card.id));
+  return finishFlashcardFallback(await persistLocalList(flashcardCacheKey(owner, deckId), [...existing.filter(card => !ids.has(card.id)), ...cards.map(card => ({ ...card, source: "local" as const }))].slice(0, 1000)), cloudError);
 }
 
 export async function deleteFlashcard(owner: string | null, card: Flashcard): Promise<FlashcardStorage> {
@@ -606,13 +700,13 @@ export async function deleteFlashcard(owner: string | null, card: Flashcard): Pr
       const client = await clientFor(owner);
       const { error } = await client.from("flashcards").delete().eq("user_id", owner).eq("id", card.id).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
-      writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
+      await persistLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id));
       return "cloud";
     } catch {
       // Keep the app usable until the flashcard migration/network is available.
     }
   }
-  requirePersistentLocalList(writeLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id)));
+  requirePersistentLocalList(await persistLocalList(flashcardCacheKey(owner, card.deckId), localCards(owner, card.deckId).filter(item => item.id !== card.id)));
   return "local";
 }
 
@@ -740,20 +834,24 @@ function localStudyEvents(owner: string | null) {
   return readLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner)).filter(event => typeof event?.eventId === "string" && typeof event.studyDate === "string");
 }
 
-function cacheStudyPlan(owner: string | null, plan: StudyPlan): boolean {
-  return writeLocalList(flashcardStudyPlanCacheKey(owner), [plan, ...localStudyPlans(owner).filter(item => item.id !== plan.id)].slice(0, 20));
+async function cacheStudyPlan(owner: string | null, plan: StudyPlan): Promise<boolean> {
+  await hydrateLocalList<StudyPlan>(flashcardStudyPlanCacheKey(owner));
+  return persistLocalList(flashcardStudyPlanCacheKey(owner), [plan, ...localStudyPlans(owner).filter(item => item.id !== plan.id)].slice(0, 20));
 }
 
-function cacheStudyDay(owner: string | null, day: StudyDayProgress): boolean {
-  return writeLocalList(flashcardStudyDayCacheKey(owner), [day, ...localStudyDays(owner).filter(item => studyDayKey(item) !== studyDayKey(day))].slice(0, 730));
+async function cacheStudyDay(owner: string | null, day: StudyDayProgress): Promise<boolean> {
+  await hydrateLocalList<StudyDayProgress>(flashcardStudyDayCacheKey(owner));
+  return persistLocalList(flashcardStudyDayCacheKey(owner), [day, ...localStudyDays(owner).filter(item => studyDayKey(item) !== studyDayKey(day))].slice(0, 730));
 }
 
-function cacheStudyEvent(owner: string | null, event: StudyEvent): boolean {
-  return writeLocalList(flashcardStudyEventQueueCacheKey(owner), [event, ...localStudyEvents(owner).filter(item => item.eventId !== event.eventId)].slice(0, 5000));
+async function cacheStudyEvent(owner: string | null, event: StudyEvent): Promise<boolean> {
+  await hydrateLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner));
+  return persistLocalList(flashcardStudyEventQueueCacheKey(owner), [event, ...localStudyEvents(owner).filter(item => item.eventId !== event.eventId)].slice(0, 5000));
 }
 
-function removeStudyEvent(owner: string | null, eventId: string) {
-  writeLocalList(flashcardStudyEventQueueCacheKey(owner), localStudyEvents(owner).filter(event => event.eventId !== eventId));
+async function removeStudyEvent(owner: string | null, eventId: string) {
+  await hydrateLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner));
+  await persistLocalList(flashcardStudyEventQueueCacheKey(owner), localStudyEvents(owner).filter(event => event.eventId !== eventId));
 }
 
 export function readStudyPlans(owner: string | null) {
@@ -765,13 +863,14 @@ export function readStudyDays(owner: string | null) {
 }
 
 export async function fetchStudyPlans(owner: string | null): Promise<FlashcardRepositoryResult<StudyPlan>> {
+  await hydrateLocalList<StudyPlan>(flashcardStudyPlanCacheKey(owner));
   if (!owner) return { items: localStudyPlans(null), source: "local" };
   try {
     const client = await clientFor(owner);
     const { data, error } = await client.from("flashcard_study_plans").select("id,name,source_type,deck_ids,source_document_id,daily_target,daily_minutes,timezone,start_date,status,plan_mode,schedule,created_at,updated_at").eq("user_id", owner).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     const items = (data ?? []).map(row => planFromRow(row, "cloud")).filter((item): item is StudyPlan => !!item);
-    writeLocalList(flashcardStudyPlanCacheKey(owner), items);
+    await persistLocalList(flashcardStudyPlanCacheKey(owner), items);
     return { items, source: "cloud" };
   } catch {
     return { items: localStudyPlans(owner), source: "local" };
@@ -784,18 +883,20 @@ export async function upsertStudyPlan(owner: string | null, plan: StudyPlan): Pr
       const client = await clientFor(owner);
       const { error } = await client.from("flashcard_study_plans").upsert({ id: plan.id, user_id: owner, name: plan.name, source_type: plan.sourceType, deck_ids: plan.deckIds, source_document_id: plan.sourceDocumentId, daily_target: plan.dailyTarget, daily_minutes: plan.dailyMinutes, timezone: plan.timezone, start_date: plan.startDate, status: plan.status, plan_mode: plan.mode ?? "ai", schedule: plan.schedule ?? [], created_at: plan.createdAt, updated_at: plan.updatedAt }).abortSignal(requestTimeoutSignal(20000));
       if (error) throw error;
-      cacheStudyPlan(owner, { ...plan, source: "cloud" });
+      await cacheStudyPlan(owner, { ...plan, source: "cloud" });
       return "cloud";
     } catch {
       // The migration may be applied after the UI is deployed. Keep plan setup
       // usable locally until the cloud table becomes available.
     }
   }
-  requirePersistentLocalList(cacheStudyPlan(owner, { ...plan, source: "local" }));
+  requirePersistentLocalList(await cacheStudyPlan(owner, { ...plan, source: "local" }));
   return "local";
 }
 
 export async function fetchStudyDays(owner: string | null): Promise<FlashcardRepositoryResult<StudyDayProgress>> {
+  await hydrateLocalList<StudyDayProgress>(flashcardStudyDayCacheKey(owner));
+  await hydrateLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner));
   if (!owner) return { items: localStudyDays(null), source: "local" };
   await flushStudyEvents(owner);
   try {
@@ -809,7 +910,7 @@ export async function fetchStudyDays(owner: string | null): Promise<FlashcardRep
       if (!previous || day.updatedAt >= previous.updatedAt) merged.set(studyDayKey(day), day);
     }
     const items = [...merged.values()].sort((a, b) => b.studyDate.localeCompare(a.studyDate) || b.updatedAt.localeCompare(a.updatedAt)).slice(0, 730);
-    writeLocalList(flashcardStudyDayCacheKey(owner), items);
+    await persistLocalList(flashcardStudyDayCacheKey(owner), items);
     return { items, source: "cloud" };
   } catch {
     return { items: localStudyDays(owner), source: "local" };
@@ -830,14 +931,14 @@ export async function upsertStudyDay(owner: string | null, day: StudyDayProgress
       if (error) throw error;
       const saved = studyDayFromRow(data, "cloud");
       if (!saved) throw new Error("Invalid study day returned by Supabase.");
-      cacheStudyDay(owner, saved);
+      await cacheStudyDay(owner, saved);
       return { item: saved, source: "cloud" };
     } catch {
       // Fall through to the offline copy when the V4.2 migration is not live.
     }
   }
   const saved = { ...day, source: "local" as const };
-  requirePersistentLocalList(cacheStudyDay(owner, saved));
+  requirePersistentLocalList(await cacheStudyDay(owner, saved));
   return { item: saved, source: "local" };
 }
 
@@ -852,18 +953,20 @@ export async function saveStudyDay(owner: string | null, day: StudyDayProgress):
       if (error) throw error;
       const saved = studyDayFromRow(data, "cloud");
       if (!saved) throw new Error("Invalid study day returned by Supabase.");
-      cacheStudyDay(owner, saved);
+      await cacheStudyDay(owner, saved);
       return { item: saved, source: "cloud" };
     } catch {
       // Fall through to the local copy until the V4.3 migration is live.
     }
   }
   const saved = { ...day, source: "local" as const };
-  requirePersistentLocalList(cacheStudyDay(owner, saved));
+  requirePersistentLocalList(await cacheStudyDay(owner, saved));
   return { item: saved, source: "local" };
 }
 
-function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForCloud: boolean) {
+async function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForCloud: boolean) {
+  await hydrateLocalList<StudyDayProgress>(flashcardStudyDayCacheKey(owner));
+  await hydrateLocalList<StudyEvent>(flashcardStudyEventQueueCacheKey(owner));
   const existingEvent = localStudyEvents(owner).find(item => item.eventId === event.eventId);
   const current: StudyDayProgress = localStudyDays(owner).find(day => studyDayKey(day) === studyDayKey(event)) ?? {
     studyDate: event.studyDate,
@@ -906,8 +1009,8 @@ function localApplyStudyEvent(owner: string | null, event: StudyEvent, queueForC
     updatedAt: timestamp,
   };
   const saved: StudyDayProgress = { ...applyStudyEventToTasks(base, event), source: "local" };
-  requirePersistentLocalList(cacheStudyDay(owner, saved));
-  if (queueForCloud) requirePersistentLocalList(cacheStudyEvent(owner, event));
+  requirePersistentLocalList(await cacheStudyDay(owner, saved));
+  if (queueForCloud) requirePersistentLocalList(await cacheStudyEvent(owner, event));
   return saved;
 }
 
@@ -928,9 +1031,9 @@ async function recordCloudStudyEvent(owner: string, event: StudyEvent) {
   const row = Array.isArray(data) ? data[0] : data;
   const saved = studyDayFromRow(row, "cloud");
   if (!saved) throw new Error("Invalid study event returned by Supabase.");
-  cacheStudyDay(owner, saved);
-  cacheStudyEvent(owner, event);
-  removeStudyEvent(owner, event.eventId);
+  await cacheStudyDay(owner, saved);
+  await cacheStudyEvent(owner, event);
+  await removeStudyEvent(owner, event.eventId);
   return saved;
 }
 
@@ -951,11 +1054,11 @@ export async function recordFlashcardStudy(owner: string | null, event: StudyEve
       const saved = await recordCloudStudyEvent(owner, event);
       return { item: saved, source: "cloud" };
     } catch {
-      const saved = localApplyStudyEvent(owner, event, true);
+      const saved = await localApplyStudyEvent(owner, event, true);
       return { item: saved, source: "local" };
     }
   }
-  return { item: localApplyStudyEvent(null, event, false), source: "local" };
+  return { item: await localApplyStudyEvent(null, event, false), source: "local" };
 }
 
 // A rejected save must not poison subsequent saves. Requests for the same

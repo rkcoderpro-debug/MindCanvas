@@ -35,7 +35,7 @@ beforeEach(() => {
   SVGElement.prototype.releasePointerCapture = () => {};
   localStorage.clear(); host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); collaborationHarness.callback = null; vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); collaborationHarness.callback = null; vi.restoreAllMocks(); });
 describe("Workspace lifecycle", () => {
   it("keeps the remote revision and owner when opening an invitation", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]);
@@ -173,23 +173,6 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.flush()); expect(api.status).toBe("saveError"); expect(store.readCache("A")[0].pending).toBe(true);
     save.mockResolvedValue({}); await act(async () => api.flush()); expect(api.status).toBe("saved"); expect(store.readCache("A")[0].pending).toBe(false);
   });
-  it("retries a transient cloud save automatically while keeping the local draft", async () => {
-    vi.useFakeTimers();
-    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
-    const save = vi.spyOn(store, "persistProject").mockRejectedValueOnce(new Error("Network failure")).mockResolvedValue({});
-    await act(async () => root.render(<Harness owner="A"/>));
-    await act(async () => api.create("Retry draft"));
-    await act(async () => api.flush());
-    expect(api.status).toBe("saveError");
-    expect(store.readCache("A")[0].pending).toBe(true);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
-    expect(save).toHaveBeenCalledTimes(2);
-    expect(api.status).toBe("saved");
-    expect(api.error).toBe("");
-    expect(store.readCache("A")[0].pending).toBe(false);
-    vi.useRealTimers();
-  });
   it("still returns to Workspace after a save timeout while retaining the pending draft", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
     vi.spyOn(store, "persistProject").mockRejectedValue(new Error("TimeoutError: signal timed out"));
@@ -228,6 +211,18 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.change({ ...api.board!, title: "Mobile 3" })); await act(async () => api.flush());
     expect(save.mock.calls.map(call => call[1].revision)).toEqual([undefined, 0, 1]);
     expect(store.readCache("A")[0].revision).toBe(2); expect(api.status).toBe("saved");
+  });
+  it("does not clear a pending stroke from an unverified realtime echo", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => {
+      collaborationHarness.callback?.({ projectId: snapshot.id, board: snapshot.board, revision: 0, updatedAt: snapshot.updatedAt });
+      throw new Error("Cloud readback failed");
+    });
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("New stroke"));
+    await act(async () => api.flush());
+    expect(store.readCache("A")[0].pending).toBe(true);
+    expect(api.status).toBe("saveError");
   });
   it("keeps Undo after the cloud echo changes status from saving to saved", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);

@@ -30,7 +30,7 @@ export async function readOfflineProjectCache(owner: string): Promise<unknown[] 
 
 export async function writeOfflineProjectCache(owner: string, projects: unknown[]): Promise<void> {
   const database = await openDatabase();
-  if (!database) return;
+  if (!database) throw new Error("Trình duyệt không hỗ trợ lưu bản nháp IndexedDB.");
   try {
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(STORE, "readwrite");

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import "fake-indexeddb/auto";
 import { blankBoard } from "./board";
-import { acknowledge, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, type CachedProject } from "./projectStore";
+import { acknowledge, cacheKey, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, waitForProjectCache, type CachedProject } from "./projectStore";
+import { readOfflineProjectCache } from "./offlineProjectCache";
 import { createFlashcard } from "./flashcards";
 const cached = (): CachedProject => { const board = blankBoard("Project"); return { id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: true }; };
 beforeEach(() => localStorage.clear());
@@ -16,12 +18,42 @@ describe("Project isolation and save queue", () => {
   });
   it("keeps a newer edit pending while advancing its saved base revision", () => { const old = { ...cached(), revision: 3 }; cacheProject("A", old); cacheProject("A", { ...old, board: { ...old.board, title: "Changed while saving" } }); acknowledge("A", old, 4); expect(readCache("A")[0].pending).toBe(true); expect(readCache("A")[0].revision).toBe(4); });
   it("acknowledges only the exact saved snapshot", () => { const p = cached(); cacheProject("A", p); acknowledge("A", p); expect(readCache("A")[0].pending).toBe(false); });
+  it("keeps the latest stroke when localStorage quota leaves an older snapshot behind", async () => {
+    const owner = "quota-canvas-stroke";
+    const first = cached();
+    cacheProject(owner, first);
+    await waitForProjectCache(owner);
+    const latest = { ...first, updatedAt: "2099-01-01T00:00:00.000Z", board: { ...first.board, title: "Stroke kept", updatedAt: "2099-01-01T00:00:00.000Z" } };
+    const original = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === cacheKey(owner)) throw new DOMException("Storage quota exceeded", "QuotaExceededError");
+      return original.call(this, key, value);
+    });
+    try {
+      cacheProject(owner, latest);
+      expect(readCache(owner)[0].board.title).toBe("Stroke kept");
+      await waitForProjectCache(owner);
+      expect((await readOfflineProjectCache(owner))?.[0]).toMatchObject({ pending: true, board: { title: "Stroke kept" } });
+      expect(JSON.parse(localStorage.getItem(cacheKey(owner)) ?? "null")?.[0].board.title).toBe("Project");
+    } finally { spy.mockRestore(); }
+    vi.resetModules();
+    const reloaded = await import("./projectStore");
+    expect((await reloaded.hydrateProjectCache(owner))[0].board.title).toBe("Stroke kept");
+  });
+  it("commits rapidly changed canvas snapshots to IndexedDB in order", async () => {
+    const owner = "ordered-canvas-strokes", first = cached();
+    cacheProject(owner, first);
+    cacheProject(owner, { ...first, board: { ...first.board, title: "Second" } });
+    cacheProject(owner, { ...first, board: { ...first.board, title: "Last" } });
+    await waitForProjectCache(owner);
+    expect((await readOfflineProjectCache(owner))?.[0]).toMatchObject({ board: { title: "Last" } });
+  });
   it("keeps pending drafts when a remote list is empty", () => { const p = cached(); expect(mergeProjects([], [p], "A")).toEqual([p]); expect(mergeProjects([], [{ ...p, pending: false }], "A")).toEqual([]); });
   it("never lets a pending shared cache replace cloud metadata", () => {
     const local = { ...cached(), title: "Old phone copy", ownerId: "owner", accessRole: "editor" as const, shared: true };
     const remote = { id: local.id, title: "Cloud version", folderId: "folder", updatedAt: "2099-01-02T00:00:00.000Z", ownerId: "owner", accessRole: "editor" as const, shared: true, pending: false };
     const merged = mergeProjects([remote], [local], "member");
-    expect(merged[0]).toMatchObject({ id: local.id, title: "Cloud version", folderId: "folder", updatedAt: remote.updatedAt, ownerId: "owner", accessRole: "editor", shared: true, pending: false, cloudOffline: false });
+    expect(merged[0]).toMatchObject({ id: local.id, title: "Cloud version", folderId: "folder", updatedAt: remote.updatedAt, ownerId: "owner", accessRole: "editor", shared: true, pending: true, cloudOffline: false });
     expect(merged[0].board).toBe(local.board);
   });
   it("serializes requests and recovers after a failure", async () => {
