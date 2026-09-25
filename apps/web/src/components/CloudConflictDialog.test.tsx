@@ -79,4 +79,20 @@ describe("CloudConflictDialog", () => {
     await act(async () => root.render(<LanguageProvider><CloudConflictDialog conflict={conflict("42501: cloud write denied")} onResolve={async () => false}/></LanguageProvider>));
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("42501");
   });
+
+  it("uses the latest cloud version automatically when the default is enabled", async () => {
+    const item = conflict();
+    const onResolve = vi.fn().mockResolvedValue(true);
+    await act(async () => root.render(<LanguageProvider><CloudConflictDialog conflict={item} autoResolveCloud onResolve={onResolve}/></LanguageProvider>));
+    expect(onResolve).toHaveBeenCalledTimes(1);
+    expect(onResolve).toHaveBeenCalledWith("cloud");
+  });
+
+  it("keeps manual recovery available when automatic cloud selection fails", async () => {
+    const onResolve = vi.fn().mockResolvedValue(false);
+    await act(async () => root.render(<LanguageProvider><CloudConflictDialog conflict={conflict()} autoResolveCloud onResolve={onResolve}/></LanguageProvider>));
+    expect(onResolve).toHaveBeenCalledWith("cloud");
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Bản nháp vẫn được giữ");
+    expect([...host.querySelectorAll<HTMLButtonElement>("button")].every(button => !button.disabled)).toBe(true);
+  });
 });

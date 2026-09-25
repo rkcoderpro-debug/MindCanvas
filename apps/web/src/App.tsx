@@ -486,7 +486,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
         } catch { ws.setError(t("aiError")); setAiPanelMode("closed"); }
       }}/>} {/* Keep this mounted while minimized so its request survives. */}
     {commandOpen && <CommandPalette projects={ws.projects} onClose={() => setCommandOpen(false)} onOpenProject={project => void ws.open(project)} onCreateProject={() => askName("project")} onOpenFlashcards={openFlashcards} onOpenSettings={() => setModal("settings")} onImport={() => fileInput.current?.click()}/>}
-    {ws.conflict && <CloudConflictDialog conflict={ws.conflict} onResolve={resolution => ws.resolveConflict(resolution, t("copySuffix"))}/>}
+    {ws.conflict && <CloudConflictDialog conflict={ws.conflict} autoResolveCloud onResolve={resolution => ws.resolveConflict(resolution, t("copySuffix"))}/>}
     </Suspense>
   </div>;
 }

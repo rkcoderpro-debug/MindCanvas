@@ -11,8 +11,8 @@ export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export class ProjectConflictError extends Error {
   code = "PROJECT_CONFLICT";
-  constructor(public projectId?: string) {
-    super("Cloud project changed in another tab or device. Keep the local copy and choose a recovery action.");
+  constructor(public projectId?: string, message = "Cloud project changed in another tab or device. Keep the local copy and choose a recovery action.") {
+    super(message);
   }
 }
 export type ProjectVersion = { id: string; projectId: string; version: number; createdAt: string; board: BoardState; source: "cloud" | "local"; label?: string };
@@ -321,7 +321,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
   const verify = async (revision?: number) => {
     const remote = await fetchProjectSnapshot(owner, project.id);
     if (remote.revision !== revision || remote.folderId !== project.folderId || !sameBoardContent(remote.board, project.board)) {
-      throw new Error("Cloud chưa xác nhận nội dung canvas vừa lưu. Bản nháp vẫn chờ đồng bộ; hãy kiểm tra lại trước khi đóng trang.");
+      throw new ProjectConflictError(project.id, "Cloud chưa xác nhận nội dung canvas vừa lưu. Bản nháp vẫn chờ đồng bộ; hãy kiểm tra lại trước khi đóng trang.");
     }
     return { revision, updatedAt: remote.updatedAt };
   };

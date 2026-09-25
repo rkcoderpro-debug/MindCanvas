@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Cloud, Copy, HardDrive } from "lucide-react";
 import type { ConflictResolution, WorkspaceConflict } from "../hooks/useWorkspace";
 import { errorMessage } from "../lib/errors";
@@ -8,15 +8,17 @@ import Dialog from "./Dialog";
 type Props = {
   conflict: WorkspaceConflict;
   onResolve: (resolution: ConflictResolution) => Promise<boolean>;
+  autoResolveCloud?: boolean;
 };
 
-export default function CloudConflictDialog({ conflict, onResolve }: Props) {
+export default function CloudConflictDialog({ conflict, onResolve, autoResolveCloud = false }: Props) {
   const { t, language } = useLanguage();
   const [workingAction, setWorkingAction] = useState<ConflictResolution | null>(null);
   const [queuedAction, setQueuedAction] = useState<ConflictResolution | null>(null);
   const [localError, setLocalError] = useState("");
   const actionInFlight = useRef(false);
   const queuedActionRef = useRef<ConflictResolution | null>(null);
+  const autoCloudAttempt = useRef<string | null>(null);
   const resolve = async (resolution: ConflictResolution) => {
     if (actionInFlight.current) {
       queuedActionRef.current = resolution;
@@ -68,6 +70,13 @@ export default function CloudConflictDialog({ conflict, onResolve }: Props) {
       setQueuedAction(null);
     }
   };
+  useEffect(() => {
+    if (!autoResolveCloud) return;
+    const key = [conflict.projectId, conflict.local.updatedAt, conflict.remote.updatedAt, conflict.remote.revision ?? "legacy"].join(":");
+    if (autoCloudAttempt.current === key) return;
+    autoCloudAttempt.current = key;
+    void resolve("cloud");
+  }, [autoResolveCloud, conflict, onResolve]);
   const actionError = conflict.error || localError;
   const actionLabel = (action: ConflictResolution) => action === "cloud" ? t("useCloudVersion") : action === "copy" ? t("saveAsCopy") : t("saveDeviceToCloud");
   const format = (value: string) => new Date(value).toLocaleString(language === "vi" ? "vi-VN" : "en-US");
@@ -79,6 +88,7 @@ export default function CloudConflictDialog({ conflict, onResolve }: Props) {
     </div>
     <p className="conflict-safety">{t("conflictSafety")}</p>
     {actionError && <div className="conflict-error" role="alert">{actionError}</div>}
+    {autoResolveCloud && workingAction === "cloud" && <div className="conflict-queue-message" role="status">{t("conflictDefaultCloudPending")}</div>}
     {queuedAction && <div className="conflict-queue-message" role="status">{t("conflictChoiceQueued", { choice: actionLabel(queuedAction) })}</div>}
     <footer className="conflict-actions">
       <button className="secondary-button" disabled={workingAction === "cloud"} onClick={() => void resolve("cloud")}><Cloud size={17}/>{workingAction === "cloud" ? t("saving") : queuedAction === "cloud" ? t("conflictQueued") : t("useCloudVersion")}</button>
