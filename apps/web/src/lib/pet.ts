@@ -1,6 +1,6 @@
 import { getCurrentSession, supabase } from "./supabase";
 
-export const PET_KINDS = ["cat", "dog", "fox", "rabbit"] as const;
+export const PET_KINDS = ["cat", "dog", "fox", "rabbit", "hamster"] as const;
 export type PetKind = (typeof PET_KINDS)[number];
 export type PetMood = "energetic" | "happy" | "calm" | "tired" | "sad";
 export type PetActivityType = "workspace" | "flashcard" | "quiz" | "lab";

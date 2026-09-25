@@ -30,6 +30,10 @@ describe("study companion state", () => {
     expect(normalizePet({}, now)?.followPointer).toBe(true);
   });
 
+  it("loads and preserves the hamster species from local or cloud pet data", () => {
+    expect(normalizePet({ pet_kind: "hamster" }, now)?.kind).toBe("hamster");
+  });
+
   it("only follows the pointer inside its attention radius and returns to idle outside", () => {
     expect(getPetPointerTracking(40, -20, 220).active).toBe(true);
     expect(getPetPointerTracking(40, -20, 220).x).toBeGreaterThan(0);

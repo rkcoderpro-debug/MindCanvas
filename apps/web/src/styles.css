@@ -3769,7 +3769,10 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .interactive-pet .pet-pupils { transition:transform .18s ease-out; }
 .interactive-pet[data-kind="dog"] .pet-ear-left, .interactive-pet[data-kind="dog"] .pet-ear-right { transform-box:fill-box; transform-origin:top center; animation:pet-ear-sway 4s ease-in-out infinite; }
 .interactive-pet[data-kind="dog"] .pet-ear-right { animation-delay:-2s; }
+.interactive-pet[data-kind="hamster"] .hamster-ear-left, .interactive-pet[data-kind="hamster"] .hamster-ear-right { transform-box:fill-box;transform-origin:bottom center;animation:hamster-ear-twitch 5.8s ease-in-out infinite; }
+.interactive-pet[data-kind="hamster"] .hamster-ear-right { animation-delay:-2.9s; }
 @keyframes pet-ear-sway { 0%,80%,100% { transform:rotate(0deg); } 88% { transform:rotate(5deg); } 94% { transform:rotate(-3deg); } }
+@keyframes hamster-ear-twitch { 0%,73%,100% { transform:rotate(0deg); } 79% { transform:rotate(7deg); } 85% { transform:rotate(-3deg); } 90% { transform:rotate(0deg); } }
 @media (prefers-reduced-motion:reduce) { .interactive-pet *, .interactive-pet[data-kind="dog"] .pet-ear-left, .interactive-pet[data-kind="dog"] .pet-ear-right { animation:none !important; transition:none !important; } }
 @media (max-width:620px) { .sidebar.mobile-open .folder-list { max-height:none; min-height:90px; } .lab-footer-actions { bottom:calc(60px + env(safe-area-inset-bottom)); } }
 

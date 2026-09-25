@@ -5,7 +5,7 @@ import { Heart, Sparkles, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { getPetLevel, getPetMood, PET_KINDS, readPet, recordPetActivity, updatePetProfile, type PetActivityType, type PetKind, type PetMood, type PetState, fetchPetProfile } from "../lib/pet";
 
-const PET_EMOJI: Record<PetKind, string> = { cat: "🐱", dog: "🐶", fox: "🦊", rabbit: "🐰" };
+const PET_EMOJI: Record<PetKind, string> = { cat: "🐱", dog: "🐶", fox: "🦊", rabbit: "🐰", hamster: "🐹" };
 
 const COPY = {
   vi: {
@@ -22,6 +22,7 @@ const COPY = {
     dog: "Chó",
     fox: "Cáo",
     rabbit: "Thỏ",
+    hamster: "Hamster",
     minimize: "Thu nhỏ",
     energetic: "Đang tràn đầy năng lượng!",
     happy: "Rất vui vì bạn đang học.",
@@ -46,6 +47,7 @@ const COPY = {
     dog: "Dog",
     fox: "Fox",
     rabbit: "Rabbit",
+    hamster: "Hamster",
     minimize: "Minimize",
     energetic: "Full of energy!",
     happy: "Happy that you are studying.",
