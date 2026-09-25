@@ -1015,6 +1015,8 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .conflict-versions strong, .conflict-versions small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conflict-versions svg { flex: 0 0 auto; color: var(--accent); }
 .conflict-safety { margin-bottom: 0; font-size: 12px; }
+.conflict-error { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: 9px; color: var(--danger); background: var(--danger-soft); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.conflict-queue-message { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--soft); font-size: 13px; line-height: 1.5; }
 .conflict-actions { display: grid !important; grid-template-columns: 1fr 1fr; }
 .conflict-actions .primary-button { grid-column: 1 / -1; }
 

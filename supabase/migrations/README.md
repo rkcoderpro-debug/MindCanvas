@@ -38,6 +38,10 @@ Trong Lab, bật **Cho phép tải thư viện CDN** trước khi chạy HTML d�
 
 Sau khi database đã chạy đến migration 0024, chạy `0025_v5_14_0_hamster_pet.sql`. Migration này thêm `hamster` vào giới hạn loại pet và RPC cập nhật hồ sơ. Tài khoản khách vẫn lưu lựa chọn trong trình duyệt; tài khoản đăng nhập cần migration để đồng bộ Hamster lên cloud.
 
+## v5.14.1 — sửa lưu canvas và xung đột cloud
+
+Không có migration mới. Ứng dụng ghi project có revision bằng optimistic locking; với database cũ chưa có cột revision, ứng dụng dùng `updated_at` đọc từ cloud làm điều kiện cập nhật và xác minh lại nội dung sau khi lưu.
+
 ## v5.0 — thú cưng học tập và chia sẻ học liệu
 
 Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sql` đã sửa lỗi `42601` và `42P13`; nếu cần chạy lại sau `0020`, bản sửa vẫn giữ đáp án Quiz riêng tư. File `0019_v5_0_pets.sql` thêm hồ sơ thú cưng và nhật ký thời gian học. File `0020` giới hạn quyền đọc đáp án Quiz trước khi nộp. File `0021_v5_11_3_learning_version_trigger_fix.sql` sửa lỗi `42703` do trigger dùng chung đọc `OLD.questions` trên bảng `flashcards`. File `0022_v5_11_5_quiz_answer_reveal.sql` bổ sung lựa chọn xem đáp án từng câu ngay khi chọn, có ghi nhận lựa chọn trên server.
