@@ -30,6 +30,7 @@ import { activatePlusTrial, getPlusTrial, type PlusTrialState } from "./lib/plus
 import { errorMessage } from "./lib/errors";
 import { isIOSDevice } from "./lib/canvasInput";
 import ShareInbox from "./components/ShareInbox";
+import AutoResolveCloudConflict from "./components/AutoResolveCloudConflict";
 import ToolbarCustomization from "./components/ToolbarCustomization";
 import WebBackgroundControls from "./components/WebBackgroundControls";
 import { readWebBackground, saveWebBackground, type WebBackground } from "./lib/webBackground";
@@ -43,7 +44,6 @@ const FolderManager = lazy(() => import("./components/FolderManager"));
 const AiPanel = lazy(() => import("./components/AiPanel"));
 const VersionHistory = lazy(() => import("./components/VersionHistory"));
 const LearningHubPage = lazy(() => import("./components/LearningHubPage"));
-const CloudConflictDialog = lazy(() => import("./components/CloudConflictDialog"));
 const SyncCenter = lazy(() => import("./components/SyncCenter"));
 const PlanUpgradeDialog = lazy(() => import("./components/PlanUpgradeDialog"));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
@@ -156,7 +156,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const message = ws.error || authError;
+  const message = ws.conflict?.error || ws.error || authError;
   useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
   useEffect(() => {
     const sync = () => setGuideProgress(readGuideProgress(user?.id ?? null));
@@ -227,7 +227,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : filter === "__shared" ? p.shared : !filter || p.folderId === filter));
   const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter === "__shared" ? t("sharedWithMe") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
   const currentProject = ws.board ? ws.projects.find(project => project.id === ws.board!.id) : undefined;
-  const readOnly = currentProject?.accessRole === "viewer" || !!currentProject?.cloudOffline;
+  const readOnly = currentProject?.accessRole === "viewer" || !!currentProject?.cloudOffline || ws.conflict?.projectId === ws.board?.id;
   // The mobile project sheet also needs to expose Share for local/guest
   // projects so the feature is not missing on Android. Authenticated cloud
   // projects still remain owner-only; guests receive the sign-in path.
@@ -411,7 +411,9 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
         <button type="button" className="icon-button mobile-project-menu-trigger" aria-label={t("projectActions")} aria-expanded={mobileProjectMenuOpen} title={t("projectActions")} onClick={() => setMobileProjectMenuOpen(value => !value)}><MoreHorizontal size={21}/></button>
       </header>}
       {pwa.updateReady && <div className="update-banner" role="status"><span>{t("updateReady")}</span><button onClick={pwa.applyUpdate}>{t("updateNow")}</button></div>}
-      {message && !ws.conflict && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button></div>}
+      {ws.conflict && <AutoResolveCloudConflict conflict={ws.conflict} onResolve={() => ws.resolveConflict("cloud", t("copySuffix"))}/>}
+      {ws.conflict && !message && <div className="invite-banner" role="status"><span>{t("conflictDefaultCloudPending")}</span></div>}
+      {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); if (ws.conflict) void ws.resolveConflict("cloud", t("copySuffix")); else void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button>{!ws.conflict && <button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button>}</div>}
       {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
       {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Trung tâm học tập.</div>}
@@ -486,7 +488,6 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
         } catch { ws.setError(t("aiError")); setAiPanelMode("closed"); }
       }}/>} {/* Keep this mounted while minimized so its request survives. */}
     {commandOpen && <CommandPalette projects={ws.projects} onClose={() => setCommandOpen(false)} onOpenProject={project => void ws.open(project)} onCreateProject={() => askName("project")} onOpenFlashcards={openFlashcards} onOpenSettings={() => setModal("settings")} onImport={() => fileInput.current?.click()}/>}
-    {ws.conflict && <CloudConflictDialog conflict={ws.conflict} autoResolveCloud onResolve={resolution => ws.resolveConflict(resolution, t("copySuffix"))}/>}
     </Suspense>
   </div>;
 }
