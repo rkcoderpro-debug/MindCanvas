@@ -1,0 +1,10 @@
+mindcanvas-v1/CHANGELOG_V5.14.5.md
+mindcanvas-v1/CHANGED_FILES_V5.14.5.txt
+mindcanvas-v1/V5.14.5_RELEASE_REPORT_VI.md
+mindcanvas-v1/SHA256SUMS.txt
+mindcanvas-v1/package.json
+mindcanvas-v1/package-lock.json
+mindcanvas-v1/apps/server/package.json
+mindcanvas-v1/apps/web/package.json
+mindcanvas-v1/apps/web/public/sw.js
+mindcanvas-v1/apps/web/src/App.tsx
