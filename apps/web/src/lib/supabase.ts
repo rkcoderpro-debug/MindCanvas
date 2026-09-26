@@ -13,7 +13,7 @@ export function hasRememberedAuthUser(): boolean {
   try { return Boolean(localStorage.getItem(LAST_AUTH_USER_KEY)); } catch { return false; }
 }
 
-function rememberAuthUser(userId: string | undefined): void {
+export function rememberAuthUser(userId: string | undefined): void {
   if (!userId) return;
   try { localStorage.setItem(LAST_AUTH_USER_KEY, userId); } catch { /* storage is optional */ }
 }
@@ -129,9 +129,18 @@ export async function signOut() {
   if (!supabase) return;
   // The account menu represents this browser session. Do not revoke the
   // user's other devices when a local canvas save is being recovered.
-  const { error } = await supabase.auth.signOut({ scope: "local" });
-  if (error) throw error;
-  try { localStorage.removeItem(LAST_AUTH_USER_KEY); } catch {}
+  let rememberedUser: string | null = null;
+  try {
+    rememberedUser = localStorage.getItem(LAST_AUTH_USER_KEY);
+    localStorage.removeItem(LAST_AUTH_USER_KEY);
+  } catch {}
+  try {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) throw error;
+  } catch (error) {
+    if (rememberedUser) try { localStorage.setItem(LAST_AUTH_USER_KEY, rememberedUser); } catch {}
+    throw error;
+  }
 }
 
 export async function loadLatestBoardNote() {

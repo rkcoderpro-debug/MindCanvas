@@ -1,45 +1,30 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 
-export type AuthBootstrapState =
-  | { status: "checking" }
-  | { status: "authenticated"; user: User }
-  | { status: "anonymous" }
-  | { status: "error"; error: unknown };
+type SessionAuth = Pick<SupabaseClient["auth"], "getSession" | "refreshSession">;
+export type AuthRestoreResult =
+  | { kind: "restored"; session: Session; source: "stored" | "refreshed" }
+  | { kind: "guest" }
+  | { kind: "recovery"; error?: unknown };
 
-type AuthStateSource = Pick<SupabaseClient["auth"], "onAuthStateChange">;
+/** Read the persisted session and, when a prior account is remembered, try one refresh. */
+export async function restorePersistedSession(auth: SessionAuth, previouslySignedIn: boolean): Promise<AuthRestoreResult> {
+  let initialError: unknown;
+  try {
+    const result = await auth.getSession();
+    if (!result.error && result.data.session) return { kind: "restored", session: result.data.session, source: "stored" };
+    initialError = result.error;
+  } catch (error) {
+    initialError = error;
+  }
 
-/**
- * Recover the persisted session without treating INITIAL_SESSION(null) as a
- * confirmed sign-out. Supabase can emit that event after a retryable recovery
- * error while the stored refresh token may still be usable on a later retry.
- */
-export function watchAuthBootstrap(
-  auth: AuthStateSource,
-  readCurrentUser: () => Promise<User | null>,
-  onState: (state: AuthBootstrapState) => void,
-): () => void {
-  let active = true;
-  let authoritativeEventReceived = false;
-  const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
-    if (!active) return;
-    if (session?.user) {
-      authoritativeEventReceived = true;
-      onState({ status: "authenticated", user: session.user });
-    } else if (event === "SIGNED_OUT") {
-      authoritativeEventReceived = true;
-      onState({ status: "anonymous" });
-    }
-  });
+  if (!previouslySignedIn) return initialError ? { kind: "recovery", error: initialError } : { kind: "guest" };
 
-  void readCurrentUser().then(user => {
-    if (!active || authoritativeEventReceived) return;
-    onState(user ? { status: "authenticated", user } : { status: "anonymous" });
-  }).catch(error => {
-    if (active && !authoritativeEventReceived) onState({ status: "error", error });
-  });
-
-  return () => {
-    active = false;
-    subscription.unsubscribe();
-  };
+  try {
+    const refreshed = await auth.refreshSession();
+    if (refreshed.error) return { kind: "recovery", error: refreshed.error };
+    if (refreshed.data.session) return { kind: "restored", session: refreshed.data.session, source: "refreshed" };
+    return { kind: "recovery", error: initialError };
+  } catch (error) {
+    return { kind: "recovery", error };
+  }
 }

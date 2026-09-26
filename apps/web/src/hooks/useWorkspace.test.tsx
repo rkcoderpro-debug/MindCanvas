@@ -263,7 +263,7 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.resolveConflict("overwrite", "copy"));
     expect(save.mock.calls.at(-1)?.[1].revision).toBe(1); expect(api.conflict).toBeNull(); expect(api.status).toBe("saved"); expect(api.board?.title).toBe("Phone edit");
   });
-  it("uses the latest cloud version after preserving the device draft as a recovery checkpoint", async () => {
+  it("keeps the device draft when no recovery checkpoint can be confirmed", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
     const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => persisted(snapshot, 0));
     await act(async () => root.render(<Harness owner="A"/>));
@@ -281,11 +281,33 @@ describe("Workspace lifecycle", () => {
     let resolved = false;
     await act(async () => { resolved = await api.resolveConflict("cloud"); });
 
+    expect(resolved).toBe(false);
+    expect(api.conflict?.error).toContain("Nháp local vẫn được giữ");
+    expect(api.board?.title).toBe("Phone edit");
+    expect(store.readCache("A").find(project => project.id === remote.id)).toMatchObject({ board: { title: "Phone edit" }, pending: true });
+    expect(save).toHaveBeenCalledTimes(saveCountBeforeCloudChoice);
+  });
+  it("uses the latest cloud snapshot after a matching recovery checkpoint is confirmed", async () => {
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockImplementation(async (_owner, snapshot) => persisted(snapshot, 0));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.create("Phone")); await act(async () => api.flush());
+    const local = { ...api.board!, title: "Phone edit", updatedAt: "2026-09-25T02:00:00.000Z" };
+    const remoteBoard = { ...api.board!, title: "Desktop edit", updatedAt: "2026-09-25T02:01:00.000Z" };
+    const remote = { id: remoteBoard.id, title: remoteBoard.title, board: remoteBoard, folderId: null, updatedAt: remoteBoard.updatedAt, pending: false, revision: 1 };
+    const newestBoard = { ...api.board!, title: "Desktop latest edit", updatedAt: "2026-09-25T02:02:00.000Z" };
+    const newestRemote = { ...remote, title: newestBoard.title, board: newestBoard, updatedAt: newestBoard.updatedAt, revision: 2 };
+    vi.spyOn(store, "fetchProjectSnapshot").mockResolvedValueOnce(remote).mockResolvedValueOnce(remote).mockResolvedValueOnce(newestRemote).mockResolvedValue(remote);
+    vi.spyOn(store, "createProjectVersion").mockImplementation(async (_owner, board, label) => ({ id: "cloud-recovery", projectId: board.id, version: 1, createdAt: new Date().toISOString(), board, source: "cloud", label }));
+    save.mockRejectedValueOnce(new store.ProjectConflictError(remote.id));
+    await act(async () => api.change(local)); await act(async () => api.flush());
+
+    let resolved = false;
+    await act(async () => { resolved = await api.resolveConflict("cloud"); });
     expect(resolved).toBe(true);
     expect(api.conflict).toBeNull();
-    expect(api.board?.title).toBe("Desktop edit");
-    expect(store.readCache("A").find(project => project.id === remote.id)).toMatchObject({ board: { title: "Desktop edit" }, pending: false });
-    expect(save).toHaveBeenCalledTimes(saveCountBeforeCloudChoice);
+    expect(api.board?.title).toBe("Desktop latest edit");
+    expect(store.readCache("A").find(project => project.id === remote.id)).toMatchObject({ board: { title: "Desktop latest edit" }, revision: 2, pending: false });
   });
   it("keeps the local edit and exposes the write error when overwrite fails, then allows retry", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);

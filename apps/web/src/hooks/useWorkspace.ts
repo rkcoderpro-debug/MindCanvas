@@ -5,19 +5,26 @@ import { normalizeEditor } from "../lib/editorCommands";
 import { errorMessage } from "../lib/errors";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { subscribeToProject } from "../lib/collaboration";
-import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, readProjectVersions, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 import { createCanvasThumbnail } from "../lib/canvasThumbnail";
 
-export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
+export type SaveStatus = "localSaved" | "saved" | "saving" | "verifying" | "pending" | "offline" | "saveError";
 export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject; error?: string };
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
-const CONFLICT_CHECKPOINT_WAIT_MS = 4000;
+const CONFLICT_CHECKPOINT_WAIT_MS = 15_000;
 const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
 type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
-function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
-  return new Promise<void>(resolve => {
-    const timeout = window.setTimeout(resolve, CONFLICT_CHECKPOINT_WAIT_MS);
-    void createProjectVersion(owner, board, label).catch(() => undefined).finally(() => { window.clearTimeout(timeout); resolve(); });
+function createRecoveryCheckpoint(owner: string, board: BoardState, label: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => resolve(false), CONFLICT_CHECKPOINT_WAIT_MS);
+    void createProjectVersion(owner, board, label).then(checkpoint => {
+      window.clearTimeout(timeout);
+      const contentMatches = sameBoardContent(checkpoint.board, board);
+      if (!contentMatches || checkpoint.source !== "cloud") {
+        const storedLocally = contentMatches && readProjectVersions(owner, board.id).some(version => version.id === checkpoint.id && version.source === "local" && sameBoardContent(version.board, board));
+        resolve((contentMatches && checkpoint.source === "cloud") || storedLocally);
+      } else resolve(true);
+    }).catch(() => { window.clearTimeout(timeout); resolve(false); });
   });
 }
 // Mount once per account (App keys this component by user.id).
@@ -30,6 +37,8 @@ export function useWorkspace(owner: string | null) {
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const syncErrorRef = useRef("");
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
@@ -70,7 +79,19 @@ export function useWorkspace(owner: string | null) {
     setPast(nextPast);
     setFuture([]);
   };
-  const report = useCallback((err: unknown) => { if (alive.current) setError(errorMessage(err, "Could not save this project.")); }, []);
+  const report = useCallback((err: unknown) => {
+    if (!alive.current) return;
+    const message = errorMessage(err, "Could not save this project.");
+    syncErrorRef.current = message;
+    setSyncError(message);
+    setError(message);
+  }, []);
+  const clearSyncError = useCallback(() => {
+    const previous = syncErrorRef.current;
+    syncErrorRef.current = "";
+    setSyncError("");
+    if (previous) setError(currentError => currentError === previous ? "" : currentError);
+  }, []);
   const refresh = useCallback(async () => {
     try {
       // Show an already available device draft immediately; an IndexedDB
@@ -276,7 +297,7 @@ export function useWorkspace(owner: string | null) {
             const marker: LocalSaveMarker = { projectId: candidate.id, snapshot: candidate, createdAt: now };
             localSaveMarkers.current.push(marker);
             try {
-              const saved = await persistProject(owner, candidate);
+              const saved = await persistProject(owner, candidate, { onVerifying: () => { if (alive.current && current.current?.id === candidate.id) setStatus("verifying"); } });
               marker.expectedRevision = saved?.revision;
               acknowledge(owner, candidate, saved?.revision, saved?.updatedAt);
               await waitForProjectCache(owner);
@@ -306,7 +327,7 @@ export function useWorkspace(owner: string | null) {
               continue;
             }
             const next = { projectId: snapshot.id, local, remote };
-            conflictRef.current = next; setConflict(next); setError(""); setStatus("saveError");
+            conflictRef.current = next; setConflict(next); clearSyncError(); setStatus("saveError");
             return false;
           }
         }
@@ -318,6 +339,7 @@ export function useWorkspace(owner: string | null) {
     const resultById = new Map(outcomes);
     const allSaved = outcomes.every(([, saved]) => saved) && !readCache(owner).some(p => p.pending);
     if (alive.current) {
+      if (owner && allSaved) clearSyncError();
       dirty.current = readCache(owner).some(p => p.pending);
       const activeId = current.current?.id;
       const activePending = !!activeId && readCache(owner).some(p => p.id === activeId && p.pending);
@@ -330,7 +352,7 @@ export function useWorkspace(owner: string | null) {
       else setStatus(owner ? "saved" : "localSaved");
     }
     return allSaved;
-  }, [owner, report]);
+  }, [owner, report, clearSyncError]);
 
   useEffect(() => {
     alive.current = true; void refresh();
@@ -641,15 +663,27 @@ export function useWorkspace(owner: string | null) {
     if (!owner || !active) return false;
     const clearedConflict = { ...active, error: undefined };
     conflictRef.current = clearedConflict; setConflict(clearedConflict);
-    setStatus("saving"); setError("");
+    setStatus("saving"); clearSyncError(); setError("");
     try {
-      const latestRemote = await fetchProjectSnapshot(owner, active.projectId);
+      let latestRemote = await fetchProjectSnapshot(owner, active.projectId);
       const latestLocal = readCache(owner).find(item => item.id === active.projectId) ?? active.local;
       let selected: CachedProject;
       if (resolution === "cloud") {
-        await createRecoveryCheckpoint(owner, latestLocal.board, "Local conflict backup");
+        if (!await createRecoveryCheckpoint(owner, latestLocal.board, "Local conflict backup")) {
+          throw new Error("Không thể xác nhận bản khôi phục cho nháp trên thiết bị. Nháp local vẫn được giữ nguyên; hãy thử lại sau.");
+        }
+        // The recovery checkpoint can take several seconds. Read cloud again
+        // after it completes so the default choice always uses the newest
+        // version, rather than the snapshot that opened the conflict.
+        latestRemote = await fetchProjectSnapshot(owner, active.projectId);
         selected = latestRemote;
         cacheProject(owner, selected);
+        try { await waitForProjectCache(owner); }
+        catch (cacheError) {
+          cacheProject(owner, latestLocal);
+          void waitForProjectCache(owner).catch(() => undefined);
+          throw cacheError;
+        }
       } else if (resolution === "overwrite") {
         await createRecoveryCheckpoint(owner, latestRemote.board, "Before conflict overwrite");
         const candidate = { ...latestLocal, revision: latestRemote.revision, baseUpdatedAt: latestRemote.updatedAt, pending: true };
@@ -671,6 +705,7 @@ export function useWorkspace(owner: string | null) {
         selected = readCache(owner).find(item => item.id === candidate.id) ?? { ...candidate, revision: saved.revision, baseUpdatedAt: saved.updatedAt, pending: false };
       }
       conflictRef.current = null; setConflict(null); cacheFailed.current = false;
+      clearSyncError();
       dirty.current = readCache(owner).some(item => item.pending);
       if (current.current?.id === active.projectId) {
         current.current = normalizeEditor(selected.board); folderId.current = selected.folderId;
@@ -706,5 +741,5 @@ export function useWorkspace(owner: string | null) {
   // Reading them here keeps the toolbar state aligned with the transaction
   // that was just created, including a create-text/shape commit followed
   // immediately by Undo while a cloud save is still settling.
-  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, checkpointDraft, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
+  return { board, projects, folders, versions, versionLoading, loading, error, syncError, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, checkpointDraft, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
 }

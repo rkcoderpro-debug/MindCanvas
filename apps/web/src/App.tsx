@@ -2,7 +2,7 @@ import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { ArrowLeft, CircleHelp, Cloud, CloudOff, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
 import FloatingTimer from "./components/FloatingTimer";
@@ -14,7 +14,8 @@ import TopbarProfile from "./components/TopbarProfile";
 import CollaboratorPresence from "./components/CollaboratorPresence";
 import AppSidebar, { type SidebarView } from "./components/AppSidebar";
 import { LanguageProvider, useLanguage, useTheme, type MessageKey } from "./lib/i18n";
-import { getCurrentSession, hasRememberedAuthUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
+import { hasRememberedAuthUser, isSupabaseConfigured, rememberAuthUser, signInWithGoogle, signOut, supabase } from "./lib/supabase";
+import { restorePersistedSession } from "./lib/authSession";
 import { acceptProjectInvitation } from "./lib/collaboration";
 import { acceptLearning } from "./lib/learningShare";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
@@ -55,55 +56,83 @@ function AuthenticatedApp() {
   const { t } = useLanguage();
   const [user, setUser] = useState<User | null>(null), [loading, setLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState("");
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
+  const [continueAsGuest, setContinueAsGuest] = useState(false);
+  const [authWorking, setAuthWorking] = useState(false);
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) { setLoading(false); return; }
     let alive = true;
-    let initialEventSeen = false;
-    let sessionChecked = false;
     let settled = false;
+    let authEventGeneration = 0;
+    let startupTimer: number | undefined;
     const hadPreviousSession = hasRememberedAuthUser();
-    const settle = () => {
-      if (!alive || settled || !initialEventSeen || !sessionChecked) return;
-      settled = true;
-      setLoading(false);
+    const startupGeneration = authEventGeneration;
+    const showRecovery = (detail = "") => {
+      setUser(null);
+      setContinueAsGuest(false);
+      setAuthRecoveryRequired(true);
+      setError(detail || "Phiên đăng nhập chưa khôi phục được. Đăng nhập lại để tiếp tục bằng tài khoản; dữ liệu tài khoản vẫn được giữ trên thiết bị.");
     };
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (!alive) return;
       if (session?.user) {
+        rememberAuthUser(session.user.id);
+        authEventGeneration++;
         setUser(session.user);
+        setAuthRecoveryRequired(false);
+        setContinueAsGuest(false);
         setError("");
-      } else if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
+        settled = true;
+        setLoading(false);
+        if (startupTimer !== undefined) window.clearTimeout(startupTimer);
+      } else if (event === "SIGNED_OUT") {
+        authEventGeneration++;
         setUser(null);
-        if (event === "INITIAL_SESSION" && hadPreviousSession) {
-          setError("Phiên đăng nhập trước đó chưa được khôi phục sau khi tải lại. Hãy đăng nhập lại; dữ liệu Lab trên thiết bị vẫn được giữ.");
-        }
+        if (hasRememberedAuthUser()) showRecovery();
+        else { setAuthRecoveryRequired(false); setContinueAsGuest(false); setError(""); }
+        settled = true;
+        setLoading(false);
+        if (startupTimer !== undefined) window.clearTimeout(startupTimer);
       }
-      if (event === "INITIAL_SESSION") initialEventSeen = true;
-      settle();
     });
-    // Supabase emits INITIAL_SESSION while it is restoring local storage, but
-    // an early null event can race with getSession in some Chromium profiles.
-    // Wait for both observations before rendering the Guest workspace so a
-    // valid account does not appear logged out for one refresh.
-    void getCurrentSession().then(session => {
-      if (alive && session?.user) { setUser(session.user); setError(""); }
-      else if (alive && hadPreviousSession) setError("Phiên đăng nhập trước đó chưa được khôi phục. Hãy đăng nhập lại; dữ liệu Lab trên thiết bị vẫn được giữ.");
-    }).catch(err => {
-      if (alive) setError(errorMessage(err, t("error")));
-    }).finally(() => {
-      if (!alive) return;
-      sessionChecked = true;
-      settle();
-    });
-    const timeout = window.setTimeout(() => {
+    startupTimer = window.setTimeout(() => {
       if (!alive || settled) return;
       settled = true;
       setLoading(false);
-      setError("Không thể khôi phục phiên đăng nhập sau khi tải lại. Hãy thử đăng nhập lại; dữ liệu Lab trên thiết bị vẫn được giữ.");
+      showRecovery(hadPreviousSession
+        ? "Phiên đăng nhập chưa khôi phục được sau khi tải lại. Hãy thử đăng nhập lại; dữ liệu tài khoản vẫn được giữ trên thiết bị."
+        : "Không thể kiểm tra phiên đăng nhập. Bạn có thể thử đăng nhập hoặc tiếp tục ở chế độ khách.");
     }, 10_000);
-    return () => { alive = false; window.clearTimeout(timeout); data.subscription.unsubscribe(); };
+    void restorePersistedSession(supabase.auth, hadPreviousSession).then(result => {
+      if (!alive || authEventGeneration !== startupGeneration) return;
+      settled = true;
+      if (startupTimer !== undefined) window.clearTimeout(startupTimer);
+      if (result.kind === "restored") {
+        rememberAuthUser(result.session.user.id);
+        setUser(result.session.user);
+        setAuthRecoveryRequired(false);
+        setContinueAsGuest(false);
+        setError("");
+      } else if (result.kind === "recovery") {
+        showRecovery();
+      } else {
+        setUser(null);
+        setAuthRecoveryRequired(false);
+        setContinueAsGuest(false);
+        setError("");
+      }
+      setLoading(false);
+    }).catch(err => {
+      if (!alive || authEventGeneration !== startupGeneration) return;
+      settled = true;
+      if (startupTimer !== undefined) window.clearTimeout(startupTimer);
+      showRecovery(errorMessage(err, "Không thể khôi phục phiên đăng nhập."));
+      setLoading(false);
+    });
+    return () => { alive = false; if (startupTimer !== undefined) window.clearTimeout(startupTimer); data.subscription.unsubscribe(); };
   }, []);
   if (loading) return <main className="auth-loading" role="status"><Sparkles/>{t("checking")}</main>;
+  if (!user && authRecoveryRequired && !continueAsGuest) return <main className="auth-recovery"><section><Sparkles size={28}/><h1>Không khôi phục được phiên đăng nhập</h1><p>Dữ liệu tài khoản vẫn được giữ trên thiết bị. Đăng nhập lại để mở đúng workspace; hoặc chọn tiếp tục với tư cách khách.</p>{error && <div className="auth-recovery-error" role="alert">{error}</div>}<button className="primary-button" disabled={authWorking} onClick={() => { setAuthWorking(true); void signInWithGoogle().then(result => { if (result.error) setError(errorMessage(result.error, "Không thể bắt đầu đăng nhập.")); }).catch(err => setError(errorMessage(err, "Không thể bắt đầu đăng nhập."))).finally(() => setAuthWorking(false)); }}>{authWorking ? t("loading") : "Đăng nhập lại"}</button><button className="secondary-button" onClick={() => { setAuthRecoveryRequired(false); setContinueAsGuest(true); setError(""); }}>Tiếp tục với tư cách khách</button></section></main>;
   // Keying by identity prevents account A's boards/history from appearing for account B.
   return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user} authError={error} onClearAuthError={() => setError("")}/></MusicProvider>;
 }
@@ -156,7 +185,8 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const message = ws.conflict?.error || ws.error || authError;
+  const syncIssue = ws.conflict?.error || ws.syncError;
+  const message = syncIssue || authError || ws.error;
   useEffect(() => { let alive = true; void listDocuments(user?.id ?? null).then(rows => { if (alive) setDocuments(rows); }).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu."))); return () => { alive = false; }; }, [user?.id]);
   useEffect(() => {
     const sync = () => setGuideProgress(readGuideProgress(user?.id ?? null));
@@ -399,7 +429,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
     <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`}>
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="breadcrumbs"><button onClick={home}>{ws.board ? <ArrowLeft size={17}/> : <LayoutGrid size={17}/>} {t("workspace")}</button>{ws.board && <span>/ {ws.board.title}</span>}</div>
-        <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
+        <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={() => setCommandOpen(true)}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}${syncIssue ? " has-error" : ""}`} title={t("syncCenter")} onClick={() => setModal("sync")}>{t(syncIssue ? "saveError" : ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.saveCheckpoint(t("saveCheckpoint")).catch(err => ws.setError(errorMessage(err, t("error"))))}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
         {pageHelpScope && pageHelpUnlocked && <button type="button" className="icon-button page-help-trigger" aria-label={language === "vi" ? "Trợ giúp trang này" : "Help for this page"} title={language === "vi" ? "Trợ giúp trang này" : "Help for this page"} aria-expanded={pageHelpOpen} onClick={() => setPageHelpOpen(value => !value)}><CircleHelp size={19}/></button>}
         <div className="topbar-account-actions">{plusTrial?.eligible && !plusTrial.consumed && !plusTrial.active && <button type="button" className="topbar-trial-button" aria-label="Kích hoạt 3 ngày Plus miễn phí" title="3 ngày Plus miễn phí" onClick={() => { setTrialActivated(false); setTrialError(""); setTrialOpen(true); }}><Gift size={15}/><span>3 ngày Plus</span></button>}<button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
@@ -407,13 +437,13 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       {ws.board && <header className="mobile-canvas-header">
         <button type="button" className="icon-button mobile-canvas-back" aria-label={t("workspace")} title={t("workspace")} onClick={home}><ArrowLeft size={20}/></button>
         <div className="mobile-canvas-title" title={ws.board.title}><strong>{ws.board.title}</strong><small>{currentProject?.cloudOffline ? t("sharedOffline") : readOnly ? t("viewerProject") : "Canvas"}</small></div>
-        <button type="button" role="status" className={`mobile-save-status ${ws.status}`} aria-label={t(ws.status)} title={t(ws.status)} onClick={() => setModal("sync")}><Cloud size={19}/><span>{t(ws.status)}</span></button>
+        <button type="button" role="status" className={`mobile-save-status ${ws.status}${syncIssue ? " has-error" : ""}`} aria-label={t(syncIssue ? "saveError" : ws.status)} title={t("syncCenter")} onClick={() => setModal("sync")}><Cloud size={19}/><span>{t(syncIssue ? "saveError" : ws.status)}</span></button>
         <button type="button" className="icon-button mobile-project-menu-trigger" aria-label={t("projectActions")} aria-expanded={mobileProjectMenuOpen} title={t("projectActions")} onClick={() => setMobileProjectMenuOpen(value => !value)}><MoreHorizontal size={21}/></button>
       </header>}
       {pwa.updateReady && <div className="update-banner" role="status"><span>{t("updateReady")}</span><button onClick={pwa.applyUpdate}>{t("updateNow")}</button></div>}
+      {!ws.board && (syncIssue || ws.pendingCount > 0) && <button type="button" className="sync-issue-short" role="status" onClick={() => setModal("sync")}><CloudOff size={15}/>{t(syncIssue ? "saveError" : ws.status)} · {t("syncCenter")}</button>}
       {ws.conflict && <AutoResolveCloudConflict conflict={ws.conflict} onResolve={() => ws.resolveConflict("cloud", t("copySuffix"))}/>}
-      {ws.conflict && !message && <div className="invite-banner" role="status"><span>{t("conflictDefaultCloudPending")}</span></div>}
-      {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); if (ws.conflict) void ws.resolveConflict("cloud", t("copySuffix")); else void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button>{!ws.conflict && <button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button>}</div>}
+      {message && !ws.conflict && !syncIssue && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button><button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button></div>}
       {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
       {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Trung tâm học tập.</div>}
@@ -464,7 +494,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     <Suspense fallback={null}>
     {modal === "plans" && <PlanUpgradeDialog currentPlan={accountPlan} onClose={() => setModal(null)}/>}
     {modal === "install" && <Dialog title={t("installAppTitle")} onClose={() => setModal(null)}><div className="install-app-dialog"><Smartphone size={38}/><p>{t(pwa.installed ? "appInstalledHint" : "installAppHint")}</p>{pwa.ios && <p className="install-instruction">{t("iosInstallHint")}</p>}{!pwa.installed && !pwa.canInstall && !pwa.ios && <p className="install-instruction">{t("browserInstallHint")}</p>}<small>{t("pwaOfflineHint")}</small></div><footer className="actions"><button className="secondary-button" onClick={() => setModal(null)}>{t("close")}</button>{pwa.canInstall && <button className="primary-button" disabled={working} onClick={() => { setWorking(true); void pwa.install().then(installed => { if (installed) setModal(null); }).finally(() => setWorking(false)); }}><Download size={17}/>{t("installNow")}</button>}</footer></Dialog>}
-    {modal === "sync" && <SyncCenter owner={user?.id ?? null} online={ws.online} status={ws.status} projects={ws.projects} working={working} onClose={() => setModal(null)} onRetry={async () => { setWorking(true); try { const saved = await ws.flush(); if (saved) await ws.refresh(); } finally { setWorking(false); } }}/>}
+    {modal === "sync" && <SyncCenter owner={user?.id ?? null} online={ws.online} status={ws.status} projects={ws.projects} error={ws.conflict?.error || ws.syncError} working={working} onClose={() => setModal(null)} onRetry={async () => { setWorking(true); try { if (ws.conflict) { const resolved = await ws.resolveConflict("cloud", t("copySuffix")); if (resolved) await ws.refresh(); } else { const saved = await ws.flush(); if (saved) await ws.refresh(); } } finally { setWorking(false); } }}/>}
     {modal === "versions" && ws.board && <VersionHistory versions={ws.versions} loading={ws.versionLoading} working={working} onClose={() => { if (!working) setModal(null); }} onCheckpoint={async () => { setWorking(true); try { await ws.saveCheckpoint(t("saveCheckpoint")); } catch (err) { ws.setError(errorMessage(err, t("error"))); } finally { setWorking(false); } }} onRestore={async version => { setWorking(true); try { await ws.restoreVersion(version); setModal(null); } catch (err) { ws.setError(errorMessage(err, t("error"))); } finally { setWorking(false); } }}/>}
     {aiPanelMode !== "closed" && ws.board && <AiPanel
       key={ws.board.id}

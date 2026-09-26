@@ -34,7 +34,9 @@ it("updates an editor's snapshot with a revision guard, without changing owner",
   for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);
   chain.maybeSingle = vi.fn().mockResolvedValue({ data: { revision: 4 }, error: null });
   mocks.from.mockReturnValueOnce(chain).mockReturnValueOnce(readback(project, 4)).mockReturnValue({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { role: "editor" }, error: null }) }) }) }) });
-  await expect(persistProject("editor", project)).resolves.toEqual({ revision: 4, updatedAt: project.board.updatedAt });
+  const onVerifying = vi.fn();
+  await expect(persistProject("editor", project, { onVerifying })).resolves.toEqual({ revision: 4, updatedAt: project.board.updatedAt });
+  expect(onVerifying).toHaveBeenCalledTimes(1);
   expect(chain.update.mock.calls[0][0]).not.toHaveProperty("user_id");
   expect(chain.eq).toHaveBeenCalledWith("revision", 3);
   expect(chain.eq).not.toHaveBeenCalledWith("user_id", "editor");
@@ -45,7 +47,7 @@ it("does not acknowledge a write when cloud readback contains an older canvas", 
   for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);
   chain.maybeSingle = vi.fn().mockResolvedValue({ data: { revision: 4 }, error: null });
   mocks.from.mockReturnValueOnce(chain).mockReturnValueOnce(readback(project, 4, { ...project.board, title: "Older canvas" }));
-  await expect(persistProject("editor", project)).rejects.toMatchObject({ code: "PROJECT_CONFLICT", message: expect.stringContaining("Cloud chưa xác nhận") });
+  await expect(persistProject("editor", project, { verification: { maxWaitMs: 0 } })).rejects.toMatchObject({ code: "PROJECT_VERIFY_PENDING", message: expect.stringContaining("Cloud chưa xác nhận") });
 });
 it("updates a revisionless existing project with an updated_at compare-and-swap", async () => {
   const cloudUpdatedAt = "2026-09-25T02:00:00.000Z";

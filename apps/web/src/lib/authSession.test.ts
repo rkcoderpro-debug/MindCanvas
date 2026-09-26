@@ -1,78 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { watchAuthBootstrap, type AuthBootstrapState } from "./authSession";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { restorePersistedSession } from "./authSession";
 
-function source() {
-  let listener: ((event: string, session: { user: User } | null) => void) | undefined;
-  const unsubscribe = vi.fn();
-  const auth = {
-    onAuthStateChange: vi.fn((callback: typeof listener) => {
-      listener = callback;
-      return { data: { subscription: { unsubscribe } } };
-    }),
-  } as unknown as Pick<SupabaseClient["auth"], "onAuthStateChange">;
-  return {
-    auth,
-    emit(event: string, session: { user: User } | null = null) { listener?.(event, session); },
-    unsubscribe,
-  };
+const session = { access_token: "test", token_type: "bearer", expires_in: 3600, refresh_token: "test", user: { id: "user-a" } } as Session;
+function authDouble(getSession: () => Promise<unknown>, refreshSession: () => Promise<unknown>) {
+  return { getSession: vi.fn(getSession), refreshSession: vi.fn(refreshSession) } as unknown as Pick<SupabaseClient["auth"], "getSession" | "refreshSession">;
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
-
-const user = { id: "user-1" } as User;
-
-describe("watchAuthBootstrap", () => {
-  it("keeps a session recovery error separate from an explicit guest session", async () => {
-    const auth = source();
-    const read = deferred<User | null>();
-    const states: AuthBootstrapState[] = [];
-    watchAuthBootstrap(auth.auth, () => read.promise, state => states.push(state));
-
-    auth.emit("INITIAL_SESSION");
-    read.reject(new Error("Temporary refresh failure"));
-    await Promise.resolve(); await Promise.resolve();
-
-    expect(states).toEqual([{ status: "error", error: expect.any(Error) }]);
+describe("restorePersistedSession", () => {
+  it("uses the saved session when storage restores it", async () => {
+    const auth = authDouble(async () => ({ data: { session }, error: null }), async () => ({ data: { session: null }, error: null }));
+    await expect(restorePersistedSession(auth, true)).resolves.toEqual({ kind: "restored", session, source: "stored" });
+    expect(auth.refreshSession).not.toHaveBeenCalled();
   });
 
-  it("uses an auth event over a late session-read failure", async () => {
-    const auth = source();
-    const read = deferred<User | null>();
-    const states: AuthBootstrapState[] = [];
-    watchAuthBootstrap(auth.auth, () => read.promise, state => states.push(state));
-    auth.emit("SIGNED_IN", { user });
-    read.reject(new Error("Stale read failure"));
-    await Promise.resolve();
-
-    expect(states).toEqual([{ status: "authenticated", user }]);
+  it("refreshes once when a previously signed-in profile has no loaded session", async () => {
+    const auth = authDouble(async () => ({ data: { session: null }, error: null }), async () => ({ data: { session }, error: null }));
+    await expect(restorePersistedSession(auth, true)).resolves.toEqual({ kind: "restored", session, source: "refreshed" });
+    expect(auth.refreshSession).toHaveBeenCalledTimes(1);
   });
 
-  it("recognizes an explicit sign-out even if session recovery finishes later", async () => {
-    const auth = source();
-    const read = deferred<User | null>();
-    const states: AuthBootstrapState[] = [];
-    watchAuthBootstrap(auth.auth, () => read.promise, state => states.push(state));
-    auth.emit("SIGNED_OUT");
-    read.resolve(user);
-    await Promise.resolve();
-
-    expect(states).toEqual([{ status: "anonymous" }]);
+  it("keeps a remembered account in recovery state when restoration and refresh fail", async () => {
+    const refreshError = new Error("refresh token expired");
+    const auth = authDouble(async () => ({ data: { session: null }, error: null }), async () => ({ data: { session: null }, error: refreshError }));
+    await expect(restorePersistedSession(auth, true)).resolves.toEqual({ kind: "recovery", error: refreshError });
   });
 
-  it("uses a successful empty session as anonymous and unsubscribes on cleanup", async () => {
-    const auth = source();
-    const states: AuthBootstrapState[] = [];
-    const stop = watchAuthBootstrap(auth.auth, async () => null, state => states.push(state));
-    await Promise.resolve();
-    stop();
+  it("starts a first-time visitor as guest without an unnecessary refresh", async () => {
+    const auth = authDouble(async () => ({ data: { session: null }, error: null }), async () => ({ data: { session: null }, error: null }));
+    await expect(restorePersistedSession(auth, false)).resolves.toEqual({ kind: "guest" });
+    expect(auth.refreshSession).not.toHaveBeenCalled();
+  });
 
-    expect(states).toEqual([{ status: "anonymous" }]);
-    expect(auth.unsubscribe).toHaveBeenCalledOnce();
+  it("does not silently classify a failed session read as a guest", async () => {
+    const authError = new Error("storage read failed");
+    const auth = authDouble(async () => { throw authError; }, async () => ({ data: { session: null }, error: null }));
+    await expect(restorePersistedSession(auth, false)).resolves.toEqual({ kind: "recovery", error: authError });
   });
 });
