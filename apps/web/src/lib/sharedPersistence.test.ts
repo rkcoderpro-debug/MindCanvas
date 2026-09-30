@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { blankBoard } from "./board";
 const mocks = vi.hoisted(() => ({ from: vi.fn() }));
 vi.mock("./supabase", () => ({ getCurrentSession: async () => ({ user: { id: "editor" } }), requestTimeoutSignal: () => new AbortController().signal, supabase: { from: mocks.from } }));
-import { persistProject, ProjectConflictError, type CachedProject } from "./projectStore";
+import { CloudVerificationPendingError, persistProject, ProjectConflictError, type CachedProject } from "./projectStore";
 const draft = (): CachedProject => {
   const board = blankBoard("Shared");
   return { id: board.id, title: board.title, board, updatedAt: board.updatedAt, folderId: null, pending: true, shared: true, ownerId: "owner", accessRole: "editor" };
@@ -34,20 +34,40 @@ it("updates an editor's snapshot with a revision guard, without changing owner",
   for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);
   chain.maybeSingle = vi.fn().mockResolvedValue({ data: { revision: 4 }, error: null });
   mocks.from.mockReturnValueOnce(chain).mockReturnValueOnce(readback(project, 4)).mockReturnValue({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { role: "editor" }, error: null }) }) }) }) });
-  const onVerifying = vi.fn();
-  await expect(persistProject("editor", project, { onVerifying })).resolves.toEqual({ revision: 4, updatedAt: project.board.updatedAt });
-  expect(onVerifying).toHaveBeenCalledTimes(1);
+  await expect(persistProject("editor", project)).resolves.toEqual({ revision: 4, updatedAt: project.board.updatedAt });
   expect(chain.update.mock.calls[0][0]).not.toHaveProperty("user_id");
   expect(chain.eq).toHaveBeenCalledWith("revision", 3);
   expect(chain.eq).not.toHaveBeenCalledWith("user_id", "editor");
 });
-it("does not acknowledge a write when cloud readback contains an older canvas", async () => {
+it("keeps a draft pending if cloud readback never confirms the canvas", async () => {
   const project = { ...draft(), revision: 3 };
   const chain: any = {};
   for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);
   chain.maybeSingle = vi.fn().mockResolvedValue({ data: { revision: 4 }, error: null });
-  mocks.from.mockReturnValueOnce(chain).mockReturnValueOnce(readback(project, 4, { ...project.board, title: "Older canvas" }));
-  await expect(persistProject("editor", project, { verification: { maxWaitMs: 0 } })).rejects.toMatchObject({ code: "PROJECT_VERIFY_PENDING", message: expect.stringContaining("Cloud chưa xác nhận") });
+  mocks.from.mockReturnValueOnce(chain).mockReturnValue(readback(project, 4, { ...project.board, title: "Older canvas" }));
+  vi.useFakeTimers();
+  try {
+    const saving = persistProject("editor", project);
+    const rejected = expect(saving).rejects.toBeInstanceOf(CloudVerificationPendingError);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejected;
+  } finally { vi.useRealTimers(); }
+});
+it("accepts an eventually consistent readback without opening a conflict", async () => {
+  const project = { ...draft(), revision: 3, ownerId: "editor", shared: false, accessRole: "owner" as const };
+  const chain: any = {};
+  for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data: { revision: 4 }, error: null });
+  mocks.from.mockReturnValueOnce(chain).mockReturnValueOnce(readback(project, 3, { ...project.board, title: "Old" })).mockReturnValueOnce(readback(project, 4));
+  await expect(persistProject("editor", project)).resolves.toMatchObject({ revision: 4 });
+});
+it("reports a genuine later revision when its canvas differs", async () => {
+  const project = { ...draft(), revision: 3 };
+  const chain: any = {};
+  for (const name of ["update", "eq", "select", "abortSignal"]) chain[name] = vi.fn(() => chain);
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data: { revision: 4 }, error: null });
+  mocks.from.mockReturnValueOnce(chain).mockReturnValueOnce(readback(project, 5, { ...project.board, title: "Other device" }));
+  await expect(persistProject("editor", project)).rejects.toBeInstanceOf(ProjectConflictError);
 });
 it("updates a revisionless existing project with an updated_at compare-and-swap", async () => {
   const cloudUpdatedAt = "2026-09-25T02:00:00.000Z";

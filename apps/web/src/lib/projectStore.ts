@@ -15,11 +15,10 @@ export class ProjectConflictError extends Error {
     super(message);
   }
 }
-export class ProjectVerificationError extends Error {
-  code = "PROJECT_VERIFY_PENDING";
-  constructor(public projectId: string, public lastError?: unknown) {
-    super("Cloud chưa xác nhận được nội dung canvas. Bản nháp trên thiết bị vẫn được giữ và đang chờ đồng bộ; hãy thử lại sau.");
-    this.name = "ProjectVerificationError";
+export class CloudVerificationPendingError extends Error {
+  code = "CLOUD_VERIFICATION_PENDING";
+  constructor(public projectId: string) {
+    super("Cloud chưa xác nhận bản lưu. Bản nháp trên thiết bị vẫn đang chờ đồng bộ.");
   }
 }
 export type ProjectVersion = { id: string; projectId: string; version: number; createdAt: string; board: BoardState; source: "cloud" | "local"; label?: string };
@@ -153,7 +152,20 @@ export function acknowledge(owner: string, snapshot: CachedProject, revision = s
 export function sameBoardContent(left: BoardState, right: BoardState) {
   const { viewport: _leftViewport, updatedAt: _leftUpdatedAt, ...leftContent } = left;
   const { viewport: _rightViewport, updatedAt: _rightUpdatedAt, ...rightContent } = right;
-  return JSON.stringify(leftContent) === JSON.stringify(rightContent);
+  // Postgres jsonb is free to reorder object keys. Arrays still have order,
+  // and undefined object properties are omitted by JSON serialization.
+  const equal = (a: unknown, b: unknown): boolean => {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+    if (Array.isArray(a) || Array.isArray(b)) {
+      return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => equal(item === undefined ? null : item, b[i] === undefined ? null : b[i]));
+    }
+    const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+    const leftKeys = Object.keys(left).filter(key => left[key] !== undefined);
+    const rightKeys = Object.keys(right).filter(key => right[key] !== undefined);
+    return leftKeys.length === rightKeys.length && leftKeys.every(key => Object.prototype.hasOwnProperty.call(right, key) && equal(left[key], right[key]));
+  };
+  return equal(leftContent, rightContent);
 }
 function readVersionCache(owner: string | null, projectId: string): ProjectVersion[] {
   const raw = localStorage.getItem(versionCacheKey(owner, projectId));
@@ -316,78 +328,7 @@ export async function fetchProjectSnapshot(owner: string, id: string, timeoutMs 
 export async function fetchBoard(owner: string, id: string): Promise<BoardState> {
   return (await fetchProjectSnapshot(owner, id)).board;
 }
-export type ProjectWriteVerificationOptions = {
-  maxWaitMs?: number;
-  retryDelaysMs?: readonly number[];
-  now?: () => number;
-  sleep?: (milliseconds: number) => Promise<void>;
-  fetchSnapshot?: (owner: string, projectId: string, timeoutMs: number) => Promise<CachedProject>;
-  onChecking?: () => void;
-};
-const DEFAULT_PROJECT_VERIFY_WAIT_MS = 15_000;
-const DEFAULT_PROJECT_VERIFY_DELAYS_MS = [1000, 2000, 3000, 4000, 2500] as const;
-const sleepFor = (milliseconds: number) => new Promise<void>(resolve => window.setTimeout(resolve, milliseconds));
-function retryableVerificationReadError(error: unknown): boolean {
-  const value = error as { status?: unknown; statusCode?: unknown; code?: unknown } | null;
-  const status = Number(value?.status ?? value?.statusCode);
-  const code = String(value?.code ?? "");
-  if ([408, 409, 425, 429, 404, 406].includes(status) || code === "PGRST116") return true;
-  if (status >= 500) return true;
-  if (status >= 400) return false;
-  if (code === "42501" || code.startsWith("23") || code.startsWith("28")) return false;
-  // Fetch failures and PostgREST connection errors can recover during the bounded window.
-  return !code || code.startsWith("08") || code.startsWith("PGRST");
-}
-export async function verifyProjectWrite(owner: string, project: CachedProject, expectedRevision: number | undefined, options: ProjectWriteVerificationOptions = {}): Promise<{ revision?: number; updatedAt?: string }> {
-  const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? sleepFor;
-  const fetchSnapshot = options.fetchSnapshot ?? fetchProjectSnapshot;
-  const maxWaitMs = Math.max(0, options.maxWaitMs ?? DEFAULT_PROJECT_VERIFY_WAIT_MS);
-  const startedAt = now();
-  const deadline = startedAt + maxWaitMs;
-  const delays = options.retryDelaysMs ?? DEFAULT_PROJECT_VERIFY_DELAYS_MS;
-  let attempt = 0;
-  let lastError: unknown;
-  options.onChecking?.();
-
-  while (true) {
-    if (attempt > 0) {
-      const remaining = deadline - now();
-      if (remaining <= 0) break;
-      const delay = delays[Math.min(attempt - 1, delays.length - 1)] ?? 1000;
-      if (delay >= remaining) { await sleep(remaining); break; }
-      await sleep(delay);
-    }
-    const remaining = Math.max(1, deadline - now());
-    let timeoutId: number | undefined;
-    try {
-      const remote = await Promise.race([
-        fetchSnapshot(owner, project.id, remaining),
-        new Promise<never>((_resolve, reject) => {
-          timeoutId = window.setTimeout(() => reject(new Error("Cloud readback timed out")), remaining);
-        }),
-      ]);
-      const contentMatches = remote.folderId === project.folderId && sameBoardContent(remote.board, project.board);
-      const revisionMatches = expectedRevision === undefined || (remote.revision !== undefined && remote.revision >= expectedRevision);
-      if (contentMatches && revisionMatches) return { revision: remote.revision, updatedAt: remote.updatedAt };
-      if (!contentMatches && expectedRevision !== undefined && remote.revision !== undefined && remote.revision > expectedRevision) {
-        throw new ProjectConflictError(project.id, "Cloud đã nhận một chỉnh sửa mới hơn có nội dung khác. Bản nháp trên thiết bị vẫn được giữ.");
-      }
-      lastError = undefined;
-    } catch (error) {
-      if (error instanceof ProjectConflictError) throw error;
-      if (!retryableVerificationReadError(error)) throw error;
-      lastError = error;
-    } finally {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-    }
-    attempt++;
-    if (now() >= deadline) break;
-  }
-  throw new ProjectVerificationError(project.id, lastError);
-}
-export type PersistProjectOptions = { onVerifying?: () => void; verification?: ProjectWriteVerificationOptions };
-export async function persistProject(owner: string, project: CachedProject, options: PersistProjectOptions = {}): Promise<{ revision?: number; updatedAt?: string }> {
+export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number; updatedAt?: string }> {
   if (project.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
   if (project.cloudOffline) throw new Error("Project chia sẻ đang ở chế độ chỉ xem khi ngoại tuyến.");
   // An existing shared draft without a base revision must be reconciled,
@@ -396,7 +337,29 @@ export async function persistProject(owner: string, project: CachedProject, opti
     throw new ProjectConflictError(project.id);
   }
   const client = await clientFor(owner);
-  const verify = async (revision?: number) => verifyProjectWrite(owner, project, revision, { ...options.verification, onChecking: options.onVerifying });
+  const verify = async (revision?: number) => {
+    const deadline = Date.now() + 15_000;
+    while (true) {
+      try {
+        const remote = await fetchProjectSnapshot(owner, project.id, Math.min(5000, Math.max(1000, deadline - Date.now())));
+        if (remote.revision === revision && remote.folderId === project.folderId && sameBoardContent(remote.board, project.board)) {
+          return { revision, updatedAt: remote.updatedAt };
+        }
+        // A later revision containing this exact board is already durable.
+        if (revision !== undefined && remote.revision !== undefined && remote.revision > revision) {
+          if (remote.folderId === project.folderId && sameBoardContent(remote.board, project.board)) return { revision: remote.revision, updatedAt: remote.updatedAt };
+          throw new ProjectConflictError(project.id);
+        }
+      } catch (err) {
+        if (err instanceof ProjectConflictError) throw err;
+        // A timed-out or lagging read cannot prove that the successful write
+        // was lost. Keep the device draft pending and retry verification.
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new CloudVerificationPendingError(project.id);
+      await new Promise(resolve => setTimeout(resolve, Math.min(1500, remaining)));
+    }
+  };
   const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, thumbnail: project.thumbnail ?? createCanvasThumbnail(project.board), updated_at: project.board.updatedAt };
   const { thumbnail: _thumbnail, ...payloadWithoutThumbnail } = payload;
   const updateWithRevision = async (baseRevision: number) => {

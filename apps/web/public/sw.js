@@ -1,6 +1,5 @@
-// The canvas autosave/auth packaging follow-up changes the JS entrypoint. A distinct cache key
-// is required so an installed PWA cannot keep serving the pre-fix bundle.
-const CACHE_NAME = "mindcanvas-shell-v5.14.5";
+// Refresh the installed app shell when the canvas sync and recovery code changes.
+const CACHE_NAME = "mindcanvas-shell-v5.14.6";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/mindcanvas-192.png", "/icons/mindcanvas-512.png", "/icons/mindcanvas-maskable-512.png"];
 
 async function cacheAppShell() {

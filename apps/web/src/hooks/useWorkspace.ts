@@ -5,27 +5,23 @@ import { normalizeEditor } from "../lib/editorCommands";
 import { errorMessage } from "../lib/errors";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { subscribeToProject } from "../lib/collaboration";
-import { acknowledge, addFolder, cacheProject, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, readProjectVersions, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, CloudVerificationPendingError, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectVersions, hydrateProjectCache, mergeProjects, persistProject, ProjectConflictError, readCache, readProjectVersions, sameBoardContent, SaveQueue, updateFolder, updateProjectThumbnail, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 import { createCanvasThumbnail } from "../lib/canvasThumbnail";
 
-export type SaveStatus = "localSaved" | "saved" | "saving" | "verifying" | "pending" | "offline" | "saveError";
+export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
 export type WorkspaceConflict = { projectId: string; local: CachedProject; remote: CachedProject; error?: string };
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
-const CONFLICT_CHECKPOINT_WAIT_MS = 15_000;
 const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
 type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
-function createRecoveryCheckpoint(owner: string, board: BoardState, label: string): Promise<boolean> {
-  return new Promise(resolve => {
-    const timeout = window.setTimeout(() => resolve(false), CONFLICT_CHECKPOINT_WAIT_MS);
-    void createProjectVersion(owner, board, label).then(checkpoint => {
-      window.clearTimeout(timeout);
-      const contentMatches = sameBoardContent(checkpoint.board, board);
-      if (!contentMatches || checkpoint.source !== "cloud") {
-        const storedLocally = contentMatches && readProjectVersions(owner, board.id).some(version => version.id === checkpoint.id && version.source === "local" && sameBoardContent(version.board, board));
-        resolve((contentMatches && checkpoint.source === "cloud") || storedLocally);
-      } else resolve(true);
-    }).catch(() => { window.clearTimeout(timeout); resolve(false); });
-  });
+async function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
+  const version = await createProjectVersion(owner, board, label);
+  if (version.source === "cloud") return;
+  // createProjectVersion can fall back to localStorage and its cache write can
+  // fail on quota. A returned version is not proof of a durable backup.
+  const stored = readProjectVersions(owner, board.id).find(item => item.id === version.id);
+  if (!stored || stored.board.id !== board.id || !sameBoardContent(stored.board, board)) {
+    throw new Error("Không thể lưu bản khôi phục trên thiết bị. Bản nháp vẫn được giữ nguyên; hãy giải phóng dung lượng rồi thử lại.");
+  }
 }
 // Mount once per account (App keys this component by user.id).
 export function useWorkspace(owner: string | null) {
@@ -37,8 +33,6 @@ export function useWorkspace(owner: string | null) {
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [error, setError] = useState("");
-  const [syncError, setSyncError] = useState("");
-  const syncErrorRef = useRef("");
   const [conflict, setConflict] = useState<WorkspaceConflict | null>(null);
   const [status, setStatus] = useState<SaveStatus>(owner ? "saved" : "localSaved");
   const [past, setPast] = useState<BoardState[]>([]), [future, setFuture] = useState<BoardState[]>([]);
@@ -47,6 +41,7 @@ export function useWorkspace(owner: string | null) {
   // transaction boundary synchronous instead of waiting for a re-render.
   const pastRef = useRef<BoardState[]>([]), futureRef = useRef<BoardState[]>([]);
   const folderId = useRef<string | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), viewportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const verificationRetries = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
@@ -79,19 +74,7 @@ export function useWorkspace(owner: string | null) {
     setPast(nextPast);
     setFuture([]);
   };
-  const report = useCallback((err: unknown) => {
-    if (!alive.current) return;
-    const message = errorMessage(err, "Could not save this project.");
-    syncErrorRef.current = message;
-    setSyncError(message);
-    setError(message);
-  }, []);
-  const clearSyncError = useCallback(() => {
-    const previous = syncErrorRef.current;
-    syncErrorRef.current = "";
-    setSyncError("");
-    if (previous) setError(currentError => currentError === previous ? "" : currentError);
-  }, []);
+  const report = useCallback((err: unknown) => { if (alive.current) setError(errorMessage(err, "Could not save this project.")); }, []);
   const refresh = useCallback(async () => {
     try {
       // Show an already available device draft immediately; an IndexedDB
@@ -254,6 +237,7 @@ export function useWorkspace(owner: string | null) {
       return true;
     }
 
+    const verificationPendingIds = new Set<string>();
     const flushProject = async (targetId: string) => queue.current.run(async () => {
       if (!alive.current) return false;
       if (conflictRef.current?.projectId === targetId) {
@@ -297,10 +281,12 @@ export function useWorkspace(owner: string | null) {
             const marker: LocalSaveMarker = { projectId: candidate.id, snapshot: candidate, createdAt: now };
             localSaveMarkers.current.push(marker);
             try {
-              const saved = await persistProject(owner, candidate, { onVerifying: () => { if (alive.current && current.current?.id === candidate.id) setStatus("verifying"); } });
+              const saved = await persistProject(owner, candidate);
               marker.expectedRevision = saved?.revision;
               acknowledge(owner, candidate, saved?.revision, saved?.updatedAt);
               await waitForProjectCache(owner);
+              clearTimeout(verificationRetries.current.get(candidate.id));
+              verificationRetries.current.delete(candidate.id);
               rememberAcknowledged(marker);
               const cached = readCache(owner).find(item => item.id === candidate.id);
               if (alive.current && cached) setProjects(items => [cached, ...items.filter(item => item.id !== cached.id)]);
@@ -327,32 +313,45 @@ export function useWorkspace(owner: string | null) {
               continue;
             }
             const next = { projectId: snapshot.id, local, remote };
-            conflictRef.current = next; setConflict(next); clearSyncError(); setStatus("saveError");
+            conflictRef.current = next; setConflict(next); setError(""); setStatus("saveError");
             return false;
           }
         }
         return true;
-      } catch (err) { if (alive.current) setStatus(navigator.onLine ? "saveError" : "offline"); report(err); return false; }
+      } catch (err) {
+        if (err instanceof CloudVerificationPendingError) {
+          verificationPendingIds.add(targetId);
+          clearTimeout(verificationRetries.current.get(targetId));
+          verificationRetries.current.set(targetId, setTimeout(() => {
+            verificationRetries.current.delete(targetId);
+            if (alive.current) void flush(targetId);
+          }, 15_000));
+          return false;
+        }
+        if (alive.current) setStatus(navigator.onLine ? "saveError" : "offline");
+        report(err);
+        return false;
+      }
     }, targetId);
 
     const outcomes = await Promise.all(targetIds.map(async id => [id, await flushProject(id)] as const));
     const resultById = new Map(outcomes);
     const allSaved = outcomes.every(([, saved]) => saved) && !readCache(owner).some(p => p.pending);
     if (alive.current) {
-      if (owner && allSaved) clearSyncError();
       dirty.current = readCache(owner).some(p => p.pending);
       const activeId = current.current?.id;
       const activePending = !!activeId && readCache(owner).some(p => p.id === activeId && p.pending);
       const activeConflict = !!activeId && conflictRef.current?.projectId === activeId;
       const activeResult = activeId ? resultById.get(activeId) : undefined;
       if (activeConflict) setStatus("saveError");
+      else if (activeId && verificationPendingIds.has(activeId)) setStatus("pending");
       else if (activeResult === false) setStatus(navigator.onLine ? "saveError" : "offline");
       else if (activePending) setStatus(navigator.onLine ? "pending" : "offline");
       else if (!allSaved) setStatus("saveError");
       else setStatus(owner ? "saved" : "localSaved");
     }
     return allSaved;
-  }, [owner, report, clearSyncError]);
+  }, [owner, report]);
 
   useEffect(() => {
     alive.current = true; void refresh();
@@ -363,7 +362,7 @@ export function useWorkspace(owner: string | null) {
     const pageHide = () => { checkpointCurrent(); void flush(); };
     window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
     window.addEventListener("beforeunload", beforeUnload); window.addEventListener("pagehide", pageHide); document.addEventListener("visibilitychange", hidden);
-    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
+    return () => { checkpointCurrent(); alive.current = false; clearTimeout(timer.current); clearTimeout(viewportTimer.current); verificationRetries.current.forEach(clearTimeout); verificationRetries.current.clear(); window.removeEventListener("online", cameOnline); window.removeEventListener("offline", wentOffline); window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); document.removeEventListener("visibilitychange", hidden); };
   }, [refresh, flush, owner, checkpointCurrent]);
 
   // A shared project receives durable Postgres Changes while it is open. The
@@ -663,26 +662,30 @@ export function useWorkspace(owner: string | null) {
     if (!owner || !active) return false;
     const clearedConflict = { ...active, error: undefined };
     conflictRef.current = clearedConflict; setConflict(clearedConflict);
-    setStatus("saving"); clearSyncError(); setError("");
+    setStatus("saving"); setError("");
     try {
-      let latestRemote = await fetchProjectSnapshot(owner, active.projectId);
+      const latestRemote = await fetchProjectSnapshot(owner, active.projectId);
       const latestLocal = readCache(owner).find(item => item.id === active.projectId) ?? active.local;
       let selected: CachedProject;
       if (resolution === "cloud") {
-        if (!await createRecoveryCheckpoint(owner, latestLocal.board, "Local conflict backup")) {
-          throw new Error("Không thể xác nhận bản khôi phục cho nháp trên thiết bị. Nháp local vẫn được giữ nguyên; hãy thử lại sau.");
+        await waitForProjectCache(owner);
+        await createRecoveryCheckpoint(owner, latestLocal.board, "Local conflict backup");
+        // Fetch again after checkpointing: another device can save while the
+        // recovery version is being written. Never discard a new local stroke.
+        const confirmedRemote = await fetchProjectSnapshot(owner, active.projectId);
+        const deviceNow = readCache(owner).find(item => item.id === active.projectId);
+        if (!deviceNow || deviceNow.folderId !== latestLocal.folderId || !sameBoardContent(deviceNow.board, latestLocal.board)
+          || (current.current?.id === active.projectId && !sameBoardContent(current.current, latestLocal.board))) {
+          throw new Error("Canvas vừa có thay đổi mới. Bản nháp được giữ lại; hãy thử đồng bộ lại sau khi vẽ xong.");
         }
-        // The recovery checkpoint can take several seconds. Read cloud again
-        // after it completes so the default choice always uses the newest
-        // version, rather than the snapshot that opened the conflict.
-        latestRemote = await fetchProjectSnapshot(owner, active.projectId);
-        selected = latestRemote;
+        selected = confirmedRemote;
         cacheProject(owner, selected);
         try { await waitForProjectCache(owner); }
-        catch (cacheError) {
+        catch (err) {
+          // The editor is still showing the device draft. Restore its
+          // in-memory cache too if neither durable cache accepted the cloud.
           cacheProject(owner, latestLocal);
-          void waitForProjectCache(owner).catch(() => undefined);
-          throw cacheError;
+          throw err;
         }
       } else if (resolution === "overwrite") {
         await createRecoveryCheckpoint(owner, latestRemote.board, "Before conflict overwrite");
@@ -705,7 +708,6 @@ export function useWorkspace(owner: string | null) {
         selected = readCache(owner).find(item => item.id === candidate.id) ?? { ...candidate, revision: saved.revision, baseUpdatedAt: saved.updatedAt, pending: false };
       }
       conflictRef.current = null; setConflict(null); cacheFailed.current = false;
-      clearSyncError();
       dirty.current = readCache(owner).some(item => item.pending);
       if (current.current?.id === active.projectId) {
         current.current = normalizeEditor(selected.board); folderId.current = selected.folderId;
@@ -741,5 +743,5 @@ export function useWorkspace(owner: string | null) {
   // Reading them here keeps the toolbar state aligned with the transaction
   // that was just created, including a create-text/shape commit followed
   // immediately by Undo while a cloud save is still settling.
-  return { board, projects, folders, versions, versionLoading, loading, error, syncError, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, checkpointDraft, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
+  return { board, projects, folders, versions, versionLoading, loading, error, setError, status, online, pendingCount: projects.filter(project => project.pending).length, conflict, resolveConflict, change, checkpointDraft, navigate, undo, redo, canUndo: !!pastRef.current.length, canRedo: !!futureRef.current.length, flush, refresh, loadVersions, saveCheckpoint, restoreVersion, open, create, home, newFolder, renameFolder, removeFolder, move, manageProject, duplicateProject, loadThumbnail };
 }

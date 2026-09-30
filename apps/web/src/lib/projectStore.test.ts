@@ -74,6 +74,12 @@ describe("Project isolation and save queue", () => {
     expect(sameBoardContent(board, { ...board, viewport: { x: 400, y: -20, scale: 1.8 }, updatedAt: "2099-01-01T00:00:00.000Z" })).toBe(true);
     expect(sameBoardContent(board, { ...board, title: "Changed" })).toBe(false);
   });
+  it("compares nested jsonb objects independently of key order while preserving strokes", () => {
+    const board = { ...blankBoard("Canvas"), drawings: [{ id: "stroke", points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], color: "#000000", width: 3, opacity: 1 }] };
+    const readback = { ...board, drawings: [{ opacity: 1, color: "#000000", points: [{ y: 2, x: 1 }, { y: 4, x: 3 }], width: 3, id: "stroke" }] };
+    expect(sameBoardContent(board, readback)).toBe(true);
+    expect(sameBoardContent(board, { ...readback, drawings: [{ ...readback.drawings[0], points: [{ x: 1, y: 2 }] }] })).toBe(false);
+  });
   it("applies an AI flashcard preview as one complete local batch", async () => {
     const cards = [createFlashcard("deck", "Question 1", "Answer 1"), createFlashcard("deck", "Question 2", "Answer 2")];
     await expect(upsertFlashcards(null, cards)).resolves.toBe("local");
