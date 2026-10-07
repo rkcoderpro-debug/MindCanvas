@@ -59,6 +59,17 @@ it("reveals the selected question immediately and locks its answer", async () =>
   expect((host.querySelector(".quiz-options button") as HTMLButtonElement).disabled).toBe(true);
 });
 
+it("separates the answer letter from a rendered fraction", async () => {
+  const mathQuiz: QuizTest = { ...quiz, id: "math-quiz", questions: [{ ...quiz.questions[0], prompt: "Calculate $\\frac{3}{4}+\\frac{5}{8}$.", options: ["$\\frac{8}{12}$", "$1\\frac{1}{8}$", "$1\\frac{3}{8}$", "$1\\frac{5}{8}$"] }] };
+  const mathStore = { ...store, quizzes: [mathQuiz] } as QuizStore;
+  await act(async () => root.render(<LanguageProvider><QuizPage owner={null} store={mathStore}/></LanguageProvider>));
+  await act(async () => (host.querySelector(".quiz-card-actions .primary-button") as HTMLButtonElement).click());
+  const option = host.querySelector(".quiz-options button") as HTMLButtonElement;
+  expect(option.querySelector(":scope > .quiz-option-label")?.textContent).toBe("A");
+  expect(option.querySelector(":scope > .quiz-option-content .katex")).not.toBeNull();
+  expect(option.querySelector(".quiz-option-label .katex")).toBeNull();
+});
+
 it("keeps answers hidden and editable until submission in delayed mode", async () => {
   const reveal = host.querySelectorAll(".quiz-mode-panel select")[2] as HTMLSelectElement;
   await act(async () => { reveal.value = "submit"; reveal.dispatchEvent(new Event("change", { bubbles: true })); });
@@ -113,4 +124,23 @@ it("uses the same free typing and validation in AI Auto", async () => {
   await typeQuestionCount("51");
   expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("50");
   expect(input.value).toBe("51");
+});
+
+it("shows the actual question count when a manual result exceeds the selected maximum", async () => {
+  await act(async () => root.render(<LanguageProvider><QuizPage owner="user-1" store={store}/></LanguageProvider>));
+  await act(async () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click());
+  await act(async () => (host.querySelectorAll('.ai-mode-switch [role="tab"]')[1] as HTMLButtonElement).click());
+  const textarea = host.querySelector('.quiz-manual-form textarea:not([readonly])') as HTMLTextAreaElement;
+  const result = { title: "Unit 1", description: "Number", questions: Array.from({ length: 20 }, (_, index) => ({
+    prompt: `Question ${index + 1}?`, options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "Because A.", sourcePage: 2,
+  })) };
+  const json = host.querySelectorAll('.quiz-manual-form textarea:not([readonly])')[1] as HTMLTextAreaElement;
+  expect(textarea).toBeTruthy();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(json, JSON.stringify(result));
+    json.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => (host.querySelector('.quiz-manual-form .actions .primary-button') as HTMLButtonElement).click());
+  expect(host.querySelector('.quiz-manual-form .form-error')?.textContent).toContain("20 questions");
+  expect(host.querySelector('.quiz-manual-form .form-error')?.textContent).toContain("10");
 });

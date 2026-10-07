@@ -54,6 +54,13 @@ export class QuizValidationError extends Error {
   }
 }
 
+export class QuizQuestionLimitError extends QuizValidationError {
+  constructor(public readonly count: number, public readonly limit: number) {
+    super(`The quiz has ${count} questions, but the selected maximum is ${limit}.`);
+    this.name = "QuizQuestionLimitError";
+  }
+}
+
 type RawQuiz = {
   title?: unknown;
   description?: unknown;
@@ -83,7 +90,8 @@ export function parseQuizResult(raw: unknown, maxQuestions = 50): Omit<QuizTest,
   } catch {
     throw new QuizValidationError("The quiz JSON is not valid.");
   }
-  if (!isObject(root) || !Array.isArray(root.questions) || root.questions.length < 1 || root.questions.length > maxQuestions) throw new QuizValidationError();
+  if (!isObject(root) || !Array.isArray(root.questions) || root.questions.length < 1) throw new QuizValidationError();
+  if (root.questions.length > maxQuestions) throw new QuizQuestionLimitError(root.questions.length, maxQuestions);
   const usedIds = new Set<string>();
   const questions = root.questions.map((item, index): QuizQuestion => {
     if (!isObject(item) || !Array.isArray(item.options) || item.options.length !== 4) throw new QuizValidationError();

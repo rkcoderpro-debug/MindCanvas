@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { allowsQuizNavigation, formatQuizPercent, parseQuizResult, prepareQuizQuestions, revealsQuizAnswer, scoreQuiz, shuffleQuizQuestions, type QuizAttempt, type QuizTest } from "./quiz";
+import { allowsQuizNavigation, formatQuizPercent, parseQuizResult, prepareQuizQuestions, QuizQuestionLimitError, revealsQuizAnswer, scoreQuiz, shuffleQuizQuestions, type QuizAttempt, type QuizTest } from "./quiz";
 
 const rawQuiz = {
   title: "Sinh học cơ bản",
@@ -22,6 +22,18 @@ describe("quiz parser and scoring", () => {
 
   it("rejects duplicate choices", () => {
     expect(() => parseQuizResult({ ...rawQuiz, questions: [{ ...rawQuiz.questions[0], options: ["A", "A", "B", "C"] }] }, 10)).toThrow();
+  });
+
+  it("explains a 20-question JSON result when the form is still set to 10", () => {
+    const result = { title: "Unit 1: Number 1", description: "Mathematics", questions: Array.from({ length: 20 }, (_, index) => ({
+      prompt: `Evaluate $18 + ${index} \\times 4$.`, options: ["$96$", "$42$", "$72$", "$48$"],
+      correctIndex: 1, explanation: "Use multiplication first.", sourcePage: 2, topic: "Arithmetic",
+    })) };
+    expect(() => parseQuizResult(JSON.stringify(result), 10)).toThrow(QuizQuestionLimitError);
+    try { parseQuizResult(JSON.stringify(result), 10); } catch (error) {
+      expect(error).toMatchObject({ count: 20, limit: 10 });
+    }
+    expect(parseQuizResult(JSON.stringify(result), 20).questions).toHaveLength(20);
   });
 
   it("keeps question ids unique when an imported file repeats an id", () => {

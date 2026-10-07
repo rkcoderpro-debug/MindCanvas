@@ -1,0 +1,18 @@
+MindCanvas V5.14.11 — cải thiện hiển thị đáp án có công thức
+Áp dụng các tệp dưới đây trên mã nguồn V5.14.10, giữ nguyên cấu trúc thư mục.
+
+apps/web/src/components/QuizPage.tsx
+apps/web/src/components/QuizPage.reveal.test.tsx
+apps/web/src/components/SharedLearningPage.tsx
+apps/web/src/lib/quiz.ts
+apps/web/src/lib/quiz.test.ts
+apps/web/src/lib/i18n.tsx
+apps/web/src/styles.css
+apps/web/public/sw.js
+apps/web/package.json
+apps/server/package.json
+package.json
+package-lock.json
+
+Đã tách nhãn A/B/C/D khỏi phần nội dung đáp án; tăng kích thước công thức và diện tích nút; hỗ trợ công thức dài, màn hình hẹp, giao diện sáng/tối; tăng cỡ chữ màn hình xem lại và Quiz được chia sẻ. Thông báo lỗi AI Manual cho biết số câu JSON và mức tối đa khi vượt giới hạn.
+Kiểm chứng: npm run test --workspace apps/web -- src/lib/quiz.test.ts src/components/QuizPage.reveal.test.tsx; npm run build.
