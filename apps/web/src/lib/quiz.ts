@@ -123,9 +123,10 @@ export function buildQuizPrompt(input: { text?: string; fileName?: string; maxQu
     `Create no more than ${input.maxQuestions} clear questions that test understanding, not trivia.`,
     aiOptionsInstruction(options),
     "Every question must have exactly four different answer choices and exactly one correct answer.",
+    "For math and science formulas inside prompt, options, or explanation, use $...$ for inline LaTeX and $$...$$ for display LaTeX. Chemical formulas may use \\ce{H2O} inside delimiters. Keep ordinary text as ordinary text.",
     "Prepare a UTF-8 JSON file named mindcanvas-quiz.json and return only that JSON object.",
     'Schema: {"title":"short title","description":"short learner-facing description","questions":[{"prompt":"question","options":["A","B","C","D"],"correctIndex":0,"explanation":"why this is correct","sourcePage":null,"topic":"optional"}]}',
-    "correctIndex must be 0, 1, 2 or 3. Use sourcePage only when known. Escape quotes, use \\n for line breaks, and do not use Markdown or trailing commas.",
+    "correctIndex must be 0, 1, 2 or 3. Use sourcePage only when known. Escape quotes and LaTeX backslashes for valid JSON (for example, write \\\\frac instead of \\frac), use \\n for line breaks, and do not use Markdown or trailing commas.",
     source,
   ].join("\n\n");
 }

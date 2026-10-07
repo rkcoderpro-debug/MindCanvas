@@ -1,15 +1,23 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
+
+// Prefer workspace-specific settings when present, then fill missing values
+// from the root .env used by the documented local setup. Production env wins.
+loadEnv();
+loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
+
+const optionalUrl = z.preprocess(value => value === "" ? undefined : value, z.string().url().optional());
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(8787),
-  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-  ADMIN_EMAIL: z.string().email().optional(),
-  WEB_ORIGIN: z.string().url().optional(),
-  EXPERIENTIAL_LABS_BASE_URL: z.string().url().optional(),
+  ADMIN_EMAIL: z.preprocess(value => value === "" ? undefined : value, z.string().email().optional()),
+  WEB_ORIGIN: optionalUrl,
+  EXPERIENTIAL_LABS_BASE_URL: optionalUrl,
   EXPERIENTIAL_LABS_API_KEY: z.string().optional(),
   EXPERIENTIAL_LABS_MODEL: z.string().default(""),
   GEMINI_BASE_URL: z.string().url().default("https://generativelanguage.googleapis.com"),

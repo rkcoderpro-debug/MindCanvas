@@ -1,0 +1,14 @@
+MindCanvas V5.14.10 — sửa ô nhập số câu hỏi trong Quiz
+Áp dụng các tệp dưới đây trên mã nguồn V5.14.9, giữ nguyên cấu trúc thư mục.
+
+apps/web/src/components/QuizPage.tsx
+apps/web/src/components/QuizPage.reveal.test.tsx
+apps/web/src/lib/i18n.tsx
+apps/web/public/sw.js
+apps/web/package.json
+apps/server/package.json
+package.json
+package-lock.json
+
+Cách hoạt động: hai chế độ AI Auto và AI Manual cho phép xóa trắng rồi nhập lại số câu hỏi; báo lỗi rõ ràng khi trống, không phải số nguyên, dưới 3 hoặc vượt hạn mức tài khoản (mặc định 50); chặn tạo/kiểm tra/sao chép prompt khi số câu hỏi không hợp lệ.
+Kiểm chứng: npm run test --workspace apps/web -- src/components/QuizPage.reveal.test.tsx; npm run build.

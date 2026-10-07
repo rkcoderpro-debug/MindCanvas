@@ -25,13 +25,25 @@ const savedQuiz: QuizTest = {
 let root: Root;
 let host: HTMLDivElement;
 let saveAttempt: ReturnType<typeof vi.fn>;
+let store: QuizStore;
+
+async function typeQuestionCount(value: string) {
+  const input = host.querySelector('.dialog input[inputmode="numeric"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return input;
+}
 
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.setItem("mindcanvas:language", "en");
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   saveAttempt = vi.fn(async (attempt: unknown) => ({ item: attempt, source: "local" }));
-  const store = { quizzes: [quiz, savedQuiz], attempts: [], loading: false, busy: false, error: "", setError: vi.fn(), saveAttempt } as unknown as QuizStore;
+  HTMLDialogElement.prototype.showModal ??= function () { this.open = true; };
+  HTMLDialogElement.prototype.close ??= function () { this.open = false; };
+  store = { quizzes: [quiz, savedQuiz], attempts: [], loading: false, busy: false, error: "", setError: vi.fn(), saveAttempt } as unknown as QuizStore;
   await act(async () => root.render(<LanguageProvider><QuizPage owner={null} store={store}/></LanguageProvider>));
 });
 
@@ -68,4 +80,37 @@ it("filters the native Quiz library to saved copies", async () => {
   await act(async () => savedFilter.click());
   expect([...host.querySelectorAll(".quiz-test-card h3")].map(node => node.textContent)).toEqual(["Saved from a share"]);
   expect(host.querySelector(".learning-copy-provenance")?.textContent).toContain("Study partner");
+});
+
+it("lets users clear and retype the manual question count, then validates the limit", async () => {
+  await act(async () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click());
+  const input = await typeQuestionCount("");
+  expect(input.value).toBe("");
+  expect(host.querySelector("#quiz-question-count-error")).toBeNull();
+  await act(async () => { input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("Enter the number");
+  await typeQuestionCount("20");
+  expect(host.querySelector("#quiz-question-count-error")).toBeNull();
+  expect((host.querySelector('.quiz-manual-form textarea[readonly]') as HTMLTextAreaElement).value).toContain("20");
+  await typeQuestionCount("51");
+  expect(input.value).toBe("51");
+  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("50");
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect((host.querySelector('.quiz-manual-form textarea[readonly]') as HTMLTextAreaElement).value).toBe("");
+  await typeQuestionCount("2.5");
+  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("whole number");
+  await typeQuestionCount("2");
+  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("at least 3");
+});
+
+it("uses the same free typing and validation in AI Auto", async () => {
+  await act(async () => root.render(<LanguageProvider><QuizPage owner="user-1" store={store}/></LanguageProvider>));
+  await act(async () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click());
+  const input = await typeQuestionCount("");
+  expect(input.value).toBe("");
+  await typeQuestionCount("20");
+  expect(input.value).toBe("20");
+  await typeQuestionCount("51");
+  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("50");
+  expect(input.value).toBe("51");
 });

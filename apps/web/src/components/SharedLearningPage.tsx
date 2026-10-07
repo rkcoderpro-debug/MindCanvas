@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Clock3, FileText, Inbox, Maximize2, Minimize2, RefreshCw, RotateCcw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
 import { labSandboxDocument } from "../lib/lab";
+import FormulaText from "./FormulaText";
 import {
   acceptPendingLearningInvite,
   finishSharedQuiz,
@@ -222,12 +223,12 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
         <div className="shared-progress-track" aria-hidden="true"><span style={{ width: `${quizResult ? 100 : quiz.questions.length ? (questionIndex + 1) / quiz.questions.length * 100 : 0}%` }}/></div>
         {quizResult ? <div className="shared-quiz-results"><div className="shared-result-hero"><CheckCircle2 size={22}/><div><strong>{quizResult.score}/{quizResult.total}</strong><span>Đã nộp thành công</span></div></div>{reviewQuestions.map((q, n) => {
           const selected = answers[n];
-          return <article key={q.id}><strong>{n + 1}. {q.prompt}</strong><p>Bạn chọn: {selected === null ? "Bỏ qua" : q.options[selected] ?? "Không hợp lệ"}</p><p>Đáp án: <strong>{q.options[q.correctIndex] ?? "—"}</strong></p><p className="shared-explanation">{q.explanation?.trim() || "Chưa có lời giải"}</p></article>;
+          return <article key={q.id}><strong>{n + 1}. <FormulaText text={q.prompt}/></strong><p>Bạn chọn: {selected === null ? "Bỏ qua" : q.options[selected] ? <FormulaText text={q.options[selected]}/> : "Không hợp lệ"}</p><p>Đáp án: <strong>{q.options[q.correctIndex] ? <FormulaText text={q.options[q.correctIndex]}/> : "—"}</strong></p><p className="shared-explanation"><FormulaText text={q.explanation?.trim() || "Chưa có lời giải"}/></p></article>;
         })}<button className="secondary-button" disabled={busy} onClick={() => void start()}><RotateCcw size={15}/>Làm lượt mới</button></div> : <>
           <div className="shared-question-meta">Câu {questionIndex + 1}/{quiz.questions.length}</div>
-          <h3>{quiz.questions[questionIndex]?.prompt}</h3>
-          <div className="shared-answer-grid">{quiz.questions[questionIndex]?.options.map((option, n) => <button disabled={busy || !!quizFeedback[questionIndex]} className={`shared-answer ${answers[questionIndex] === n ? "selected" : ""} ${quizFeedback[questionIndex]?.correctIndex === n ? "correct" : ""} ${answers[questionIndex] === n && quizFeedback[questionIndex]?.correctIndex !== undefined && quizFeedback[questionIndex]?.correctIndex !== n ? "wrong" : ""}`} key={n} onClick={() => void chooseQuizAnswer(n)}><span>{String.fromCharCode(65+n)}</span>{option}</button>)}</div>
-          {quizFeedback[questionIndex] && <p className="shared-explanation" role="status">{answers[questionIndex] === quizFeedback[questionIndex].correctIndex ? "Chính xác." : `Đáp án đúng: ${quiz.questions[questionIndex]?.options[quizFeedback[questionIndex].correctIndex] ?? "—"}.`} {quizFeedback[questionIndex].explanation}</p>}
+          <h3><FormulaText text={quiz.questions[questionIndex]?.prompt ?? ""}/></h3>
+          <div className="shared-answer-grid">{quiz.questions[questionIndex]?.options.map((option, n) => <button disabled={busy || !!quizFeedback[questionIndex]} className={`shared-answer ${answers[questionIndex] === n ? "selected" : ""} ${quizFeedback[questionIndex]?.correctIndex === n ? "correct" : ""} ${answers[questionIndex] === n && quizFeedback[questionIndex]?.correctIndex !== undefined && quizFeedback[questionIndex]?.correctIndex !== n ? "wrong" : ""}`} key={n} onClick={() => void chooseQuizAnswer(n)}><span>{String.fromCharCode(65+n)}</span><FormulaText text={option}/></button>)}</div>
+          {quizFeedback[questionIndex] && <p className="shared-explanation" role="status">{answers[questionIndex] === quizFeedback[questionIndex].correctIndex ? "Chính xác." : <>Đáp án đúng: <FormulaText text={quiz.questions[questionIndex]?.options[quizFeedback[questionIndex].correctIndex] ?? "—"}/>.</>} <FormulaText text={quizFeedback[questionIndex].explanation ?? ""}/></p>}
           <footer><button className="secondary-button" disabled={questionIndex === 0 || busy} onClick={() => setQuestionIndex(i => i-1)}>Trước</button>{questionIndex + 1 < quiz.questions.length ? <button className="primary-button" disabled={busy || (quizRevealMode === "instant" && answers[questionIndex] === null)} onClick={() => setQuestionIndex(i => i+1)}>Tiếp</button> : <button className="primary-button" disabled={busy} onClick={() => void submit()}>{busy ? "Đang nộp…" : "Nộp bài"}</button>}</footer>
         </>}
       </div>)}
