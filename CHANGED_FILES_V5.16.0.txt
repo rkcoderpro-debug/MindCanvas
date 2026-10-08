@@ -1,0 +1,21 @@
+MindCanvas V5.16.0 — Phần C và D: giáo viên, học trò, lớp học, bài tập, điểm
+Áp dụng các tệp trong ZIP trên mã nguồn V5.15.0, giữ nguyên cấu trúc thư mục.
+
+apps/web/src/components/ClassroomsPage.tsx
+apps/web/src/components/ClassroomsPage.test.tsx
+apps/web/src/components/LearningHubPage.tsx
+apps/web/src/lib/classrooms.ts
+apps/web/src/styles.css
+apps/web/public/sw.js
+apps/web/package.json
+apps/server/package.json
+package.json
+package-lock.json
+supabase/migrations/0027_v5_16_0_classrooms.sql
+supabase/migrations/README.md
+V5.16.0_CLASSROOMS_RELEASE_VI.md
+CHANGED_FILES_V5.16.0.txt
+
+Chạy migration 0027 sau 0026 trên staging, kiểm tra ba tài khoản theo README,
+sau đó áp dụng production trước khi deploy V5.16.0. Không đưa .env vào ZIP.
+Kiểm thử mã nguồn: 398/398 frontend tests; build frontend/backend. Chưa chạy SQL trên Supabase thật.
