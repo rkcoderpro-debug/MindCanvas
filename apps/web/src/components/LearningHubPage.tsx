@@ -1,7 +1,7 @@
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, FileText, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, WandSparkles } from "lucide-react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, FileText, Flame, Gauge, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -12,6 +12,7 @@ import FlashcardsPage from "./FlashcardsPage";
 import QuizPage from "./QuizPage";
 import LabPage from "./LabPage";
 import SharedLearningPage from "./SharedLearningPage";
+import ConnectionsPage from "./ConnectionsPage";
 import StudyPlanDialog from "./StudyPlanDialog";
 import { generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcardsFromFile, type StudyPlanRecommendation } from "../lib/api";
 import { MAX_FILE_BYTES } from "../lib/board";
@@ -21,7 +22,7 @@ import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 import DocumentToolsPage from "./DocumentToolsPage";
 import type { UploadedDocument } from "../lib/documentStore";
 
-type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "music" | "tools";
+type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "connections" | "music" | "tools";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -98,6 +99,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     { id: "lab", label: t("labNav"), icon: Beaker },
     { id: "tools", label: "Tài liệu", icon: FileText },
     { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
+    { id: "connections", label: "Bạn bè & tin nhắn", icon: Users },
   ];
 
   return <section className="learning-hub-page">
@@ -111,6 +113,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
     {tab === "tools" && <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan} onBack={() => setTab("overview")}/>}
     {tab === "music" && <MusicPage/>}
+    {tab === "connections" && <ConnectionsPage owner={owner} onOpenShared={() => setTab("shared")}/>}
     {tab === "shared" && <SharedLearningPage owner={owner} onSaved={kind => {
       if (kind === "quiz") void quizzes.refresh();
       if (kind === "flashcard") void flashcards.refreshDecks();

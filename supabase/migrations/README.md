@@ -55,3 +55,16 @@ Chạy migration theo thứ tự tăng dần. File `0018_v4_9_learning_shares.sq
 ```
 
 Chủ học liệu vẫn là người duy nhất quản lý lời mời; người nhận chỉ đọc nội dung đã được cấp quyền và ghi tiến độ riêng. Pet lưu dự phòng trên trình duyệt khách, còn tài khoản đăng nhập đồng bộ qua `get_my_pet`, `update_my_pet` và `record_pet_activity`. Thời gian chỉ được ghi khi trang đang hiển thị và có tương tác gần đây; không tự động tải Lab cục bộ lên tài khoản.
+
+## v5.15.0 — phần B: kết nối và trao đổi học liệu
+
+Chạy `0026_v5_15_0_connections_messages.sql` **sau** `0025_v5_14_0_hamster_pet.sql`, trên môi trường staging trước khi cập nhật production. Mã web V5.15.0 cần migration này để sử dụng tab **Bạn bè & tin nhắn**.
+
+- Tạo lời mời bằng email (hiện trong tài khoản người nhận) hoặc liên kết dùng một lần; ứng dụng không tự gửi email. Không có tìm kiếm tài khoản công khai.
+- Người nhận có thể chấp nhận/từ chối; người gửi có thể hủy. Chỉ cặp đã kết nối, chưa chặn nhau được gửi tin nhắn. Nội dung chat là văn bản hoặc thẻ tham chiếu Quiz, Flashcard, Lab, Tài liệu.
+- Gửi học liệu trong hộp **Chia sẻ** sẽ tạo quyền xem bản gốc và một thẻ trong cuộc trò chuyện cùng giao dịch. Quyền gói Plus/Pro của chủ học liệu được kiểm tra trên database. Hủy kết nối hoặc chặn sẽ thu hồi quyền xem bản gốc giữa hai người; bản sao người nhận đã lưu vẫn thuộc người nhận.
+- Tin nhắn được lưu trong database; giao diện kiểm tra cập nhật mỗi 5 giây trong hội thoại và 15 giây ở danh sách khi tab đang hiển thị. Chat nhóm và push realtime bằng kênh riêng chưa nằm trong bản này.
+
+**Kiểm tra trên staging bằng ba tài khoản A, B, C:** A mời B bằng email; B nhận và chấp nhận, C không nhìn thấy lời mời. A gửi Quiz và Tài liệu cho B; B tải bản gốc và lưu bản sao; C không thể truy vấn tin nhắn, file Storage hay học liệu. B từ chối lời mời khác; thử nhận liên kết sai email và liên kết đã dùng phải thất bại. A hủy kết nối hoặc B chặn A: tin nhắn mới và bản gốc phải bị chặn, bản sao vẫn mở được. Thử quá 20 tin/phút và quá 10 lời mời/ngày để xác minh giới hạn; kiểm tra số tin chưa đọc và tải tin cũ. Sau đó mới chạy migration trên production và deploy web.
+
+Không đưa service-role key vào Vite hoặc trình duyệt. Các bảng chỉ cấp SELECT cho authenticated dưới RLS; mọi thay đổi phải qua RPC kiểm tra danh tính và quyền.

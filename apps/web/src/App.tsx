@@ -17,6 +17,7 @@ import { LanguageProvider, useLanguage, useTheme, type MessageKey } from "./lib/
 import { getCurrentSession, hasRememberedAuthUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
 import { acceptProjectInvitation } from "./lib/collaboration";
 import { acceptLearning } from "./lib/learningShare";
+import { respondConnectionInvitation } from "./lib/connections";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { usePwaInstall } from "./lib/pwa";
@@ -151,6 +152,9 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const [learningInvite] = useState(() => new URLSearchParams(window.location.search).get("learning_invite") || (() => { try { return localStorage.getItem("mindcanvas:pending-learning-invite") ?? ""; } catch { return ""; } })());
   const [learningInviteState, setLearningInviteState] = useState<"waiting" | "accepting" | "accepted" | "error">("waiting");
   const [learningInviteError, setLearningInviteError] = useState("");
+  const [connectionInvite] = useState(() => new URLSearchParams(window.location.search).get("connection_invite") || (() => { try { return localStorage.getItem("mindcanvas:pending-connection-invite") ?? ""; } catch { return ""; } })());
+  const [connectionInviteState, setConnectionInviteState] = useState<"waiting" | "accepting" | "accepted" | "error">("waiting");
+  const [connectionInviteError, setConnectionInviteError] = useState("");
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [manualGuideId, setManualGuideId] = useState<string | null>(null);
   const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
@@ -299,6 +303,18 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     }).catch(e => { if (alive) { setLearningInviteError(e instanceof Error ? e.message : "Không thể nhận lời mời."); setLearningInviteState("error"); } });
     return () => { alive = false; };
   }, [learningInvite, user]);
+  useEffect(() => {
+    if (!connectionInvite || !user || connectionInviteState !== "waiting") return;
+    let alive = true;
+    setConnectionInviteState("accepting");
+    void respondConnectionInvitation(connectionInvite, "accepted").then(() => {
+      if (!alive) return;
+      try { localStorage.removeItem("mindcanvas:pending-connection-invite"); } catch {}
+      window.history.replaceState({}, "", window.location.pathname);
+      void ws.home(); setFilter("__learning"); setRecent(false); setConnectionInviteState("accepted");
+    }).catch(cause => { if (alive) { setConnectionInviteError(cause instanceof Error ? cause.message : "Không thể nhận lời mời kết nối."); setConnectionInviteState("error"); } });
+    return () => { alive = false; };
+  }, [connectionInvite, user]);
   const closeTrial = () => {
     if (trialWorking) return;
     setTrialOpen(false);
@@ -419,6 +435,8 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
       {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Trung tâm học tập.</div>}
       {learningInvite && learningInviteState === "error" && <div className="invite-banner error" role="alert">{learningInviteError}</div>}
+      {connectionInvite && connectionInviteState === "accepted" && <div className="invite-banner success" role="status">Đã kết nối. Mở “Bạn bè & tin nhắn” trong Trung tâm học tập.</div>}
+      {connectionInvite && connectionInviteState === "error" && <div className="invite-banner error" role="alert">{connectionInviteError}</div>}
       {inviteState === "accepting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("acceptInviteLoading")}</small></span></div>}
       {inviteState === "accepted" && <div className="invite-banner success" role="status"><span><strong>{t("inviteAccepted")}</strong></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}
       {inviteState === "error" && inviteError && <div className="invite-banner error" role="alert"><span><strong>{t("error")}</strong><small>{inviteError}</small></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}
@@ -446,7 +464,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
           </div>
         </aside></div>}
         <CanvasBoard key={ws.board.id} board={ws.board} documents={documents} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush()} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds} onDocumentSaved={saveCanvasDocument}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__manager" ? <FolderManager owner={user?.id ?? null} projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} accountPlan={accountPlan} initialTab={learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__manager" ? <FolderManager owner={user?.id ?? null} projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments)} accountPlan={accountPlan} initialTab={connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnail={ws.loadThumbnail} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>

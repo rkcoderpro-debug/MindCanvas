@@ -3541,6 +3541,7 @@ body,
 .shared-document-card > svg { flex: 0 0 auto; color: var(--accent); }
 .shared-document-card p { margin: 5px 0; color: var(--muted); font-size: 12px; }
 .shared-document-card small { color: var(--muted); font-size: 11px; }
+.shared-document-card .secondary-button { display: flex; width: fit-content; margin-top: 12px; }
 .document-selected-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised); }
 .document-selected-actions .actions { display: flex; align-items: center; gap: 8px; }
 .shared-learning-empty { display: grid; justify-items: center; gap: 7px; padding: 56px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: 16px; background: color-mix(in srgb, var(--surface) 72%, transparent); text-align: center; }
@@ -4466,4 +4467,54 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
   .document-tools-shell .docx-editor-status > .primary-button, .document-tools-shell .docx-editor-status > .secondary-button { flex: 1 1 auto; }
   .document-tools-shell .docx-ribbon { max-height: 104px; }
   .document-tools-shell .docx-ribbon-groups { min-width: max-content; }
+}
+
+/* Private connections and learning conversations. */
+.connections-page { display: grid; gap: 17px; padding: clamp(15px, 3vw, 32px); }
+.connections-page > header, .connections-conversation > header { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.connections-page h2, .connections-page h3 { margin: 4px 0; }
+.connections-page > header p, .connections-sidebar p { margin: 4px 0; color: var(--muted); line-height: 1.5; }
+.connections-layout { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.connections-sidebar { display: grid; gap: 13px; }
+.connections-sidebar section, .connections-conversation { min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface-raised); }
+.connections-sidebar h3 { display: flex; align-items: center; gap: 7px; font-size: 15px; }
+.connections-invite form { display: grid; gap: 8px; margin-top: 12px; }
+.connections-invite label, .connections-report label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.connections-invite input, .connections-report textarea, .connections-composer textarea { min-width: 0; width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 14px; }
+.connections-invite button { justify-self: start; }
+.connections-link { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
+.connections-link input { flex: 1 1 180px; }
+.connections-pending article { display: grid; gap: 5px; padding: 11px 0; border-top: 1px solid var(--line); }
+.connections-pending small { color: var(--muted); }
+.connections-pending article > div, .connections-peer-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.connections-pending button, .connections-peer-actions button, .connections-report button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--surface); }
+.connections-people > button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 46px; padding: 9px; border-radius: 9px; color: var(--text); text-align: left; }
+.connections-people > button:hover, .connections-people > button.active { background: var(--accent-soft); color: var(--accent); }
+.connections-people > button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.connections-people > button small { min-width: 21px; padding: 3px 6px; border-radius: 999px; background: var(--accent); color: white; text-align: center; }
+.connections-conversation { display: grid; gap: 14px; min-height: 460px; }
+.connections-conversation > header small { color: var(--muted); }
+.connections-report { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; }
+.connections-report button { justify-self: start; }
+.connections-messages { display: flex; flex-direction: column; gap: 9px; min-height: 230px; max-height: min(58vh, 620px); padding: 12px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+.connections-messages > button { align-self: center; }
+.connections-messages article { max-width: min(85%, 580px); padding: 10px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow-wrap: anywhere; }
+.connections-messages article.mine { align-self: end; border-color: var(--accent-border); background: var(--accent-soft); }
+.connections-messages article.theirs { align-self: start; }
+.connections-messages article p { margin: 0 0 5px; white-space: pre-wrap; }
+.connections-messages article small { display: block; color: var(--muted); font-size: 10px; }
+.connections-resource { display: block; width: 100%; margin: 6px 0; padding: 10px; border: 1px solid var(--accent-border); border-radius: 8px; color: var(--accent); background: var(--surface); text-align: left; }
+.connections-composer { display: flex; align-items: end; gap: 8px; }
+.connections-composer textarea { flex: 1; resize: vertical; }
+.connections-empty { display: grid; align-content: center; justify-items: center; gap: 7px; color: var(--muted); text-align: center; }
+.connections-empty h3, .connections-empty p { margin: 0; }
+.learning-share-connections { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--accent-border); border-radius: 11px; background: var(--accent-soft); }
+.learning-share-connections h3, .learning-share-connections p { margin: 0; }
+.learning-share-connections p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.learning-share-connections > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.learning-share-connections small { color: var(--success); }
+@media (max-width: 760px) {
+  .connections-layout { grid-template-columns: 1fr; }
+  .connections-conversation { min-height: 350px; }
+  .connections-messages { max-height: 50vh; }
 }

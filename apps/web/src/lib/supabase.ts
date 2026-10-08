@@ -13,7 +13,7 @@ export function hasRememberedAuthUser(): boolean {
   try { return Boolean(localStorage.getItem(LAST_AUTH_USER_KEY)); } catch { return false; }
 }
 
-export function rememberAuthUser(userId: string | undefined): void {
+function rememberAuthUser(userId: string | undefined): void {
   if (!userId) return;
   try { localStorage.setItem(LAST_AUTH_USER_KEY, userId); } catch { /* storage is optional */ }
 }
@@ -41,11 +41,15 @@ export async function signInWithGoogle() {
   // so the authenticated account can accept it.
   const inviteToken = new URLSearchParams(window.location.search).get("invite");
   const learningInvite = new URLSearchParams(window.location.search).get("learning_invite");
+  const connectionInvite = new URLSearchParams(window.location.search).get("connection_invite");
   if (inviteToken) {
     try { localStorage.setItem("mindcanvas:pending-invite", inviteToken); } catch {}
   }
   if (learningInvite) {
     try { localStorage.setItem("mindcanvas:pending-learning-invite", learningInvite); } catch {}
+  }
+  if (connectionInvite) {
+    try { localStorage.setItem("mindcanvas:pending-connection-invite", connectionInvite); } catch {}
   }
   const redirectTo = window.location.origin;
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } });
@@ -129,18 +133,9 @@ export async function signOut() {
   if (!supabase) return;
   // The account menu represents this browser session. Do not revoke the
   // user's other devices when a local canvas save is being recovered.
-  let rememberedUser: string | null = null;
-  try {
-    rememberedUser = localStorage.getItem(LAST_AUTH_USER_KEY);
-    localStorage.removeItem(LAST_AUTH_USER_KEY);
-  } catch {}
-  try {
-    const { error } = await supabase.auth.signOut({ scope: "local" });
-    if (error) throw error;
-  } catch (error) {
-    if (rememberedUser) try { localStorage.setItem(LAST_AUTH_USER_KEY, rememberedUser); } catch {}
-    throw error;
-  }
+  const { error } = await supabase.auth.signOut({ scope: "local" });
+  if (error) throw error;
+  try { localStorage.removeItem(LAST_AUTH_USER_KEY); } catch {}
 }
 
 export async function loadLatestBoardNote() {

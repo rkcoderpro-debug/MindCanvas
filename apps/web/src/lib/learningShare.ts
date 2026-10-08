@@ -133,6 +133,16 @@ export async function getSharedContent(kind: LearningKind, id: string) {
   const c = await client();
   return checked(await c.rpc("get_learning_shared_content", { p_kind: kind, p_id: id })) as Record<string, unknown>;
 }
+/** Download the original only while the recipient still has an active Storage grant. */
+export async function downloadSharedDocument(id: string) {
+  const c = await client();
+  const metadata = await getSharedContent("document", id);
+  const path = String(metadata.file_path ?? "");
+  if (!path) throw new Error("Không tìm thấy tệp tài liệu được chia sẻ.");
+  const blob = checked(await c.storage.from("documents").download(path));
+  if (!blob) throw new Error("Không thể tải tài liệu được chia sẻ.");
+  return { blob, name: String(metadata.file_name ?? metadata.title ?? "tai-lieu") };
+}
 export async function saveSharedLearningCopy(kind: LearningKind, id: string): Promise<{ copyId: string; alreadySaved: boolean }> {
   const c = await client();
   const existing = checked(await c.rpc("get_saved_learning_copy", { p_kind: kind, p_source_id: id })) as string | null;

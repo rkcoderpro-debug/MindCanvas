@@ -1,38 +1,25 @@
-CHANGELOG_V5.14.1.md
-CHANGED_FILES_V5.14.1.txt
-V5.14.1_RELEASE_REPORT_VI.md
+MindCanvas V5.15.0 — Phần B: kết nối, chia sẻ học liệu và tin nhắn 1–1
+Áp dụng các tệp trong ZIP trên mã nguồn V5.14.11, giữ nguyên cấu trúc thư mục.
+
+apps/web/src/App.tsx
+apps/web/src/components/ConnectionsPage.tsx
+apps/web/src/components/ConnectionsPage.test.tsx
+apps/web/src/components/LearningHubPage.tsx
+apps/web/src/components/LearningShareDialog.tsx
+apps/web/src/components/SharedLearningPage.tsx
+apps/web/src/lib/connections.ts
+apps/web/src/lib/connections.test.ts
+apps/web/src/lib/learningShare.ts
+apps/web/src/lib/supabase.ts
+apps/web/src/styles.css
+apps/web/public/sw.js
+apps/web/package.json
+apps/server/package.json
 package.json
 package-lock.json
-apps/server/package.json
-apps/web/package.json
-apps/web/public/sw.js
-apps/web/src/App.tsx
-apps/web/src/components/AutoResolveCloudConflict.tsx
-apps/web/src/components/AutoResolveCloudConflict.test.tsx
-apps/web/src/components/CloudConflictDialog.tsx
-apps/web/src/components/CloudConflictDialog.test.tsx
-apps/web/src/hooks/useWorkspace.ts
-apps/web/src/hooks/useWorkspace.test.tsx
-apps/web/src/lib/i18n.tsx
-apps/web/src/lib/projectStore.ts
-apps/web/src/lib/sharedPersistence.test.ts
-apps/web/src/styles.css
+supabase/migrations/0026_v5_15_0_connections_messages.sql
 supabase/migrations/README.md
-CHANGELOG_V5.14.2.md
-CHANGED_FILES_V5.14.2.txt
-V5.14.2_RELEASE_REPORT_VI.md
-CHANGELOG_V5.14.3.md
-CHANGED_FILES_V5.14.3.txt
-V5.14.3_RELEASE_REPORT_VI.md
-CHANGELOG_V5.14.4.md
-CHANGED_FILES_V5.14.4.txt
-V5.14.4_RELEASE_REPORT_VI.md
-apps/web/src/components/SyncCenter.tsx
-apps/web/src/lib/authSession.ts
-apps/web/src/lib/authSession.test.ts
-apps/web/src/lib/projectWriteVerification.test.ts
-apps/web/src/lib/supabase.ts
-apps/web/src/lib/supabaseSession.test.ts
-CHANGELOG_V5.15.0.md
-CHANGED_FILES_V5.15.0.txt
-V5.15.0_RELEASE_REPORT_VI.md
+
+Thứ tự áp dụng: chạy 0026 trên Supabase staging đã có 0025; thử với ba tài khoản theo README; sau đó chạy 0026 trên production và deploy mã web/server. Không đưa .env hoặc service-role key vào ZIP.
+Kiểm thử tại môi trường mã nguồn: 396 bài test frontend thành công, build frontend/backend thành công. Chưa chạy migration và kiểm tra RLS trên Supabase staging/production do môi trường làm việc không có database của người dùng.
+Giới hạn hiện tại: Tin nhắn được cập nhật bằng polling 5 giây trong hội thoại, 15 giây ở danh sách; Broadcast kênh riêng và chat nhóm chưa có trong bản này.

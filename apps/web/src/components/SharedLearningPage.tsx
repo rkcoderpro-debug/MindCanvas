@@ -7,6 +7,7 @@ import {
   finishSharedQuiz,
   getSharedCards,
   getSharedContent,
+  downloadSharedDocument,
   listLearningShares,
   listMyLearningCopySources,
   listPendingLearningInvites,
@@ -204,6 +205,19 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
     } finally { setBusy(false); }
   };
 
+  const downloadOriginal = async (id: string) => {
+    setBusy(true); setError("");
+    try {
+      const { blob, name } = await downloadSharedDocument(id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = name.replace(/[\\/:*?"<>|]/g, "_");
+      document.body.append(anchor); anchor.click(); anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (cause) { setError(sharedLearningErrorMessage(cause, "open")); }
+    finally { setBusy(false); }
+  };
+
   if (!owner) return <section className="shared-learning"><h2>Được chia sẻ với tôi</h2><p>Đăng nhập bằng email được mời để nhận và học nội dung.</p></section>;
 
   const card = cards[cardIndex];
@@ -243,7 +257,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
       </div> : <p>Bộ thẻ chưa có thẻ.</p>)}
 
       {active.kind === "lab" && <><p>Lab chỉ tải phiên bản mới khi bạn mở lại. Chuyển vào/ra toàn màn hình không tải lại mô phỏng.</p><div ref={labShellRef} className={`shared-lab-shell ${labFallbackFullscreen ? "shared-lab-fallback-fullscreen" : ""}`}><div className="shared-lab-toolbar"><span>Lab tương tác</span><button type="button" className="secondary-button" onClick={() => void toggleLabFullscreen()}>{labFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>} {labFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}</button></div>{content?.allow_external_resources === true && !allowSharedExternalResources ? <div className="shared-lab-external-consent" role="note"><p>Lab này tải thư viện từ CDN: unpkg, jsDelivr, cdn.tailwindcss.com và cdnjs. API/Gemini bị chặn; localStorage chỉ lưu tạm trong phiên và không đọc được dữ liệu MindCanvas. Chỉ tiếp tục nếu bạn tin cậy nội dung được chia sẻ.</p><button type="button" className="primary-button" onClick={() => setAllowSharedExternalResources(true)}>Cho phép tải thư viện và chạy Lab</button></div> : <iframe className="shared-lab-frame" title={active.title} sandbox="allow-scripts" srcDoc={labSandboxDocument(String(content?.program_html ?? ""), { allowExternalResources: content?.allow_external_resources === true && allowSharedExternalResources })}/>}</div></>}
-      {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small></div></div>}
+      {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small><button type="button" className="secondary-button" disabled={busy} onClick={() => void downloadOriginal(active.resource_id)}>Tải bản gốc</button></div></div>}
     </div> : <>
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}
       <div className="shared-learning-summary" aria-label="Tóm tắt học liệu chia sẻ"><article><Inbox size={18}/><strong>{items.length}</strong><span>Tổng học liệu</span></article><article><Users size={18}/><strong>{activeCount}</strong><span>Đang truy cập</span></article><article><Clock3 size={18}/><strong>{pausedCount + removedCount}</strong><span>Cần kiểm tra</span></article></div>
