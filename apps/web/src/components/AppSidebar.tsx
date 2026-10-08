@@ -3,7 +3,7 @@ import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Clock3, FileText, Fold
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
-import { sidebarDensityFor } from "../lib/sidebarLayout";
+import { SIDEBAR_MIN_WIDTH, sidebarDensityFor } from "../lib/sidebarLayout";
 import SidebarAppearanceControls from "./SidebarAppearanceControls";
 import { emitGuideAction } from "../lib/featureGuides";
 import { APP_VERSION_LABEL } from "../lib/appVersion";
@@ -45,13 +45,22 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   const [showSwipeHint, setShowSwipeHint] = useState(() => { try { return localStorage.getItem("mindcanvas:mobile-nav-swiped:v1") !== "true"; } catch { return true; } });
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 620px)").matches);
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 1280 : window.innerWidth);
   const closeMobile = () => setMobileOpen(false);
   const goHome = () => { closeMobile(); onHome(); };
   const goView = (view: SidebarView) => { closeMobile(); onOpenView(view); if (view === "recent") emitGuideAction("workspace:recent"); else if (view === "__favorites") emitGuideAction("workspace:favorites"); else if (view === "__trash") emitGuideAction("workspace:trash"); };
   const openFolder = (folderId: string) => { closeMobile(); onOpenFolder(folderId); emitGuideAction("workspace:folder", folderId); };
   const handleDrop = (event: DragEvent, folderId: string | null) => { closeMobile(); onDropProject(event, folderId); };
-  const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : sidebarWidth}px` } as CSSProperties;
-  const density = sidebarDensityFor(sidebarWidth, sidebarCollapsed);
+  // A saved desktop width must not consume the content area on a smaller window.
+  const effectiveWidth = Math.min(sidebarWidth, Math.max(SIDEBAR_MIN_WIDTH, Math.floor(viewportWidth * .28)));
+  const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : effectiveWidth}px` } as CSSProperties;
+  const density = sidebarDensityFor(effectiveWidth, sidebarCollapsed);
+
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;

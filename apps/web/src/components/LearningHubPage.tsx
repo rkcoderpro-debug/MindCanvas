@@ -1,7 +1,7 @@
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, Users, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -51,6 +51,8 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
   const [tab, setTab] = useState<HubTab>(initialTab ?? "overview");
   const [openAiPlan, setOpenAiPlan] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  const pickerRef = useRef<HTMLDetailsElement>(null);
+  const [navScroll, setNavScroll] = useState({ overflow: false, start: true, end: true });
   const [showNavSwipeHint, setShowNavSwipeHint] = useState(() => {
     try { return localStorage.getItem("mindcanvas:learning-nav-swiped:v1") !== "true"; } catch { return true; }
   });
@@ -67,10 +69,25 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     void flashcards.loadCardsForDecks(plan.deckIds).then(cards => { if (alive) void flashcards.ensureStudyPlanDay(plan, cards); }).catch(() => undefined);
     return () => { alive = false; };
   }, [flashcards.activeStudyPlan, flashcards.ensureStudyPlanDay, flashcards.loadCardsForDecks, flashcards.studyLoading, flashcards.todayStudyDay]);
+  const updateNavScroll = () => {
+    const nav = navRef.current;
+    if (!nav) return;
+    setNavScroll({ overflow: nav.scrollWidth > nav.clientWidth + 2, start: nav.scrollLeft < 2, end: nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2 });
+  };
+
   useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia?.("(max-width: 620px)").matches) return;
-    const active = navRef.current?.querySelector<HTMLElement>("button.active");
-    active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+    const nav = navRef.current;
+    if (!nav) return;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateNavScroll);
+    observer?.observe(nav);
+    updateNavScroll();
+    window.addEventListener("resize", updateNavScroll);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", updateNavScroll); };
+  }, []);
+
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>("button.active")?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    updateNavScroll();
   }, [tab]);
 
   const markNavDiscovered = () => {
@@ -103,10 +120,38 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     { id: "connections", label: "Bạn bè & tin nhắn", icon: Users },
     { id: "classrooms", label: "Lớp học", icon: GraduationCap },
   ];
+  const pickTab = (id: HubTab) => {
+    setTab(id);
+    markNavDiscovered();
+    if (pickerRef.current) pickerRef.current.open = false;
+    emitGuideAction(`learning:tab:${id}`);
+    if (id === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } }));
+  };
+  const onNavKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]')];
+    const current = buttons.indexOf(event.target as HTMLButtonElement);
+    if (current < 0) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next].focus();
+    pickTab(tabs[next].id);
+  };
+  const tabGroups: Array<{ title: string; ids: HubTab[] }> = [
+    { title: language === "vi" ? "Học" : "Study", ids: ["overview", "flashcards", "quiz", "lab"] },
+    { title: language === "vi" ? "Tài nguyên" : "Resources", ids: ["tools", "shared"] },
+    { title: language === "vi" ? "Lịch học" : "Schedule", ids: ["plan", "progress"] },
+    { title: language === "vi" ? "Cộng tác" : "Collaborate", ids: ["connections", "classrooms"] },
+  ];
 
   return <section className="learning-hub-page">
     <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-actions"><button type="button" data-help-id="learning-music" className={`learning-music-launcher ${tab === "music" ? "active" : ""}`} onClick={() => { setTab("music"); emitGuideAction("learning:tab:music"); }}><Music2 size={17}/><span>Nhạc</span></button><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div></header>
-    <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onScroll={markNavDiscovered}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} data-guide-tab={id} data-help-id={id === "music" ? "learning-music" : `learning-tab-${id}`} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""} ${id === "tools" ? "learning-tools-tab" : ""}`} onClick={() => { setTab(id); emitGuideAction(`learning:tab:${id}`); if (id === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } })); }}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
+    <div className="learning-nav-shell">
+      <button type="button" className="learning-nav-arrow" aria-label={language === "vi" ? "Xem mục trước" : "Previous sections"} disabled={!navScroll.overflow || navScroll.start} onClick={() => { const nav = navRef.current; nav?.scrollBy({ left: -Math.max(200, nav.clientWidth * .7), behavior: "smooth" }); }}><ChevronLeft size={18}/></button>
+      <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onKeyDown={onNavKeyDown} onScroll={() => { markNavDiscovered(); updateNavScroll(); }}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} data-guide-tab={id} data-help-id={`learning-tab-${id}`} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""} ${id === "tools" ? "learning-tools-tab" : ""}`} onClick={() => pickTab(id)}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>
+      <button type="button" className="learning-nav-arrow" aria-label={language === "vi" ? "Xem mục tiếp" : "Next sections"} disabled={!navScroll.overflow || navScroll.end} onClick={() => { const nav = navRef.current; nav?.scrollBy({ left: Math.max(200, nav.clientWidth * .7), behavior: "smooth" }); }}><ChevronRight size={18}/></button>
+      <details ref={pickerRef} className="learning-nav-picker"><summary>{language === "vi" ? "Tất cả mục" : "All sections"}</summary><div className="learning-nav-picker-menu">{tabGroups.map(group => <section key={group.title}><strong>{group.title}</strong>{group.ids.map(id => { const item = tabs.find(candidate => candidate.id === id)!; return <button type="button" key={id} aria-current={tab === id ? "page" : undefined} onClick={() => pickTab(id)}>{item.label}</button>; })}</section>)}</div></details>
+    </div>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
     {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
     {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}
     {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}

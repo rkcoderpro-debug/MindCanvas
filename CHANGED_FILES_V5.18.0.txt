@@ -1,0 +1,21 @@
+MindCanvas V5.18.0 — UI/UX
+
+package.json
+package-lock.json
+apps/server/package.json
+apps/web/package.json
+apps/web/public/sw.js
+apps/web/src/App.test.tsx
+apps/web/src/components/AppSidebar.tsx
+apps/web/src/components/FlashcardsPage.tsx
+apps/web/src/components/FolderManager.tsx
+apps/web/src/components/LabPage.tsx
+apps/web/src/components/LearningHubPage.tsx
+apps/web/src/components/QuizPage.tsx
+apps/web/src/lib/theme.ts
+apps/web/src/lib/theme.test.ts
+apps/web/src/styles.css
+V5.18.0_UI_UX_RELEASE_VI.md
+CHANGED_FILES_V5.18.0.txt
+
+Chép đúng các đường dẫn vào repo gốc. Không đưa .env hay dist vào ZIP.

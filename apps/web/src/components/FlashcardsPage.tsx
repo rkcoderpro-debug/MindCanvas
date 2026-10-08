@@ -117,6 +117,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     });
   }, [maxCardsLimit]);
   const due = flashcards.due;
+  const canStartPlan = !!flashcards.activeStudyPlan && !!flashcards.todayStudyDay && !flashcards.todayStudyDay.completed;
   const newCards = flashcards.cards.filter(card => card.repetitions === 0);
   const difficultCards = flashcards.cards.filter(card => card.lapses > 0).sort((a, b) => b.lapses - a.lapses);
   const learnedCards = flashcards.cards.filter(card => card.repetitions >= 2);
@@ -380,7 +381,18 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
         {!flashcards.selectedDeck ? <div className="flashcards-empty"><BookOpen size={48}/><h2>{t("chooseDeck")}</h2><p>{t("chooseDeckHint")}</p><button className="primary-button" onClick={openCreateDeck}><Plus size={17}/>{t("newDeck")}</button></div> : <>
           <header className="flashcards-content-heading">
             <div><div className="flashcards-title-line"><BookOpen size={21}/><h2>{flashcards.selectedDeck.name}</h2></div>{flashcards.selectedDeck.savedFrom && <small className="learning-copy-provenance">Đã lưu từ {flashcards.selectedDeck.savedFrom.ownerName} · {flashcards.selectedDeck.savedFrom.title}</small>}<div className="flashcards-meta"><span>{t("cardCount", { count: flashcards.cards.length })}</span><span>·</span><span>{t("dueCount", { count: due.length })}</span>{flashcards.selectedDeck.projectId && <><span>·</span><span><FileText size={13}/>{availableProjects.find(project => project.id === flashcards.selectedDeck?.projectId)?.title ?? t("linkedProject")}</span></>}</div></div>
-            <div className="actions"><LearningShareButton kind="flashcard" id={flashcards.selectedDeck.id} title={flashcards.selectedDeck.name} plan={accountPlan} available={!!owner && flashcards.selectedDeck.source === "cloud" && flashcards.cards.every(card => card.source === "cloud")}/><button className="icon-button danger" aria-label={t("deleteDeck")} title={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={17}/></button><button className="secondary-button" disabled={flashcards.busy || aiBusy} title={!owner ? t("aiManualHint") : t("generateFlashcards")} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button><button className="secondary-button" disabled={flashcards.busy || aiBusy} onClick={() => setStudyPlanDialog(true)}><CalendarClock size={16}/>{flashcards.activeStudyPlan ? t("manageStudyPlan") : t("createStudyPlan")}</button>{flashcards.activeStudyPlan && <button className="primary-button" disabled={flashcards.busy || aiBusy || !flashcards.todayStudyDay || flashcards.todayStudyDay.completed} onClick={() => void startPlanReview()}><Play size={16}/>{t("startPlanReview")}</button>}<button className="secondary-button" disabled={!due.length || flashcards.busy || aiBusy} onClick={() => startReview("due")}><Play size={16}/>{t("startReview")}</button><button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div>
+            <div className="actions flashcards-main-actions">
+              {canStartPlan && <button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={() => void startPlanReview()}><Play size={16}/>{t("startPlanReview")}</button>}
+              {!flashcards.activeStudyPlan && due.length > 0 && <button className="primary-button" disabled={flashcards.busy || aiBusy} onClick={() => startReview("due")}><Play size={16}/>{t("startReview")}</button>}
+              <button className={canStartPlan || (!flashcards.activeStudyPlan && due.length > 0) ? "secondary-button" : "primary-button"} disabled={flashcards.busy || aiBusy} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button>
+              <details className="flashcards-more-actions"><summary>{t("moreTools")}</summary><div>
+                <button type="button" disabled={flashcards.busy || aiBusy} title={!owner ? t("aiManualHint") : t("generateFlashcards")} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button>
+                <button type="button" disabled={flashcards.busy || aiBusy} onClick={() => setStudyPlanDialog(true)}><CalendarClock size={16}/>{flashcards.activeStudyPlan ? t("manageStudyPlan") : t("createStudyPlan")}</button>
+                {flashcards.activeStudyPlan && <button type="button" disabled={!due.length || flashcards.busy || aiBusy} onClick={() => startReview("due")}><Play size={16}/>{t("startReview")}</button>}
+                <LearningShareButton kind="flashcard" id={flashcards.selectedDeck.id} title={flashcards.selectedDeck.name} plan={accountPlan} available={!!owner && flashcards.selectedDeck.source === "cloud" && flashcards.cards.every(card => card.source === "cloud")}/>
+                <button type="button" className="danger" aria-label={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={16}/>{t("deleteDeck")}</button>
+              </div></details>
+            </div>
           </header>
           <div className="study-overview">
             <button disabled={!due.length} onClick={() => startReview("due")}><span><RotateCcw size={16}/>{t("reviewDue")}</span><strong>{due.length}</strong></button>

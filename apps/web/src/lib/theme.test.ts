@@ -26,8 +26,8 @@ describe("theme configuration", () => {
     expect(plus.every(option => themeGradient(option.id)[0] !== themeGradient(option.id)[1])).toBe(true);
     expect(themeGradient("lavender")).toEqual(["#8b5cf6", "#ec4899"]);
     expect(themeGradient("emeraldNight")).toEqual(["#10b981", "#14b8a6"]);
-    expect(themeGradient("crimsonOcean")).toEqual(["#dc2626", "#2563eb"]);
-    expect(themeGradient("crimsonMidnight")).toEqual(["#f43f5e", "#3b82f6"]);
+    expect(themeGradient("crimsonOcean")).toEqual(["#b91c1c", "#2563eb"]);
+    expect(themeGradient("crimsonMidnight")).toEqual(["#ffa0aa", "#3b82f6"]);
   });
 
   it("rejects stale or unknown persisted theme values", () => {

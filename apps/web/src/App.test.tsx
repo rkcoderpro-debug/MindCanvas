@@ -114,7 +114,7 @@ describe("Workspace UI", () => {
     await act(async () => cobalt.click());
     expect(cobalt.getAttribute("aria-pressed")).toBe("true");
     expect(document.documentElement.dataset.theme).toBe("cobalt");
-    expect(document.documentElement.style.getPropertyValue("--theme-gradient-start")).toBe("#60a5fa");
+    expect(document.documentElement.style.getPropertyValue("--theme-gradient-start")).toBe("#7bb6ff");
     expect(document.documentElement.style.getPropertyValue("--theme-gradient-end")).toBe("#22d3ee");
     expect(localStorage.getItem("mindcanvas:theme")).toBe("cobalt");
   });
@@ -168,6 +168,21 @@ describe("Workspace UI", () => {
       expect(host.textContent).toContain("Chưa có bộ thẻ");
     });
     expect(host.querySelector(".flashcard-row")).toBeNull();
+  });
+  it("lets a guest find a hidden learning section through the grouped section picker", async () => {
+    await import("./components/LearningHubPage");
+    await act(async () => root.render(<App/>));
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Trung tâm học tập") as HTMLButtonElement).click());
+    const picker = host.querySelector(".learning-nav-picker") as HTMLDetailsElement;
+    await act(async () => (picker.querySelector("summary") as HTMLElement).click());
+    expect(picker.open).toBe(true);
+    await act(async () => ([...picker.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Lớp học") as HTMLButtonElement).click());
+    expect(host.querySelector('.learning-hub-nav button[aria-selected="true"]')?.textContent).toContain("Lớp học");
+    expect(host.textContent).toContain("Đăng nhập để tham gia lớp học");
+    expect(picker.open).toBe(false);
+    const selectedTab = host.querySelector('.learning-hub-nav button[aria-selected="true"]') as HTMLButtonElement;
+    await act(async () => selectedTab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    expect(host.querySelector('.learning-hub-nav button[aria-selected="true"]')?.textContent).toContain("Tổng quan");
   });
   it("opens the interactive Lab and runs self-contained HTML in a sandbox", async () => {
     await import("./components/LabPage");
@@ -265,6 +280,23 @@ describe("Workspace UI", () => {
     expect(host.querySelector(".sidebar")?.getAttribute("data-sidebar-density")).toBe("narrow");
     expect(localStorage.getItem("mindcanvas:sidebar-width")).toBe("154");
     await act(async () => window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 0 })));
+  });
+  it("constrains a saved wide sidebar when the desktop viewport becomes narrow", async () => {
+    localStorage.setItem("mindcanvas:sidebar-width", "380");
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
+    try {
+      await act(async () => root.render(<App/>));
+      const sidebar = host.querySelector(".sidebar") as HTMLElement;
+      expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("224px");
+      expect(sidebar.dataset.sidebarDensity).toBe("comfortable");
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 650 });
+      await act(async () => window.dispatchEvent(new Event("resize")));
+      expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("182px");
+      expect(sidebar.dataset.sidebarDensity).toBe("compact");
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+    }
   });
   it("keeps one navigation toggle and exposes account actions in the topbar", async () => {
     await act(async () => root.render(<App/>));
