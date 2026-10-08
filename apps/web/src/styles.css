@@ -4554,3 +4554,23 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .classrooms-quiz-panel fieldset label { display:flex; align-items:flex-start; gap:10px; padding:10px; cursor:pointer; }
 .classrooms-quiz-panel fieldset input { width:auto; flex:none; margin-top:4px; }
 @media (max-width:760px) { .classrooms-grid { grid-template-columns:1fr; } .classrooms-submission form { grid-template-columns:1fr; } .classrooms-page > header { flex-wrap:wrap; } }
+/* V5.17.0 private classroom gradebook */
+.class-gradebook { min-width:0; }
+.class-gradebook > header { display:flex; justify-content:space-between; align-items:start; gap:14px; }
+.class-gradebook h3 { margin:4px 0 6px; }
+.class-gradebook-actions { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+.class-gradebook-actions button,.class-gradebook-row-actions button { display:inline-flex; gap:5px; align-items:center; }
+.class-gradebook-scroll { max-width:100%; overflow:auto; border:1px solid var(--border,#d8d8e2); border-radius:12px; }
+.class-gradebook table { width:100%; border-collapse:collapse; min-width:1050px; font-size:.9rem; }
+.class-gradebook th,.class-gradebook td { padding:10px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border,#d8d8e2); overflow-wrap:anywhere; max-width:240px; }
+.class-gradebook th { position:sticky; top:0; background:var(--surface,#fff); white-space:nowrap; }
+.class-gradebook-row-actions { display:grid; gap:6px; }
+.class-gradebook-grade { border:1px solid var(--border,#d8d8e2); border-radius:10px; margin-top:10px; padding:12px; }
+.class-gradebook-grade summary { cursor:pointer; font-weight:650; }
+.class-gradebook-grade form { display:grid; grid-template-columns:minmax(95px,130px) minmax(150px,1fr) minmax(150px,1fr) auto; align-items:end; gap:10px; margin-top:12px; }
+.class-gradebook-grade label { display:grid; gap:5px; }
+.class-gradebook-grade input,.class-gradebook-grade textarea { box-sizing:border-box; width:100%; }
+.class-gradebook-detail { margin-top:16px; border-top:1px solid var(--border,#d8d8e2); padding-top:12px; }
+.class-gradebook-detail article { padding:10px 0; border-bottom:1px solid var(--border,#d8d8e2); }
+.class-gradebook-detail p { margin:5px 0; }
+@media (max-width:900px) { .class-gradebook-grade form { grid-template-columns:1fr; } .class-gradebook > header { flex-wrap:wrap; } }

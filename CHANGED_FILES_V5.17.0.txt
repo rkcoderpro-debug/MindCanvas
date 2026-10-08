@@ -1,0 +1,23 @@
+MindCanvas V5.17.0 — phần E: chấm điểm, lịch sử và sổ điểm
+Áp dụng các tệp trong ZIP trên mã nguồn V5.16.0, giữ nguyên cấu trúc thư mục.
+
+apps/web/src/components/ClassGradebook.tsx
+apps/web/src/components/ClassGradebook.test.tsx
+apps/web/src/components/ClassroomsPage.tsx
+apps/web/src/lib/classrooms.ts
+apps/web/src/lib/gradebookExport.ts
+apps/web/src/lib/gradebookExport.test.ts
+apps/web/src/styles.css
+apps/web/public/sw.js
+apps/web/package.json
+apps/server/package.json
+package.json
+package-lock.json
+supabase/migrations/0028_v5_17_0_gradebook.sql
+supabase/migrations/README.md
+V5.17.0_GRADEBOOK_RELEASE_VI.md
+CHANGED_FILES_V5.17.0.txt
+
+Chạy migration 0028 sau 0027 trên staging, kiểm thử nhiều tài khoản theo README,
+rồi áp dụng production trước khi deploy V5.17.0. Không đưa .env vào ZIP.
+Kiểm thử mã nguồn: 402/402 frontend tests; build frontend/backend. Chưa chạy SQL trên Supabase thật.

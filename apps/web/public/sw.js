@@ -1,5 +1,5 @@
 // Refresh the installed app shell for this release.
-const CACHE_NAME = "mindcanvas-shell-v5.16.0";
+const CACHE_NAME = "mindcanvas-shell-v5.17.0";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/mindcanvas-192.png", "/icons/mindcanvas-512.png", "/icons/mindcanvas-maskable-512.png"];
 
 async function cacheAppShell() {

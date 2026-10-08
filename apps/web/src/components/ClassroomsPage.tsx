@@ -2,14 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { BookOpen, Check, ClipboardList, GraduationCap, RefreshCw, Users } from "lucide-react";
 import { listConnections, type Connection } from "../lib/connections";
 import {
-  closeClassAssignment, createClassAssignment, createClassroom, endTeacherStudent, gradeClassSubmission,
-  inviteClassStudent, listClassAssignments, listClassMembers, listClassQuizAttempts, listClassSubmissions,
+  closeClassAssignment, createClassAssignment, createClassroom, endTeacherStudent,
+  inviteClassStudent, listClassAssignments, listClassMembers, listClassQuizAttempts,
   listClassrooms, listTeacherStudentLinks, removeClassStudent, requestTeacherStudent, respondClassInvite,
   respondTeacherStudent, submitClassAssignment,
-  type ClassAssignment, type ClassMember, type ClassQuizAttempt, type ClassSubmission, type Classroom, type TeacherStudentLink,
+  type ClassAssignment, type ClassMember, type ClassQuizAttempt, type Classroom, type TeacherStudentLink,
 } from "../lib/classrooms";
 import { finishSharedQuiz, startSharedQuiz, type SharedQuizResult, type SharedQuizSession } from "../lib/learningShare";
 import FormulaText from "./FormulaText";
+import ClassGradebook from "./ClassGradebook";
 import type { QuizTest } from "../lib/quiz";
 
 const dateLabel = (value: string) => new Date(value).toLocaleString("vi-VN");
@@ -22,7 +23,6 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
   const [selected, setSelected] = useState<string | null>(null);
   const [members, setMembers] = useState<ClassMember[]>([]);
   const [assignments, setAssignments] = useState<ClassAssignment[]>([]);
-  const [submissions, setSubmissions] = useState<Record<string, ClassSubmission[]>>({});
   const [attempts, setAttempts] = useState<Record<string, ClassQuizAttempt[]>>({});
   const [className, setClassName] = useState("");
   const [description, setDescription] = useState("");
@@ -33,7 +33,7 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
   const [maxPoints, setMaxPoints] = useState(100);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [chosenAttempts, setChosenAttempts] = useState<Record<string, string>>({});
-  const [gradeDrafts, setGradeDrafts] = useState<Record<string, { points: string; feedback: string }>>({});
+  const [gradebookAssignmentId, setGradebookAssignmentId] = useState<string | null>(null);
   const [quizSession, setQuizSession] = useState<{ assignmentId: string; session: SharedQuizSession } | null>(null);
   const [answers, setAnswers] = useState<Array<number | null>>([]);
   const [quizResult, setQuizResult] = useState<SharedQuizResult | null>(null);
@@ -72,7 +72,7 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
     if (!selected || !classroom || classroom.status === "pending") { setMembers([]); setAssignments([]); return; }
     let alive = true;
     void Promise.all([listClassMembers(selected), listClassAssignments(selected)]).then(([students, work]) => {
-      if (alive) { setMembers(students); setAssignments(work); setSubmissions({}); setAttempts({}); }
+      if (alive) { setMembers(students); setAssignments(work); setAttempts({}); setGradebookAssignmentId(null); }
     }).catch(cause => { if (alive) setError(errorText(cause)); });
     return () => { alive = false; };
   }, [selected, classroom?.status, owner]);
@@ -86,7 +86,6 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
     await createClassAssignment(selected, title, instructions, instant, quizId || null, maxPoints);
     setTitle(""); setInstructions(""); setDue(""); setQuizId(""); setNotice("Đã giao bài tập.");
   }); };
-  const loadSubmissions = async (id: string) => { try { const rows = await listClassSubmissions(id); setSubmissions(current => ({ ...current, [id]: rows })); } catch (cause) { setError(errorText(cause)); } };
   const loadAttempts = async (id: string) => { try { const rows = await listClassQuizAttempts(id); setAttempts(current => ({ ...current, [id]: rows })); } catch (cause) { setError(errorText(cause)); } };
   const startQuiz = async (assignment: ClassAssignment) => {
     if (!assignment.quiz_id) return;
@@ -131,9 +130,10 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
             const expired = new Date(assignment.due_at).getTime() < Date.now() || !!assignment.closed_at;
             const attemptList = attempts[assignment.id];
             return <article className="learning-card classrooms-assignment" key={assignment.id}><div className="classrooms-assignment-head"><div><h4>{assignment.title}</h4><small>Hạn nộp: {dateLabel(assignment.due_at)} · Tối đa {assignment.max_points} điểm{assignment.closed_at ? " · Đã đóng" : ""}</small></div>{isTeacher && !assignment.closed_at && <button type="button" disabled={busy} onClick={() => void run(() => closeClassAssignment(assignment.id))}>Đóng bài</button>}</div><p>{assignment.instructions}</p>{assignment.quiz_id && <p>Quiz: <strong>{assignment.quiz_title ?? "Không còn khả dụng"}</strong></p>}
-              {isTeacher ? <div><button type="button" onClick={() => void loadSubmissions(assignment.id)}>Xem bài nộp và chấm điểm</button>{submissions[assignment.id]?.map(submission => { const key = `${assignment.id}:${submission.student_id}`; const draft = gradeDrafts[key] ?? { points: String(submission.points ?? ""), feedback: submission.feedback ?? "" }; return <div className="classrooms-submission" key={key}><strong>{submission.name}</strong><small>Nộp: {dateLabel(submission.submitted_at)} · Điểm Quiz: {submission.auto_points ?? "—"}</small><p>{submission.note}</p><form onSubmit={event => { event.preventDefault(); void run(async () => { await gradeClassSubmission(assignment.id, submission.student_id, Number(draft.points), draft.feedback); await loadSubmissions(assignment.id); }); }}><label>Điểm<input type="number" min={0} max={assignment.max_points} required value={draft.points} onChange={event => setGradeDrafts(current => ({ ...current, [key]: { ...draft, points: event.target.value } }))}/></label><label>Nhận xét<textarea maxLength={4000} value={draft.feedback} onChange={event => setGradeDrafts(current => ({ ...current, [key]: { ...draft, feedback: event.target.value } }))}/></label><button disabled={busy}>Lưu điểm</button></form></div>; })}</div> : <div className="classrooms-student-work">{assignment.submitted_at && <p>Đã nộp: {dateLabel(assignment.submitted_at)} · Điểm: {assignment.points ?? "Chờ chấm"}/{assignment.max_points}{assignment.feedback ? ` · Nhận xét: ${assignment.feedback}` : ""}</p>}{assignment.quiz_id && !expired && <><button type="button" disabled={busy} onClick={() => void startQuiz(assignment)}>Làm Quiz</button><button type="button" onClick={() => void loadAttempts(assignment.id)}>Xem lượt Quiz đã hoàn thành</button>{attemptList && <select aria-label={`Chọn lượt Quiz cho ${assignment.title}`} value={chosenAttempts[assignment.id] ?? ""} onChange={event => setChosenAttempts(current => ({ ...current, [assignment.id]: event.target.value }))}><option value="">Chọn lượt làm đã hoàn thành</option>{attemptList.map(attempt => <option key={attempt.id} value={attempt.id}>{dateLabel(attempt.completed_at)} · {attempt.score}/{attempt.total}</option>)}</select>}</>}{!expired && !assignment.submitted_at?.length && <p>Bạn có thể nộp trước hạn và sửa bài cho đến khi giáo viên chấm.</p>}{!expired && !assignment.graded_at && <form onSubmit={event => { event.preventDefault(); void run(() => submitClassAssignment(assignment.id, notes[assignment.id] ?? assignment.note ?? "", chosenAttempts[assignment.id] || null)); }}><label>Ghi chú bài nộp<textarea maxLength={4000} value={notes[assignment.id] ?? assignment.note ?? ""} onChange={event => setNotes(current => ({ ...current, [assignment.id]: event.target.value }))}/></label><button className="primary-button" disabled={busy || !(notes[assignment.id] ?? assignment.note ?? "").trim() && !chosenAttempts[assignment.id]}>{assignment.submitted_at ? "Cập nhật bài nộp" : "Nộp bài"}</button></form>}{assignment.graded_at && <p>Giáo viên đã chấm bài. Liên hệ giáo viên nếu cần điều chỉnh.</p>}{expired && !assignment.submitted_at && <p>Đã hết hạn nộp.</p>}</div>}
+              {isTeacher ? <button type="button" onClick={() => setGradebookAssignmentId(assignment.id)}>Mở sổ điểm và chấm bài</button> : <div className="classrooms-student-work">{assignment.submitted_at && <p>Đã nộp: {dateLabel(assignment.submitted_at)} · Điểm: {assignment.points ?? "Chờ chấm"}/{assignment.max_points}{assignment.feedback ? ` · Nhận xét: ${assignment.feedback}` : ""}</p>}{assignment.quiz_id && !expired && <><button type="button" disabled={busy} onClick={() => void startQuiz(assignment)}>Làm Quiz</button><button type="button" onClick={() => void loadAttempts(assignment.id)}>Xem lượt Quiz đã hoàn thành</button>{attemptList && <select aria-label={`Chọn lượt Quiz cho ${assignment.title}`} value={chosenAttempts[assignment.id] ?? ""} onChange={event => setChosenAttempts(current => ({ ...current, [assignment.id]: event.target.value }))}><option value="">Chọn lượt làm đã hoàn thành</option>{attemptList.map(attempt => <option key={attempt.id} value={attempt.id}>{dateLabel(attempt.completed_at)} · {attempt.score}/{attempt.total}</option>)}</select>}</>}{!expired && !assignment.submitted_at?.length && <p>Bạn có thể nộp trước hạn và sửa bài cho đến khi giáo viên chấm.</p>}{!expired && !assignment.graded_at && <form onSubmit={event => { event.preventDefault(); void run(() => submitClassAssignment(assignment.id, notes[assignment.id] ?? assignment.note ?? "", chosenAttempts[assignment.id] || null)); }}><label>Ghi chú bài nộp<textarea maxLength={4000} value={notes[assignment.id] ?? assignment.note ?? ""} onChange={event => setNotes(current => ({ ...current, [assignment.id]: event.target.value }))}/></label><button className="primary-button" disabled={busy || !(notes[assignment.id] ?? assignment.note ?? "").trim() && !chosenAttempts[assignment.id]}>{assignment.submitted_at ? "Cập nhật bài nộp" : "Nộp bài"}</button></form>}{assignment.graded_at && <p>Giáo viên đã chấm bài. Liên hệ giáo viên nếu cần điều chỉnh.</p>}{expired && !assignment.submitted_at && <p>Đã hết hạn nộp.</p>}</div>}
             </article>;
           })}{!assignments.length && <p>Chưa có bài tập.</p>}</section>
+          {isTeacher && assignments.some(item => item.id === gradebookAssignmentId) && <ClassGradebook key={gradebookAssignmentId} assignment={assignments.find(item => item.id === gradebookAssignmentId)!}/>}
         </>}
       </> : <section className="learning-card"><h3>Chọn một lớp học</h3><p>Tạo lớp hoặc nhận lời mời từ giáo viên để bắt đầu.</p></section>}</div>
     </div>
