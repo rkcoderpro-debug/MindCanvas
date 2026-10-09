@@ -109,14 +109,16 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
   };
 
   if (!owner) return <section className="classrooms-page"><h2>Lớp học</h2><p>Đăng nhập để tham gia lớp học.</p></section>;
+  const hasOwnClass = classes.some(room => room.teacher_id === owner && room.status === "teacher");
   const acceptedStudents = links.filter(link => link.teacher_id === owner && link.status === "accepted");
   return <section className="classrooms-page">
     <header><div><span className="eyebrow">LEARNING HUB · LỚP HỌC</span><h2>Giáo viên và học trò</h2><p>Lời mời vai trò, lớp học, bài tập, hạn nộp và điểm riêng của từng học trò.</p></div><button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => undefined)}><RefreshCw size={16}/>Làm mới</button></header>
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     <div className="classrooms-grid">
       <aside className="classrooms-sidebar">
-        <section className="learning-card"><h3><GraduationCap size={18}/>Quan hệ học tập</h3><p>Mời người đã kết nối nhận vai trò học trò. Người nhận phải đồng ý trước khi vào lớp.</p>
-          {connections.filter(person => !links.some(link => link.teacher_id === owner && link.student_id === person.peer_id && link.status !== "declined")).map(person => <div className="classrooms-row" key={person.peer_id}><span>{person.display_name}</span><button type="button" disabled={busy} onClick={() => void run(() => requestTeacherStudent(person.peer_id))}>Mời làm học trò</button></div>)}
+        <section className="learning-card"><h3><GraduationCap size={18}/>Quan hệ học tập</h3><p>Tạo lớp trước, sau đó mời người đã kết nối làm học trò. Người nhận phải đồng ý trước khi vào lớp.</p>
+          {!hasOwnClass && <p className="classrooms-prerequisite">Hãy tạo ít nhất một lớp học trước khi mời học trò.</p>}
+          {connections.filter(person => !links.some(link => link.teacher_id === owner && link.student_id === person.peer_id && link.status !== "declined")).map(person => <div className="classrooms-row" key={person.peer_id}><span>{person.display_name}</span><button type="button" disabled={busy || !hasOwnClass} onClick={() => { if (hasOwnClass) void run(() => requestTeacherStudent(person.peer_id)); }}>Mời làm học trò</button></div>)}
           {links.map(link => <div className="classrooms-row" key={`${link.teacher_id}-${link.student_id}`}><span>{link.teacher_id === owner ? `Học trò: ${link.student_name}` : `Giáo viên: ${link.teacher_name}`} · {link.status === "accepted" ? "Đã đồng ý" : link.status === "pending" ? "Đang chờ" : "Đã từ chối"}</span><div>{link.student_id === owner && link.status === "pending" && <><button disabled={busy} onClick={() => void run(() => respondTeacherStudent(link.teacher_id, true))}>Chấp nhận</button><button disabled={busy} onClick={() => void run(() => respondTeacherStudent(link.teacher_id, false))}>Từ chối</button></>}{link.status === "accepted" && <button disabled={busy} onClick={() => void run(() => endTeacherStudent(link.teacher_id, link.student_id))}>Kết thúc</button>}</div></div>)}
         </section>
         <section className="learning-card"><h3><Users size={18}/>Lớp của tôi</h3>{classes.map(room => <button type="button" key={room.id} className={`classrooms-class-option ${room.id === selected ? "active" : ""}`} onClick={() => setSelected(room.id)}><strong>{room.name}</strong><small>{room.status === "teacher" ? `Giáo viên · ${room.student_count} học trò` : `${room.teacher_name} · ${room.status === "pending" ? "Chờ xác nhận" : "Học trò"}`}</small></button>)}{!classes.length && <p>Chưa có lớp học.</p>}</section>

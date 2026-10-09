@@ -17,6 +17,8 @@ async function rpc<T>(name: string, args: Record<string, unknown> = {}): Promise
   if (error) {
     if (error.code === "PGRST202" || /schema cache|could not find the function/i.test(error.message))
       throw new Error("Chưa chạy migration 0027_v5_16_0_classrooms.sql trên Supabase.");
+    if (error.message.includes("CLASS_REQUIRED"))
+      throw new Error("Hãy tạo ít nhất một lớp học trước khi mời học trò.");
     throw new Error(error.message);
   }
   return data as T;

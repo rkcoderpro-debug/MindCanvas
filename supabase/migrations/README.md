@@ -89,3 +89,7 @@ Chạy `0028_v5_17_0_gradebook.sql` **sau** `0027_v5_16_0_classrooms.sql` trên 
 - CSV và Excel xuất đúng các hàng/cột đang hiển thị trong sổ điểm của **bài tập đang mở**; dữ liệu tải về xử lý chuỗi dạng công thức spreadsheet như văn bản. Không cấp SELECT trực tiếp cho bảng nhật ký, lượt Quiz hay bảng điểm; giáo viên xem sổ điểm và bài nộp, học trò chỉ có thể truy vấn lịch sử điểm của chính mình trong lớp đang hoạt động.
 
 **Kiểm tra staging:** A là giáo viên, B/C là học trò trong lớp, D ngoài lớp. B và C nộp Quiz; A xem sổ điểm có hàng chưa nộp, xem câu sai của B, chấm lần đầu rồi sửa điểm và nhận xét kèm lý do. So sánh điểm/nhận xét ở màn hình với hai file CSV/XLSX. Thử sửa điểm không có lý do, vượt thang, chấm bằng B/C/D, đọc bài Quiz chưa nộp, xem lịch sử của người khác, đọc trực tiếp `class_grade_events`: đều phải thất bại. Cho B nộp lại trước khi chấm để xác nhận điểm tự động và nhật ký. Mở lại sau F5; điểm và lịch sử phải giữ nguyên. Việc chạy SQL/RLS trên staging/production chưa thể kiểm chứng trong môi trường mã nguồn này.
+
+## v5.18.1 — tạo lớp trước khi mời học trò
+
+Chạy `0029_v5_18_1_require_class_before_student_invite.sql` sau `0028` trước khi cập nhật web. RPC mời học trò yêu cầu người gửi sở hữu ít nhất một lớp. Kiểm tra bằng tài khoản đã kết nối: chưa tạo lớp thì nút mời bị khóa và RPC trả `CLASS_REQUIRED`; sau khi tạo lớp, lời mời gửi được; người nhận vẫn phải đồng ý trước khi được mời vào lớp. Tài khoản chỉ tham gia lớp của giáo viên khác vẫn không có quyền mời học trò.
