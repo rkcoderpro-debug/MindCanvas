@@ -4666,3 +4666,18 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
   .learning-nav-picker summary { max-width: 72px; white-space: normal; text-align: center; font-size: 11px; }
   .learning-nav-picker-menu { grid-template-columns: 1fr; }
 }
+
+/* Keep the pet in the learning page's scroll flow so it never covers cards or Lab actions. */
+.pet-companion.is-inline { position: static; align-self: flex-end; flex: 0 0 auto; max-width: 100%; margin: 12px 0 20px; pointer-events: auto; }
+@media (max-width: 620px) {
+  .pet-companion.is-inline { margin-bottom: calc(82px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 380px) {
+  .topbar:not(.canvas-desktop-topbar) { gap: 4px; }
+  .topbar .breadcrumbs { flex: 1 1 auto; overflow: hidden; }
+  .topbar .breadcrumbs button { min-width: 0; max-width: 100%; overflow: hidden; }
+  .topbar .focus-mode-toggle, .topbar .page-help-trigger { display: none; }
+  .topbar > .actions { min-width: 0; gap: 0; }
+  .topbar-plan-button { width: 34px; max-width: 34px; justify-content: center; padding: 0; }
+  .topbar-plan-button span { display: none; }
+}

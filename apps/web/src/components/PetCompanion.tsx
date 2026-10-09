@@ -64,7 +64,7 @@ function moodCopy(mood: PetMood, language: "vi" | "en") {
   return COPY[language][mood];
 }
 
-export default function PetCompanion({ owner, active, visible = true, activityType = "workspace" }: { visible?: boolean; owner: string | null; active: boolean; activityType?: PetActivityType }) {
+export default function PetCompanion({ owner, active, visible = true, inline = false, activityType = "workspace" }: { visible?: boolean; inline?: boolean; owner: string | null; active: boolean; activityType?: PetActivityType }) {
   const floating = usePetPosition();
   const { language } = useLanguage();
   const copy = COPY[language];
@@ -162,7 +162,7 @@ export default function PetCompanion({ owner, active, visible = true, activityTy
     else setNameDraft(pet.name);
   };
 
-  return <aside {...floating} hidden={!visible} className={`pet-companion ${expanded ? "is-expanded" : ""}`} aria-label={copy.label}>
+  return <aside {...(inline ? { ref: floating.ref } : floating)} hidden={!visible} className={`pet-companion ${inline ? "is-inline" : ""} ${expanded ? "is-expanded" : ""}`} aria-label={copy.label}>
     {expanded && <section className="pet-companion-card" aria-label={copy.label}>
       <header>
         <div><strong>{pet.name}</strong><small>{moodCopy(mood, language)}</small></div>
