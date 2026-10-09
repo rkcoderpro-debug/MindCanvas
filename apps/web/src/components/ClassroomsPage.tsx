@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { BookOpen, Check, ClipboardList, GraduationCap, RefreshCw, Users } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { BookOpen, ClipboardList, GraduationCap, RefreshCw, Users } from "lucide-react";
 import { listConnections, type Connection } from "../lib/connections";
 import {
   closeClassAssignment, createClassAssignment, createClassroom, endTeacherStudent,
@@ -9,7 +9,7 @@ import {
   type ClassAssignment, type ClassMember, type ClassQuizAttempt, type Classroom, type TeacherStudentLink,
 } from "../lib/classrooms";
 import { finishSharedQuiz, startSharedQuiz, type SharedQuizResult, type SharedQuizSession } from "../lib/learningShare";
-import FormulaText from "./FormulaText";
+import ClassroomQuizRunner from "./ClassroomQuizRunner";
 import ClassGradebook from "./ClassGradebook";
 import type { QuizTest } from "../lib/quiz";
 
@@ -34,9 +34,10 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [chosenAttempts, setChosenAttempts] = useState<Record<string, string>>({});
   const [gradebookAssignmentId, setGradebookAssignmentId] = useState<string | null>(null);
-  const [quizSession, setQuizSession] = useState<{ assignmentId: string; session: SharedQuizSession } | null>(null);
+  const [quizSession, setQuizSession] = useState<{ assignmentId: string; assignmentTitle: string; title: string; session: SharedQuizSession } | null>(null);
   const [answers, setAnswers] = useState<Array<number | null>>([]);
   const [quizResult, setQuizResult] = useState<SharedQuizResult | null>(null);
+  const quizSubmittingRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -89,23 +90,25 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
   const loadAttempts = async (id: string) => { try { const rows = await listClassQuizAttempts(id); setAttempts(current => ({ ...current, [id]: rows })); } catch (cause) { setError(errorText(cause)); } };
   const startQuiz = async (assignment: ClassAssignment) => {
     if (!assignment.quiz_id) return;
+    quizSubmittingRef.current = false;
     setBusy(true); setError(""); setQuizResult(null);
     try {
       const session = await startSharedQuiz(assignment.quiz_id);
-      setQuizSession({ assignmentId: assignment.id, session }); setAnswers(session.questions.map(() => null));
+      setQuizSession({ assignmentId: assignment.id, assignmentTitle: assignment.title, title: assignment.quiz_title || assignment.title, session }); setAnswers(session.questions.map(() => null));
     } catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
   };
-  const finishQuiz = async (event: FormEvent) => {
-    event.preventDefault(); if (!quizSession) return;
+  const finishQuiz = async () => {
+    if (!quizSession || busy || quizResult || quizSubmittingRef.current) return;
+    quizSubmittingRef.current = true;
     setBusy(true); setError("");
     try {
       setQuizResult(await finishSharedQuiz(quizSession.session.id, answers));
-      await loadAttempts(quizSession.assignmentId);
       setChosenAttempts(current => ({ ...current, [quizSession.assignmentId]: quizSession.session.id }));
+      await loadAttempts(quizSession.assignmentId);
       setNotice("Đã hoàn thành Quiz. Hãy nộp bài tập để ghi điểm vào lớp.");
     } catch (cause) { setError(errorText(cause)); }
-    finally { setBusy(false); }
+    finally { quizSubmittingRef.current = false; setBusy(false); }
   };
 
   if (!owner) return <section className="classrooms-page"><h2>Lớp học</h2><p>Đăng nhập để tham gia lớp học.</p></section>;
@@ -139,6 +142,6 @@ export default function ClassroomsPage({ owner, quizzes }: { owner: string | nul
         </>}
       </> : <section className="learning-card"><h3>Chọn một lớp học</h3><p>Tạo lớp hoặc nhận lời mời từ giáo viên để bắt đầu.</p></section>}</div>
     </div>
-    {quizSession && <div className="classrooms-quiz-overlay" role="dialog" aria-modal="true" aria-label="Làm Quiz trong lớp"><div className="classrooms-quiz-panel"><header><h3>Quiz lớp học</h3><button type="button" onClick={() => { setQuizSession(null); setQuizResult(null); }}>Đóng</button></header>{quizResult ? <div><h4>Kết quả: {quizResult.score}/{quizResult.total}</h4><p>Quay lại bài tập và bấm “Nộp bài” để ghi kết quả vào lớp.</p><button onClick={() => { setQuizSession(null); setQuizResult(null); }}>Về lớp học</button></div> : <form onSubmit={event => void finishQuiz(event)}>{quizSession.session.questions.map((question, index) => <fieldset key={question.id}><legend>Câu {index+1}: <FormulaText text={question.prompt}/></legend>{question.options.map((option, optionIndex) => <label key={optionIndex}><input type="radio" name={`class-quiz-${index}`} checked={answers[index] === optionIndex} onChange={() => setAnswers(current => current.map((answer, n) => n === index ? optionIndex : answer))}/><FormulaText text={option}/></label>)}</fieldset>)}<button className="primary-button" disabled={busy}><Check size={16}/>Nộp Quiz</button></form>}</div></div>}
+    {quizSession && <ClassroomQuizRunner key={quizSession.session.id} title={quizSession.title} assignmentTitle={quizSession.assignmentTitle} session={quizSession.session} answers={answers} result={quizResult} busy={busy} error={error} onAnswer={(questionIndex, optionIndex) => setAnswers(current => current.map((answer, index) => index === questionIndex ? optionIndex : answer))} onSubmit={() => void finishQuiz()} onClose={() => { setQuizSession(null); setQuizResult(null); setError(""); }}/>}
   </section>;
 }

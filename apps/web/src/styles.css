@@ -4546,13 +4546,12 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .classrooms-student-work { display:grid; gap:12px; }
 .classrooms-submission { margin-top:12px; padding:14px; border:1px solid var(--border,#ddd); border-radius:12px; }
 .classrooms-submission form { grid-template-columns:100px minmax(0,1fr) auto; align-items:end; }
-.classrooms-quiz-overlay { position:fixed; inset:0; z-index:1200; background:#101125a6; display:grid; place-items:center; padding:16px; }
-.classrooms-quiz-panel { box-sizing:border-box; width:min(800px,100%); max-height:90vh; overflow:auto; padding:22px; border-radius:16px; background:var(--surface,#fff); color:var(--text,#20202a); }
-.classrooms-quiz-panel header { display:flex; justify-content:space-between; align-items:center; gap:14px; }
-.classrooms-quiz-panel fieldset { margin:18px 0; padding:14px; border-radius:12px; }
-.classrooms-quiz-panel legend { font-weight:650; }
-.classrooms-quiz-panel fieldset label { display:flex; align-items:flex-start; gap:10px; padding:10px; cursor:pointer; }
-.classrooms-quiz-panel fieldset input { width:auto; flex:none; margin-top:4px; }
+.classrooms-quiz-overlay { position:fixed; inset:0; z-index:1200; background:var(--app-bg); }
+.classrooms-quiz-panel { box-sizing:border-box; width:100%; height:100vh; height:100dvh; overflow:auto; overscroll-behavior:contain; padding:clamp(16px,3vw,36px) clamp(16px,4vw,48px) calc(28px + env(safe-area-inset-bottom)); background:var(--app-bg); color:var(--text); }
+.classrooms-quiz-header { max-width:1000px; margin-inline:auto; flex-wrap:wrap; }
+.classrooms-quiz-header > span { flex-basis:180px; }
+.classrooms-quiz-panel .quiz-runner-actions { flex-wrap:wrap; }
+@media (max-width:620px) { .classrooms-quiz-panel { padding:16px 12px calc(24px + env(safe-area-inset-bottom)); } .classrooms-quiz-header > span { flex-basis:100%; order:1; } .classrooms-quiz-header > small { order:2; } .classrooms-quiz-panel .quiz-runner-actions > button { flex:1 1 auto; justify-content:center; } }
 @media (max-width:760px) { .classrooms-grid { grid-template-columns:1fr; } .classrooms-submission form { grid-template-columns:1fr; } .classrooms-page > header { flex-wrap:wrap; } }
 /* V5.17.0 private classroom gradebook */
 .class-gradebook { min-width:0; }

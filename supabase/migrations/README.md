@@ -93,3 +93,7 @@ Chạy `0028_v5_17_0_gradebook.sql` **sau** `0027_v5_16_0_classrooms.sql` trên 
 ## v5.18.1 — tạo lớp trước khi mời học trò
 
 Chạy `0029_v5_18_1_require_class_before_student_invite.sql` sau `0028` trước khi cập nhật web. RPC mời học trò yêu cầu người gửi sở hữu ít nhất một lớp. Kiểm tra bằng tài khoản đã kết nối: chưa tạo lớp thì nút mời bị khóa và RPC trả `CLASS_REQUIRED`; sau khi tạo lớp, lời mời gửi được; người nhận vẫn phải đồng ý trước khi được mời vào lớp. Tài khoản chỉ tham gia lớp của giáo viên khác vẫn không có quyền mời học trò.
+
+## v5.18.2 — giao diện Quiz của bài tập lớp
+
+Quiz trong bài tập lớp dùng giao diện từng câu, ô đáp án, thanh tiến độ và điều hướng giống Quiz thường. Học trò có thể đổi đáp án trước khi nộp; đáp án đúng và giải thích chỉ xuất hiện sau khi server nhận lượt làm. Sau đó lượt làm được chọn cho bài tập, học trò vẫn cần bấm **Nộp bài** để ghi điểm vào lớp. Không có migration mới cho V5.18.2; nếu chưa chạy `0029` của V5.18.1, áp dụng migration đó trước khi deploy bản này.
