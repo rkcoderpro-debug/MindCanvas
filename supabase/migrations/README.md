@@ -97,3 +97,13 @@ Chạy `0029_v5_18_1_require_class_before_student_invite.sql` sau `0028` trướ
 ## v5.18.2 — giao diện Quiz của bài tập lớp
 
 Quiz trong bài tập lớp dùng giao diện từng câu, ô đáp án, thanh tiến độ và điều hướng giống Quiz thường. Học trò có thể đổi đáp án trước khi nộp; đáp án đúng và giải thích chỉ xuất hiện sau khi server nhận lượt làm. Sau đó lượt làm được chọn cho bài tập, học trò vẫn cần bấm **Nộp bài** để ghi điểm vào lớp. Không có migration mới cho V5.18.2; nếu chưa chạy `0029` của V5.18.1, áp dụng migration đó trước khi deploy bản này.
+
+## v5.19.0 — lưu trữ bài tập, xem lại Quiz và chuông thông báo
+
+Sau `0029`, chạy toàn bộ `0030_v5_19_0_assignment_archive_quiz_review.sql` rồi `0031_v5_19_0_activity_notifications.sql` trên staging, kiểm tra hai tài khoản và triển khai database production **trước** web V5.19.0. Nếu chưa áp dụng migration, phần thông báo và thao tác lưu trữ/xem lại sẽ báo thiếu RPC; các phần cũ vẫn có thể dùng.
+
+- Giáo viên lưu trữ bài tập thay vì xóa. Lưu trữ sẽ đóng nhận bài mới; khôi phục sẽ mở lại nếu bài vốn đang mở và hạn nộp vẫn còn. Bài nộp, điểm và lịch sử chấm được giữ. Học sinh đã nộp vẫn xem được bài lưu trữ và kết quả cũ.
+- Học sinh xem lại lượt Quiz đã hoàn thành, kể cả sau hạn nộp, qua RPC chỉ trả lượt thuộc chính họ. Xem kết quả không tự chọn lượt để nộp. Không có quyền đọc đáp án của lượt chưa hoàn thành.
+- Chuông tổng hợp tin nhắn, chia sẻ Quiz/Flashcard/Lab, thẻ tài liệu gửi trong tin nhắn, lời mời kết nối/lớp/giáo viên/Canvas và bài tập mới. Chỉ lưu dấu đã đọc; nguồn sự kiện được đọc từ các bảng hiện có. Lời mời bằng liên kết chưa gắn email không hiện cho tài khoản bất kỳ. Chuông kiểm tra khi trang có focus và mỗi 20 giây khi trang đang hiển thị.
+
+Kiểm tra staging: giáo viên lưu trữ bài đã có điểm rồi khôi phục và kiểm tra sổ điểm/lịch sử; học sinh xem lại lượt đã hoàn thành sau hạn nhưng không thể mở lượt của người khác hay lượt chưa nộp; tài khoản thứ ba không thấy thông báo/tin nhắn của cặp khác; nhận lời mời từ chuông và tải lại trang để kiểm tra số chưa đọc. Thử trên màn 320, 390, 768 và 1366 px, bàn phím và tùy chọn giảm chuyển động.

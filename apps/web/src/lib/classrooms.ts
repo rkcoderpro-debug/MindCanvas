@@ -3,9 +3,10 @@ import { getCurrentSession, supabase } from "./supabase";
 export type TeacherStudentLink = { teacher_id: string; student_id: string; teacher_name: string; student_name: string; status: "pending" | "accepted" | "declined" };
 export type Classroom = { id: string; name: string; description: string; teacher_id: string; teacher_name: string; status: "teacher" | "pending" | "active"; student_count: number };
 export type ClassMember = { student_id: string; name: string; status: "pending" | "active" };
-export type ClassAssignment = { id: string; title: string; instructions: string; quiz_id: string | null; quiz_title: string | null; due_at: string; max_points: number; closed_at: string | null; submitted_at: string | null; note: string | null; points: number | null; auto_points: number | null; feedback: string | null; graded_at: string | null };
+export type ClassAssignment = { id: string; title: string; instructions: string; quiz_id: string | null; quiz_title: string | null; due_at: string; max_points: number; closed_at: string | null; archived_at?: string | null; submitted_at: string | null; note: string | null; points: number | null; auto_points: number | null; feedback: string | null; graded_at: string | null };
 export type ClassSubmission = { student_id: string; name: string; note: string; submitted_at: string; auto_points: number | null; points: number | null; feedback: string; graded_at: string | null };
 export type ClassQuizAttempt = { id: string; score: number; total: number; completed_at: string };
+export type OwnClassQuizReview = ClassQuizAttempt & { questions: ClassQuizReviewQuestion[] };
 export type GradebookEntry = { student_id: string; name: string; status: "not_submitted" | "pending" | "graded"; submitted_at: string | null; note: string | null; auto_points: number | null; points: number | null; feedback: string | null; graded_at: string | null; wrong_count: number | null; quiz_total: number | null };
 export type ClassQuizReviewQuestion = { number: number; prompt: string; options: string[]; answer: number | null; correct_index: number; explanation: string; correct: boolean };
 export type ClassGradeEvent = { old_points: number | null; new_points: number | null; old_feedback: string; new_feedback: string; reason: string; source: "auto" | "manual" | "migration"; actor_name: string; created_at: string };
@@ -16,7 +17,9 @@ async function rpc<T>(name: string, args: Record<string, unknown> = {}): Promise
   const { data, error } = await supabase.rpc(name, args);
   if (error) {
     if (error.code === "PGRST202" || /schema cache|could not find the function/i.test(error.message))
-      throw new Error("Chưa chạy migration 0027_v5_16_0_classrooms.sql trên Supabase.");
+      throw new Error(name === "set_class_assignment_archived" || name === "review_own_class_quiz_attempt"
+        ? "Cần chạy migration 0030_v5_19_0_assignment_archive_quiz_review.sql trên Supabase."
+        : "Chưa chạy migration 0027_v5_16_0_classrooms.sql trên Supabase.");
     if (error.message.includes("CLASS_REQUIRED"))
       throw new Error("Hãy tạo ít nhất một lớp học trước khi mời học trò.");
     throw new Error(error.message);
@@ -37,6 +40,10 @@ export const listClassMembers = (classId: string) => rpc<ClassMember[]>("list_cl
 export const createClassAssignment = (classId: string, title: string, instructions: string, due: string, quizId: string | null, max: number) =>
   rpc<string>("create_class_assignment", { p_class: classId, p_title: title, p_instructions: instructions, p_due: due, p_quiz: quizId, p_max: max });
 export const listClassAssignments = (classId: string) => rpc<ClassAssignment[]>("list_class_assignments", { p_class: classId });
+export const setClassAssignmentArchived = (assignmentId: string, archived: boolean) =>
+  rpc<void>("set_class_assignment_archived", { p_assignment: assignmentId, p_archived: archived });
+export const reviewOwnClassQuizAttempt = (assignmentId: string, attemptId: string) =>
+  rpc<OwnClassQuizReview>("review_own_class_quiz_attempt", { p_assignment: assignmentId, p_attempt: attemptId });
 export const submitClassAssignment = (assignmentId: string, note: string, attemptId: string | null) =>
   rpc<void>("submit_class_assignment", { p_assignment: assignmentId, p_note: note, p_attempt: attemptId });
 export const listClassQuizAttempts = (assignmentId: string) => rpc<ClassQuizAttempt[]>("list_class_quiz_attempts", { p_assignment: assignmentId });

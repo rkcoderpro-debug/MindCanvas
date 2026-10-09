@@ -44,7 +44,7 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-export default function LearningHubPage({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialTab }: { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab }) {
+export default function LearningHubPage({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialTab, initialPeerId, initialClassId }: { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string }) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
@@ -160,8 +160,8 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
     {tab === "tools" && <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan} onBack={() => setTab("overview")}/>}
     {tab === "music" && <MusicPage/>}
-    {tab === "connections" && <ConnectionsPage owner={owner} onOpenShared={() => setTab("shared")}/>}
-    {tab === "classrooms" && <ClassroomsPage owner={owner} quizzes={quizzes.quizzes}/>}
+    {tab === "connections" && <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => setTab("shared")}/>}
+    {tab === "classrooms" && <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes}/>}
     {tab === "shared" && <SharedLearningPage owner={owner} onSaved={kind => {
       if (kind === "quiz") void quizzes.refresh();
       if (kind === "flashcard") void flashcards.refreshDecks();
