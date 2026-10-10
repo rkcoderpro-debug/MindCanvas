@@ -107,3 +107,11 @@ Sau `0029`, chạy toàn bộ `0030_v5_19_0_assignment_archive_quiz_review.sql` 
 - Chuông tổng hợp tin nhắn, chia sẻ Quiz/Flashcard/Lab, thẻ tài liệu gửi trong tin nhắn, lời mời kết nối/lớp/giáo viên/Canvas và bài tập mới. Chỉ lưu dấu đã đọc; nguồn sự kiện được đọc từ các bảng hiện có. Lời mời bằng liên kết chưa gắn email không hiện cho tài khoản bất kỳ. Chuông kiểm tra khi trang có focus và mỗi 20 giây khi trang đang hiển thị.
 
 Kiểm tra staging: giáo viên lưu trữ bài đã có điểm rồi khôi phục và kiểm tra sổ điểm/lịch sử; học sinh xem lại lượt đã hoàn thành sau hạn nhưng không thể mở lượt của người khác hay lượt chưa nộp; tài khoản thứ ba không thấy thông báo/tin nhắn của cặp khác; nhận lời mời từ chuông và tải lại trang để kiểm tra số chưa đọc. Thử trên màn 320, 390, 768 và 1366 px, bàn phím và tùy chọn giảm chuyển động.
+
+## v5.20.0 — thư viện Lab
+
+Chạy `0032_v5_20_0_lab_library.sql` **sau** `0031_v5_19_0_activity_notifications.sql`. Số `0031` đã dành cho thông báo v5.19; không đổi tên hoặc ghi đè migration đó.
+
+Migration thêm chế độ Lab, ảnh bìa, cấu hình khung xem và thông tin tạo Lab; cập nhật RPC chia sẻ/lưu bản sao, trigger phiên bản và quota. Kiểm tra lưu, mở lại, chia sẻ và lưu bản sao bằng hai tài khoản trên staging trước khi chạy production và deploy web v5.20.0. Kiểm thử cloud/RLS thực tế chưa được thực hiện trong phiên mã nguồn.
+
+Nếu đã dùng gói v5.20.0 cũ, xóa **chỉ** `0031_v5_20_0_lab_library.sql` khỏi repository và thay bằng `0032_v5_20_0_lab_library.sql`; giữ nguyên `0031_v5_19_0_activity_notifications.sql`. Nếu đã chạy SQL Lab cũ trong SQL Editor, việc sửa số file không yêu cầu xóa dữ liệu; nội dung SQL chỉ đổi chú thích thứ tự. Xem `RELEASE_V5.20.0.md` và `QA_V5.20.0.md` ở thư mục gốc.

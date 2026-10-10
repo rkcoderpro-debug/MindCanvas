@@ -1,6 +1,7 @@
+import { cleanLabThumbnail, cleanLabViewer, isLabMode } from "./labModes";
 import { getCurrentSession, supabase } from "./supabase";
 import { hashInvitationToken, normalizeInviteEmail } from "./collaboration";
-import { validateLabHtml, type LabProject } from "./lab";
+import { cleanLab, validateLabHtml, type LabProject } from "./lab";
 
 export type LearningKind = "quiz" | "flashcard" | "lab" | "document";
 export type IncomingLearningShare = { kind: LearningKind; resource_id: string; owner_name: string; title: string; updated_at: string; status: "active" | "paused" | "removed" };
@@ -18,6 +19,10 @@ export type PublishedLabProject = {
   created_at: string;
   updated_at: string;
   content_version?: number;
+  lab_mode?: LabProject["mode"];
+  thumbnail?: string;
+  viewer_config?: LabProject["viewerConfig"];
+  creation_config?: Record<string, unknown>;
 };
 export type SharedQuizQuestion = { id: string; prompt: string; options: string[]; correctIndex?: number; explanation?: string };
 export type SharedQuizSession = { id: string; questions: SharedQuizQuestion[]; version: number };
@@ -37,6 +42,7 @@ async function client() {
 function learningError(error: { message?: string; code?: string } | unknown): LearningShareError {
   const raw = typeof error === "object" && error !== null ? error as { message?: string; code?: string } : {};
   const message = String(raw.message ?? error ?? "Unknown learning share error");
+  if ((raw.code === "42703" || raw.code === "PGRST204") && /lab_mode|thumbnail|viewer_config|creation_config/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Hãy chạy migration 0032_v5_20_0_lab_library.sql trên Supabase rồi thử đồng bộ lại. Lab trên thiết bị vẫn được giữ.", raw.code);
   if ((raw.code === "42703" || raw.code === "PGRST204") && /allow_external_resources/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0024_v5_13_0_lab_cdn_resources.sql trên Supabase. Hãy áp dụng migration sau 0023 rồi thử lại.", raw.code);
   if (raw.code === "PGRST202" || /schema cache|could not find the function/i.test(message)) return new LearningShareError("MIGRATION_MISSING", "Chưa cài migration 0023_v5_12_0_save_shared_learning.sql trên Supabase. Hãy áp dụng migration sau các migration hiện có rồi thử lại.", raw.code);
   if (/ACCESS_REVOKED|access revoked|sharing paused/i.test(message)) return new LearningShareError("ACCESS_REVOKED", "Quyền truy cập học liệu đã bị thu hồi hoặc tạm dừng.", raw.code);
@@ -102,12 +108,21 @@ export async function removeLearningMember(kind: LearningKind, id: string, recip
 }
 
 /** Deliberate cloud publish. Local data survives any network failure. Only display fields leave this device. */
-export async function publishLab(lab: LabProject, owner: string) {
+const labPublishQueues = new Map<string, Promise<unknown>>();
+function queueLabCloud<T>(owner: string, id: string, job: () => Promise<T>): Promise<T> {
+  const key = `${owner}:${id}`;
+  const queued = (labPublishQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(job);
+  labPublishQueues.set(key, queued);
+  void queued.finally(() => { if (labPublishQueues.get(key) === queued) labPublishQueues.delete(key); }).catch(() => {});
+  return queued;
+}
+export function publishLab(lab: LabProject, owner: string) { return queueLabCloud(owner, lab.id, () => performLabPublish(lab, owner)); }
+async function performLabPublish(lab: LabProject, owner: string) {
   const c = await client();
   const valid = lab.programHtml.trim();
   if (!valid) throw new Error("Lab cần HTML mô phỏng trước khi đưa lên cloud.");
   if (!validateLabHtml(valid, { allowExternalResources: lab.allowExternalResources }).ok) throw new Error("HTML của Lab không đạt kiểm tra an toàn. Hãy kiểm tra nội dung trước khi chia sẻ.");
-  const { data, error } = await c.from("lab_projects").upsert({ id: lab.id, user_id: owner, title: lab.title, subject: lab.subject, learner_level: lab.learnerLevel, program_html: valid, allow_external_resources: lab.allowExternalResources, updated_at: lab.updatedAt }, { onConflict: "id" }).select("id").single();
+  const { data, error } = await c.from("lab_projects").upsert({ id: lab.id, user_id: owner, title: lab.title, subject: lab.subject, learner_level: lab.learnerLevel, program_html: valid, allow_external_resources: lab.allowExternalResources, lab_mode: lab.mode ?? "freeform", thumbnail: cleanLabThumbnail(lab.thumbnail) ?? null, viewer_config: cleanLabViewer(lab.viewerConfig), creation_config: { visualStyle: lab.visualStyle ?? "2d", request: lab.request, sourceFileName: lab.sourceFileName, sourceText: lab.sourceText, designPrompt: lab.designPrompt, planPrompt: lab.planPrompt, programPrompt: lab.programPrompt, design: lab.design }, updated_at: lab.updatedAt }, { onConflict: "id" }).select("id").single();
   if (error) {
     const mapped = learningError(error);
     if (mapped.code === "MIGRATION_MISSING") throw mapped;
@@ -122,11 +137,19 @@ export async function listPublishedLabs(owner: string) {
 /** Read the complete private Lab payload for account recovery on another profile. */
 export async function listPublishedLabProjects(owner: string): Promise<PublishedLabProject[]> {
   const c = await client();
-  return checked(await c.from("lab_projects").select("id,user_id,title,subject,learner_level,program_html,allow_external_resources,created_at,updated_at,content_version").eq("user_id", owner).order("updated_at", { ascending: false })) as PublishedLabProject[];
+  return checked(await c.from("lab_projects").select("id,user_id,title,subject,learner_level,program_html,allow_external_resources,lab_mode,thumbnail,viewer_config,creation_config,created_at,updated_at,content_version").eq("user_id", owner).order("updated_at", { ascending: false })) as PublishedLabProject[];
 }
-export async function deletePublishedLab(id: string, owner: string) {
-  const c = await client();
-  checked(await c.from("lab_projects").delete().eq("id", id).eq("user_id", owner));
+export function publishedLabToLocal(row: PublishedLabProject): LabProject {
+  return cleanLab({ ...row.creation_config, id: row.id, title: row.title, subject: row.subject, learnerLevel: row.learner_level,
+    request: typeof row.creation_config?.request === "string" ? row.creation_config.request : "", programHtml: row.program_html,
+    mode: isLabMode(row.lab_mode) ? row.lab_mode : "freeform", thumbnail: row.thumbnail, viewerConfig: row.viewer_config,
+    allowExternalResources: row.allow_external_resources === true, createdAt: row.created_at, updatedAt: row.updated_at })!;
+}
+export function deletePublishedLab(id: string, owner: string) {
+  return queueLabCloud(owner, id, async () => {
+    const c = await client();
+    checked(await c.from("lab_projects").delete().eq("id", id).eq("user_id", owner));
+  });
 }
 
 export async function getSharedContent(kind: LearningKind, id: string) {

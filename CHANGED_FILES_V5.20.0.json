@@ -1,0 +1,129 @@
+{
+  "version": "5.20.0",
+  "baseVersion": "5.19.0",
+  "files": [
+    {
+      "path": "QA_V5.20.0.md",
+      "sha256": "345c3027944d4241feaf532838518862817f3be74cc3ab86ac4d0d0053e53203"
+    },
+    {
+      "path": "RELEASE_V5.20.0.md",
+      "sha256": "ebd29a0ec23795d5ffb4c2555617b79d010e78a47be740e815f11695b71617ce"
+    },
+    {
+      "path": "apps/server/package.json",
+      "sha256": "4e5f56f6ded7334896d34ff2a79752a568dd45f338fa88b5eed865ffa2e50841"
+    },
+    {
+      "path": "apps/web/package.json",
+      "sha256": "1b1e0a82a59c8c56c644bd03d987bab2513ab912115310f815faf1791f277c6d"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "sha256": "4284a41447f9d1d0c59b94201894bd2811f1c667d391b271260d90bb54172752"
+    },
+    {
+      "path": "apps/web/src/components/LabEditorDialog.tsx",
+      "sha256": "7d91b11382d36308ed2710c15aecbc02076049a90752d26facf665bed7ac99c3"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.test.tsx",
+      "sha256": "cb83a0af434bcf0dbb0dd94039b4c853029490bfcfae4063bbcee2d7fe45ddf4"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.tsx",
+      "sha256": "882a18d1e700e32bd53be7d0ed8293823c02db4c352d93459ca91b2f13165c97"
+    },
+    {
+      "path": "apps/web/src/components/LabViewer.tsx",
+      "sha256": "6d8c18ca11d5c0668fdc94a6537d605d4f96e1ef3a33500a093a1da2a4eed992"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "sha256": "4b6e715c311b01004775ac58e4735b141466cc7e03e77f0cd20816357ec5f46a"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "sha256": "958a3bb8db6413d359c8d1ea38a9445f3e6cdd10346fad3d06162efc41a6eaa3"
+    },
+    {
+      "path": "apps/web/src/lib/lab.ts",
+      "sha256": "f5472013d1cfb65b1e01be26ec1f0e4241e6528ba0dce86753d93cf0fdd76674"
+    },
+    {
+      "path": "apps/web/src/lib/labCloud.test.ts",
+      "sha256": "9608547347f6eadd3ed3c46e9f6a0f87b63defdfc76affc3f1fc6ec348132864"
+    },
+    {
+      "path": "apps/web/src/lib/labModes.test.ts",
+      "sha256": "090949f3e4d17128ee496937f9a95c3cfc49a7986598d15ef48930750b02a05d"
+    },
+    {
+      "path": "apps/web/src/lib/labModes.ts",
+      "sha256": "7753d8a1efb0e6a3166be5deb04bb2bb185eb690616dc00d4b610d49537bc726"
+    },
+    {
+      "path": "apps/web/src/lib/labPreview.ts",
+      "sha256": "c4ea61f7cf03364ecee1369d5d633aaebe4036c7a2a89373a70771960ad1725b"
+    },
+    {
+      "path": "apps/web/src/lib/labStorage.test.ts",
+      "sha256": "f1619f75f1089d83d6770663a94d883389466ad541982fc8697af4743d772cd2"
+    },
+    {
+      "path": "apps/web/src/lib/labStorage.ts",
+      "sha256": "8b776d8c264a347f94c3cf0ceabaa93c59f34ca76dddb44edd325559616fe079"
+    },
+    {
+      "path": "apps/web/src/lib/learningShare.ts",
+      "sha256": "d556636247f97460ea435300965422891b61e06a35456e38f7916d9dffbda629"
+    },
+    {
+      "path": "apps/web/src/lib/migrationOrder.test.ts",
+      "sha256": "f7de36823be258f5a8264ea66495f59a942335b9dbb6265a04837782e3f528e7"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "sha256": "33114be3163238a0e8409796b237298e0c3520221b7042a74a6926ad8b462db6"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "72a9ce1baa7e635889d7525c26fd7e6f25530ca246329435363ec41d523a97cd"
+    },
+    {
+      "path": "package.json",
+      "sha256": "a19647efa2e209dc83bad381ba0a7377a35f7c8e0a5368911639838eb1f565a3"
+    },
+    {
+      "path": "supabase/migrations/0032_v5_20_0_lab_library.sql",
+      "sha256": "d843dfdb2415a1619ef8b3ce61bcb6a971c33cb229d59815ad4da85c49fef223"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "sha256": "cdacb2390277c79d8aaef77b44c894b8a867c552749849b5960f02cf8c281f0e"
+    }
+  ],
+  "deletedFiles": [
+    "supabase/migrations/0031_v5_20_0_lab_library.sql"
+  ],
+  "verification": {
+    "webTestsPassed": 440,
+    "serverTestsPassed": 41,
+    "serverTestsSkipped": 1,
+    "webBuild": "passed",
+    "serverBuild": "passed",
+    "realBrowser": "not run: unavailable",
+    "liveSupabase": "not run",
+    "webTestFilesPassed": 69,
+    "uniqueMigrationNumbers": "passed: 32 SQL files with unique numbers",
+    "duplicateMigrationNegativeControl": "passed: regression test rejects duplicate 0031; passes after cleanup",
+    "existing0031Unchanged": "sha256:d48e9c9413c3c185a403d8dc296c6cdea3327c8c23956058e37f1b59401fcba9"
+  },
+  "cleanupNote": "If the earlier v5.20.0 ZIP was extracted, remove only 0031_v5_20_0_lab_library.sql. Keep 0031_v5_19_0_activity_notifications.sql unchanged.",
+  "migrationCorrection": {
+    "previousErroneousPath": "supabase/migrations/0031_v5_20_0_lab_library.sql",
+    "correctedPath": "supabase/migrations/0032_v5_20_0_lab_library.sql",
+    "requiredPredecessor": "supabase/migrations/0031_v5_19_0_activity_notifications.sql",
+    "labSqlChange": "order comment only; schema and RPC statements unchanged"
+  }
+}

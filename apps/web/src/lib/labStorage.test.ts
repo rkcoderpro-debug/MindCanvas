@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mergeStoredLabs, readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft } from './labStorage';
+import { mergeStoredLabs, readStoredLabs, saveStoredLab, deleteStoredLab, readLabDraft, writeLabDraft, saveStoredLabThumbnail } from './labStorage';
 const input = { title:'HTML only', subject:'physics' as const, learnerLevel:'', sourceFileName:'', sourceText:'', request:'', designPrompt:'', planPrompt:'', programPrompt:'', design:null, programHtml:'<html><body>saved</body></html>', allowExternalResources:false };
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); localStorage.clear(); vi.restoreAllMocks(); });
 describe('durable Lab storage', () => {
@@ -54,4 +54,14 @@ describe('durable Lab storage', () => {
     expect(saved.allowExternalResources).toBe(true);
     expect((await readStoredLabs('cdn')).find(lab => lab.id === 'cdn-lab')?.allowExternalResources).toBe(true);
   });
+  it('caches a cover atomically, preserves timestamps and ignores stale HTML', async () => {
+    const lab = await saveStoredLab('cover', input);
+    const image = 'data:image/png;base64,YQ==';
+    expect(await saveStoredLabThumbnail('cover',lab.id,'stale',image)).toBeUndefined();
+    const updated = await saveStoredLabThumbnail('cover',lab.id,lab.programHtml,image);
+    expect(updated?.thumbnail).toBe(image); expect(updated?.updatedAt).toBe(lab.updatedAt);
+    expect(await saveStoredLabThumbnail('cover',lab.id,lab.programHtml,'data:image/png;base64,Yg==')).toBeUndefined();
+    expect((await readStoredLabs('cover')).find(row=>row.id===lab.id)?.thumbnail).toBe(image);
+  });
+
 });

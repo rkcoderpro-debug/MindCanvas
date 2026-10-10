@@ -1,4 +1,5 @@
 import { cleanLab, FLAPPY_BIRD_STARTER_LAB, LAB_LIMITS, readLabs, type LabProject } from './lab';
+import { cleanLabThumbnail } from './labModes';
 
 function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -37,7 +38,7 @@ async function migrate(owner: string | null) {
 export async function readStoredLabs(owner: string | null): Promise<LabProject[]> {
   await migrate(owner);
   const rows = await access<LabProject[]>('labs', owner) || [];
-  return [FLAPPY_BIRD_STARTER_LAB, ...rows.sort((a,b) => b.updatedAt.localeCompare(a.updatedAt))];
+  return [FLAPPY_BIRD_STARTER_LAB, ...rows.map(cleanLab).filter((lab): lab is LabProject => lab !== null).sort((a,b) => b.updatedAt.localeCompare(a.updatedAt))];
 }
 export async function saveStoredLab(owner: string | null, input: Omit<LabProject, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LabProject> {
   await migrate(owner);
@@ -45,8 +46,9 @@ export async function saveStoredLab(owner: string | null, input: Omit<LabProject
   let saved!: LabProject;
   await access<LabProject[]>('labs', owner, (rows = []) => {
     const now = new Date().toISOString();
-    saved = { ...input, id, systemDemo: false, createdAt: rows.find(row => row.id === id)?.createdAt || now, updatedAt: now };
-    if (!cleanLab(saved)) throw new Error('Dữ liệu Lab không hợp lệ. Nội dung chưa lưu vẫn được giữ.');
+    const candidate = cleanLab({ ...input, id, systemDemo: false, createdAt: rows.find(row => row.id === id)?.createdAt || now, updatedAt: now });
+    if (!candidate) throw new Error('Dữ liệu Lab không hợp lệ. Nội dung chưa lưu vẫn được giữ.');
+    saved = candidate;
     return [saved, ...rows.filter(row => row.id !== id)];
   });
   return saved;
@@ -83,6 +85,18 @@ export async function mergeStoredLabs(owner: string | null, incoming: unknown[])
 export async function deleteStoredLab(owner: string | null, id: string) {
   await migrate(owner);
   await access<LabProject[]>('labs', owner, (rows = []) => rows.filter(row => row.id !== id));
+}
+/** Cache a cover atomically without overwriting edits or changing content timestamps. */
+export async function saveStoredLabThumbnail(owner: string | null, id: string, html: string, image: string): Promise<LabProject | undefined> {
+  const thumbnail = cleanLabThumbnail(image);
+  if (!thumbnail) return;
+  let updated: LabProject | undefined;
+  await migrate(owner);
+  await access<LabProject[]>('labs', owner, (rows = []) => rows.map(lab => {
+    if (lab.id !== id || lab.programHtml !== html || lab.thumbnail) return lab;
+    updated = { ...lab, thumbnail }; return updated;
+  }));
+  return updated;
 }
 export const readLabDraft = <T,>(owner: string | null) => access<T>('drafts', owner);
 export const writeLabDraft = <T,>(owner: string | null, draft: T) => access<T>('drafts', owner, () => draft);

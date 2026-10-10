@@ -938,6 +938,20 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "In Learning Hub, click the Lab tab. The next step appears only after the tab is actually open.",
       },
       {
+        target: ".lab-add-button",
+        completion: { type: "click", selector: ".lab-add-button" },
+        titleVi: "Thêm Lab", titleEn: "Add Lab",
+        bodyVi: "Thư viện hiển thị các Lab đã lưu. Bấm Thêm Lab để mở hộp thoại tạo nội dung.",
+        bodyEn: "The library shows saved Labs. Click Add Lab to open the editor.",
+      },
+      {
+        target: '.lab-editor-tabs button:nth-child(2)',
+        completion: { type: "click", selector: '.lab-editor-tabs button:nth-child(2)' },
+        titleVi: "Tạo bằng AI", titleEn: "Create with AI",
+        bodyVi: "Chọn Tạo bằng AI, rồi chọn chế độ và nhập yêu cầu. Nếu đã có HTML, bạn có thể nhập trực tiếp.",
+        bodyEn: "Choose Create with AI, select a mode and enter your request. Existing HTML can also be imported directly.",
+      },
+      {
         target: ".lab-step-card input",
         completion: {
           type: "input",
@@ -971,7 +985,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Click this button, copy the prompt and send it to your AI provider. Ask for a complete .html file that can be downloaded.",
       },
       {
-        target: ".lab-run-card textarea",
+        target: ".lab-run-card",
         completion: {
           type: "action",
           actions: [
@@ -985,12 +999,12 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         titleVi: "Đưa file HTML vào runner",
         titleEn: "Bring the HTML file into the runner",
         bodyVi:
-          "Chọn file .html AI trả về hoặc dán toàn bộ nội dung vào ô Simulation HTML. Guide chỉ qua khi hệ thống nhận được HTML thật.",
+          "Chọn file HTML AI trả về; hoặc chọn Dán / sửa HTML để nhập văn bản. Guide chờ đến khi đã có nội dung HTML.",
         bodyEn:
           "Choose the returned .html file or paste the complete document into Simulation HTML. The guide advances only after real HTML is received.",
       },
       {
-        target: ".lab-run-card .lab-actions .primary-button",
+        target: ".lab-editor-footer .secondary-button",
         completion: {
           type: "action",
           actions: [
@@ -1004,7 +1018,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         titleVi: "Kiểm tra và chạy",
         titleEn: "Check and run",
         bodyVi:
-          "Bấm Kiểm tra và chạy để mở preview sandbox. Nếu có resource ngoài hoặc HTML không an toàn, runner sẽ báo để bạn sửa.",
+          "Bấm Xem thử để kiểm tra Lab trong khung xem. Lỗi HTML được hiển thị ngay trong hộp thoại.",
         bodyEn:
           "Click Check and run to open the sandbox preview. Unsafe external resources are reported before execution.",
       },

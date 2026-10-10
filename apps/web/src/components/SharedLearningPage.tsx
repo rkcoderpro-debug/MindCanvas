@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock3, FileText, Inbox, Maximize2, Minimize2, RefreshCw, RotateCcw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
-import { labSandboxDocument } from "../lib/lab";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Clock3, FileText, Inbox, RefreshCw, RotateCcw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
+import LabViewer from "./LabViewer";
+import { cleanLabViewer } from "../lib/labModes";
 import FormulaText from "./FormulaText";
 import {
   acceptPendingLearningInvite,
@@ -51,10 +52,6 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [labFullscreen, setLabFullscreen] = useState(false);
-  const [labFallbackFullscreen, setLabFallbackFullscreen] = useState(false);
-  const [allowSharedExternalResources, setAllowSharedExternalResources] = useState(false);
-  const labShellRef = useRef<HTMLDivElement>(null);
 
   const reload = () => {
     if (!owner) return;
@@ -83,47 +80,9 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
     return () => window.clearInterval(timer);
   }, [active, content]);
 
-  useEffect(() => {
-    const documentWithWebkit = document as Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
-    const syncFullscreen = () => setLabFullscreen((document.fullscreenElement ?? documentWithWebkit.webkitFullscreenElement ?? null) === labShellRef.current || labFallbackFullscreen);
-    document.addEventListener("fullscreenchange", syncFullscreen);
-    document.addEventListener("webkitfullscreenchange", syncFullscreen as EventListener);
-    return () => {
-      document.removeEventListener("fullscreenchange", syncFullscreen);
-      document.removeEventListener("webkitfullscreenchange", syncFullscreen as EventListener);
-      if ((document.fullscreenElement ?? documentWithWebkit.webkitFullscreenElement ?? null) === labShellRef.current) void (document.exitFullscreen?.() ?? documentWithWebkit.webkitExitFullscreen?.() ?? Promise.resolve()).catch(() => {});
-    };
-  }, [active?.resource_id, labFallbackFullscreen]);
-
-  useEffect(() => {
-    if (!labFallbackFullscreen) return;
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setLabFallbackFullscreen(false); setLabFullscreen(false); }
-    };
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
-  }, [labFallbackFullscreen]);
-
-  const toggleLabFullscreen = async () => {
-    const shell = labShellRef.current;
-    const documentWithWebkit = document as Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
-    const activeFullscreen = document.fullscreenElement ?? documentWithWebkit.webkitFullscreenElement ?? null;
-    if (activeFullscreen === shell) {
-      await (document.exitFullscreen?.() ?? documentWithWebkit.webkitExitFullscreen?.() ?? Promise.resolve()).catch(() => {});
-      setLabFullscreen(false);
-      return;
-    }
-    if (labFallbackFullscreen) { setLabFallbackFullscreen(false); setLabFullscreen(false); return; }
-    const target = shell as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> | void }) | null;
-    const request = target?.requestFullscreen ?? target?.webkitRequestFullscreen;
-    if (!target || !request) { setLabFallbackFullscreen(true); setLabFullscreen(true); return; }
-    try { await request.call(target); setLabFullscreen(true); }
-    catch { setLabFallbackFullscreen(true); setLabFullscreen(true); }
-  };
-
   const resetDetail = () => {
     setContent(null); setQuiz(null); setQuizResult(null); setQuizFeedback({}); setCards([]); setAnswers([]); setQuestionIndex(0);
-    setLabFullscreen(false); setLabFallbackFullscreen(false); setAllowSharedExternalResources(false); setNotice("");
+    setNotice("");
   };
 
   const open = async (item: IncomingLearningShare) => {
@@ -256,7 +215,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
         {revealed && <div className="shared-ratings">{(["again","hard","good","easy"] as const).map(r => <button disabled={busy} key={r} onClick={() => void rate(r)}>{({ again: "Chưa nhớ", hard: "Khó", good: "Đã nhớ", easy: "Dễ" })[r]}</button>)}</div>}
       </div> : <p>Bộ thẻ chưa có thẻ.</p>)}
 
-      {active.kind === "lab" && <><p>Lab chỉ tải phiên bản mới khi bạn mở lại. Chuyển vào/ra toàn màn hình không tải lại mô phỏng.</p><div ref={labShellRef} className={`shared-lab-shell ${labFallbackFullscreen ? "shared-lab-fallback-fullscreen" : ""}`}><div className="shared-lab-toolbar"><span>Lab tương tác</span><button type="button" className="secondary-button" onClick={() => void toggleLabFullscreen()}>{labFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>} {labFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}</button></div>{content?.allow_external_resources === true && !allowSharedExternalResources ? <div className="shared-lab-external-consent" role="note"><p>Lab này tải thư viện từ CDN: unpkg, jsDelivr, cdn.tailwindcss.com và cdnjs. API/Gemini bị chặn; localStorage chỉ lưu tạm trong phiên và không đọc được dữ liệu MindCanvas. Chỉ tiếp tục nếu bạn tin cậy nội dung được chia sẻ.</p><button type="button" className="primary-button" onClick={() => setAllowSharedExternalResources(true)}>Cho phép tải thư viện và chạy Lab</button></div> : <iframe className="shared-lab-frame" title={active.title} sandbox="allow-scripts" srcDoc={labSandboxDocument(String(content?.program_html ?? ""), { allowExternalResources: content?.allow_external_resources === true && allowSharedExternalResources })}/>}</div></>}
+      {active.kind === "lab" && <LabViewer key={active.resource_id} frameClassName="shared-lab-frame" html={String(content?.program_html ?? "")} title={active.title} allowExternalResources={content?.allow_external_resources === true} viewerConfig={cleanLabViewer(content?.viewer_config)}/>}
       {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small><button type="button" className="secondary-button" disabled={busy} onClick={() => void downloadOriginal(active.resource_id)}>Tải bản gốc</button></div></div>}
     </div> : <>
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}
