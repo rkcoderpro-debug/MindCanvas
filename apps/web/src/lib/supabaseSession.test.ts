@@ -38,4 +38,13 @@ describe("signOut session marker", () => {
     await expect(signOut()).rejects.toBe(failure);
     expect(localStorage.getItem(LAST_AUTH_USER_KEY)).toBe("user-a");
   });
+
+  it("restores the remembered account when sign-out throws a network error", async () => {
+    const failure = new Error("network unavailable");
+    mocked.signOut.mockRejectedValue(failure);
+    localStorage.setItem(LAST_AUTH_USER_KEY, "user-a");
+    const { signOut } = await import("./supabase");
+    await expect(signOut()).rejects.toBe(failure);
+    expect(localStorage.getItem(LAST_AUTH_USER_KEY)).toBe("user-a");
+  });
 });

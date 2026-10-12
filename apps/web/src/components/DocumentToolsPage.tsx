@@ -9,6 +9,7 @@ import type { AccountPlan } from "../lib/account";
 import { emitGuideAction } from "../lib/featureGuides";
 import { buildDocxPackage } from "../lib/docxModel";
 import { LearningShareButton } from "./LearningShareDialog";
+import { useLanguage } from "../lib/i18n";
 
 type Props = { owner: string | null; documents: UploadedDocument[]; onDocumentsChanged: () => void; accountPlan?: AccountPlan; onBack?: () => void };
 type ToolTab = "all" | DocumentKind;
@@ -37,6 +38,7 @@ function documentIcon(kind: DocumentKind) {
  * viewer/annotation surface for every supported file type.
  */
 export default function DocumentToolsPage({ owner, documents, onDocumentsChanged, accountPlan, onBack }: Props) {
+  const { language, t } = useLanguage();
   const [tab, setTab] = useState<ToolTab>("all");
   const [selected, setSelected] = useState<UploadedDocument | null>(null);
   const [query, setQuery] = useState("");
@@ -126,14 +128,14 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
       <div className="document-tools-header-leading">
         <button className="text-button document-tools-back" onClick={onBack} aria-label="Quay lại Học tập"><ArrowLeft size={16}/><span>Học tập</span></button>
         <span className="document-tools-header-divider" aria-hidden="true"/>
-        <div className="document-tools-heading-inline"><span className="document-tools-heading-icon"><Wrench size={17}/></span><div><strong>Thư viện tài liệu</strong><small><HardDrive size={12}/> Thiết bị{owner ? " và cloud" : ""}</small></div></div>
+        <div className="document-tools-heading-inline"><span className="document-tools-heading-icon"><Wrench size={17}/></span><div><strong>{language === "en" ? t("documentViewer") : "Thư viện tài liệu"}</strong><small><HardDrive size={12}/> Thiết bị{owner ? " và cloud" : ""}</small></div></div>
       </div>
       <div className="document-tools-header-actions">
         <div className="document-tools-tabs" role="tablist" aria-label="Loại tài liệu">
           {filterTabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} data-tool-tab={id} onClick={() => { setTab(id); setSelected(current => current && (id === "all" || current.kind === id) ? current : null); emitGuideAction(`tools:filter:${id}`); }}><Icon size={16}/><span>{label}</span></button>)}
         </div>
         <input ref={input} hidden type="file" accept={DOCUMENT_ACCEPT} onChange={event => { void upload(event.target.files?.[0]); event.currentTarget.value = ""; }}/>
-        <button className="primary-button document-tools-upload" data-help-id="tools-upload" disabled={uploading} onClick={() => input.current?.click()}><Upload size={16}/><span>{uploading ? "Đang tải…" : "Tải tài liệu"}</span></button>
+        <button className="primary-button document-tools-upload" data-help-id="tools-upload" disabled={uploading} onClick={() => input.current?.click()}><Upload size={16}/><span>{uploading ? (language === "en" ? "Uploading…" : "Đang tải…") : (language === "en" ? "Upload document" : "Tải tài liệu")}</span></button>
       </div>
     </header>
     {error && <p className="form-error document-tools-error" role="alert">{error}</p>}{notice && <p className="lab-notice document-tools-error" role="status">{notice}</p>}
@@ -149,7 +151,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
         </>}
         {libraryCollapsed && <span className="document-library-collapsed-label" aria-hidden="true">{tab.toUpperCase()}</span>}
       </aside>
-      <main className="document-tool-workspace">{selected ? <><div className="document-selected-actions">{selected.savedFrom && <small className="learning-copy-provenance">Đã lưu từ {selected.savedFrom.ownerName} · {selected.savedFrom.title}</small>}<div className="actions">{owner && (cloudFiles.some(row => row.id === selected.id) ? <LearningShareButton kind="document" id={selected.id} title={selected.name} plan={accountPlan} available/> : <button className="secondary-button" disabled={syncingSelected} onClick={() => void publishSelected()}><Upload size={15}/>{syncingSelected ? "Đang tải lên…" : "Lưu lên cloud để chia sẻ"}</button>)}</div></div><DocumentViewer source={selected} dedicated={selected.kind === "pdf"} onReady={detail => emitGuideAction("tools:viewer-ready", { ...detail, documentId: selected.id, kind: selected.kind })}/></> : <div className="tool-empty-state"><SelectedIcon size={38}/><h2>Chọn tài liệu để xem</h2><p>PDF có thể vẽ và xuất bản sao; DOCX, PPTX và XLSX được xem trong trình xem tương ứng. Bản gốc trong thư viện không bị thay đổi.</p></div>}</main>
+      <main className="document-tool-workspace">{selected ? <><div className="document-selected-actions">{selected.savedFrom && <small className="learning-copy-provenance">Đã lưu từ {selected.savedFrom.ownerName} · {selected.savedFrom.title}</small>}<div className="actions">{owner && (cloudFiles.some(row => row.id === selected.id) ? <LearningShareButton kind="document" id={selected.id} title={selected.name} plan={accountPlan} available/> : <button className="secondary-button" disabled={syncingSelected} onClick={() => void publishSelected()}><Upload size={15}/>{syncingSelected ? "Đang tải lên…" : "Lưu lên cloud để chia sẻ"}</button>)}</div></div><DocumentViewer source={selected} dedicated={selected.kind === "pdf"} onReady={detail => emitGuideAction("tools:viewer-ready", { ...detail, documentId: selected.id, kind: selected.kind })}/></> : <div className="tool-empty-state"><SelectedIcon size={38}/><h2>{language === "en" ? "Choose a document to view" : "Chọn tài liệu để xem"}</h2><p>PDF có thể vẽ và xuất bản sao; DOCX, PPTX và XLSX được xem trong trình xem tương ứng. Bản gốc trong thư viện không bị thay đổi.</p></div>}</main>
     </div>
   </section>;
 }

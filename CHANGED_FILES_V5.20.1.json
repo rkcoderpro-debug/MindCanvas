@@ -1,0 +1,156 @@
+{
+  "version": "5.20.1",
+  "baseVersion": "5.20.0",
+  "baseArchiveName": "mindcanvas-v1 (4).zip",
+  "baseArchiveSha256": "4e5062905ed4ad4bfbe1de15230b0cc0a102885e8f6d148afc0114497f87b39d",
+  "extractionRoot": "Project root containing package.json, apps and supabase; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.20.1.md",
+      "change": "added",
+      "sha256": "e6463de644c2c2ffa838654bd53da7472c1d92e7936c74850cfc4487b4dbd3af",
+      "bytes": 4814
+    },
+    {
+      "path": "RELEASE_V5.20.1.md",
+      "change": "added",
+      "sha256": "0112f55aa40323324803eadf1267888b5c13609c855f17ed657703b980feb746",
+      "bytes": 3375
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "sha256": "eb3a1cdc6bb5b9a18dafe1ab3133293af50f54eb35098c95d5608240df780c45",
+      "bytes": 813
+    },
+    {
+      "path": "apps/server/src/appVersion.ts",
+      "change": "added",
+      "sha256": "348a2f30f850512e3a907c06afa2dd8615a771025dd4eddc8c1107b876bfee64",
+      "bytes": 317
+    },
+    {
+      "path": "apps/server/src/config.ts",
+      "change": "modified",
+      "sha256": "2eec87740d34ac4323041a7ae7bf400a228fb33ae8cb9929be93fae956bf2550",
+      "bytes": 2161
+    },
+    {
+      "path": "apps/server/src/health.ts",
+      "change": "added",
+      "sha256": "30a1149834cbdd14ef846a54d25b0935a30e85844a658ebed7213d7cc323a59f",
+      "bytes": 489
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "change": "modified",
+      "sha256": "a124a45a4906d0b991e9456a1e94f96a3f6fa4f684a59b3fd893ff63d271a462",
+      "bytes": 15535
+    },
+    {
+      "path": "apps/server/tests/config.test.ts",
+      "change": "added",
+      "sha256": "8da1b9b47babf9238df6dd33707b298e8a76f9de948f29fb0cc997eea4b4e886",
+      "bytes": 1604
+    },
+    {
+      "path": "apps/server/tests/health.test.ts",
+      "change": "added",
+      "sha256": "18470c04d577966dd44bd6d3d9d9a76cfe4cfbb7ef0544b1329d4b1572bdf7cf",
+      "bytes": 775
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "sha256": "fb49cda9a01bf1eb72cd1357fd1835766d42e9738de9810e3775dfffe29d9a02",
+      "bytes": 1021
+    },
+    {
+      "path": "apps/web/public/sw.js",
+      "change": "modified",
+      "sha256": "25afb02bd8a7d9e85a583cbbebdb9f059029a7d273ddb774fb1bb02c04d5709e",
+      "bytes": 2828
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "change": "modified",
+      "sha256": "be0889bf20912a6ebda9d29f9c7b25cb27098735eb9bbf50ae7db1e2ed98bbeb",
+      "bytes": 56809
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "change": "modified",
+      "sha256": "bbb6f8f3b7f84c0f7871ca7466fdfbb5a2540afbe0bc7ac3569067a4d4277e6d",
+      "bytes": 12948
+    },
+    {
+      "path": "apps/web/src/lib/documentStore.ts",
+      "change": "modified",
+      "sha256": "0fcf5b7faa41bf4095ec64afa3cd99855f879b8346a6e38bbaf521f170fdd9e3",
+      "bytes": 7127
+    },
+    {
+      "path": "apps/web/src/lib/serviceWorker.test.ts",
+      "change": "added",
+      "sha256": "eb898c593bcad1b5b2dc21a0be605392b81bb4a92379d93e8450d7d91384d6a1",
+      "bytes": 7630
+    },
+    {
+      "path": "apps/web/src/lib/supabase.ts",
+      "change": "modified",
+      "sha256": "c2fff83eb50688aaf0fcb1d43bda53c84e751a38d39a5e29477edefd35ce67d3",
+      "bytes": 11369
+    },
+    {
+      "path": "apps/web/src/lib/supabaseConfig.test.ts",
+      "change": "added",
+      "sha256": "da281b255400f3827a62ae4c3926b4209a15b974af0271dfd5b34810c95eeeb2",
+      "bytes": 1697
+    },
+    {
+      "path": "apps/web/src/lib/supabaseSession.test.ts",
+      "change": "modified",
+      "sha256": "83cc58e29599188e27013684483c6331a3fdc0cc52819f68cc8539033b40d306",
+      "bytes": 1984
+    },
+    {
+      "path": "apps/web/vite.config.ts",
+      "change": "modified",
+      "sha256": "aa4a13a5c359f53bdca3ca55c7c2aa86d394d69994546364df7582724fe98d60",
+      "bytes": 1183
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "sha256": "ab487625d63802f8d95197158a5cc3108897df6b3553d1dcd86bbd5c44bab94c",
+      "bytes": 181374
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "sha256": "f9b3fc4108b6da61f9f413ca7b3100c1c674ca4f13751a74293641a2d3e225ba",
+      "bytes": 708
+    }
+  ],
+  "deletedFiles": [
+    "supabase/migrations/0018_v4_9_learning_shares_FIXED.sql"
+  ],
+  "sqlMigrationsToApply": [],
+  "applyInstructions": "See RELEASE_V5.20.1.md. ZIP overwrite does not remove deletedFiles. Keep the canonical 0018, notifications 0031 and Lab 0032.",
+  "verification": {
+    "web": {
+      "testFilesPassed": 72,
+      "testsPassed": 474,
+      "testsFailed": 0
+    },
+    "server": {
+      "testsPassed": 54,
+      "testsFailed": 0
+    },
+    "typecheck": "passed",
+    "serverBuild": "passed",
+    "webBuild": "passed with temporary preserveSymlinks override for sandbox native realpath restriction",
+    "limitations": "See QA_V5.20.1.md; browser, real Supabase, HTTP health and production were not verified."
+  },
+  "manifestIncludesItself": false
+}

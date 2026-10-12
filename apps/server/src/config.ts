@@ -36,5 +36,5 @@ const envSchema = z.object({
 });
 
 export const config = envSchema.parse(process.env);
-export const supabaseKey = config.SUPABASE_PUBLISHABLE_KEY ?? config.SUPABASE_ANON_KEY;
+export const supabaseKey = config.SUPABASE_PUBLISHABLE_KEY?.trim() || config.SUPABASE_ANON_KEY?.trim() || undefined;
 export const hasSupabase = Boolean(config.SUPABASE_URL && supabaseKey);

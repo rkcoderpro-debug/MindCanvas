@@ -1,5 +1,5 @@
-// Refresh the installed app shell for this release.
-const CACHE_NAME = "mindcanvas-shell-v5.18.0";
+// Vite injects the web package version when building the deployable worker.
+const CACHE_NAME = "mindcanvas-shell-v__APP_VERSION__";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/mindcanvas-192.png", "/icons/mindcanvas-512.png", "/icons/mindcanvas-maskable-512.png"];
 
 async function cacheAppShell() {
@@ -42,18 +42,20 @@ self.addEventListener("fetch", event => {
         const copy = response.clone();
         try {
           const cache = await caches.open(CACHE_NAME);
-          await cache.put("/", copy);
+          if (response.ok) await cache.put("/", copy);
         } catch { /* A full cache must not replace a valid network response. */ }
         return response;
       } catch {
-        return await caches.match("/") || Response.error();
+        const cache = await caches.open(CACHE_NAME).catch(() => undefined);
+        return await cache?.match("/").catch(() => undefined) || Response.error();
       }
     })());
     return;
   }
 
   event.respondWith((async () => {
-    const cached = await caches.match(request);
+    const cache = await caches.open(CACHE_NAME).catch(() => undefined);
+    const cached = await cache?.match(request).catch(() => undefined);
     if (cached) return cached;
     const response = await fetch(request);
     if (response.ok) {
@@ -61,8 +63,7 @@ self.addEventListener("fetch", event => {
       // consuming the original body, a delayed response.clone() throws.
       const copy = response.clone();
       try {
-        const cache = await caches.open(CACHE_NAME);
-        await cache.put(request, copy);
+        await cache?.put(request, copy);
       } catch { /* Continue with the network response if cache storage is full. */ }
     }
     return response;

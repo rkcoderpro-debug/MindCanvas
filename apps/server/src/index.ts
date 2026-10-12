@@ -3,6 +3,7 @@ import express from "express";
 import multer from "multer";
 import { z } from "zod";
 import { config } from "./config.js";
+import { getHealthStatus } from "./health.js";
 import { requireAdmin, requireUser } from "./auth.js";
 import { assignPlan, commitAiUsage, enforceQuota, getAccountPlan, getAdminSummary, getAdminUserDetail, getSubscriptionHistory, listAdminUsers, PlanLimitError, recordUsage, releaseAiUsage, reserveAiUsage, type AiQuotaMode, type PlanId } from "./account.js";
 import { extractDocument, UnsupportedDocumentError } from "./document.js";
@@ -18,15 +19,7 @@ import { aiScheduler } from "./aiScheduler.js";
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
 app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use(express.json({ limit: "1mb" }));
-app.get("/api/health", (_req, res) => res.json({
-  ok: true,
-  mode: "server",
-  release: "5.11.4",
-  ai: "gemini",
-  aiConfigured: Boolean(config.GEMINI_API_KEY),
-  aiModelCount: (config.GEMINI_MODELS ?? config.GEMINI_MODEL).split(",").filter(Boolean).length,
-  aiCapacity: config.AI_MAX_CONCURRENT,
-}));
+app.get("/api/health", (_req, res) => res.json(getHealthStatus()));
 
 app.get("/api/account/plan", requireUser, async (req, res) => {
   try { return res.json(await getAccountPlan(req.userId!)); }

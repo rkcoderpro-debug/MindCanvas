@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ?? (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
+const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim()
+  || (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 export const supabase: SupabaseClient | null = url && anonKey ? createClient(url, anonKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -133,9 +134,22 @@ export async function signOut() {
   if (!supabase) return;
   // The account menu represents this browser session. Do not revoke the
   // user's other devices when a local canvas save is being recovered.
-  const { error } = await supabase.auth.signOut({ scope: "local" });
-  if (error) throw error;
-  try { localStorage.removeItem(LAST_AUTH_USER_KEY); } catch {}
+  let rememberedUser: string | null = null;
+  try {
+    rememberedUser = localStorage.getItem(LAST_AUTH_USER_KEY);
+    // Supabase may emit SIGNED_OUT before its promise resolves. Clear the
+    // marker first so the auth listener does not enter session recovery.
+    localStorage.removeItem(LAST_AUTH_USER_KEY);
+  } catch { /* storage is optional */ }
+  try {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) throw error;
+  } catch (error) {
+    try {
+      if (rememberedUser && !localStorage.getItem(LAST_AUTH_USER_KEY)) localStorage.setItem(LAST_AUTH_USER_KEY, rememberedUser);
+    } catch { /* preserve the original sign-out error */ }
+    throw error;
+  }
 }
 
 export async function loadLatestBoardNote() {
