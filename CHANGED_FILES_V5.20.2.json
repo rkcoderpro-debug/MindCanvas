@@ -1,0 +1,99 @@
+{
+  "version": "5.20.2",
+  "baseVersion": "5.20.1",
+  "extractionRoot": "Project root containing package.json and apps; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.20.2.md",
+      "change": "added",
+      "sha256": "0a5d89f53fc12cdd0455e75f5e14c13b78333c2f64c1ba3dd673f3de6291b91d",
+      "bytes": 3731
+    },
+    {
+      "path": "RELEASE_V5.20.2.md",
+      "change": "added",
+      "sha256": "f003199164b65658424e63b7813198bd9d8a1d0afd07bd4360dae817debf0c35",
+      "bytes": 3411
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "sha256": "3d785ec83c17ddebf72b3e308bf6d099bd58a0c8a3276c1dd3b8c1507f47ba3b",
+      "bytes": 813
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "sha256": "3d3b0825c135fa751be10dcf0dead9394a57b36ebd27b0eb1d139f6fd9d6276c",
+      "bytes": 1050
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "change": "modified",
+      "sha256": "7ed81426f0ff4b46301f75ea093b88d583a5c0af43eae8f7efad4ca9164efe29",
+      "bytes": 35515
+    },
+    {
+      "path": "apps/web/src/components/DocxViewer.test.tsx",
+      "change": "added",
+      "sha256": "879cc746cd3859294e42f6d1f4e3546137f3b1ec87b164414e54ca324db5e17a",
+      "bytes": 4062
+    },
+    {
+      "path": "apps/web/src/components/DocxViewer.tsx",
+      "change": "added",
+      "sha256": "c8740fd437dcd98dda0e22b0c7767268016bc837c677ad249e171c99428a86e9",
+      "bytes": 5967
+    },
+    {
+      "path": "apps/web/src/lib/docxView.test.ts",
+      "change": "added",
+      "sha256": "06c66f96e301c110a07606fb75b6bfcd47a99327196553d72c1954650552cf43",
+      "bytes": 7448
+    },
+    {
+      "path": "apps/web/src/lib/docxView.ts",
+      "change": "added",
+      "sha256": "987903cb50a057e47d32a52d7442f471abb8b8b81b53e4c23fb797d3bf8e3070",
+      "bytes": 9216
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "change": "modified",
+      "sha256": "f9e982a0cb0e1e6e6ad3927f5d539374123349d5dcd81f9be7c841515c5cb5d5",
+      "bytes": 117133
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "sha256": "38cca51aacc040169974efed1db72cfa3e7456aca0ec1d1f45456978dffe6938",
+      "bytes": 439287
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "sha256": "c8e347a999d92b5fa0d18d1751d2ed3d95adb1440b09eeadfdfe45842f22b590",
+      "bytes": 181769
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "sha256": "58adbefa506c884404e00b7a0dedbd3d8569dc988594f37e20be434a9fd1604c",
+      "bytes": 708
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "applyInstructions": "See RELEASE_V5.20.2.md; requires v5.20.1 and npm ci.",
+  "verification": {
+    "webTestFiles": 74,
+    "webTestsPassed": 485,
+    "serverTestsPassed": 54,
+    "docxTestsAfterFinalFooterAdjustment": 11,
+    "typecheck": "passed",
+    "webBuild": "passed with temporary sandbox override",
+    "serverBuild": "passed",
+    "limitations": "See QA_V5.20.2.md; real browser, Word page fidelity, iPad and clean online npm ci not verified."
+  },
+  "manifestIncludesItself": false
+}

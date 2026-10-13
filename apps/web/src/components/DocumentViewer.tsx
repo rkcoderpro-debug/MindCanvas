@@ -6,6 +6,7 @@ import { PDFDocument, rgb } from "pdf-lib";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { annotationMapsEqual, cloneAnnotationMap, eraseAnnotationStrokes, type AnnotationStroke, type AnnotationTool } from "../lib/documentAnnotations";
 import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
+import DocxViewer from "./DocxViewer";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type ViewerReadyDetail = { sessionId: string; documentId?: string; kind: DocumentKind };
@@ -67,13 +68,7 @@ function OfficeViewer({ source, onReady }: { source: Source; onReady?: () => voi
     void (async () => {
       try {
         const bytes = bytesFromDataUrl(source.dataUrl);
-        if (source.kind === "docx") {
-          const mammoth = await import("mammoth");
-          const arrayBuffer = new ArrayBuffer(bytes.byteLength);
-          new Uint8Array(arrayBuffer).set(bytes);
-          const result = await mammoth.convertToHtml({ arrayBuffer });
-          if (alive) { setHtml(sanitizeOfficeHtml(result.value)); onReady?.(); }
-        } else if (source.kind === "xlsx") {
+        if (source.kind === "xlsx") {
           const XLSX = await import("xlsx");
           const workbook = XLSX.read(bytes, { type: "array" });
           if (alive) { setSheets(workbook.SheetNames); setHtml(workbook.SheetNames.length ? sanitizeOfficeHtml(XLSX.utils.sheet_to_html(workbook.Sheets[workbook.SheetNames[0]])) : "<p>Không có trang tính.</p>"); onReady?.(); }
@@ -544,7 +539,8 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
             </>
           )}
         </div>
-      ) : <OfficeViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })} />}
+      ) : kind === "docx" ? <DocxViewer dataUrl={source.dataUrl} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
+        : <OfficeViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })} />}
     </section>
   );
 }

@@ -3889,6 +3889,19 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .document-pager button { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); color: var(--text); }
 .document-pager button:disabled { opacity: .45; }
 .document-loading, .document-error { display: grid; place-items: center; gap: 8px; padding: 30px; color: var(--muted); text-align: center; }
+.docx-document-viewer { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: 100%; overflow: hidden; background: #e5e7eb; }
+.docx-document-viewer.has-layout-notice { grid-template-rows: auto auto minmax(0, 1fr); }
+.docx-viewer-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface-raised); color: var(--text); border-bottom: 1px solid var(--line); }
+.docx-page-control, .docx-zoom-control { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.docx-viewer-toolbar button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 32px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.docx-viewer-toolbar button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.docx-viewer-toolbar button:disabled { opacity: .45; cursor: default; }
+.docx-viewer-toolbar span { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.docx-document-viewport { min-height: 0; overflow: auto; padding: 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.docx-scaled-paper { position: relative; margin: 0 auto; }
+.docx-scaled-paper iframe { position: absolute; top: 0; left: 0; display: block; border: 0; background: #e5e7eb; }
+.docx-layout-notice { margin: 0; padding: 8px 12px; color: var(--muted); background: var(--surface); font-size: 12px; }
+@media (max-width: 700px) { .docx-viewer-toolbar { padding: 6px; gap: 6px; } .docx-document-viewport { padding: 6px; } .docx-zoom-control { gap: 4px; } }
 .office-html { overflow: auto; padding: 18px; background: var(--surface); line-height: 1.5; }
 .office-html table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .office-html td, .office-html th { padding: 7px 9px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
