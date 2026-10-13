@@ -1,0 +1,156 @@
+{
+  "version": "5.21.0",
+  "baseVersion": "5.20.1",
+  "alsoCompatibleWith": [
+    "5.20.2"
+  ],
+  "extractionRoot": "Project root containing package.json and apps; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.21.0.md",
+      "change": "added",
+      "sha256": "253a22c6916db8ef3d9d2beafc6a0b542017c524548c38fd2f83ea2b54c40dae",
+      "bytes": 5285
+    },
+    {
+      "path": "RELEASE_V5.21.0.md",
+      "change": "added",
+      "sha256": "c2a0662cf6c425e4bcf8fe14668a983db8b523c562381d6be4e0ddfaac9fca6a",
+      "bytes": 4185
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "sha256": "7bacc22560bcb8241801db5b0aae71de69bf50a2acf93a5c2182ce00a82e29e7",
+      "bytes": 813
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "sha256": "ff95f0f4c55afa9d27dba31e4fd3bca786f8099478323bc4b29ceb3e8f8ccd24",
+      "bytes": 1050
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "change": "modified",
+      "sha256": "7ed81426f0ff4b46301f75ea093b88d583a5c0af43eae8f7efad4ca9164efe29",
+      "bytes": 35515
+    },
+    {
+      "path": "apps/web/src/components/DocxViewer.test.tsx",
+      "change": "added",
+      "sha256": "879cc746cd3859294e42f6d1f4e3546137f3b1ec87b164414e54ca324db5e17a",
+      "bytes": 4062
+    },
+    {
+      "path": "apps/web/src/components/DocxViewer.tsx",
+      "change": "added",
+      "sha256": "c8740fd437dcd98dda0e22b0c7767268016bc837c677ad249e171c99428a86e9",
+      "bytes": 5967
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.review.test.tsx",
+      "change": "added",
+      "sha256": "5c4cb4c2dd1ba6f46290e7f6b84e1099efdfc9f84ee21668c9136e394cd8cc1f",
+      "bytes": 6343
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "change": "modified",
+      "sha256": "a99e48139193b83f8d8f0d2e6a15b98fdc27595a81ee26d91add39115763003d",
+      "bytes": 54050
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "change": "modified",
+      "sha256": "ba7a278c5846deb9b8a55281ca363b657c88ce4c780131d918545d6c8aa29dd9",
+      "bytes": 33984
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.recovery.test.tsx",
+      "change": "added",
+      "sha256": "fbfae5685841172b32e1e7a3a930030946f6da813eda48590ee7ff66d80c0cc2",
+      "bytes": 7115
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "change": "modified",
+      "sha256": "59e44777fb46c47f9faca42a3b80db81ea8aadbe7383d215ff56102667124adf",
+      "bytes": 23807
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningTab.test.tsx",
+      "change": "added",
+      "sha256": "621d306532b2c59abe581aa92f20faa0ff3f612946bf5e2c2cfc179489a301be",
+      "bytes": 2495
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningTab.tsx",
+      "change": "added",
+      "sha256": "46689a505097e8efde5938af678519be32bdd07ed00c29fe05bf37303388c947",
+      "bytes": 2015
+    },
+    {
+      "path": "apps/web/src/lib/docxView.test.ts",
+      "change": "added",
+      "sha256": "06c66f96e301c110a07606fb75b6bfcd47a99327196553d72c1954650552cf43",
+      "bytes": 7448
+    },
+    {
+      "path": "apps/web/src/lib/docxView.ts",
+      "change": "added",
+      "sha256": "987903cb50a057e47d32a52d7442f471abb8b8b81b53e4c23fb797d3bf8e3070",
+      "bytes": 9216
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "change": "modified",
+      "sha256": "f9e982a0cb0e1e6e6ad3927f5d539374123349d5dcd81f9be7c841515c5cb5d5",
+      "bytes": 117133
+    },
+    {
+      "path": "apps/web/src/lib/learningShare.ts",
+      "change": "modified",
+      "sha256": "40530eb4625df2801fa5222b85b346efd111863887c211c0c5bb0504f1557a15",
+      "bytes": 18492
+    },
+    {
+      "path": "apps/web/src/lib/sharedInbox.ts",
+      "change": "added",
+      "sha256": "e288103cf22cc12e2719a4a75d14598983a6c6cb6378c997467a554d839765f7",
+      "bytes": 2863
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "sha256": "bace093dd644e18bbe68f3ffec11e75908da7283ac57ed3c4920ead506da365b",
+      "bytes": 439492
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "sha256": "d0684305afd7961ac83bcdb27b46d9556aa4567ccd4224ab02d2b27ac4b8bdac",
+      "bytes": 181769
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "sha256": "e62c7009da1325d7b3369cd58674d9b4633cb632120295197342a978661d955e",
+      "bytes": 708
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "applyInstructions": "See RELEASE_V5.21.0.md. Includes DOCX changes from 5.20.2; run npm ci.",
+  "verification": {
+    "webTestFiles": 77,
+    "webTestsPassed": 504,
+    "serverTestsPassed": 54,
+    "newTests": 19,
+    "typecheck": "passed",
+    "webBuild": "passed with temporary sandbox override",
+    "serverBuild": "passed",
+    "limitations": "See QA_V5.21.0.md. Safari/iPad, real Supabase, production/PWA update and clean online npm ci not verified."
+  },
+  "manifestIncludesItself": false
+}

@@ -1,3 +1,4 @@
+import { normalizeIncomingShares, normalizeCopySources, normalizePendingInvites } from "./sharedInbox";
 import { cleanLabThumbnail, cleanLabViewer, isLabMode } from "./labModes";
 import { getCurrentSession, supabase } from "./supabase";
 import { hashInvitationToken, normalizeInviteEmail } from "./collaboration";
@@ -77,17 +78,17 @@ export async function acceptLearning(token: string) {
 }
 export async function listLearningShares(): Promise<IncomingLearningShare[]> {
   const c = await client();
-  return checked(await c.rpc("list_learning_shares")) as IncomingLearningShare[];
+  return normalizeIncomingShares(checked(await c.rpc("list_learning_shares")));
 }
 export async function listMyLearningCopySources(): Promise<LearningCopySource[]> {
   const c = await client();
-  return checked(await c.rpc("list_my_learning_copy_sources")) as LearningCopySource[];
+  return normalizeCopySources(checked(await c.rpc("list_my_learning_copy_sources")));
 }
 export async function listPendingLearningInvites() {
   const c = await client();
   const session = await getCurrentSession();
   const result = await c.from("learning_share_invitations").select("id,kind,token_hash,expires_at").eq("status", "pending").eq("email", session?.user.email?.toLowerCase() ?? "");
-  return checked(result) as Array<{ id: string; kind: LearningKind; token_hash: string; expires_at: string }>;
+  return normalizePendingInvites(checked(result));
 }
 export async function acceptPendingLearningInvite(hash: string) {
   const c = await client(); checked(await c.rpc("accept_learning_invitation", { p_hash: hash }));

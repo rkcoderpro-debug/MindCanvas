@@ -11,7 +11,7 @@ import { useQuizzes, type QuizStore } from "../hooks/useQuizzes";
 import FlashcardsPage from "./FlashcardsPage";
 import QuizPage from "./QuizPage";
 import LabPage from "./LabPage";
-import SharedLearningPage from "./SharedLearningPage";
+import SharedLearningTab from "./SharedLearningTab";
 import ConnectionsPage from "./ConnectionsPage";
 import ClassroomsPage from "./ClassroomsPage";
 import StudyPlanDialog from "./StudyPlanDialog";
@@ -162,7 +162,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     {tab === "music" && <MusicPage/>}
     {tab === "connections" && <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => setTab("shared")}/>}
     {tab === "classrooms" && <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes}/>}
-    {tab === "shared" && <SharedLearningPage owner={owner} onSaved={kind => {
+    {tab === "shared" && <SharedLearningTab owner={owner} onSaved={kind => {
       if (kind === "quiz") void quizzes.refresh();
       if (kind === "flashcard") void flashcards.refreshDecks();
       if (kind === "document") onDocumentsChanged();

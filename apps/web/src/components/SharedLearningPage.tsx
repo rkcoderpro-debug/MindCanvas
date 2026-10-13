@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Clock3, FileText, Inbox, RefreshCw, RotateCcw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
 import LabViewer from "./LabViewer";
 import { cleanLabViewer } from "../lib/labModes";
 import FormulaText from "./FormulaText";
+import { normalizeIncomingShares, normalizePendingInvites, normalizeCopySources, withInboxTimeout } from "../lib/sharedInbox";
 import {
   acceptPendingLearningInvite,
   finishSharedQuiz,
@@ -52,13 +53,32 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [listLoaded, setListLoaded] = useState(false);
+  const [listError, setListError] = useState("");
+  const [opening, setOpening] = useState(false);
+  const listRequest = useRef(0);
+  const openRequest = useRef(0);
+  const ratingLock = useRef(false);
 
-  const reload = () => {
+  const reload = useCallback(() => {
+    const request = ++listRequest.current;
     if (!owner) return;
-    void Promise.all([listLearningShares(), listPendingLearningInvites(), listMyLearningCopySources()])
-      .then(([shares, invites, copies]) => { setItems(shares); setPending(invites); setSavedCopies(copies); })
-      .catch(e => setError(sharedLearningErrorMessage(e)));
-  };
+    setListLoading(true); setListError("");
+    void Promise.allSettled([
+      withInboxTimeout(Promise.resolve().then(listLearningShares).then(normalizeIncomingShares)),
+      withInboxTimeout(Promise.resolve().then(listPendingLearningInvites).then(normalizePendingInvites)),
+      withInboxTimeout(Promise.resolve().then(listMyLearningCopySources).then(normalizeCopySources)),
+    ]).then(([shares, invites, copies]) => {
+      if (request !== listRequest.current) return;
+      if (shares.status === "fulfilled") { setItems(shares.value); setListLoaded(true); }
+      if (invites.status === "fulfilled") setPending(invites.value);
+      if (copies.status === "fulfilled") setSavedCopies(copies.value);
+      const failures = [shares, invites, copies].flatMap(result => result.status === "rejected" ? [sharedLearningErrorMessage(result.reason)] : []);
+      setListError([...new Set(failures)].join(" "));
+      setListLoading(false);
+    });
+  }, [owner]);
 
   const visibleItems = items
     .filter(item => kind === "all" || item.kind === kind)
@@ -68,7 +88,14 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   const pausedCount = items.filter(item => item.status === "paused").length;
   const removedCount = items.filter(item => item.status === "removed").length;
 
-  useEffect(() => { reload(); }, [owner]);
+  useEffect(() => {
+    setItems([]); setPending([]); setSavedCopies([]); setActive(null);
+    setContent(null); setCards([]); setProgress([]); setQuiz(null); setQuizResult(null);
+    setAnswers([]); setQuizFeedback({}); setError(""); setNotice("");
+    setListLoaded(false); setListError(""); setListLoading(false); setOpening(false);
+    reload();
+    return () => { ++listRequest.current; ++openRequest.current; };
+  }, [reload]);
 
   useEffect(() => {
     if (active?.kind !== "lab" || !content) return;
@@ -86,16 +113,23 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   };
 
   const open = async (item: IncomingLearningShare) => {
+    const request = ++openRequest.current;
     setError(""); resetDetail(); setActive(null);
     if (item.status !== "active") { setError(item.status === "paused" ? "Chủ học liệu đã hạ gói; quyền chia sẻ tạm dừng." : "Học liệu gốc đã bị xóa."); return; }
+    setOpening(true);
     try {
-      const next = await getSharedContent(item.kind, item.resource_id);
+      const next = await withInboxTimeout(getSharedContent(item.kind, item.resource_id));
+      if (request !== openRequest.current) return;
+      if (!next || typeof next !== "object" || Array.isArray(next)) throw new Error("Không thể đọc học liệu. Hãy thử lại.");
       if (item.kind === "flashcard") {
-        const data = await getSharedCards(item.resource_id);
+        const data = await withInboxTimeout(getSharedCards(item.resource_id));
+        if (request !== openRequest.current) return;
+        if (!Array.isArray(data.cards) || !Array.isArray(data.progress)) throw new Error("Dữ liệu thẻ không hợp lệ. Hãy thử lại.");
         setCards(data.cards); setProgress(data.progress); setCardIndex(0); setRevealed(false);
       }
       setContent(next); setActive(item);
-    } catch (e) { setError(sharedLearningErrorMessage(e, "open")); reload(); }
+    } catch (e) { if (request === openRequest.current) { setError(sharedLearningErrorMessage(e, "open")); reload(); } }
+    finally { if (request === openRequest.current) setOpening(false); }
   };
 
   const start = async () => {
@@ -103,6 +137,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
     setBusy(true); setError("");
     try {
       const session = quizRevealMode === "instant" ? await startSharedQuizImmediate(active.resource_id) : await startSharedQuiz(active.resource_id);
+      if (!session || !Array.isArray(session.questions) || !session.questions.length || session.questions.some(question => !question || !Array.isArray(question.options) || question.options.some(option => typeof option !== "string"))) throw new Error("Dữ liệu Quiz không hợp lệ. Hãy thử lại.");
       setQuiz(session); setQuizResult(null); setQuizFeedback({}); setAnswers(session.questions.map(() => null)); setQuestionIndex(0);
     } catch (e) { setError(sharedLearningErrorMessage(e, "start")); }
     finally { setBusy(false); }
@@ -137,14 +172,15 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   };
 
   const rate = async (rating: "again" | "hard" | "good" | "easy") => {
-    const card = cards[cardIndex]; if (!card || !active) return;
+    const card = cards[cardIndex]; if (!card || !active || ratingLock.current) return;
+    ratingLock.current = true;
     setBusy(true); setError("");
     try {
       await rateSharedCard(card.id, rating);
       const next = await getSharedCards(active.resource_id); setProgress(next.progress);
       setRevealed(false); setCardIndex(index => cards.length ? (index + 1) % cards.length : 0);
     } catch (e) { setError(sharedLearningErrorMessage(e, "rate")); }
-    finally { setBusy(false); }
+    finally { ratingLock.current = false; setBusy(false); }
   };
 
   const saveCopy = async (item: IncomingLearningShare) => {
@@ -185,7 +221,9 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   const reviewQuestions = quizResult?.questions ?? [];
 
   return <section className="shared-learning">
-    <header className="shared-learning-header"><div><span className="eyebrow">LEARNING HUB · INBOX</span><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tập trung Quiz, Flashcard, Lab và Tài liệu; lưu bản sao vào thư viện cá nhân để tiếp tục sử dụng.</p></div><button className="secondary-button" onClick={reload}><RefreshCw size={15}/>Làm mới</button></header>
+    <header className="shared-learning-header"><div><span className="eyebrow">LEARNING HUB · INBOX</span><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tập trung Quiz, Flashcard, Lab và Tài liệu; lưu bản sao vào thư viện cá nhân để tiếp tục sử dụng.</p></div><button className="secondary-button" disabled={listLoading} onClick={reload}><RefreshCw size={15}/>Làm mới</button></header>
+    {listError && <div role="alert" className="shared-inbox-error"><p>{listError}</p><button className="secondary-button" disabled={listLoading} onClick={reload}>Thử lại</button></div>}
+    {listLoading && <p role="status">Đang tải học liệu chia sẻ…</p>}{opening && <p role="status">Đang mở học liệu…</p>}
     {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}
     {active ? <div className="shared-learning-detail">
       <button className="secondary-button shared-back-button" onClick={() => { setActive(null); resetDetail(); reload(); }}>← Danh sách</button>
@@ -221,8 +259,8 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}
       <div className="shared-learning-summary" aria-label="Tóm tắt học liệu chia sẻ"><article><Inbox size={18}/><strong>{items.length}</strong><span>Tổng học liệu</span></article><article><Users size={18}/><strong>{activeCount}</strong><span>Đang truy cập</span></article><article><Clock3 size={18}/><strong>{pausedCount + removedCount}</strong><span>Cần kiểm tra</span></article></div>
       <div className="shared-learning-controls"><div className="shared-learning-filters">{(["all","quiz","flashcard","lab","document"] as const).map(x => <button key={x} aria-pressed={kind === x} onClick={() => setKind(x)}>{({ all: "Tất cả", quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu" })[x]}<small>{x === "all" ? items.length : items.filter(item => item.kind === x).length}</small></button>)}</div><label className="shared-learning-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc người chia sẻ…" aria-label="Tìm học liệu được chia sẻ"/></label><label className="shared-learning-sort"><SlidersHorizontal size={15}/><select value={sort} onChange={event => setSort(event.target.value as "updated" | "title")} aria-label="Sắp xếp học liệu"><option value="updated">Mới cập nhật</option><option value="title">Tên A–Z</option></select></label></div>
-      <div className="shared-learning-list">{visibleItems.map(item => { const saved = savedCopies.some(copy => copy.kind === item.kind && copy.source_id === item.resource_id); return <article className={`shared-learning-item status-${item.status}`} key={`${item.kind}:${item.resource_id}`}><div className="shared-learning-item-top"><span className="shared-learning-kind">{({ quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu" })[item.kind]}</span><span className={`shared-learning-status status-${item.status}`}>{item.status === "active" ? "Có quyền truy cập" : item.status === "paused" ? "Tạm dừng" : "Đã gỡ"}</span></div><h3>{item.title ?? "Học liệu đã xóa"}</h3><small>Chia sẻ bởi <strong>{item.owner_name}</strong></small><small>Cập nhật {item.updated_at ? new Date(item.updated_at).toLocaleDateString("vi-VN") : "—"}</small><p>{item.status === "active" ? "Bạn có thể mở và lưu bản sao vào thư viện cá nhân." : item.status === "paused" ? "Chủ học liệu đã tạm dừng quyền truy cập." : "Học liệu gốc không còn khả dụng."}</p><div className="shared-learning-item-actions"><button className="primary-button" disabled={item.status !== "active"} onClick={() => void open(item)}>{item.kind === "quiz" ? "Làm Quiz" : item.kind === "flashcard" ? "Ôn Flashcard" : item.kind === "lab" ? "Chạy Lab" : "Xem tài liệu"}</button><button className="secondary-button" disabled={item.status !== "active" || busy || saved} onClick={() => void saveCopy(item)}><Save size={14}/>{saved ? "Đã lưu" : busy ? "Đang lưu…" : "Lưu vào của tôi"}</button></div></article>; })}</div>
-      {!items.length && <div className="shared-learning-empty"><Inbox size={34}/><h3>Chưa có học liệu được chia sẻ</h3><p>Khi ai đó gửi Quiz, Flashcard, Lab hoặc Tài liệu đến tài khoản này, nội dung sẽ xuất hiện ở đây.</p></div>}
+      <div className="shared-learning-list">{visibleItems.map(item => { const saved = savedCopies.some(copy => copy.kind === item.kind && copy.source_id === item.resource_id); return <article className={`shared-learning-item status-${item.status}`} key={`${item.kind}:${item.resource_id}`}><div className="shared-learning-item-top"><span className="shared-learning-kind">{({ quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu" })[item.kind]}</span><span className={`shared-learning-status status-${item.status}`}>{item.status === "active" ? "Có quyền truy cập" : item.status === "paused" ? "Tạm dừng" : "Đã gỡ"}</span></div><h3>{item.title ?? "Học liệu đã xóa"}</h3><small>Chia sẻ bởi <strong>{item.owner_name}</strong></small><small>Cập nhật {item.updated_at ? new Date(item.updated_at).toLocaleDateString("vi-VN") : "—"}</small><p>{item.status === "active" ? "Bạn có thể mở và lưu bản sao vào thư viện cá nhân." : item.status === "paused" ? "Chủ học liệu đã tạm dừng quyền truy cập." : "Học liệu gốc không còn khả dụng."}</p><div className="shared-learning-item-actions"><button className="primary-button" disabled={item.status !== "active" || opening} onClick={() => void open(item)}>{item.kind === "quiz" ? "Làm Quiz" : item.kind === "flashcard" ? "Ôn Flashcard" : item.kind === "lab" ? "Chạy Lab" : "Xem tài liệu"}</button><button className="secondary-button" disabled={item.status !== "active" || busy || saved} onClick={() => void saveCopy(item)}><Save size={14}/>{saved ? "Đã lưu" : busy ? "Đang lưu…" : "Lưu vào của tôi"}</button></div></article>; })}</div>
+      {!listLoading && listLoaded && !items.length && <div className="shared-learning-empty"><Inbox size={34}/><h3>Chưa có học liệu được chia sẻ</h3><p>Khi ai đó gửi Quiz, Flashcard, Lab hoặc Tài liệu đến tài khoản này, nội dung sẽ xuất hiện ở đây.</p></div>}
       {items.length > 0 && !visibleItems.length && <div className="shared-learning-empty"><Search size={30}/><h3>Không tìm thấy kết quả</h3><p>Thử đổi bộ lọc hoặc từ khóa tìm kiếm.</p></div>}
     </>}
   </section>;
