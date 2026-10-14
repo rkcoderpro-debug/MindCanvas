@@ -1,0 +1,124 @@
+{
+  "version": "5.22.1",
+  "baseVersion": "5.22.0",
+  "extractionRoot": "Project root containing package.json, apps and packages; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.22.1.md",
+      "change": "added",
+      "bytes": 4451,
+      "sha256": "69f873524dcdd2afadfa621d7a87306baa00d5fd88065cbd142477d3f955f566"
+    },
+    {
+      "path": "RELEASE_V5.22.1.md",
+      "change": "added",
+      "bytes": 4811,
+      "sha256": "f109c31037019e4141300c9b1150119dfc55a2fdc99c1e05a3a6427539b3824a"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "e15f037dbbdbfddcc7dbe9183c1bf5eefbf60764312daff0600d69b0464a60d3"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "bfcd649a7de9a83882ae50562b262dc4dc8759c6d87928af58c97c7d4a92381d"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.test.tsx",
+      "change": "modified",
+      "bytes": 17586,
+      "sha256": "e01b6608dbbc7a70c169dd201d6345c7b4f9e163541963f55c33c680044dae0d"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "change": "modified",
+      "bytes": 28180,
+      "sha256": "b9a29f14815430fe20248a55876271dcaf5f5a58eeec28f1d5d7aa6cf15c21b9"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualPanel.tsx",
+      "change": "added",
+      "bytes": 6247,
+      "sha256": "d7f96e3d6de78cfa30b6eaba88bb35d9f4d9bf1c09e2bc915a4dd88472d0638e"
+    },
+    {
+      "path": "apps/web/src/lib/api.ts",
+      "change": "modified",
+      "bytes": 12579,
+      "sha256": "8c1f1eb58a39a071cd9c788a611c14915757fa8348df75b5309425199697e0fe"
+    },
+    {
+      "path": "apps/web/src/lib/examManual.test.ts",
+      "change": "added",
+      "bytes": 5891,
+      "sha256": "77cad4bb89aeb77d39a249973c15b4ad40a1898ff51e59e5f462f800ca6dbf94"
+    },
+    {
+      "path": "apps/web/src/lib/examManual.ts",
+      "change": "added",
+      "bytes": 10894,
+      "sha256": "ef3fcc5f3da9ac0b869eaabbd4463a4eedbc7b0906c3442a57c24d4f1c0f89c4"
+    },
+    {
+      "path": "apps/web/src/lib/examManualSource.test.ts",
+      "change": "added",
+      "bytes": 5123,
+      "sha256": "22d11e6ade1dff69621c7211afb3bc3efe1ef9af4bddd9479248616fe4289884"
+    },
+    {
+      "path": "apps/web/src/lib/examManualSource.ts",
+      "change": "added",
+      "bytes": 7066,
+      "sha256": "89c15f5d9c6eb894c9b56c79df1624793a9d105b4f13cee8b026b92ae6c3b170"
+    },
+    {
+      "path": "apps/web/src/lib/examWorkspace.ts",
+      "change": "modified",
+      "bytes": 5252,
+      "sha256": "7a7cb5c932124b830a1678f6364047f5717c4f4294ad3b8c6ed2709f48edd83e"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "bytes": 445713,
+      "sha256": "b690e220990e82f564e08ee77ea50a75920789f7f43f500438df81a2a33099af"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "710bb7999173ef78ca2173f804ed0de5bf91473de7189654e4c35f02b1439cdc"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "040ab63bdfa73c182fe3b9dfd3d53828cb0137dd2d5fa2b1757f5fa17e52b2a5"
+    },
+    {
+      "path": "packages/shared/src/exams.d.ts",
+      "change": "modified",
+      "bytes": 2627,
+      "sha256": "09bb00883b2742b0e5ddc56b1a194d945a55372cbe9d6867b779df73e4a61eae"
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "newNpmDependencies": [],
+  "applyInstructions": "See RELEASE_V5.22.1.md; overlay v5.22.0 source and use existing build/deployment workflow. Manual import uses the existing Manual usage endpoint.",
+  "verification": {
+    "webTestFiles": 83,
+    "webTestsPassed": 571,
+    "serverTestsPassed": 62,
+    "newWebTests": 34,
+    "typecheck": "passed",
+    "webBuild": "passed with temporary sandbox preserveSymlinks override",
+    "serverBuild": "passed",
+    "limitations": "See QA_V5.22.1.md; real browser/Safari/iPad, physical PDF, live external AI/account quota and production not verified."
+  },
+  "manifestIncludesItself": false
+}

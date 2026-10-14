@@ -72,6 +72,7 @@ export type SavedExam = {
     blueprint: ExamBlueprint;
     draft: ExamDraft;
     quizId?: string;
+    generationMode?: "auto" | "manual";
 };
 export declare const MAX_EXAM_SOURCES = 6;
 export declare const MAX_EXAM_TEXT = 120000;

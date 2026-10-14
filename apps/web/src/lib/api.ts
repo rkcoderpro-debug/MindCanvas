@@ -72,7 +72,7 @@ export function getSubscriptionHistory(signal?: AbortSignal) {
   return accountRequest<{ history: SubscriptionHistoryRecord[] }>("/api/account/subscription-history", { signal });
 }
 
-export function consumeAiManualUsage(requestId = crypto.randomUUID(), signal?: AbortSignal) {
+export function consumeAiManualUsage(requestId: string = crypto.randomUUID(), signal?: AbortSignal) {
   return accountRequest<{ ok: boolean; requestId: string; remaining?: number | null }>("/api/ai/manual/usage/consume", { method: "POST", body: JSON.stringify({ requestId }), signal });
 }
 
