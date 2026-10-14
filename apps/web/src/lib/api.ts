@@ -208,3 +208,16 @@ export async function transformSelection(action: SelectionAiAction, text: string
   if (!response.ok) await responseError(response, `AI HTTP ${response.status}`);
   return response.json() as Promise<SelectionAiResult>;
 }
+
+export async function readExamFile(file: File, signal?: AbortSignal) {
+  const body = new FormData(); body.append("file", file);
+  const response = await fetch(`${apiBase}/api/exams/read-source`, { method: "POST", headers: await authHeaders(), body, signal });
+  if (!response.ok) await responseError(response, "Không thể đọc nguồn đề thi.");
+  return response.json() as Promise<import("@mindcanvas/shared").ExamSource>;
+}
+export function analyzeExamSources(settings: import("@mindcanvas/shared").ExamSettings, sources: import("@mindcanvas/shared").ExamSource[], signal?: AbortSignal) {
+  return accountRequest<{ blueprint: import("@mindcanvas/shared").ExamBlueprint }>("/api/exams/analyze", { method: "POST", body: JSON.stringify({ settings, sources }), signal });
+}
+export function generateExamDraft(settings: import("@mindcanvas/shared").ExamSettings, sources: import("@mindcanvas/shared").ExamSource[], blueprint: import("@mindcanvas/shared").ExamBlueprint, excludedPrompts: string[] = [], signal?: AbortSignal) {
+  return accountRequest<{ draft: import("@mindcanvas/shared").ExamDraft }>("/api/exams/generate", { method: "POST", body: JSON.stringify({ settings, sources, blueprint, excludedPrompts }), signal });
+}

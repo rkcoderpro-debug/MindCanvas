@@ -1,0 +1,186 @@
+{
+  "version": "5.22.0",
+  "baseVersion": "5.21.0",
+  "extractionRoot": "Project root containing package.json, apps and packages; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.22.0.md",
+      "change": "added",
+      "bytes": 6157,
+      "sha256": "3874142a15f015d93f95ae44403c29c3ee10446544daef8c70fe8857224efdcf"
+    },
+    {
+      "path": "RELEASE_V5.22.0.md",
+      "change": "added",
+      "bytes": 5384,
+      "sha256": "04d959184a609c336556b0562f26abcd050c7cb3a35597d7d26018056eba3c17"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "15d66cae3a2169946faa7a4345cd88b9fb2aa40beff4994cb0764de7be404df3"
+    },
+    {
+      "path": "apps/server/src/exams.ts",
+      "change": "added",
+      "bytes": 10251,
+      "sha256": "db0cebdc1fa2bd619485c1e78ec957c1d1f67a63145db323e5ef7ae1e1f770be"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "change": "modified",
+      "bytes": 17397,
+      "sha256": "6b84e2698671fe9cd78cc23c85cf65aa222adb48693d97cf703f2f86fb2f518b"
+    },
+    {
+      "path": "apps/server/tests/exams.test.ts",
+      "change": "added",
+      "bytes": 4824,
+      "sha256": "d76c82bcbe1a8c69d5cd0a4d9d3c2b09f75fff5ac36b2d34d6f1e2bd0d737532"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "f2440770760b002db5db781c9d3ad1ac15b119481a180c96e6e1cf17dbf09f41"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.test.tsx",
+      "change": "added",
+      "bytes": 9090,
+      "sha256": "f5ba5d18e96cca404864d2df6f711a403086d8ecae3aa6ee94bc91ed240fe3d6"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "change": "added",
+      "bytes": 22028,
+      "sha256": "b227261f625fa8b5ed439d9f10e8218c22f01abe532b87477d3bd00537161869"
+    },
+    {
+      "path": "apps/web/src/components/ExamDraftEditor.tsx",
+      "change": "added",
+      "bytes": 3802,
+      "sha256": "07f0f775344e55e4ef85a1c20f667f0ba6d0952def0d4a74a6012f603d830e7c"
+    },
+    {
+      "path": "apps/web/src/components/ExamPaper.tsx",
+      "change": "added",
+      "bytes": 3132,
+      "sha256": "1f5ff4666c9cf20ea31af22d3181cae0dbf4fc9d41161bab5b858469455707a0"
+    },
+    {
+      "path": "apps/web/src/components/ExamPlanEditor.tsx",
+      "change": "added",
+      "bytes": 3724,
+      "sha256": "995b0cdfea8ab506b18aeb00498d5af320d41d686a64eb38a4d936eab5dae6eb"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "change": "modified",
+      "bytes": 34701,
+      "sha256": "c261a7856ca38df09eba20ee85765919ff030895e190dbf6f3fce24161438de7"
+    },
+    {
+      "path": "apps/web/src/lib/api.ts",
+      "change": "modified",
+      "bytes": 12571,
+      "sha256": "9520f2801dacde13f7819625e8c99ec60ec91f7ba79d7902eb7142b4d572f4d0"
+    },
+    {
+      "path": "apps/web/src/lib/examModel.test.ts",
+      "change": "added",
+      "bytes": 3512,
+      "sha256": "3d57fbcd49d1121d672c4901da9e896b3a23823a3de924910852a0ef7749c350"
+    },
+    {
+      "path": "apps/web/src/lib/examPdf.test.tsx",
+      "change": "added",
+      "bytes": 2545,
+      "sha256": "788b04d961df1641b91831d15b6c89f1e9b18630aedf37ce193ae3fd264eab87"
+    },
+    {
+      "path": "apps/web/src/lib/examPdf.tsx",
+      "change": "added",
+      "bytes": 3877,
+      "sha256": "53e98f24d4cdc3e5ce4a59d7af348aff9ab9306a97e8b4a1baa7a4e8f1c2c758"
+    },
+    {
+      "path": "apps/web/src/lib/examStore.test.ts",
+      "change": "added",
+      "bytes": 2561,
+      "sha256": "1962ce2206ee965cb023ee0fa512b2afd0fba0ff7a2241f223db4100cd32626c"
+    },
+    {
+      "path": "apps/web/src/lib/examStore.ts",
+      "change": "added",
+      "bytes": 3203,
+      "sha256": "8907d44083e3ebbd4d6e7aca531c2901b16ba41df8ae53812a9101920c71eae3"
+    },
+    {
+      "path": "apps/web/src/lib/examTestData.ts",
+      "change": "added",
+      "bytes": 2007,
+      "sha256": "2235a2a820c66368eca752817d0ae82598055b1c5798fe5ef5897e01393765dc"
+    },
+    {
+      "path": "apps/web/src/lib/examWorkspace.ts",
+      "change": "added",
+      "bytes": 3328,
+      "sha256": "d26f6a88db3a404cd74e13e434cf45736315109be24ab8b3a6ecbf08bab26e7b"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "bytes": 445407,
+      "sha256": "a7d9945d2afa07fc984b6de297d9533a6da554c7d13dba03b534751aebc6659f"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "fb20f67f5ba5d81fcc500fff338b0d32e0575b1add996e98b26e1979aa8bd4e7"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "31f425235ab07235ce326d6d6abad7c38943d6e31a31d54f847956b318fed1f6"
+    },
+    {
+      "path": "packages/shared/src/exams.d.ts",
+      "change": "added",
+      "bytes": 2587,
+      "sha256": "54be820061fa39f869043edbc10c093cffd69f9ab5f09885ee4062b28a5f739b"
+    },
+    {
+      "path": "packages/shared/src/exams.js",
+      "change": "added",
+      "bytes": 9543,
+      "sha256": "6b773c09fddc0e4a024ae152d20f0d31254442a263722da4be4fd87cb43db61d"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "change": "modified",
+      "bytes": 6354,
+      "sha256": "cdcbec8902d51f0cec84580e67cc13a85d6e5a9e9165338a719fde3646ff4c70"
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "newNpmDependencies": [],
+  "applyInstructions": "See RELEASE_V5.22.0.md; deploy web and backend, retain packages/shared/src runtime. PDF uses browser print-to-PDF.",
+  "verification": {
+    "webTestFiles": 81,
+    "webTestsPassed": 537,
+    "serverTestsPassed": 62,
+    "newWebTests": 33,
+    "newServerTests": 8,
+    "typecheck": "passed",
+    "webBuild": "passed with temporary sandbox preserveSymlinks override",
+    "serverBuild": "passed",
+    "compiledServerSharedRuntime": "passed",
+    "limitations": "See QA_V5.22.0.md. Gemini/Supabase live, real browser/Safari/iPad, physical PDF export/layout and production not verified."
+  },
+  "manifestIncludesItself": false
+}

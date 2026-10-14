@@ -1,6 +1,6 @@
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense, type KeyboardEvent } from "react";
 import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
@@ -11,7 +11,8 @@ import { useQuizzes, type QuizStore } from "../hooks/useQuizzes";
 import FlashcardsPage from "./FlashcardsPage";
 import QuizPage from "./QuizPage";
 import LabPage from "./LabPage";
-import SharedLearningTab from "./SharedLearningTab";
+import SharedLearningTab, { InboxBoundary } from "./SharedLearningTab";
+const ExamBuilderPage = lazy(() => import("./ExamBuilderPage"));
 import ConnectionsPage from "./ConnectionsPage";
 import ClassroomsPage from "./ClassroomsPage";
 import StudyPlanDialog from "./StudyPlanDialog";
@@ -23,7 +24,7 @@ import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 import DocumentToolsPage from "./DocumentToolsPage";
 import type { UploadedDocument } from "../lib/documentStore";
 
-type HubTab = "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "connections" | "classrooms" | "music" | "tools";
+type HubTab = "exams" | "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "connections" | "classrooms" | "music" | "tools";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -112,6 +113,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     { id: "overview", label: t("overview"), icon: Layers3 },
     { id: "flashcards", label: t("flashcards"), icon: BookOpen },
     { id: "quiz", label: t("quiz"), icon: ClipboardList },
+    { id: "exams", label: language === "vi" ? "Tạo đề thi" : "Exam studio", icon: FileText },
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
@@ -138,7 +140,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     pickTab(tabs[next].id);
   };
   const tabGroups: Array<{ title: string; ids: HubTab[] }> = [
-    { title: language === "vi" ? "Học" : "Study", ids: ["overview", "flashcards", "quiz", "lab"] },
+    { title: language === "vi" ? "Học" : "Study", ids: ["overview", "flashcards", "quiz", "exams", "lab"] },
     { title: language === "vi" ? "Tài nguyên" : "Resources", ids: ["tools", "shared"] },
     { title: language === "vi" ? "Lịch học" : "Schedule", ids: ["plan", "progress"] },
     { title: language === "vi" ? "Cộng tác" : "Collaborate", ids: ["connections", "classrooms"] },
@@ -155,6 +157,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
     {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}
     {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}
+    {tab === "exams" && <InboxBoundary key={owner} fallback={<section role="alert"><p>Không thể tải mục tạo đề thi.</p><button className="secondary-button" onClick={() => window.location.reload()}>Tải lại trang</button></section>}><Suspense fallback={<p role="status">Đang tải mục tạo đề thi…</p>}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={() => setTab("quiz")}/></Suspense></InboxBoundary>}
     {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
     {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}

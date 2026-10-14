@@ -239,3 +239,5 @@ export type AIProviderConfig = {
   model: string;
   enabled: boolean;
 };
+
+export * from "./exams.js";

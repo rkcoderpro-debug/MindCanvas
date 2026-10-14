@@ -14,6 +14,8 @@ import { generateQuizWithGemini, MAX_QUIZ_QUESTIONS } from "./quiz.js";
 import { generateSelectionWithGemini, selectionActions, selectionScopeSchema } from "./selection.js";
 import { recommendStudyPlanWithGemini } from "./studyPlan.js";
 import { aiOptionsSchema, mindMapDetailSchema, mindMapOptionsSchema } from "./aiOptions.js";
+import { examQuestionCount, ExamValidationError } from "../../../packages/shared/src/exams.js";
+import { analyzeExam, generateExam, parseExamInput, readExamSource } from "./exams.js";
 import { aiScheduler } from "./aiScheduler.js";
 
 const app = express();
@@ -138,6 +140,31 @@ app.post("/api/documents/upload", requireUser, upload.single("file"), async (req
     if (error instanceof PlanLimitError) return sendAiError(res, error, "Account limit reached.");
     if (error instanceof UnsupportedDocumentError) return res.status(415).json({ error: error.message, code: error.code });
     return res.status(422).json({ error: "Document text extraction failed." });
+  }
+});
+
+app.post("/api/exams/read-source", requireUser, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "A source file is required." });
+  try {
+    await enforceQuota(req.userId!, "storage", req.file.size);
+    const source = await readExamSource(req.file.buffer, req.file.originalname, req.file.mimetype, work => runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, work)));
+    await recordUsage(req.userId!, "document_upload", 1, req.file.size, { source: "exam" });
+    return res.json(source);
+  } catch (error) {
+    if (error instanceof UnsupportedDocumentError) return res.status(415).json({ error: error.message, code: error.code });
+    return sendAiError(res, error, "Could not read exam source.");
+  }
+});
+for (const action of ["analyze", "generate"] as const) app.post(`/api/exams/${action}`, requireUser, async (req, res) => {
+  try {
+    const input = parseExamInput(req.body, action === "generate");
+    if (input.blueprint) await enforceQuota(req.userId!, "quiz", examQuestionCount(input.blueprint));
+    const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, async () => action === "analyze" ? await analyzeExam(input) : await generateExam(input)));
+    await recordUsage(req.userId!, "ai_quiz", 1, 0, { source: "exam", action, format: input.settings.format });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof ExamValidationError) return res.status(400).json({ error: error.message, code: "EXAM_INPUT", retryable: false });
+    return sendAiError(res, error, "Exam AI processing failed.");
   }
 });
 
