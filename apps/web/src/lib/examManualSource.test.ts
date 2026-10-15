@@ -32,12 +32,15 @@ it("prepares image OCR prompt with source identity and no automated OCR", async 
   const source = await readManualExamSource(new File(["image bytes"], "scan.png"), "template");
   expect(source.text).toContain("[UNREADABLE]"); expect(source.warnings).toContain(OCR_WARNING); expect(sourceOcrPrompt(source)).toContain("never guess"); expect(pdf.getDocument).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
 });
-it("packages prompt, text, metadata and exact original bytes with safe paths", async () => {
+it("packages only prompt and exact original bytes with safe paths", async () => {
   const file = new File(["A sufficiently long original learning material."], "../unsafe:notes.txt"), source = await readManualExamSource(file, "material");
   const blob = await manualSourceBundle("Exam prompt", [source], new Map([[source.id, file]])), zip = await JSZip.loadAsync(await readLocalBytes(blob));
   expect(await zip.file("prompt.txt")!.async("text")).toBe("Exam prompt");
-  const entries = JSON.parse(await zip.file("sources.json")!.async("text")); expect(entries[0].sourceId).toBe(source.id);
-  expect(entries[0].originalPath).not.toContain("../"); expect(await zip.file(entries[0].originalPath)!.async("text")).toBe(await new Response(await readLocalBytes(file)).text());
+  const names = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+  expect(names.some(name => /sources|\.json$|README/.test(name))).toBe(false);
+  const originalPath = names.find(name => name.startsWith("originals/"))!;
+  expect(originalPath).not.toContain("../"); expect(await zip.file(originalPath)!.async("text")).toBe(await new Response(await readLocalBytes(file)).text());
+
 });
 it("rejects empty, oversized, unsupported, corrupted and aborted source inputs", async () => {
   await expect(readManualExamSource(new File([], "empty.txt"), "material")).rejects.toThrow(/nội dung/);

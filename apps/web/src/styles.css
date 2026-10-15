@@ -4939,3 +4939,23 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .exam-manual-panel > p { font-size: .88rem; line-height: 1.6; }
 .exam-manual-panel textarea[readonly] { font-family: ui-monospace, monospace; font-size: .78rem; }
 .exam-builder-page .form-error { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* Word and interactive Exam Studio */
+.exam-original-list { padding: 0; list-style: none; }
+.exam-original-list li { padding: .65rem 0; border-bottom: 1px solid var(--border, #d5dce5); overflow-wrap: anywhere; }
+.exam-original-list li span { display: block; font-size: .88rem; }
+.exam-manual-studio input[type=file] { width: 100%; }
+.exam-response-fields { border: 0; padding: .5rem 0; margin: 0; min-width: 0; }
+.exam-response-fields legend { font-size: .85rem; color: #4b5563; }
+.exam-response-fields label { display: grid; gap: .4rem; margin-bottom: .7rem; }
+.exam-response-fields input:not([type=radio]), .exam-response-fields textarea, .exam-submitted-solution input { width: 100%; color: #111827; background: #fff; border: 1px solid #9ca3af; border-radius: 8px; padding: .65rem; box-sizing: border-box; }
+.exam-response-fields .exam-choice { display: flex; align-items: flex-start; gap: .65rem; cursor: pointer; }
+.exam-choice input { margin-top: .3rem; flex-shrink: 0; }
+.exam-response-fields textarea { resize: vertical; }
+.exam-response-fields:disabled { opacity: .85; }
+.exam-submitted-solution { margin-top: 1rem; padding: 1rem; border-radius: 12px; background: #f0f7ff; color: #111827; overflow-wrap: anywhere; }
+.exam-score-summary { background: var(--panel, #edf5ff); padding: 1rem; border-radius: 14px; margin-bottom: 1rem; }
+.exam-runner-toolbar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: var(--panel, #fff); padding: .7rem; border: 1px solid var(--border, #d5dce5); border-radius: 10px; }
+.exam-online-runner .form-error { white-space: pre-line; }
+.exam-manual-studio .docx-document-viewer { height: min(80vh, 1000px); min-height: 400px; }
+@media(max-width: 650px) { .exam-runner-toolbar { flex-wrap: wrap; } .exam-online-runner .exam-paper { padding: 1rem; } }

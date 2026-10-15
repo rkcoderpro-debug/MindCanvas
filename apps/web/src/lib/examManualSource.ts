@@ -57,16 +57,12 @@ export function sourceOcrPrompt(source: ExamSource) {
 export async function manualSourceBundle(prompt: string, sources: ExamSource[], originals: Map<string, File>) {
   const JSZip = (await import("jszip")).default, zip = new JSZip();
   zip.file("prompt.txt", prompt);
-  const entries = [];
   for (let i = 0; i < sources.length; i++) {
-    const source = sources[i], original = originals.get(source.id), safeName = source.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").slice(0, 180) || "source";
-    const textPath = `sources/${i + 1}-${safeName}.txt`; zip.file(textPath, source.text);
-    const originalPath = original ? `originals/${i + 1}-${safeName}` : null;
-    if (original && originalPath) zip.file(originalPath, await readLocalBytes(original));
-    entries.push({ sourceId: source.id, name: source.name, role: source.role, textPath, originalPath, pageCount: source.pageCount ?? null });
+    const source = sources[i], original = originals.get(source.id);
+    if (!original) throw new Error(`Thiếu file gốc ${source.name}. Hãy chọn lại file trước khi tải gói.`);
+    const safeName = original.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "_").slice(0, 220) || "document";
+    zip.file(`originals/${i + 1}/${safeName}`, await readLocalBytes(original));
   }
-  zip.file("sources.json", JSON.stringify(entries, null, 2));
-  zip.file("README.txt", "Send prompt.txt and the selected sources to your external AI. Original files are included only when selected during this session; after reopening the page, reselect originals if necessary. This bundle is AI input, not the exported exam. For scans, use the source OCR prompt first and review the transcription in MindCanvas before generating an exam.");
   return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
 }
 export function downloadManualFile(blob: Blob, name: string) {

@@ -99,79 +99,11 @@ it("does not expose another account's cached draft", async () => {
   await mount("user-b"); expect(host.querySelector(".exam-paper")).toBeNull();
   await mount("user-a"); expect(host.querySelector(".exam-paper")?.textContent).toContain("Practice Exam");
 });
-async function prepareManual(paper = false) {
+it("routes Manual to Word and interactive Studio without the legacy source confirmation UI", async () => {
   await mount(); await set('[aria-label="Chế độ AI đề thi"]', "manual");
-  if (paper) { await set('[aria-label="Hình thức đề"]', "paper"); await set('[aria-label="Vai trò nguồn"]', "template"); }
-  else await set('[aria-label="Số câu Manual"]', "1");
-  await set('[aria-label="Văn bản nguồn"]', examFixture().sources[0].text); await click("Thêm văn bản"); await click("Lấy prompt tạo đề");
-}
-function manualResponse() {
-  const session = loadExamWorkspace("user-a").manual!.session!, example = examFixture(session.settings.format);
-  for (const section of example.draft.sections) for (const question of section.questions) question.references[0].sourceId = session.sources[0].id;
-  return { blueprint: example.blueprint, draft: example.draft };
-}
-async function importManual() { await set('[aria-label="Kết quả AI Manual"]', JSON.stringify(manualResponse())); await click("Nhập kết quả & xem đề"); }
-function noAuto() { expect(api.read).not.toHaveBeenCalled(); expect(api.analyze).not.toHaveBeenCalled(); expect(api.generate).not.toHaveBeenCalled(); }
-it("Manual imports a complete quiz without confirmation, uses Manual quota once and saves the same quiz ID on reimport", async () => {
-  await prepareManual(); expect(host.querySelector('input[type="checkbox"]')).toBeNull(); expect(host.querySelector(".exam-plan-editor")).toBeNull();
-  await set('[aria-label="Kết quả AI Manual"]', JSON.stringify(manualResponse()));
-  await act(async () => { button("Nhập kết quả & xem đề").click(); button("Nhập kết quả & xem đề").click(); });
-  expect(api.usage).toHaveBeenCalledTimes(1); expect(host.querySelector(".exam-paper")?.textContent).toContain("Practice Exam");
-  await click("Lưu vào Quiz"); const id = api.quiz.mock.calls[0][0].id;
-  await click("Nhập kết quả & xem đề"); await click("Lưu vào Quiz"); expect(api.quiz.mock.calls[1][0].id).toBe(id); expect(api.usage).toHaveBeenCalledTimes(1); noAuto();
-});
-it("Manual keeps invalid input and the previous preview while reporting question-specific errors before quota", async () => {
-  await prepareManual(); await importManual(); const before = host.querySelector(".exam-paper")?.textContent;
-  const bad = manualResponse(); bad.draft.sections[0].questions[0].options.pop(); const text = JSON.stringify(bad);
-  await set('[aria-label="Kết quả AI Manual"]', text); await click("Nhập kết quả & xem đề");
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("câu 1"); expect((host.querySelector('[aria-label="Kết quả AI Manual"]') as HTMLTextAreaElement).value).toBe(text);
-  expect(host.querySelector(".exam-paper")?.textContent).toBe(before); expect(api.usage).toHaveBeenCalledTimes(1); noAuto();
-});
-it("Manual quota rejection keeps JSON and retries with the same request identity", async () => {
-  await prepareManual(); const text = JSON.stringify(manualResponse()); api.usage.mockRejectedValueOnce(new Error("Manual quota exceeded"));
-  await set('[aria-label="Kết quả AI Manual"]', text); await click("Nhập kết quả & xem đề"); expect(host.querySelector(".exam-paper")).toBeNull();
-  expect((host.querySelector('[aria-label="Kết quả AI Manual"]') as HTMLTextAreaElement).value).toBe(text);
-  await click("Nhập kết quả & xem đề"); expect(api.usage.mock.calls[1][0]).toBe(api.usage.mock.calls[0][0]); expect(host.querySelector(".exam-paper")).toBeTruthy(); noAuto();
-});
-it("Manual import uses the source/settings captured in the prompt even after builder selections change", async () => {
-  await prepareManual(); await set('[aria-label="Độ khó"]', "hard"); await importManual();
-  expect(loadExamWorkspace("user-a").result?.settings.difficulty).toBe("medium"); expect(loadExamWorkspace("user-a").settings.difficulty).toBe("hard"); noAuto();
-});
-it("Manual mixed paper keeps separate answer view and PDF-only output", async () => {
-  await prepareManual(true); await importManual(); expect(host.querySelector('input[type="checkbox"]')).toBeNull();
-  expect(host.querySelector(".exam-paper")?.textContent).not.toContain("MODEL ANSWER ONLY"); await click("Đáp án & lời giải"); expect(host.querySelector(".exam-paper")?.textContent).toContain("MODEL ANSWER ONLY");
-  expect(Array.from(host.querySelectorAll("button")).some(button => button.textContent === "Lưu vào Quiz")).toBe(false);
-  await click("Xuất PDF"); expect(api.pdf).toHaveBeenCalledTimes(1); expect(api.pdf.mock.calls[0][0].generationMode).toBe("manual"); noAuto();
-});
-it("Manual single-question replacement produces a new prompt and imports just that question", async () => {
-  await prepareManual(true); await importManual(); await click("Chỉnh sửa đề"); await click("Tạo lại câu này");
-  const session = loadExamWorkspace("user-a").manual!.session!; expect(session.replacement?.blueprint.sections[0].count).toBe(1); expect(session.prompt).toContain("REPLACE ONE QUESTION ONLY");
-  const example = manualResponse(); example.blueprint = session.replacement!.blueprint; example.draft.sections = [example.draft.sections[0]]; example.draft.sections[0].questions[0].prompt = "Replacement scenario: cooling fresh water below zero, what change occurs?";
-  await set('[aria-label="Kết quả AI Manual"]', JSON.stringify(example)); await click("Nhập kết quả & xem đề");
-  expect(host.querySelector(".exam-paper")?.textContent).toContain("Replacement scenario"); expect(host.querySelector(".exam-paper")?.textContent).toContain("Apply concept 2");
-  expect(loadExamWorkspace("user-a").result?.draft.sections[0].questions[0].id).toBe("q-0"); expect(api.usage).toHaveBeenCalledTimes(2); noAuto();
-});
-it("Manual pending input restores for its owner and remains isolated from another account", async () => {
-  await prepareManual(); await set('[aria-label="Kết quả AI Manual"]', "{incomplete JSON"); const prompt = (host.querySelector('[aria-label="Prompt đề Manual"]') as HTMLTextAreaElement).value;
-  await mount("user-b"); expect(host.querySelector('[aria-label="Kết quả AI Manual"]')).toBeNull();
-  await mount("user-a"); expect((host.querySelector('[aria-label="Kết quả AI Manual"]') as HTMLTextAreaElement).value).toBe("{incomplete JSON"); expect((host.querySelector('[aria-label="Prompt đề Manual"]') as HTMLTextAreaElement).value).toBe(prompt); noAuto();
-});
-async function upload(selector: string, name: string, bytes: string) {
-  const file = new File([bytes], name); Object.defineProperty(file, "arrayBuffer", { value: async () => new TextEncoder().encode(bytes).buffer });
-  const input = host.querySelector(selector) as HTMLInputElement; Object.defineProperty(input, "files", { configurable: true, value: [file] });
-  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
-}
-it("Manual file upload reads locally and accepts a returned JSON file", async () => {
-  await mount(); await set('[aria-label="Chế độ AI đề thi"]', "manual"); await set('[aria-label="Số câu Manual"]', "1");
-  await upload('[aria-label="Tải tài liệu"]', "notes.txt", examFixture().sources[0].text); await click("Lấy prompt tạo đề");
-  await upload('[aria-label="File JSON Manual"]', "result.json", JSON.stringify(manualResponse())); await click("Nhập kết quả & xem đề");
-  expect(host.querySelector(".exam-paper")?.textContent).toContain("Practice Exam"); noAuto();
-});
-it("Manual images require external OCR transcription and review, with no Auto OCR request", async () => {
-  await mount(); await set('[aria-label="Chế độ AI đề thi"]', "manual"); await set('[aria-label="Số câu Manual"]', "1");
-  await upload('[aria-label="Tải tài liệu"]', "scan.png", "image bytes"); await click("Lấy prompt đọc nguồn");
-  expect((host.querySelector('[aria-label="Prompt OCR Manual"]') as HTMLTextAreaElement).value).toContain("scan.png");
-  await click("Lấy prompt tạo đề"); expect(host.querySelector('[role="alert"]')?.textContent).toContain("OCR");
-  await set('[aria-label="Nội dung scan.png"]', examFixture().sources[0].text); await act(async () => (host.querySelector('input[type="checkbox"]') as HTMLInputElement).click());
-  await click("Lấy prompt tạo đề"); expect(host.querySelector('[aria-label="Prompt đề Manual"]')).toBeTruthy(); noAuto();
+  expect(host.querySelector('[aria-label="Chế độ đề Manual"]')).toBeTruthy();
+  expect(host.querySelector('[aria-label="Word đề kết quả"]')).toBeTruthy();
+  expect(host.querySelector('[aria-label="Kết quả AI Manual"]')).toBeNull();
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  await click("Chuyển sang AI Auto"); expect(button("Phân tích cấu trúc")).toBeTruthy();
 });

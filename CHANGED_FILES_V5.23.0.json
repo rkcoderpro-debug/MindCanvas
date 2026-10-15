@@ -1,0 +1,163 @@
+{
+  "version": "5.23.0",
+  "baseVersion": "5.22.1",
+  "extractionRoot": "Project root containing package.json, apps and packages; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.23.0.md",
+      "change": "added",
+      "bytes": 7671,
+      "sha256": "7e574b93093c70d3b4f2a18a4d91b07d5c4a41f2ee49928af470f059f2728af2"
+    },
+    {
+      "path": "RELEASE_V5.23.0.md",
+      "change": "added",
+      "bytes": 7904,
+      "sha256": "ae3c904e2cd1fb5e7d1127257efb6fa58a0adca07b33dab08cd546817f532157"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "529f11c6f279cce3f163e8ad02f40b29aa051a1cdffdc8cd70e74f7aabea1083"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "e7c6ec30620d37f3f97ec46e47f7a18d6ee75597d7b75627ea5f7bd4b6ca80d6"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.test.tsx",
+      "change": "modified",
+      "bytes": 9809,
+      "sha256": "0ed8e94d708a0034967694450a11438e9504441ec445c0c24b3d60134fdae910"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "change": "modified",
+      "bytes": 23215,
+      "sha256": "2204dc7e10efa5a490c8e29cd7049eae44eea6f1782f9e8e1d5008faae0ef62e"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.test.tsx",
+      "change": "added",
+      "bytes": 11247,
+      "sha256": "ac906ddb80b8b3762e02bd7afa1d09e78dc5b55a5baa3dfb5b3e003da3bd1e4a"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "change": "added",
+      "bytes": 28616,
+      "sha256": "8fa89cceaec413272c6193a5728d7c9c89c6798775f29f3aed873120b9c12692"
+    },
+    {
+      "path": "apps/web/src/components/ExamOnlineRunner.test.tsx",
+      "change": "added",
+      "bytes": 6606,
+      "sha256": "e0073e397ac8845ede0d987179f750e08a7a1eeb8190db506e4939f0c927ce30"
+    },
+    {
+      "path": "apps/web/src/components/ExamOnlineRunner.tsx",
+      "change": "added",
+      "bytes": 10858,
+      "sha256": "079bbbb0eda8e4e57e11488b8afb0d18b9742a49f232ccec4e4f04b91e995b09"
+    },
+    {
+      "path": "apps/web/src/lib/examManual.ts",
+      "change": "modified",
+      "bytes": 10919,
+      "sha256": "83ef21698798fd3a2ecc3dbc053182d5c4c6a75131754d7c8781f878ec4b9485"
+    },
+    {
+      "path": "apps/web/src/lib/examManualSource.test.ts",
+      "change": "modified",
+      "bytes": 5200,
+      "sha256": "055ff2a68ca044012b76b0e04311e0298d64fadde5edf6a486fff3591e35f088"
+    },
+    {
+      "path": "apps/web/src/lib/examManualSource.ts",
+      "change": "modified",
+      "bytes": 6441,
+      "sha256": "1d39b2f08cf81aa0e51bef518b92e298ad85216dc7f0e501ccb2d6fd1991bbcf"
+    },
+    {
+      "path": "apps/web/src/lib/examOnline.test.ts",
+      "change": "added",
+      "bytes": 4683,
+      "sha256": "22af51e4d6b14f1823164fa2dfb76e1867de8367eea2a217b3baee383f1523ce"
+    },
+    {
+      "path": "apps/web/src/lib/examOnline.ts",
+      "change": "added",
+      "bytes": 11927,
+      "sha256": "f4175db0b3d00e91edf9165f90b221835256d3e95cf5bb65a9c6e1dc2d5e81d7"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioPrompt.test.ts",
+      "change": "added",
+      "bytes": 2013,
+      "sha256": "42bfb65012e2e99e9f1028a50702cdaaf1887c795c668fe947b16f7b9988228e"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioPrompt.ts",
+      "change": "added",
+      "bytes": 9832,
+      "sha256": "708614c97f9ff1e2f084b97525a874934b561468ed943aa871f9bc92411fb33e"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioStore.test.ts",
+      "change": "added",
+      "bytes": 6262,
+      "sha256": "7c72d8fff2e19674c9ae3a8e500d65177e6acaccdca5d5df458bf9b6776fdde5"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioStore.ts",
+      "change": "added",
+      "bytes": 14692,
+      "sha256": "2283a7f16213404a6feed0450142c7279f1a55d1cf4bec2901804c29f57e7d66"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioTestData.ts",
+      "change": "added",
+      "bytes": 2317,
+      "sha256": "b3fdce6d56b5ef38cc585294a79407be8b32200bcf253b85aada024853c0e36b"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "bytes": 447582,
+      "sha256": "9b684a6418cb3258889d651e11cf9f14af782cf76dcf44346572d6ba5c5315b6"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "6fbe4c93de602ab59108fe5488a48c26133c24c5e26cc59611ea1bfbd0d0f70d"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "6cd0b9504a9a8c7e1abe0ddc97613efd46036b712401ce1b7483657f37d959c0"
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "newNpmDependencies": [],
+  "applyInstructions": "Overlay v5.22.1 source and use existing build/deployment workflow. See RELEASE_V5.23.0.md; Manual uses the existing usage endpoint.",
+  "verification": {
+    "webTestFiles": 88,
+    "webTestsPassed": 624,
+    "serverTestsPassed": 62,
+    "newTestCases": 62,
+    "replacedLegacyManualUiTests": 9,
+    "finalRunnerTestsPassed": 8,
+    "typecheck": "passed",
+    "webBuild": "passed with temporary sandbox preserveSymlinks override",
+    "serverBuild": "passed",
+    "limitations": "See QA_V5.23.0.md. Real browser/Safari/iPad, real external-AI DOCX/JSON generation, desktop Word layout matching, production and real clipboard/download were not verified.",
+    "revalidated": "2026-10-15 Asia/Saigon: 624 web tests and 62 server tests passed; typecheck and builds passed; source unchanged; QA updated."
+  },
+  "manifestIncludesItself": false
+}
