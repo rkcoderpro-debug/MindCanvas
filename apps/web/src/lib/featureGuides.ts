@@ -142,6 +142,7 @@ export function practiceActionsForGuide(
       },
     ],
     "learning-hub": [
+      { id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" },
       {
         id: "learning:tab:flashcards",
         labelVi: "Mở Flashcard",
@@ -625,36 +626,36 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     id: "learning-hub",
     trigger: "learning",
     category: "learning",
-    titleVi: "Trung tâm học tập",
-    titleEn: "Learning Hub",
+    titleVi: "Không gian học tập",
+    titleEn: "Learning Space",
     summaryVi: "Mở từng tính năng học tập và xem chính khu vực vừa chọn.",
     summaryEn: "Open each learning feature and review the selected area.",
     gifSrc: "/guides/learning-hub.gif",
     demo: "learning",
     outcomeVi:
-      "Biết vị trí và công dụng của mọi khu vực trong Trung tâm học tập.",
-    outcomeEn: "Know where every Learning Hub area is and what it does.",
+      "Biết vị trí và công dụng của mọi khu vực trong Không gian học tập.",
+    outcomeEn: "Know where every Learning Space area is and what it does.",
     steps: [
       {
         target: ".nav-learning",
         skipWhenRoute: "learning",
-        titleVi: "Mở Trung tâm học tập",
-        titleEn: "Open Learning Hub",
-        bodyVi: "Bấm Trung tâm học tập trên thanh bên.",
-        bodyEn: "Click Learning Hub in the sidebar.",
+        titleVi: "Mở Không gian học tập",
+        titleEn: "Open Learning Space",
+        bodyVi: "Bấm Không gian học tập trên thanh bên.",
+        bodyEn: "Click Learning Space in the sidebar.",
       },
       {
-        target: ".learning-hub-overview",
+        target: ".learning-space-home-content",
         completion: { type: "manual" },
         titleVi: "Tổng quan",
         titleEn: "Overview",
         bodyVi:
-          "Tổng quan hiển thị kế hoạch hôm nay, chuỗi học, mục tiêu và các lối tắt tới công cụ học.",
+          "Trang chủ giúp chọn công cụ học, xem kế hoạch hôm nay và tiếp tục mục vừa mở.",
         bodyEn:
-          "Overview shows today's plan, streak, goals and shortcuts to study tools.",
+          "The home page shows learning tools, today’s plan and the most recently opened area.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="flashcards"]',
+        target: '.learning-space button[data-guide-tab="flashcards"]',
         titleVi: "Mở Flashcard",
         titleEn: "Open Flashcards",
         bodyVi: "Bấm Flashcard để xem khu vực tạo bộ thẻ và ôn tập.",
@@ -671,7 +672,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Create decks from a file or manually, edit cards and start a review session here.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="quiz"]',
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="quiz"]',
         titleVi: "Mở Quiz",
         titleEn: "Open Quiz",
         bodyVi: "Bấm Quiz để xem khu vực bài kiểm tra.",
@@ -688,7 +696,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Quiz supports question creation, study or exam modes and answer explanations.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="plan"]',
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="plan"]',
         titleVi: "Mở Kế hoạch học",
         titleEn: "Open Study plan",
         bodyVi: "Bấm Kế hoạch học để thiết kế lịch học theo ngày.",
@@ -705,7 +720,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Choose decks, tasks, targets and rest days, or ask AI to suggest a plan.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="progress"]',
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="progress"]',
         titleVi: "Mở Tiến độ",
         titleEn: "Open Progress",
         bodyVi: "Bấm Tiến độ để xem kết quả học tập.",
@@ -722,7 +744,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "This area summarizes streaks, reviewed cards, Quiz scores and recent history.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="lab"]',
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="lab"]',
         titleVi: "Mở Lab",
         titleEn: "Open Lab",
         bodyVi: "Bấm Lab để tạo và chạy mô phỏng HTML tương tác.",
@@ -739,7 +768,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Lab creates prompts, accepts HTML files, runs them in a sandbox, and saves or downloads simulations.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="shared"]',
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="shared"]',
         titleVi: "Mở Được chia sẻ với tôi",
         titleEn: "Open Shared with me",
         bodyVi:
@@ -758,7 +794,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Open and study shared content without changing the owner's original.",
       },
       {
-        target: ".learning-music-launcher",
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="music"]',
         completion: {
           type: "action",
           actions: [
@@ -785,7 +828,14 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Add a file or YouTube, YouTube Music, Spotify or SoundCloud link, then use play, pause, volume, repeat and Dynamic Island.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="tools"]',
+        target: ".learning-space-back",
+        completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
+        titleVi: "Về trang học tập", titleEn: "Back to learning home",
+        bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
+        bodyEn: "Return home to choose another tool. Your open content stays in this visit.",
+      },
+      {
+        target: '.learning-space button[data-guide-tab="tools"]',
         titleVi: "Mở Công cụ",
         titleEn: "Open Tools",
         bodyVi: "Bấm Công cụ để mở trình xem tài liệu dùng chung thư viện đã tải lên.",
@@ -920,22 +970,22 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
       {
         target: ".nav-learning",
         skipWhenRoute: "lab",
-        titleVi: "Đi tới Trung tâm học tập",
-        titleEn: "Go to Learning Hub",
+        titleVi: "Đi tới Không gian học tập",
+        titleEn: "Go to Learning Space",
         bodyVi:
-          "Bước này cần thao tác thật: bấm Trung tâm học tập ở sidebar. Guide sẽ chờ đến khi trang học tập mở, không tự nhảy qua.",
+          "Bước này cần thao tác thật: bấm Không gian học tập ở sidebar. Guide sẽ chờ đến khi trang học tập mở, không tự nhảy qua.",
         bodyEn:
-          "This step requires a real action: click Learning Hub in the sidebar. The guide waits until the study page opens.",
+          "This step requires a real action: click Learning Space in the sidebar. The guide waits until the study page opens.",
       },
       {
-        target: '.learning-hub-nav button[data-guide-tab="lab"]',
+        target: '.learning-space button[data-guide-tab="lab"]',
         skipWhenRoute: "lab",
         titleVi: "Mở tab Lab",
         titleEn: "Open the Lab tab",
         bodyVi:
-          "Trong Trung tâm học tập, bấm đúng tab Lab. Khi tab đã mở, bước tiếp theo mới xuất hiện.",
+          "Trong Không gian học tập, bấm đúng tab Lab. Khi tab đã mở, bước tiếp theo mới xuất hiện.",
         bodyEn:
-          "In Learning Hub, click the Lab tab. The next step appears only after the tab is actually open.",
+          "In Learning Space, click the Lab tab. The next step appears only after the tab is actually open.",
       },
       {
         target: ".lab-add-button",
@@ -1121,7 +1171,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     gifSrc: "/guides/pdf-annotation.gif",
     demo: "pdf",
     steps: [
-      { target: ".learning-tools-tab", completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Trung tâm học tập, bấm Công cụ để mở trình xem tài liệu.", bodyEn: "In Learning Hub, click Tools to open the document viewer." },
+      { target: ".learning-tools-tab", completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Không gian học tập, bấm Công cụ để mở trình xem tài liệu.", bodyEn: "In Learning Space, click Tools to open the document viewer." },
       { target: ".document-tools-tabs [data-tool-tab=\"pdf\"]", completion: { type: "click" }, titleVi: "Lọc tài liệu PDF", titleEn: "Filter PDF documents", bodyVi: "Chọn bộ lọc PDF để chỉ hiển thị những tài liệu có thể chú thích.", bodyEn: "Choose the PDF filter to show documents that can be annotated." },
       { target: ".document-tool-list button[data-document-kind=\"pdf\"]", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu thư viện trống, hãy tải một file PDF lên trước.", bodyEn: "Choose a PDF from the list. If the library is empty, upload a PDF first." },
       { target: ".document-tools-page .document-tool-workspace", completion: { type: "action", actions: [{ id: "tools:viewer-ready", labelVi: "Mở viewer tài liệu", labelEn: "Open the document viewer" }] }, titleVi: "Mở viewer tài liệu", titleEn: "Open the document viewer", bodyVi: "Viewer đã sẵn sàng. DOCX, PPTX và XLSX chỉ được xem; PDF có thể chú thích.", bodyEn: "The viewer is ready. DOCX, PPTX and XLSX are view-only; PDFs support annotation." },

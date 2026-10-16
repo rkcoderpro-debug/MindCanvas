@@ -1,3 +1,4 @@
+import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { BookOpen, CalendarClock, CheckCircle2, ClipboardPaste, Cloud, FileText, Flame, HardDrive, Layers3, ListOrdered, Pencil, Play, Plus, RotateCcw, Search, Shuffle, Sparkles, Target, Trash2, Upload, Zap, X } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
@@ -67,6 +68,8 @@ function StorageBadge({ mode }: { mode: "cloud" | "local" }) {
 
 export default function FlashcardsPage({ owner, projects, accountPlan, store }: { owner: string | null; projects: Project[]; accountPlan?: AccountPlan; store?: FlashcardStore }) {
   const { t, language } = useLanguage();
+  const navigation = useLearningTool();
+  const backToCards = () => { setPanel("cards"); navigation?.back(); };
   const localFlashcards = useFlashcards(owner);
   const flashcards = store ?? localFlashcards;
   const [panel, setPanel] = useState<"cards" | "review">("cards");
@@ -299,7 +302,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
   const beginReview = (cards: Flashcard[], context: { planId: string | null; contextKey: string; targetCount: number }, random = false) => {
     const ordered = random ? shuffleCards(cards) : cards;
     setReviewCards(ordered); setReviewQueue(ordered.map(card => card.id)); setReviewContext(context);
-    setReviewIndex(0); setShowAnswer(false); setPanel("review");
+    setReviewIndex(0); setShowAnswer(false); if (navigation) navigation.open("review", () => setPanel("review"), () => setPanel("cards")); else setPanel("review");
   };
   const startReview = (mode: "due" | "new" | "difficult" | "all" | "random" = "due") => {
     const cards = mode === "new" ? newCards : mode === "difficult" ? difficultCards : mode === "due" ? dueCards(flashcards.cards) : flashcards.cards;
@@ -402,8 +405,8 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
           </div>
           <div className={`study-plan-banner ${flashcards.activeStudyPlan ? "has-plan" : "manual-mode"}`}><div className="study-plan-banner-main"><span className="streak-flame"><Flame size={19}/></span><div><span className="study-plan-kicker">{flashcards.activeStudyPlan ? t("aiPlanToday") : t("manualPractice")}</span><strong>{flashcards.streak.current} {t("streakDays")}</strong><small>{flashcards.activeStudyPlan ? `${flashcards.streak.todayProgress} / ${flashcards.streak.todayTarget} ${t("targetCards").toLocaleLowerCase()}` : t("manualStreakHint")}</small></div></div><div className="study-plan-banner-progress"><div><span>{flashcards.activeStudyPlan ? flashcards.activeStudyPlan.name : t("streak")}</span><b>{flashcards.streak.todayCompleted ? t("streakEarned") : flashcards.activeStudyPlan ? t("streakLocked") : t("studyOneCard")}</b></div><progress value={Math.min(flashcards.streak.todayProgress, Math.max(1, flashcards.streak.todayTarget))} max={Math.max(1, flashcards.streak.todayTarget)}/></div><div className="streak-best"><span>{t("bestStreak")}</span><strong>{flashcards.streak.best}</strong></div></div>
           <div className="study-mode-toolbar"><span><Target size={16}/>{t("studyMode")}</span><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("all")}><ListOrdered size={15}/>{t("studyOrder")}</button><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("random")}><Shuffle size={15}/>{t("random")}</button><button className="secondary-button" disabled={!flashcards.cards.length || flashcards.busy || aiBusy} onClick={() => startReview("new")}><Zap size={15}/>{t("studyNew")}</button></div>
-          <div className="flashcard-tabs" role="tablist"><button role="tab" aria-selected={panel === "cards"} className={panel === "cards" ? "active" : ""} onClick={() => setPanel("cards")}>{t("allCards")}</button><button role="tab" aria-selected={panel === "review"} className={panel === "review" ? "active" : ""} onClick={() => startReview("due")}><RotateCcw size={15}/>{t("review")}{due.length > 0 && <span>{due.length}</span>}</button></div>
-          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} forgottenCount={flashcards.todayStudyDay?.forgottenCardIds.length ?? 0} dailyCurrent={flashcards.streak.todayProgress} dailyGoal={flashcards.streak.todayTarget} planMode={!!reviewContext?.planId} ratingBusy={ratingBusy} showAnswer={showAnswer} onToggleAnswer={() => setShowAnswer(value => !value)} onRate={rating => void rateReview(rating)} onBack={() => setPanel("cards")} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
+          <div className="flashcard-tabs" role="tablist"><button role="tab" aria-selected={panel === "cards"} className={panel === "cards" ? "active" : ""} onClick={backToCards}>{t("allCards")}</button><button role="tab" aria-selected={panel === "review"} className={panel === "review" ? "active" : ""} onClick={() => startReview("due")}><RotateCcw size={15}/>{t("review")}{due.length > 0 && <span>{due.length}</span>}</button></div>
+          {panel === "review" ? <ReviewPanel target={reviewTarget} finished={reviewFinished} index={reviewIndex} total={reviewQueue.length} forgottenCount={flashcards.todayStudyDay?.forgottenCardIds.length ?? 0} dailyCurrent={flashcards.streak.todayProgress} dailyGoal={flashcards.streak.todayTarget} planMode={!!reviewContext?.planId} ratingBusy={ratingBusy} showAnswer={showAnswer} onToggleAnswer={() => setShowAnswer(value => !value)} onRate={rating => void rateReview(rating)} onBack={backToCards} t={t}/> : flashcards.cardsLoading ? <p className="flashcards-loading">{t("loading")}</p> : !flashcards.cards.length ? <div className="flashcards-empty cards"><BookOpen size={38}/><h3>{t("noCards")}</h3><p>{t("noCardsHint")}</p><button className="secondary-button" onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button></div> : <><label className="card-search"><Search size={16}/><input aria-label={t("cardSearch")} placeholder={t("cardSearch")} value={cardQuery} onChange={event => setCardQuery(event.target.value)}/></label>{!filteredCards.length ? <div className="command-empty">{t("noResults")}</div> : <div className="cards-list">{filteredCards.map(card => <CardRow key={card.id} card={card} language={language} onEdit={() => openEditCard(card)} onDelete={() => void flashcards.removeCard(card)} onOpenSource={card.sourcePage && flashcards.selectedDeck?.projectId ? () => void openCardSource(card) : undefined} busy={flashcards.busy} t={t}/>)}</div>}</>}
         </>}
       </section>
     </div>
@@ -466,6 +469,7 @@ function CardRow({ card, language, onEdit, onDelete, onOpenSource, busy, t }: { 
 }
 
 export function ReviewPanel({ target, finished, index, total, forgottenCount, dailyCurrent, dailyGoal, planMode, ratingBusy, showAnswer, onToggleAnswer, onRate, onBack, t }: { target: Flashcard | null; finished: boolean; index: number; total: number; forgottenCount: number; dailyCurrent: number; dailyGoal: number; planMode: boolean; ratingBusy: boolean; showAnswer: boolean; onToggleAnswer: () => void; onRate: (rating: Extract<FlashcardRating, "again" | "good">) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
+  const learningActive = useLearningActive();
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const skipClick = useRef(false);
   const [dragX, setDragX] = useState(0);
@@ -477,9 +481,10 @@ export function ReviewPanel({ target, finished, index, total, forgottenCount, da
       if (showAnswer && event.key === "ArrowLeft") { event.preventDefault(); onRate("again"); }
       if (showAnswer && event.key === "ArrowRight") { event.preventDefault(); onRate("good"); }
     };
+    if (!learningActive) return;
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [finished, onRate, onToggleAnswer, ratingBusy, showAnswer, target]);
+  }, [learningActive, finished, onRate, onToggleAnswer, ratingBusy, showAnswer, target]);
   const pointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (ratingBusy) return;
     skipClick.current = false;

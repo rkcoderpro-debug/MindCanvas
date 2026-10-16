@@ -26,7 +26,7 @@ describe("feature guides", () => {
       ".guide-project-create-submit",
     ]);
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "workspace-navigation")?.steps.some(step => step.target?.includes("project-card-favorite"))).toBe(true);
-    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "learning-hub")?.steps.some(step => step.target === ".learning-music-launcher")).toBe(true);
+    expect(GUIDE_DEFINITIONS.find(guide => guide.id === "learning-hub")?.steps.some(step => step.target === '.learning-space button[data-guide-tab="music"]')).toBe(true);
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "folder-manager")?.steps.map(step => step.target)).toContain(".folder-manager-new-folder");
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "pdf-annotation")?.steps.slice(0, 2).map(step => step.target)).toEqual([
       ".manager-documents",

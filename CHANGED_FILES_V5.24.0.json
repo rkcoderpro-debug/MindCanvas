@@ -1,0 +1,172 @@
+{
+  "version": "5.24.0",
+  "baseVersion": "5.23.1",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.24.0.md",
+      "change": "added",
+      "bytes": 4289,
+      "sha256": "c61430208fd73806c3c87f610c0fff51a5354c982bdf1d6a54300971a4b1275a"
+    },
+    {
+      "path": "RELEASE_V5.24.0.md",
+      "change": "added",
+      "bytes": 4065,
+      "sha256": "aa2891072156504b0543276876a0171f5ea5a412f87e2c3f9b729d4a860552be"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "766041ad0f9f839e6c194787b2f7a5b3ebc360bd986c7aabac4ad82001355bea"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "ea19f18541c7767b738f385b369a3d6f966980967870aaab963e67b5e66ebc99"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "change": "modified",
+      "bytes": 30513,
+      "sha256": "670465998f688d094f77caec70f6802ef6027f58af558ed0dbfa20ca79089133"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "change": "modified",
+      "bytes": 57728,
+      "sha256": "12b982b227f7fb598e6a3a17968189295f6d6aafd946f08ea3f9b586aa1ef0c1"
+    },
+    {
+      "path": "apps/web/src/components/ClassroomsPage.tsx",
+      "change": "modified",
+      "bytes": 20601,
+      "sha256": "dd8210f175664e80f93ac48c58d81e849e49dea4343b5189dd1bc15a6d534982"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "change": "modified",
+      "bytes": 12652,
+      "sha256": "5c9594733a1ac98777c3dadc6a2f07ee788fca298ccc5cfdbee66280e97f3492"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "change": "modified",
+      "bytes": 1315,
+      "sha256": "6d2d9e3355fa6f58f0761a1311e9904d4755653c611e25eb9a32784fb86e1c55"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.test.tsx",
+      "change": "modified",
+      "bytes": 14502,
+      "sha256": "0dfccb626ff11c68139d0a5ec8756f9c302c3e6b9a8a444bca9dc14f249a1951"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "change": "modified",
+      "bytes": 26913,
+      "sha256": "674c276a9f6c6b0c69dc2114bff5a813b107c182ce6444d8ecae707e846bbf79"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "change": "modified",
+      "bytes": 30575,
+      "sha256": "52252b84a4743665be737c26e7076a46fe8ee59afe1b083a318064d821f88b1e"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "change": "modified",
+      "bytes": 54412,
+      "sha256": "ce6b90802a1813ba1b5bf8b60846856dc0f9993df6387a46e37ea36044c23f2f"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.tsx",
+      "change": "modified",
+      "bytes": 19458,
+      "sha256": "d61c8123b2dd94798cf0863915f0a626b880ddbfd84da91d7074b45d3f54ebbb"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "change": "modified",
+      "bytes": 33780,
+      "sha256": "fdd0556a41f9d8edcdd2897ff05806735a2ab0e28c496a88638cecfc58a7e809"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "change": "modified",
+      "bytes": 30022,
+      "sha256": "47e8dc416204a8b813429d598a506fd467d47c6d7c5ae8bf0aa84a4ff963b0e7"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "change": "modified",
+      "bytes": 23791,
+      "sha256": "7ae4a4edbfc98844890d97f37583613acdb0b72ef5848433edd7eef960a020a6"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.test.ts",
+      "change": "modified",
+      "bytes": 4562,
+      "sha256": "b77048f3126acbb8a89cb1b8da26754839564489c6492b1f112cedd800517fea"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "change": "modified",
+      "bytes": 65218,
+      "sha256": "ecd109377eec5714b56b2a04f7029a719fc26b0b9c2eb277d2208e5b0b41bcbb"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "change": "modified",
+      "bytes": 117101,
+      "sha256": "29abda7e7d3d38650dc8721661047f918c354017c3f915fcface3245188af3fe"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.test.tsx",
+      "change": "added",
+      "bytes": 8481,
+      "sha256": "44accf9180e4fed5e50b82b40f5d10e5bd43c135c19735db8c6362dfe7e4a207"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "change": "added",
+      "bytes": 6705,
+      "sha256": "0a1bda9d13f733547d1b0a4ccae52e16f82693568aa8434f619eff9ab88e188b"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "bytes": 458616,
+      "sha256": "37153032be6201886e60f63080152a65d09c372115f4a7b5957344b61f04b19f"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "e23677a04e1c53403cd10d53fe6fd974172c26fa65c2fe42a286afd2fd7263ec"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "b843d5ee480a6bb2747e062e1fa15f6074c8d4d2559959faa74bbf9cd7cfd910"
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "newNpmDependencies": [],
+  "applyInstructions": "See RELEASE_V5.24.0.md; overlay source v5.23.1 and use the existing build/deployment workflow.",
+  "verification": {
+    "webTestsPassed": 648,
+    "webTestFiles": 89,
+    "serverTestsPassed": 62,
+    "serverTestsSkipped": 0,
+    "typecheck": "passed",
+    "build": "passed; existing chunk-size warning",
+    "browser": "Chromium 153: 1440x1000, 768x1024, 390x844; real local repositories, DOM, history and iframe; no pageerrors",
+    "limitations": "See QA_V5.24.0.md"
+  },
+  "manifestIncludesItself": false
+}

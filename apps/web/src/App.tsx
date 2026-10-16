@@ -1,3 +1,4 @@
+import { enterLearningSpace, leaveLearningSpace, learningTabFromUrl } from "./lib/learningNavigation";
 import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
@@ -115,7 +116,15 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const iosDevice = isIOSDevice();
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{ tab: "connections" | "shared" | "classrooms"; peerId?: string; classId?: string; nonce: number } | null>(null);
-  const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
+  const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(() => learningTabFromUrl() ? "__learning" : null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
+  useEffect(() => {
+    const restore = () => {
+      const learning = learningTabFromUrl();
+      if (learning && !["__learning", "__flashcards", "__lab"].includes(filter ?? "")) { void ws.home(); setFilter("__learning"); setRecent(false); setNotificationDestination(null); }
+      else if (!learning && ["__learning", "__flashcards", "__lab"].includes(filter ?? "")) { setFilter(null); setRecent(false); }
+    };
+    window.addEventListener("popstate", restore); return () => window.removeEventListener("popstate", restore);
+  }, [filter]);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
   const [petVisible, setPetVisible] = useState(() => { try { return localStorage.getItem("mindcanvas:pet-visible") !== "false"; } catch { return true; } });
@@ -178,6 +187,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     catch (err) { ws.setError(errorMessage(err, "Không thể lưu tài liệu vào thư viện.")); return undefined; }
   };
   const home = () => {
+    leaveLearningSpace();
     setMobileProjectMenuOpen(false);
     setAiPanelMode("closed");
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
@@ -345,7 +355,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
   };
-  const openView = (view: SidebarView) => { void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
+  const openView = (view: SidebarView) => { if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview"); else leaveLearningSpace(); void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
   const openNotification = (item: ActivityNotification) => {
     void ws.home(); setRecent(false);
     if (item.target === "workspace") { setFilter(null); setNotificationDestination(null); return; }
@@ -445,9 +455,9 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); if (ws.conflict) void ws.resolveConflict("cloud", t("copySuffix")); else void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button>{!ws.conflict && <button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button>}</div>}
       {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
-      {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Trung tâm học tập.</div>}
+      {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Không gian học tập.</div>}
       {learningInvite && learningInviteState === "error" && <div className="invite-banner error" role="alert">{learningInviteError}</div>}
-      {connectionInvite && connectionInviteState === "accepted" && <div className="invite-banner success" role="status">Đã kết nối. Mở “Bạn bè & tin nhắn” trong Trung tâm học tập.</div>}
+      {connectionInvite && connectionInviteState === "accepted" && <div className="invite-banner success" role="status">Đã kết nối. Mở “Bạn bè & tin nhắn” trong Không gian học tập.</div>}
       {connectionInvite && connectionInviteState === "error" && <div className="invite-banner error" role="alert">{connectionInviteError}</div>}
       {inviteState === "accepting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("acceptInviteLoading")}</small></span></div>}
       {inviteState === "accepted" && <div className="invite-banner success" role="status"><span><strong>{t("inviteAccepted")}</strong></span><button className="icon-button" aria-label={t("close")} onClick={() => setInviteState("idle")}><X size={16}/></button></div>}

@@ -1,3 +1,4 @@
+import { useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, FileUp, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import { examQuestionCount, validateExamSettings, validateExamSources, validateExamBlueprint, validateExamDraft, type ExamBlueprint, type ExamQuestion, type ExamSettings, type ExamSource, type SavedExam } from "@mindcanvas/shared";
@@ -26,6 +27,9 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
   const [busy, setBusy] = useState("");
   const [library, setLibrary] = useState<SavedExam[]>([]);
   const [showResult, setShowResult] = useState(!!initial.work.result);
+  const navigation = useLearningTool();
+  const showExam = () => { if (navigation) navigation.open("auto-result", () => setShowResult(true), () => setShowResult(false)); else setShowResult(true); };
+  const backToSetup = () => { setShowResult(false); navigation?.back(); };
   const [answers, setAnswers] = useState(false), [editing, setEditing] = useState(false);
   const [sourceRole, setSourceRole] = useState<ExamSource["role"]>("material");
   const [documentId, setDocumentId] = useState("");
@@ -92,7 +96,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
     const draft = validateExamDraft(response.draft, blueprint, input.sources, input.settings.format);
     if (!alive.current || signal.aborted) return;
     const exam: SavedExam = { id: crypto.randomUUID(), owner: owner ?? "guest", updatedAt: new Date().toISOString(), ...structuredClone(input), blueprint, draft, generationMode: "auto" };
-    setWork(current => ({ ...current, result: exam })); setShowResult(true); setAnswers(false); setEditing(false); setReference(null);
+    setWork(current => ({ ...current, result: exam })); showExam(); setAnswers(false); setEditing(false); setReference(null);
     setNotice("Đã tạo bản nháp. Hãy xem lại đề, đáp án và lời giải trước khi sử dụng.");
   });
   const createAuto = () => run("Đang tạo đề bằng AI…", async signal => {
@@ -110,7 +114,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
     const draft = validateExamDraft(response.draft, blueprint, sources, settings.format);
     if (!alive.current || signal.aborted) return;
     const exam: SavedExam = { id: crypto.randomUUID(), owner, updatedAt: new Date().toISOString(), settings, sources, blueprint, draft, generationMode: "auto" };
-    setWork(current => ({ ...current, result: exam })); setShowResult(true); setAnswers(false); setEditing(false); setReference(null);
+    setWork(current => ({ ...current, result: exam })); showExam(); setAnswers(false); setEditing(false); setReference(null);
     setNotice("Đã tạo bản nháp. Hãy kiểm tra đề và lời giải trước khi sử dụng.");
   });
   const updatePlan = (change: Partial<ExamBlueprint>) => setWork(current => ({ ...current, blueprint: current.blueprint ? { ...current.blueprint, ...change } : null, planConfirmed: false }));
@@ -153,7 +157,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
     <header className="exam-builder-heading"><div><span className="eyebrow">EXAM STUDIO</span><h1>Tạo đề thi bằng AI</h1><p>Tải đề mẫu, tài liệu hoặc nhập nội dung để AI tạo đề cho bạn.</p></div><button className="secondary-button" disabled={!!busy} onClick={() => { setShowResult(false); setPaste(""); setWork(emptyExamWorkspace()); setAnswers(false); setReference(null); setError(""); }}>Tạo đề mới</button></header>
     <ExamModeSwitch mode="auto" disabled={!!busy} onChange={mode => { setWork(current => ({ ...current, aiMode: mode })); setError(""); setNotice(""); }}/>
     {error && <p role="alert" className="form-error">{error}</p>}{persistError && <p role="alert" className="form-error">{persistError}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}{busy && <p role="status" className="exam-busy"><RefreshCw size={16}/>{busy}</p>}
-    <div className="exam-builder-layout exam-creation-layout"><div className="exam-builder-controls" hidden={showResult}><fieldset disabled={!!busy}>
+    <div className="exam-builder-layout exam-creation-layout"><div className="exam-builder-controls" hidden={showResult && !!result}><fieldset disabled={!!busy}>
       <legend>Thuộc tính đề thi</legend><div className="exam-setup-grid">
       <label>Hình thức đề<select aria-label="Hình thức đề" value={work.settings.format} onChange={event => setting({ format: event.target.value as ExamSettings["format"], ...(event.target.value === "paper" ? { mode: "template" } : {}) })}><option value="quiz">Quiz thông thường · 4 lựa chọn</option><option value="paper">Đề nhiều dạng · theo mẫu · PDF</option></select></label>
       <label>Cách tạo<select value={work.settings.mode} onChange={event => setting({ mode: event.target.value as ExamSettings["mode"] })}><option value="materials" disabled={work.settings.format === "paper"}>Theo tài liệu</option><option value="template">Tương tự đề mẫu</option></select></label>
@@ -166,7 +170,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       <p className="exam-hint">Tối đa 6 nguồn, 10 MB/file. Kiểm tra lại nội dung đọc từ ảnh hoặc PDF scan.</p></div><div>
       <label>Nội dung cần tạo đề<textarea aria-label="Văn bản nguồn" rows={7} value={paste} maxLength={120000} onChange={event => setPaste(event.target.value)} placeholder="Nhập hoặc dán kiến thức, yêu cầu và nội dung câu hỏi cần tạo…"/></label><p className="exam-hint">Có thể dùng nội dung này thay cho file tải lên. Nếu đã chọn đề mẫu, nội dung được dùng làm tài liệu bổ sung.</p></div></div>
       {work.sources.length > 0 && <div className="exam-selected-sources" role="status">{work.sources.map(source => <span key={source.id}>{source.role === "template" ? "Mẫu" : "Tài liệu"}: {source.name}</span>)}</div>}
-      <div className="exam-create-action"><p>AI phân tích cấu trúc, tạo câu hỏi và rà soát lời giải.</p>{result && <button className="secondary-button" disabled={!!busy} onClick={() => setShowResult(true)}>Xem đề đã tạo</button>}<button className="primary-button" disabled={!!busy || !owner || (!work.sources.length && !paste.trim())} onClick={() => void createAuto()}><Sparkles size={17}/>Tạo đề bằng AI</button></div>
+      <div className="exam-create-action"><p>AI phân tích cấu trúc, tạo câu hỏi và rà soát lời giải.</p>{result && <button className="secondary-button" disabled={!!busy} onClick={showExam}>Xem đề đã tạo</button>}<button className="primary-button" disabled={!!busy || !owner || (!work.sources.length && !paste.trim())} onClick={() => void createAuto()}><Sparkles size={17}/>Tạo đề bằng AI</button></div>
       <details className="exam-secondary-tools"><summary>Kiểm tra nguồn và cấu trúc (tùy chọn)</summary>
       <details><summary>Tài liệu đã lưu và tên nguồn</summary><label>Vai trò<select aria-label="Vai trò nguồn" value={sourceRole} onChange={event => setSourceRole(event.target.value as ExamSource["role"])}><option value="material">Tài liệu kiến thức</option><option value="template" disabled={work.settings.mode !== "template"}>Đề mẫu</option></select></label>
         <select aria-label="Tài liệu đã lưu" value={documentId} onChange={event => setDocumentId(event.target.value)}><option value="">Chọn tài liệu đã lưu</option>{documents.filter(document => document.kind !== "xlsx").map(document => <option key={document.id} value={document.id}>{document.name}</option>)}</select><button type="button" className="secondary-button" disabled={!documentId || work.sources.length >= 6} onClick={() => { const document = documents.find(item => item.id === documentId); if (document) void run("Đang đọc tài liệu đã lưu…", async signal => { if (!owner) throw new Error("Đăng nhập để đọc tài liệu."); const response = await fetch(document.dataUrl, { signal }); const blob = await response.blob(); if (blob.size > MAX_FILE) throw new Error("Tối đa 10 MB mỗi file."); const file = new File([blob], document.name, { type: document.mimeType }); const source = await readExamFile(file, signal); if (alive.current && !signal.aborted) addSource({ ...source, role: sourceRole }); }); }}>Đọc tài liệu đã chọn</button>
@@ -178,7 +182,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       {!owner && <p className="exam-warning">Đăng nhập để đọc file và dùng AI.</p>}
     </details></fieldset>
     {work.blueprint && <details className="exam-secondary-tools"><summary>Điều chỉnh cấu trúc đề</summary><ExamPlanEditor plan={work.blueprint} format={work.settings.format} maxQuestions={maxQuestions} busy={!!busy} confirmed={work.planConfirmed} canGenerate={work.sourceConfirmed && !!owner} onChange={updatePlan} onConfirm={value => setWork(current => ({ ...current, planConfirmed: value }))} onGenerate={() => void generate()}/></details>}
-    </div>{result && <main className="exam-result-view" hidden={!showResult}><button className="secondary-button exam-back-button" disabled={!!busy} onClick={() => setShowResult(false)}>Quay lại thiết lập</button>
+    </div>{result && <main className="exam-result-view" hidden={!showResult}><button className="secondary-button exam-back-button" disabled={!!busy} onClick={backToSetup}>Quay lại thiết lập</button>
       <div className="exam-result-toolbar"><button className="secondary-button" aria-expanded={answers} onClick={() => { setAnswers(value => !value); setReference(null); }}>{answers ? "Xem đề" : "Đáp án & lời giải"}</button><button className="secondary-button" disabled={!!busy} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? "Xong chỉnh sửa" : "Chỉnh sửa đề"}</button><button className="secondary-button" disabled={!!busy} onClick={() => void save(false)}><Save size={16}/>Lưu đề</button>
         {result.settings.format === "quiz" ? <><button className="primary-button" disabled={!!busy || quizzes.busy || quizzes.loading} onClick={() => void save(true)}>Lưu vào Quiz</button>{result.quizId && <button className="secondary-button" onClick={onOpenQuiz}>Đi tới Quiz</button>}</> : <button className="primary-button" disabled={!!busy} onClick={() => void run("Đang chuẩn bị PDF…", async () => { await exportExamPdf(result); if (alive.current) setNotice("Trong hộp thoại in, chọn Lưu thành PDF. Đề ở trước; đáp án và lời giải bắt đầu ở phần riêng phía sau."); })}>Xuất PDF</button>}
       </div>
@@ -187,6 +191,6 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       {selectedReference && <aside className="exam-reference-panel"><button className="text-button" onClick={() => setReference(null)}>Đóng nguồn</button><h3>{selectedReference.name}{reference?.page ? ` · trang ${reference.page}` : ""}</h3><pre>{reference?.page ? selectedReference.text.split(`[PAGE ${reference.page}]`)[1]?.split(/\[PAGE \d+\]/)[0] : selectedReference.text}</pre></aside>}
       <ExamPaper exam={result} answers={answers} onReference={(sourceId, page) => setReference({ sourceId, page })}/>
     </main>}</div>
-    <details className="exam-library"><summary><BookOpen size={16}/>Thư viện đề trên thiết bị này ({library.length})</summary><p>Đề và bản nháp được lưu riêng theo tài khoản trên trình duyệt này. Quiz dùng thư viện Quiz hiện có.</p><div>{library.map(exam => <article key={exam.id}><button disabled={!!busy} onClick={() => { setShowResult(true); setWork({ settings: exam.settings, sources: exam.sources, blueprint: exam.blueprint, result: structuredClone(exam), sourceConfirmed: true, planConfirmed: true, aiMode: exam.generationMode ?? "auto", manual: emptyManualExam() }); setAnswers(false); setEditing(false); setReference(null); }}>{exam.draft.title}<small>{exam.settings.format === "quiz" ? "Quiz" : "Đề nhiều dạng"} · {new Date(exam.updatedAt).toLocaleDateString("vi-VN")}</small></button><button className="icon-button" aria-label={`Xóa ${exam.draft.title}`} disabled={!!busy} onClick={() => void run("Đang xóa…", async () => { await deleteExam(owner, exam.id); if (alive.current) setLibrary(items => items.filter(item => item.id !== exam.id)); })}><Trash2 size={16}/></button></article>)}</div></details>
+    <details className="exam-library"><summary><BookOpen size={16}/>Thư viện đề trên thiết bị này ({library.length})</summary><p>Đề và bản nháp được lưu riêng theo tài khoản trên trình duyệt này. Quiz dùng thư viện Quiz hiện có.</p><div>{library.map(exam => <article key={exam.id}><button disabled={!!busy} onClick={() => { showExam(); setWork({ settings: exam.settings, sources: exam.sources, blueprint: exam.blueprint, result: structuredClone(exam), sourceConfirmed: true, planConfirmed: true, aiMode: exam.generationMode ?? "auto", manual: emptyManualExam() }); setAnswers(false); setEditing(false); setReference(null); }}>{exam.draft.title}<small>{exam.settings.format === "quiz" ? "Quiz" : "Đề nhiều dạng"} · {new Date(exam.updatedAt).toLocaleDateString("vi-VN")}</small></button><button className="icon-button" aria-label={`Xóa ${exam.draft.title}`} disabled={!!busy} onClick={() => void run("Đang xóa…", async () => { await deleteExam(owner, exam.id); if (alive.current) setLibrary(items => items.filter(item => item.id !== exam.id)); })}><Trash2 size={16}/></button></article>)}</div></details>
   </section>;
 }

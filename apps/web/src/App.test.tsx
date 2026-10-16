@@ -17,7 +17,7 @@ async function waitForUI(check: () => void) {
 }
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear();
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; localStorage.clear(); window.history.replaceState({}, "", "/");
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
@@ -47,7 +47,7 @@ describe("Workspace UI", () => {
     await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());
     expect(host.querySelector('button[aria-label="Trợ giúp trang này"]')).not.toBeNull();
     await act(async () => (host.querySelector(".brand") as HTMLButtonElement).click());
-    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Trung tâm học tập") as HTMLButtonElement).click());
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Không gian học tập") as HTMLButtonElement).click());
     expect(host.querySelector('button[aria-label="Trợ giúp trang này"]')).not.toBeNull();
   });
   it("favorites, duplicates, trashes and restores real projects from cards", async()=>{
@@ -156,11 +156,11 @@ describe("Workspace UI", () => {
   it("opens the Learning Hub without injecting demo decks or cards", async () => {
     await import("./components/LearningHubPage");
     await act(async () => root.render(<App/>));
-    const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Trung tâm học tập") as HTMLButtonElement;
+    const button = [...host.querySelectorAll("nav button")].find(item => item.textContent === "Không gian học tập") as HTMLButtonElement;
     await act(async () => button.click());
     expect(host.querySelector(".learning-hub-page")).not.toBeNull();
-    expect(host.textContent).toContain("Tổng quan");
-    const flashcardTab = [...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(item => item.textContent === "Flashcard")!;
+    expect(host.textContent).toContain("Hôm nay bạn muốn học gì?");
+    const flashcardTab = host.querySelector<HTMLButtonElement>('.learning-primary-tools [data-guide-tab="flashcards"]')!;
     await act(async () => flashcardTab.click());
     expect(host.textContent).toContain("Bộ thẻ");
     await vi.waitFor(async () => {
@@ -169,26 +169,45 @@ describe("Workspace UI", () => {
     });
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("lets a guest find a hidden learning section through the grouped section picker", async () => {
-    await import("./components/LearningHubPage");
-    await act(async () => root.render(<App/>));
-    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Trung tâm học tập") as HTMLButtonElement).click());
-    const picker = host.querySelector(".learning-nav-picker") as HTMLDetailsElement;
-    await act(async () => (picker.querySelector("summary") as HTMLElement).click());
-    expect(picker.open).toBe(true);
-    await act(async () => ([...picker.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Lớp học") as HTMLButtonElement).click());
-    expect(host.querySelector('.learning-hub-nav button[aria-selected="true"]')?.textContent).toContain("Lớp học");
+  it("opens secondary tools from home and switches tools with the compact picker", async () => {
+    await import("./components/LearningHubPage"); await act(async () => root.render(<App/>));
+    await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Không gian học tập")!).click());
+    await act(async () => host.querySelector<HTMLButtonElement>('.learning-secondary-groups [data-guide-tab="classrooms"]')!.click());
+    expect(host.querySelector(".learning-space-heading")).toBeNull(); expect(host.querySelector(".learning-hub-nav")).toBeNull();
     expect(host.textContent).toContain("Đăng nhập để tham gia lớp học");
-    expect(picker.open).toBe(false);
-    const selectedTab = host.querySelector('.learning-hub-nav button[aria-selected="true"]') as HTMLButtonElement;
-    await act(async () => selectedTab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-    expect(host.querySelector('.learning-hub-nav button[aria-selected="true"]')?.textContent).toContain("Tổng quan");
+    const picker = host.querySelector(".learning-tool-picker") as HTMLDetailsElement;
+    await act(async () => picker.querySelector("summary")!.click()); expect(picker.open).toBe(true);
+    await act(async () => picker.querySelector<HTMLButtonElement>('[data-guide-tab="lab"]')!.click()); expect(picker.open).toBe(false);
+    expect(host.querySelector('.learning-tool-page[data-learning-tool="lab"]')?.hasAttribute("hidden")).toBe(false);
+    await act(async () => host.querySelector<HTMLButtonElement>(".learning-space-back")!.click());
+    expect(host.querySelector(".learning-space-heading")?.textContent).toContain("Không gian học tập");
+  });
+  it("opens a valid tool URL directly and restores tool/home with browser history", async () => {
+    await import("./components/LearningHubPage"); window.history.replaceState({}, "", "/?learn=quiz");
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.querySelector('.learning-tool-page[data-learning-tool="quiz"]')?.hasAttribute("hidden")).toBe(false));
+    expect(host.querySelector(".learning-space-heading")).toBeNull();
+    await act(async () => host.querySelector<HTMLButtonElement>(".learning-space-back")!.click());
+    expect(host.querySelector(".learning-space-heading")).not.toBeNull();
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(host.querySelector('.learning-tool-page[data-learning-tool="quiz"]')?.hasAttribute("hidden")).toBe(false);
+    await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(host.querySelector(".learning-space-heading")).not.toBeNull();
+  });
+  it("restores the workspace and learning home when traversing their entry history", async () => {
+    await import("./components/LearningHubPage"); await act(async () => root.render(<App/>));
+    await act(async () => host.querySelector<HTMLButtonElement>(".nav-learning")!.click());
+    expect(host.querySelector(".learning-space-heading")).not.toBeNull();
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(host.querySelector(".learning-hub-page")).toBeNull();
+    await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 30)); });
+    await waitForUI(() => expect(host.querySelector(".learning-space-heading")).not.toBeNull());
   });
   it("opens the Lab library, previews HTML and preserves its session through fullscreen", async () => {
     await import("./components/LabPage");
     await act(async () => root.render(<App/>));
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(b => b.textContent === "Trung tâm học tập")!.click());
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(b => b.textContent?.includes("Lab"))!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(b => b.textContent === "Không gian học tập")!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".learning-primary-tools button")].find(b => b.textContent?.includes("Lab"))!.click());
     await waitForUI(() => expect(host.querySelector<HTMLButtonElement>(".lab-add-button")?.disabled).toBe(false));
     expect(host.querySelector("iframe")).toBeNull();
     await act(async () => host.querySelector<HTMLButtonElement>(".lab-add-button")!.click());
@@ -208,8 +227,8 @@ describe("Workspace UI", () => {
   });
   it("saves an HTML-only Lab through the editor without requiring an AI request", async () => {
     await import("./components/LabPage"); await act(async () => root.render(<App/>));
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(b => b.textContent === "Trung tâm học tập")!.click());
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".learning-hub-nav button")].find(b => b.textContent?.includes("Lab"))!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(b => b.textContent === "Không gian học tập")!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".learning-primary-tools button")].find(b => b.textContent?.includes("Lab"))!.click());
     await waitForUI(() => expect(host.querySelector<HTMLButtonElement>(".lab-add-button")?.disabled).toBe(false));
     await act(async () => host.querySelector<HTMLButtonElement>(".lab-add-button")!.click());
     const name=host.querySelector<HTMLInputElement>(".lab-editor input")!;

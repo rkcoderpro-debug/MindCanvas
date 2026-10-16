@@ -92,7 +92,7 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
     });
   };
   return <section className="connections-page">
-    <header><div><span className="eyebrow">LEARNING HUB · KẾT NỐI</span><h2>Bạn bè và tin nhắn</h2><p>Kết nối riêng tư bằng lời mời; gửi học liệu và trao đổi 1–1.</p></div><button type="button" className="secondary-button" onClick={() => void run(async () => undefined)}><RefreshCw size={15}/>Làm mới</button></header>
+    <header><div><span className="eyebrow">KẾT NỐI</span><h2>Bạn bè và tin nhắn</h2><p>Kết nối riêng tư bằng lời mời; gửi học liệu và trao đổi 1–1.</p></div><button type="button" className="secondary-button" onClick={() => void run(async () => undefined)}><RefreshCw size={15}/>Làm mới</button></header>
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p role="status" className="form-success">{notice}</p>}
     <div className="connections-layout">
       <aside className="connections-sidebar">

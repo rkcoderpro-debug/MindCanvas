@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { LearningNavigationProvider, LearningToolScope } from "../lib/learningNavigation";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -138,4 +139,11 @@ it("keeps direct-input sources after generation failure and retries without para
   expect((host.querySelector('[aria-label="Nội dung Văn bản"]') as HTMLTextAreaElement).value).toContain("Water freezes");
   const generate = button("Tạo đề bằng AI"); await act(async () => { generate.click(); generate.click(); });
   expect(api.analyze).toHaveBeenCalledTimes(1); expect(api.generate).toHaveBeenCalledTimes(2); expect(host.querySelector(".exam-paper")).toBeTruthy();
+});
+
+it("returns to setup from a restored result even without an inner browser history entry", async () => {
+  const work = emptyExamWorkspace(); work.result = examFixture(); persistExamWorkspace("user-a", work);
+  await act(async () => root.render(<LearningNavigationProvider owner="user-a" initialTab="exams"><LearningToolScope tab="exams" active={true}><ExamBuilderPage owner="user-a" quizzes={quizzes} onOpenQuiz={() => {}}/></LearningToolScope></LearningNavigationProvider>));
+  expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(false);
+  await click("Quay lại thiết lập"); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(false);
 });

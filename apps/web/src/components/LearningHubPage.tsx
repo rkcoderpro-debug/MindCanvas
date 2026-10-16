@@ -1,7 +1,7 @@
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, lazy, Suspense, type KeyboardEvent } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Target, Trophy, Users, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowLeft, ArrowRight, ChevronDown, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -23,8 +23,7 @@ import type { AiGenerationOptions } from "../lib/aiOptions";
 import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 import DocumentToolsPage from "./DocumentToolsPage";
 import type { UploadedDocument } from "../lib/documentStore";
-
-type HubTab = "exams" | "overview" | "flashcards" | "quiz" | "plan" | "progress" | "lab" | "shared" | "connections" | "classrooms" | "music" | "tools";
+import { LearningNavigationProvider, LearningToolScope, useLearningNavigation, type HubTab } from "../lib/learningNavigation";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -45,23 +44,40 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-export default function LearningHubPage({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialTab, initialPeerId, initialClassId }: { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string }) {
+type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string };
+export default function LearningHubPage(props: LearningHubProps) {
+  return <LearningNavigationProvider key={props.owner ?? "guest"} owner={props.owner} initialTab={props.initialTab}><LearningSpace {...props}/></LearningNavigationProvider>;
+}
+function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId }: LearningHubProps) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
-  const [tab, setTab] = useState<HubTab>(initialTab ?? "overview");
+  const navigation = useLearningNavigation(), tab = navigation.route.tab;
   const [openAiPlan, setOpenAiPlan] = useState(false);
-  const navRef = useRef<HTMLElement>(null);
-  const pickerRef = useRef<HTMLDetailsElement>(null);
-  const [navScroll, setNavScroll] = useState({ overflow: false, start: true, end: true });
-  const [showNavSwipeHint, setShowNavSwipeHint] = useState(() => {
-    try { return localStorage.getItem("mindcanvas:learning-nav-swiped:v1") !== "true"; } catch { return true; }
-  });
+  const pickerRef = useRef<HTMLDetailsElement>(null), rootRef = useRef<HTMLElement>(null);
   const today = vietnamStudyDate();
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const root = rootRef.current;
+      if (!root || document.querySelector("dialog[open]")) return;
+      root.scrollIntoView?.({ block: "start" });
+      const scope = tab === "overview" ? root : root.querySelector(`[data-learning-tool="${tab}"]`);
+      const heading = scope?.querySelector<HTMLElement>("h1,h2");
+      heading?.setAttribute("tabindex", "-1"); heading?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tab]);
 
   useEffect(() => {
-    if (initialTab) setTab(initialTab);
-  }, [initialTab]);
+    const close = (event: Event) => {
+      const picker = pickerRef.current;
+      if (!picker?.open) return;
+      if (event instanceof KeyboardEvent && event.key === "Escape") { picker.open = false; picker.querySelector<HTMLElement>("summary")?.focus(); }
+      else if (event.type === "pointerdown" && event.target instanceof Node && !picker.contains(event.target)) picker.open = false;
+    };
+    document.addEventListener("pointerdown", close); document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", close); };
+  }, []);
 
   useEffect(() => {
     const plan = flashcards.activeStudyPlan;
@@ -70,33 +86,6 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     void flashcards.loadCardsForDecks(plan.deckIds).then(cards => { if (alive) void flashcards.ensureStudyPlanDay(plan, cards); }).catch(() => undefined);
     return () => { alive = false; };
   }, [flashcards.activeStudyPlan, flashcards.ensureStudyPlanDay, flashcards.loadCardsForDecks, flashcards.studyLoading, flashcards.todayStudyDay]);
-  const updateNavScroll = () => {
-    const nav = navRef.current;
-    if (!nav) return;
-    setNavScroll({ overflow: nav.scrollWidth > nav.clientWidth + 2, start: nav.scrollLeft < 2, end: nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2 });
-  };
-
-  useEffect(() => {
-    const nav = navRef.current;
-    if (!nav) return;
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateNavScroll);
-    observer?.observe(nav);
-    updateNavScroll();
-    window.addEventListener("resize", updateNavScroll);
-    return () => { observer?.disconnect(); window.removeEventListener("resize", updateNavScroll); };
-  }, []);
-
-  useEffect(() => {
-    navRef.current?.querySelector<HTMLElement>("button.active")?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "nearest" });
-    updateNavScroll();
-  }, [tab]);
-
-  const markNavDiscovered = () => {
-    if (!showNavSwipeHint) return;
-    setShowNavSwipeHint(false);
-    try { localStorage.setItem("mindcanvas:learning-nav-swiped:v1", "true"); } catch {}
-  };
-
   const onQuizCompleted = async (quizId: string) => {
     const plan = flashcards.activeStudyPlan;
     const planDay = plan ? studyPlanDayFor(plan, today) : null;
@@ -117,72 +106,79 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
-    { id: "tools", label: "Tài liệu", icon: FileText },
-    { id: "shared", label: "Được chia sẻ với tôi", icon: BookOpen },
-    { id: "connections", label: "Bạn bè & tin nhắn", icon: Users },
-    { id: "classrooms", label: "Lớp học", icon: GraduationCap },
+    { id: "tools", label: language === "vi" ? "Tài liệu" : "Documents", icon: FileText },
+    { id: "shared", label: language === "vi" ? "Được chia sẻ với tôi" : "Shared with me", icon: BookOpen },
+    { id: "connections", label: language === "vi" ? "Bạn bè & tin nhắn" : "Friends & messages", icon: Users },
+    { id: "classrooms", label: language === "vi" ? "Lớp học" : "Classrooms", icon: GraduationCap },
+    { id: "music", label: language === "vi" ? "Nhạc tập trung" : "Focus music", icon: Music2 },
   ];
   const pickTab = (id: HubTab) => {
-    setTab(id);
-    markNavDiscovered();
+    navigation.go(id);
     if (pickerRef.current) pickerRef.current.open = false;
     emitGuideAction(`learning:tab:${id}`);
     if (id === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } }));
   };
-  const onNavKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]')];
-    const current = buttons.indexOf(event.target as HTMLButtonElement);
-    if (current < 0) return;
-    event.preventDefault();
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
-    buttons[next].focus();
-    pickTab(tabs[next].id);
-  };
   const tabGroups: Array<{ title: string; ids: HubTab[] }> = [
     { title: language === "vi" ? "Học" : "Study", ids: ["overview", "flashcards", "quiz", "exams", "lab"] },
     { title: language === "vi" ? "Tài nguyên" : "Resources", ids: ["tools", "shared"] },
-    { title: language === "vi" ? "Lịch học" : "Schedule", ids: ["plan", "progress"] },
+    { title: language === "vi" ? "Lịch học" : "Schedule", ids: ["plan", "progress", "music"] },
     { title: language === "vi" ? "Cộng tác" : "Collaborate", ids: ["connections", "classrooms"] },
   ];
 
-  return <section className={`learning-hub-page ${tab === "exams" ? "learning-exam-active" : ""}`}>
-    <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-actions"><button type="button" data-help-id="learning-music" className={`learning-music-launcher ${tab === "music" ? "active" : ""}`} onClick={() => { setTab("music"); emitGuideAction("learning:tab:music"); }}><Music2 size={17}/><span>Nhạc</span></button><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div></header>
-    <div className="learning-nav-shell">
-      <button type="button" className="learning-nav-arrow" aria-label={language === "vi" ? "Xem mục trước" : "Previous sections"} disabled={!navScroll.overflow || navScroll.start} onClick={() => { const nav = navRef.current; nav?.scrollBy({ left: -Math.max(200, nav.clientWidth * .7), behavior: "smooth" }); }}><ChevronLeft size={18}/></button>
-      <nav ref={navRef} className="learning-hub-nav" aria-label={t("learningHub")} role="tablist" onKeyDown={onNavKeyDown} onScroll={() => { markNavDiscovered(); updateNavScroll(); }}>{tabs.map(({ id, label, icon: Icon }) => <button key={id} data-guide-tab={id} data-help-id={`learning-tab-${id}`} role="tab" aria-selected={tab === id} className={`${tab === id ? "active" : ""} ${id === "lab" ? "learning-lab-tab" : ""} ${id === "tools" ? "learning-tools-tab" : ""}`} onClick={() => pickTab(id)}><Icon size={17}/><span>{label}</span>{id === "lab" && <small className="learning-tab-badge">{t("labFeatured")}</small>}{id === "quiz" && quizzes.quizzes.length > 0 && <small>{quizzes.quizzes.length}</small>}</button>)}</nav>
-      <button type="button" className="learning-nav-arrow" aria-label={language === "vi" ? "Xem mục tiếp" : "Next sections"} disabled={!navScroll.overflow || navScroll.end} onClick={() => { const nav = navRef.current; nav?.scrollBy({ left: Math.max(200, nav.clientWidth * .7), behavior: "smooth" }); }}><ChevronRight size={18}/></button>
-      <details ref={pickerRef} className="learning-nav-picker"><summary>{language === "vi" ? "Tất cả mục" : "All sections"}</summary><div className="learning-nav-picker-menu">{tabGroups.map(group => <section key={group.title}><strong>{group.title}</strong>{group.ids.map(id => { const item = tabs.find(candidate => candidate.id === id)!; return <button type="button" key={id} aria-current={tab === id ? "page" : undefined} onClick={() => pickTab(id)}>{item.label}</button>; })}</section>)}</div></details>
-    </div>{showNavSwipeHint && <div className="learning-hub-swipe-hint" role="status">{t("swipeForMore")}</div>}
-    {tab === "overview" && <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={setTab} onOpenAiPlan={() => { setOpenAiPlan(true); setTab("plan"); }} t={t} language={language}/>}
-    {tab === "flashcards" && <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>}
-    {tab === "quiz" && <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>}
-    {tab === "exams" && <InboxBoundary key={owner} fallback={<section role="alert"><p>Không thể tải mục tạo đề thi.</p><button className="secondary-button" onClick={() => window.location.reload()}>Tải lại trang</button></section>}><Suspense fallback={<p role="status">Đang tải mục tạo đề thi…</p>}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={() => setTab("quiz")}/></Suspense></InboxBoundary>}
-    {tab === "plan" && <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
-    {tab === "progress" && <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>}
-    {tab === "lab" && <LabPage owner={owner} embedded accountPlan={accountPlan}/>}
-    {tab === "tools" && <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan} onBack={() => setTab("overview")}/>}
-    {tab === "music" && <MusicPage/>}
-    {tab === "connections" && <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => setTab("shared")}/>}
-    {tab === "classrooms" && <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes}/>}
-    {tab === "shared" && <SharedLearningTab owner={owner} onSaved={kind => {
-      if (kind === "quiz") void quizzes.refresh();
-      if (kind === "flashcard") void flashcards.refreshDecks();
-      if (kind === "document") onDocumentsChanged();
-    }}/>}
+  const renderTool = (id: HubTab) => {
+    switch (id) {
+      case "flashcards": return <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>;
+      case "quiz": return <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>;
+      case "exams": return <InboxBoundary key={owner} fallback={<section role="alert"><p>{language === "vi" ? "Không thể tải mục tạo đề thi." : "Could not load exam studio."}</p><button className="secondary-button" onClick={() => window.location.reload()}>{t("retry")}</button></section>}><Suspense fallback={<p role="status">{t("loading")}</p>}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={() => pickTab("quiz")}/></Suspense></InboxBoundary>;
+      case "plan": return <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>;
+      case "progress": return <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>;
+      case "lab": return <LabPage owner={owner} embedded accountPlan={accountPlan}/>;
+      case "tools": return <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan}/>;
+      case "music": return <MusicPage/>;
+      case "connections": return <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => pickTab("shared")}/>;
+      case "classrooms": return <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes}/>;
+      case "shared": return <SharedLearningTab owner={owner} onSaved={kind => {
+        if (kind === "quiz") void quizzes.refresh();
+        if (kind === "flashcard") void flashcards.refreshDecks();
+        if (kind === "document") onDocumentsChanged();
+      }}/>;
+      default: return null;
+    }
+  };
+  return <section ref={rootRef} className={`learning-hub-page learning-space ${tab === "overview" ? "learning-space-home" : "learning-space-tool"}`}>
+    {tab === "overview" ? <>
+      <header className="learning-space-heading"><div><h1>{t("learningHub")}</h1><p>{language === "vi" ? "Hôm nay bạn muốn học gì?" : "What would you like to learn today?"}</p></div><div className="learning-space-streak"><Flame size={17}/><span>{flashcards.streak.current} {t("streakDays")}</span></div></header>
+      <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={pickTab} lastTool={navigation.lastTool} onOpenAiPlan={() => { setOpenAiPlan(true); pickTab("plan"); }} t={t} language={language}/>
+    </> : <div className="learning-space-toolbar">
+      <button type="button" className="learning-space-back" onClick={() => pickTab("overview")}><ArrowLeft size={16}/>{language === "vi" ? "Về không gian học tập" : "Back to Learning Space"}</button>
+      <details ref={pickerRef} className="learning-tool-picker"><summary>{language === "vi" ? "Công cụ" : "Tools"}<ChevronDown size={15}/></summary><nav aria-label={language === "vi" ? "Chuyển công cụ học tập" : "Switch learning tools"}>{tabGroups.map(group => <section key={group.title}><strong>{group.title}</strong>{group.ids.filter(id => id !== "overview").map(id => { const item = tabs.find(candidate => candidate.id === id)!; return <button type="button" key={id} className={id === "tools" ? "learning-tools-tab" : ""} data-guide-tab={id} data-help-id={`learning-tab-${id}`} aria-current={tab === id ? "page" : undefined} onClick={() => pickTab(id)}><item.icon size={16}/>{item.label}</button>; })}</section>)}</nav></details>
+    </div>}
+    {tabs.filter(item => item.id !== "overview" && navigation.visited.has(item.id)).map(item => <LearningToolScope key={item.id} tab={item.id} active={tab === item.id}>{renderTool(item.id)}</LearningToolScope>)}
   </section>;
 }
 
-function HubOverview({ flashcards, quizzes, onTab, onOpenAiPlan, t, language }: { flashcards: FlashcardStore; quizzes: QuizStore; onTab: (tab: HubTab) => void; onOpenAiPlan: () => void; t: ReturnType<typeof useLanguage>["t"]; language: string }) {
-  const plan = flashcards.activeStudyPlan;
-  const today = vietnamStudyDate();
-  const planDay = plan ? studyPlanDayFor(plan, today) : null;
-  const day = flashcards.todayStudyDay;
-  const tasks = planDay?.tasks ?? [];
-  return <div className="learning-hub-overview">
-    <div className="learning-hero"><div className="learning-hero-copy"><span className="eyebrow">{plan ? t("todayPlan") : t("quickStart")}</span><h2>{plan ? plan.name : t("continueLearning")}</h2><p>{plan ? t("manualPlanStreakHint") : t("noPlanFallbackHint")}</p><div className="learning-hero-actions"><button className="primary-button" onClick={() => onTab(plan ? "plan" : "flashcards")}><Sparkles size={17}/>{plan ? t("openTodayPlan") : t("startLearning")}</button><button className="secondary-button learning-hub-ai-action" onClick={onOpenAiPlan}><WandSparkles size={16}/>{t("aiStudyPlan")}</button></div></div><div className="learning-hero-orbit"><Trophy size={32}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div>
-    <div className="learning-stats-grid"><article><span><Flame size={16}/>{t("streak")}</span><strong>{flashcards.streak.current}</strong><small>{t("bestStreak")}: {flashcards.streak.best}</small></article><article><span><Target size={16}/>{t("todayGoal")}</span><strong>{flashcards.streak.todayProgress} / {flashcards.streak.todayTarget}</strong><small>{flashcards.streak.todayCompleted ? t("streakEarned") : t("streakLocked")}</small></article><article><span><BookOpen size={16}/>{t("flashcards")}</span><strong>{flashcards.cards.length}</strong><small>{t("dueCount", { count: flashcards.due.length })}</small></article><article><span><ClipboardList size={16}/>{t("quiz")}</span><strong>{quizzes.quizzes.length}</strong><small>{t("quizTestsSaved")}</small></article></div>
-    <div className="learning-overview-columns"><section className="learning-card learning-today-card"><div className="learning-card-heading"><div><span className="eyebrow">{t("today")}</span><h3>{plan ? t("dailyTasks") : t("quickStart")}</h3></div><button className="text-button" onClick={() => onTab(plan ? "plan" : "flashcards")}>{t("viewDetails")}</button></div>{plan && tasks.length ? <div className="task-checklist">{tasks.map(task => { const done = !!day?.completedTaskIds?.includes(task.id); return <div className={`task-check-row ${done ? "done" : ""}`} key={task.id}><span className="task-check-icon">{done ? <CheckCircle2 size={18}/> : taskIcon(task.kind)}</span><span><strong>{task.title}</strong><small>{task.kind === "flashcards" && task.targetCount ? `${task.targetCount} ${t("targetCards").toLocaleLowerCase()}` : task.minutes ? `${task.minutes} ${t("minutes")}` : t("taskPending")}</small></span>{done && <Check size={16}/>}</div>; })}</div> : <div className="learning-empty-state"><WandSparkles size={26}/><p>{t("noTasksToday")}</p><button className="secondary-button" onClick={() => onTab("plan")}><Plus size={15}/>{t("createManualPlan")}</button></div>}</section><section className="learning-card learning-quick-actions"><div className="learning-card-heading"><div><span className="eyebrow">{t("studyTools")}</span><h3>{t("chooseStudyMode")}</h3></div></div><button data-help-id="learning-tab-flashcards" onClick={() => onTab("flashcards")}><span className="quick-action-icon purple"><BookOpen size={20}/></span><span><strong>{t("flashcards")}</strong><small>{t("flashcardQuickHint")}</small></span></button><button data-help-id="learning-tab-quiz" onClick={() => onTab("quiz")}><span className="quick-action-icon blue"><ClipboardList size={20}/></span><span><strong>{t("quiz")}</strong><small>{t("quizQuickHint")}</small></span></button><button data-help-id="learning-tab-plan" onClick={() => onTab("plan")}><span className="quick-action-icon orange"><CalendarDays size={20}/></span><span><strong>{t("studyPlan")}</strong><small>{t("planQuickHint")}</small></span></button><button data-help-id="learning-tab-lab" className="learning-lab-quick-action" onClick={() => onTab("lab")}><span className="quick-action-icon green"><Beaker size={20}/></span><span><strong>{t("labNav")}</strong><small>{t("labQuickHint")}</small></span><small className="learning-tab-badge">{t("labFeatured")}</small></button></section></div>
+function HubOverview({ flashcards, quizzes, onTab, lastTool, onOpenAiPlan, t, language }: { flashcards: FlashcardStore; quizzes: QuizStore; onTab: (tab: HubTab) => void; lastTool: HubTab | null; onOpenAiPlan: () => void; t: ReturnType<typeof useLanguage>["t"]; language: string }) {
+  const vi = language === "vi", plan = flashcards.activeStudyPlan;
+  const planDay = plan ? studyPlanDayFor(plan, vietnamStudyDate()) : null;
+  const tasks = planDay?.tasks ?? [], done = flashcards.todayStudyDay?.completedTaskIds ?? [];
+  const primary = [
+    { id: "flashcards" as const, title: t("flashcards"), description: vi ? "Ghi nhớ kiến thức qua các bộ thẻ." : "Remember more with your flashcard decks.", icon: BookOpen, count: flashcards.decks.length },
+    { id: "quiz" as const, title: t("quiz"), description: vi ? "Luyện tập và tự kiểm tra kiến thức." : "Practice and test your understanding.", icon: ClipboardList, count: quizzes.quizzes.length },
+    { id: "exams" as const, title: vi ? "Tạo đề thi" : "Exam studio", description: vi ? "Tạo đề bằng AI Auto hoặc prompt Manual." : "Build exams with Auto AI or Manual prompts.", icon: FileText },
+    { id: "lab" as const, title: t("labNav"), description: vi ? "Khám phá kiến thức bằng thực hành." : "Explore ideas through hands-on learning.", icon: Beaker },
+  ];
+  const secondary = [
+    { title: vi ? "Tài nguyên" : "Resources", items: [{ id: "tools" as const, title: vi ? "Tài liệu" : "Documents", icon: FileText }, { id: "shared" as const, title: vi ? "Được chia sẻ với tôi" : "Shared with me", icon: BookOpen }] },
+    { title: vi ? "Kế hoạch & tiến độ" : "Plan & progress", items: [{ id: "plan" as const, title: t("studyPlan"), icon: CalendarDays }, { id: "progress" as const, title: t("progress"), icon: BarChart3 }, { id: "music" as const, title: vi ? "Nhạc tập trung" : "Focus music", icon: Music2 }] },
+    { title: vi ? "Kết nối" : "Connect", items: [{ id: "classrooms" as const, title: vi ? "Lớp học" : "Classrooms", icon: GraduationCap }, { id: "connections" as const, title: vi ? "Bạn bè & tin nhắn" : "Friends & messages", icon: Users }] },
+  ];
+  const names: Record<HubTab, string> = { overview: t("learningHub"), flashcards: t("flashcards"), quiz: t("quiz"), exams: vi ? "Tạo đề thi" : "Exam studio", lab: t("labNav"), tools: vi ? "Tài liệu" : "Documents", shared: vi ? "Được chia sẻ" : "Shared", plan: t("studyPlan"), progress: t("progress"), music: vi ? "Nhạc" : "Music", connections: vi ? "Bạn bè" : "Friends", classrooms: vi ? "Lớp học" : "Classrooms" };
+  return <div className="learning-space-home-content">
+    {lastTool && <section className="learning-resume"><div><span>{vi ? "MỞ GẦN ĐÂY" : "RECENTLY OPENED"}</span><h2>{names[lastTool]}</h2></div><button className="primary-button" onClick={() => onTab(lastTool)}>{vi ? "Tiếp tục" : "Continue"}<ArrowRight size={17}/></button></section>}
+    {plan && tasks.length > 0 && <section className="learning-today"><div className="learning-today-heading"><div><span>{t("today")}</span><h2>{plan.name}</h2></div><button className="text-button" onClick={() => onTab("plan")}>{t("viewDetails")}</button></div><ul>{tasks.map(task => <li key={task.id}>{done.includes(task.id) ? <CheckCircle2 size={17}/> : taskIcon(task.kind)}<span>{task.title}</span>{done.includes(task.id) && <small>{t("completed")}</small>}</li>)}</ul></section>}
+    <section className="learning-primary-tools" aria-label={vi ? "Công cụ học tập" : "Learning tools"}>{primary.map(item => <button type="button" key={item.id} data-guide-tab={item.id} data-help-id={`learning-tab-${item.id}`} onClick={() => onTab(item.id)}><span className={`learning-tool-icon ${item.id}`}><item.icon size={23}/></span><h2>{item.title}</h2><p>{item.description}</p><span className="learning-tool-footer">{item.count !== undefined && item.count > 0 ? `${item.count} ${item.id === "quiz" ? (vi ? "đề đã lưu" : "saved quizzes") : (vi ? "bộ thẻ" : "decks")}` : (vi ? "Mở công cụ" : "Open tool")}<ArrowRight size={17}/></span></button>)}</section>
+    <div className="learning-secondary-groups">{secondary.map(group => <section key={group.title}><h2>{group.title}</h2>{group.items.map(item => <button type="button" key={item.id} className={item.id === "tools" ? "learning-tools-tab" : ""} data-guide-tab={item.id} data-help-id={`learning-tab-${item.id}`} onClick={() => onTab(item.id)}><item.icon size={18}/><span>{item.title}</span><ArrowRight size={15}/></button>)}</section>)}</div>
+    {!plan && <button className="text-button learning-plan-link" onClick={onOpenAiPlan}><WandSparkles size={16}/>{vi ? "Lên kế hoạch học với AI" : "Plan your learning with AI"}</button>}
   </div>;
 }
 

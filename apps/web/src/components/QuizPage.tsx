@@ -1,3 +1,4 @@
+import { useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Award, Check, CheckCircle2, ClipboardList, FileUp, Play, RotateCcw, Trash2, X } from "lucide-react";
 import type { AccountPlan } from "../lib/account";
@@ -42,6 +43,8 @@ function modeLabel(t: ReturnType<typeof useLanguage>["t"], mode: QuizMode) {
 
 export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }: { owner: string | null; store: QuizStore; accountPlan?: AccountPlan; onQuizCompleted?: (quizId: string) => Promise<void> }) {
   const { t, language } = useLanguage();
+  const navigation = useLearningTool();
+  const [sessionVisible, setSessionVisible] = useState(false);
   const [dialog, setDialog] = useState(false);
   const [quizFilter, setQuizFilter] = useState<"all" | "saved">("all");
   const [mode, setMode] = useState<AiMode>(owner ? "auto" : "manual");
@@ -134,9 +137,10 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
     const session = { ...quiz, questions };
     const initialAnswers = Array.from({ length: questions.length }, () => null as number | null);
     const examDuration = requestedMode === "exam" ? Math.max(60, questions.length * 60) : 0;
+    if (navigation) navigation.open("quiz-session", () => setSessionVisible(true), () => setSessionVisible(false)); else setSessionVisible(true);
     setActiveQuiz(session); setActiveMode(requestedMode); setActiveOrder(requestedOrder); setActiveReveal(launchReveal); setAnswers(initialAnswers); answersRef.current = initialAnswers; setQuestionIndex(0); setAnswerRevealed(false); setStartedAt(Date.now()); setExamSeconds(examDuration); setExamEndsAt(examDuration ? Date.now() + examDuration * 1_000 : 0); examSubmittingRef.current = false; setResult(null); setError(""); store.setError("");
   };
-  const leaveQuiz = () => { examSubmittingRef.current = false; setActiveQuiz(null); setActiveMode(null); setExamEndsAt(0); setResult(null); setError(""); };
+  const leaveQuiz = () => { if (navigation) { setSessionVisible(false); navigation.back(); return; } setSessionVisible(false); examSubmittingRef.current = false; setActiveQuiz(null); setActiveMode(null); setExamEndsAt(0); setResult(null); setError(""); };
   const selectAnswer = (optionIndex: number) => {
     if (!activeQuiz || activeMode === null || (activeReveal === "instant" && answerRevealed)) return;
     setAnswers(current => { const next = current.map((answer, index) => index === questionIndex ? optionIndex : answer); answersRef.current = next; return next; });
@@ -171,7 +175,7 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
     return () => window.clearInterval(interval);
   }, [activeMode, activeQuiz?.id, examEndsAt, result]);
 
-  if (activeQuiz) {
+  if (activeQuiz && sessionVisible) {
     const question = activeQuiz.questions[questionIndex];
     const currentAnswer = answers[questionIndex];
     const currentMode = activeMode ?? "learn";

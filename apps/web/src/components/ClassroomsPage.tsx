@@ -125,7 +125,7 @@ export default function ClassroomsPage({ owner, quizzes, initialClassId }: { own
   const hasOwnClass = classes.some(room => room.teacher_id === owner && room.status === "teacher");
   const acceptedStudents = links.filter(link => link.teacher_id === owner && link.status === "accepted");
   return <section className="classrooms-page">
-    <header><div><span className="eyebrow">LEARNING HUB · LỚP HỌC</span><h2>Giáo viên và học trò</h2><p>Lời mời vai trò, lớp học, bài tập, hạn nộp và điểm riêng của từng học trò.</p></div><button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => undefined)}><RefreshCw size={16}/>Làm mới</button></header>
+    <header><div><span className="eyebrow">LỚP HỌC</span><h2>Giáo viên và học trò</h2><p>Lời mời vai trò, lớp học, bài tập, hạn nộp và điểm riêng của từng học trò.</p></div><button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => undefined)}><RefreshCw size={16}/>Làm mới</button></header>
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     <div className="classrooms-grid">
       <aside className="classrooms-sidebar">

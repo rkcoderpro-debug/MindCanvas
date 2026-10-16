@@ -221,7 +221,7 @@ export default function SharedLearningPage({ owner, onSaved }: { owner: string |
   const reviewQuestions = quizResult?.questions ?? [];
 
   return <section className="shared-learning">
-    <header className="shared-learning-header"><div><span className="eyebrow">LEARNING HUB · INBOX</span><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tập trung Quiz, Flashcard, Lab và Tài liệu; lưu bản sao vào thư viện cá nhân để tiếp tục sử dụng.</p></div><button className="secondary-button" disabled={listLoading} onClick={reload}><RefreshCw size={15}/>Làm mới</button></header>
+    <header className="shared-learning-header"><div><span className="eyebrow">INBOX</span><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tập trung Quiz, Flashcard, Lab và Tài liệu; lưu bản sao vào thư viện cá nhân để tiếp tục sử dụng.</p></div><button className="secondary-button" disabled={listLoading} onClick={reload}><RefreshCw size={15}/>Làm mới</button></header>
     {listError && <div role="alert" className="shared-inbox-error"><p>{listError}</p><button className="secondary-button" disabled={listLoading} onClick={reload}>Thử lại</button></div>}
     {listLoading && <p role="status">Đang tải học liệu chia sẻ…</p>}{opening && <p role="status">Đang mở học liệu…</p>}
     {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}
