@@ -1,6 +1,12 @@
 import { expect, it } from "vitest";
 import { createStudioPrompt, emptyStudioConfig } from "./examStudioPrompt";
 import { studioSource } from "./examStudioTestData";
+it.each(["word", "online"] as const)("prepares %s prompts without a MindCanvas upload", output => {
+  const session = createStudioPrompt({ ...emptyStudioConfig(), output }, [], 50);
+  expect(session.sources).toEqual([]);
+  expect(session.prompt).toContain("directly in the external AI conversation");
+  expect(session.prompt).toContain("never invent file IDs");
+});
 it("Word prompt asks for real DOCX and separate answers, original layout and no JSON conversion", () => {
   const config = emptyStudioConfig(); config.subject = "Kiến trúc máy tính"; const source = { ...studioSource(), role: "template" as const, name: "Midterm_HK1.pdf", text: "THIS EXTRACTED SOURCE MUST NEVER APPEAR" };
   const session = createStudioPrompt(config, [source], 100); expect(session.prompt).toContain("de-thi.docx"); expect(session.prompt).toContain("dap-an-loi-giai.docx"); expect(session.prompt).toContain("styles/fonts/font sizes"); expect(session.prompt).toContain("Do not return JSON"); expect(session.prompt).not.toContain(source.text); expect(session.prompt).not.toContain("BEGIN SOURCE DATA");

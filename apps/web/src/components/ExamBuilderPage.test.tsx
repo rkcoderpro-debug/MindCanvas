@@ -100,10 +100,42 @@ it("does not expose another account's cached draft", async () => {
   await mount("user-a"); expect(host.querySelector(".exam-paper")?.textContent).toContain("Practice Exam");
 });
 it("routes Manual to Word and interactive Studio without the legacy source confirmation UI", async () => {
-  await mount(); await set('[aria-label="Chế độ AI đề thi"]', "manual");
+  await mount(); await act(async () => (host.querySelector('button[aria-label="AI Manual"]') as HTMLButtonElement).click());
   expect(host.querySelector('[aria-label="Chế độ đề Manual"]')).toBeTruthy();
   expect(host.querySelector('[aria-label="Word đề kết quả"]')).toBeTruthy();
   expect(host.querySelector('[aria-label="Kết quả AI Manual"]')).toBeNull();
   expect(host.querySelector('input[type="checkbox"]')).toBeNull();
-  await click("Chuyển sang AI Auto"); expect(button("Phân tích cấu trúc")).toBeTruthy();
+  await act(async () => (host.querySelector('button[aria-label="AI Auto"]') as HTMLButtonElement).click()); expect(button("Phân tích cấu trúc")).toBeTruthy();
+});
+it("creates from direct text in one action and opens a separate full-width result", async () => {
+  await mount(); expect(host.querySelector(".exam-result-view")).toBeNull(); expect(host.querySelector(".exam-result-empty")).toBeNull();
+  await set('[aria-label="Văn bản nguồn"]', examFixture().sources[0].text); await click("Tạo đề bằng AI");
+  expect(api.analyze).toHaveBeenCalledTimes(1); expect(api.generate).toHaveBeenCalledTimes(1);
+  expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(true); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(false);
+  await click("Quay lại thiết lập"); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(false); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(true);
+  expect((host.querySelector('[aria-label="Nội dung Văn bản"]') as HTMLTextAreaElement).value).toContain("Water freezes");
+});
+it("accepts an uploaded template in the one-action flow", async () => {
+  await mount(); await set('[aria-label="Hình thức đề"]', "paper"); api.read.mockResolvedValueOnce({ ...examFixture().sources[0], name: "sample.pdf" });
+  const field = host.querySelector('[aria-label="Chọn đề mẫu"]') as HTMLInputElement; Object.defineProperty(field, "files", { configurable: true, value: [new File(["template"], "sample.pdf")] });
+  await act(async () => field.dispatchEvent(new Event("change", { bubbles: true }))); await click("Tạo đề bằng AI");
+  expect(api.generate.mock.calls[0][1][0].role).toBe("template"); expect(host.querySelector(".exam-paper")).toBeTruthy();
+});
+it("preserves independent settings and pending Auto text across mode switches", async () => {
+  const switchMode = async (name: string) => act(async () => (host.querySelector(`button[aria-label="${name}"]`) as HTMLButtonElement).click());
+  await mount(); await set('[aria-label="Độ khó"]', "hard"); await set('[aria-label="Văn bản nguồn"]', "Pending Auto information not yet submitted.");
+  await switchMode("AI Manual"); await set('[aria-label="Mức độ Manual"]', "easy"); await switchMode("AI Auto");
+  expect((host.querySelector('[aria-label="Độ khó"]') as HTMLSelectElement).value).toBe("hard"); expect((host.querySelector('[aria-label="Văn bản nguồn"]') as HTMLTextAreaElement).value).toContain("Pending Auto");
+  await switchMode("AI Manual"); expect((host.querySelector('[aria-label="Mức độ Manual"]') as HTMLSelectElement).value).toBe("easy");
+});
+it("blocks unreadable direct input and preserves it for correction", async () => {
+  await mount(); const text = "[UNREADABLE] Some formula is missing in the source."; await set('[aria-label="Văn bản nguồn"]', text); await click("Tạo đề bằng AI");
+  expect(api.analyze).not.toHaveBeenCalled(); expect(api.generate).not.toHaveBeenCalled(); expect((host.querySelector('[aria-label="Văn bản nguồn"]') as HTMLTextAreaElement).value).toBe(text);
+});
+it("keeps direct-input sources after generation failure and retries without parallel requests", async () => {
+  await mount(); await set('[aria-label="Văn bản nguồn"]', examFixture().sources[0].text); api.generate.mockRejectedValueOnce(new Error("Offline"));
+  await click("Tạo đề bằng AI"); expect(host.querySelector('[role="alert"]')?.textContent).toContain("Offline");
+  expect((host.querySelector('[aria-label="Nội dung Văn bản"]') as HTMLTextAreaElement).value).toContain("Water freezes");
+  const generate = button("Tạo đề bằng AI"); await act(async () => { generate.click(); generate.click(); });
+  expect(api.analyze).toHaveBeenCalledTimes(1); expect(api.generate).toHaveBeenCalledTimes(2); expect(host.querySelector(".exam-paper")).toBeTruthy();
 });

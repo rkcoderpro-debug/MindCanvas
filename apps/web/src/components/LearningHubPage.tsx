@@ -146,7 +146,7 @@ export default function LearningHubPage({ owner, projects, documents = [], onDoc
     { title: language === "vi" ? "Cộng tác" : "Collaborate", ids: ["connections", "classrooms"] },
   ];
 
-  return <section className="learning-hub-page">
+  return <section className={`learning-hub-page ${tab === "exams" ? "learning-exam-active" : ""}`}>
     <header className="learning-hub-header"><div><span className="eyebrow">LEARNING HUB</span><h1>{t("learningHub")}</h1><p>{t("learningHubHint")}</p></div><div className="learning-hub-header-actions"><button type="button" data-help-id="learning-music" className={`learning-music-launcher ${tab === "music" ? "active" : ""}`} onClick={() => { setTab("music"); emitGuideAction("learning:tab:music"); }}><Music2 size={17}/><span>Nhạc</span></button><div className="learning-hub-header-badge"><Flame size={18}/><strong>{flashcards.streak.current}</strong><span>{t("streakDays")}</span></div></div></header>
     <div className="learning-nav-shell">
       <button type="button" className="learning-nav-arrow" aria-label={language === "vi" ? "Xem mục trước" : "Previous sections"} disabled={!navScroll.overflow || navScroll.start} onClick={() => { const nav = navRef.current; nav?.scrollBy({ left: -Math.max(200, nav.clientWidth * .7), behavior: "smooth" }); }}><ChevronLeft size={18}/></button>

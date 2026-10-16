@@ -4959,3 +4959,48 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .exam-online-runner .form-error { white-space: pre-line; }
 .exam-manual-studio .docx-document-viewer { height: min(80vh, 1000px); min-height: 400px; }
 @media(max-width: 650px) { .exam-runner-toolbar { flex-wrap: wrap; } .exam-online-runner .exam-paper { padding: 1rem; } }
+
+
+/* Exam creation occupies the content area; results have a separate view. */
+.exam-builder-page { width: 100%; min-height: calc(100dvh - 150px); }
+.exam-creation-layout { grid-template-columns: minmax(0, 1fr); }
+.exam-creation-layout > .exam-builder-controls { grid-template-columns: minmax(0, 1fr); }
+.exam-builder-page [hidden] { display: none !important; }
+.exam-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 6px; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.exam-mode-switch button { display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; min-height: 72px; padding: 12px 18px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; transition: background .18s, border-color .18s, color .18s; }
+.exam-mode-switch button span { font-weight: 750; }
+.exam-mode-switch small { display: block; margin-top: 4px; font-size: 12px; font-weight: 400; }
+.exam-mode-switch button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.exam-mode-switch button[aria-pressed=true] > svg { color: var(--accent); }
+.exam-mode-switch button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.exam-mode-switch button:disabled { opacity: .65; cursor: wait; }
+.exam-setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 0 20px; }
+.exam-source-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 24px; }
+.exam-source-grid .exam-upload { min-height: 125px; align-content: center; background: var(--surface-raised); border-radius: 14px; }
+.exam-source-grid textarea { min-height: 150px; }
+.exam-create-action, .exam-prompt-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 0; }
+.exam-create-action > p, .exam-prompt-heading > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.exam-create-action .primary-button, .exam-prompt-heading .primary-button { flex-shrink: 0; min-height: 44px; padding-inline: 24px; }
+.exam-secondary-tools { border-top: 1px solid var(--line); padding-top: 6px; }
+.exam-secondary-tools > summary { color: var(--muted); }
+.exam-online-settings { display: grid; grid-template-columns: minmax(140px, .3fr) minmax(0, 1fr); align-items: start; gap: 20px; margin: 12px 0; }
+.exam-online-settings > fieldset { display: flex; flex-wrap: wrap; gap: 0 18px; }
+.exam-manual-panel { margin-top: 0; }
+.exam-manual-panel textarea[readonly] { min-height: 260px; max-height: 46vh; font-size: 12px; line-height: 1.7; }
+.exam-manual-panel > small { display: block; margin-top: 10px; color: var(--muted); line-height: 1.6; }
+.exam-back-button { margin-bottom: 14px; }
+@media (max-width: 760px) {
+  .exam-source-grid, .exam-online-settings { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .exam-mode-switch button { padding: 10px; gap: 8px; }
+  .exam-mode-switch button small { font-size: 11px; }
+  .exam-mode-switch button > svg { flex-shrink: 0; width: 16px; }
+  .exam-create-action .primary-button, .exam-prompt-heading .primary-button { width: 100%; }
+  .exam-manual-panel textarea[readonly] { max-height: none; min-height: 300px; }
+}
+@media (prefers-reduced-motion: reduce) { .exam-mode-switch button { transition: none; } }
+
+.learning-hub-page.learning-exam-active { width: 100%; }
+
+.exam-selected-sources { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.exam-selected-sources span { border: 1px solid var(--line); background: var(--accent-soft); color: var(--text); padding: 7px 10px; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.exam-builder-page > .exam-library { margin-top: 20px; }

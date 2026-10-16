@@ -1,0 +1,111 @@
+{
+  "version": "5.23.1",
+  "baseVersion": "5.23.0",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.23.1.md",
+      "change": "added",
+      "bytes": 2817,
+      "sha256": "b7027460ec6d80c77ebf7a204eac6e28130c5597d31b5d6b17dfabe6108fa7a9"
+    },
+    {
+      "path": "RELEASE_V5.23.1.md",
+      "change": "added",
+      "bytes": 3901,
+      "sha256": "5032be7054d55f8f9cf82557f6137fe4e6b7c5f6d8de6aaca789f3a521bd5fbc"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "54e6cb7166f7dc409ad49e912be133fd852fb30c7267cfadba11a2b0b5ad0cd7"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "a3c4dd2b658eb7048fcd9466dd0ca5ac73bbd350a0b557cc511399b8f20b1ca7"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.test.tsx",
+      "change": "modified",
+      "bytes": 13709,
+      "sha256": "b4f2e1feeafa507bf9cbe486f979b9c5fd8647e7035bea7db3c3de0f586ae57e"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "change": "modified",
+      "bytes": 26625,
+      "sha256": "faf7b7456576bc2e66cff66ec7555445d2fc86a7c46171a79e28a7bce3e226ea"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.test.tsx",
+      "change": "modified",
+      "bytes": 13984,
+      "sha256": "989815a09448025a00af236559c1537e4a97bc93b6c9f7188c90228b6c040ecf"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "change": "modified",
+      "bytes": 30023,
+      "sha256": "49dcd690c57449baca5bb07be8acb349444e767edd3b357fe4a3e81294d38d13"
+    },
+    {
+      "path": "apps/web/src/components/ExamModeSwitch.tsx",
+      "change": "added",
+      "bytes": 785,
+      "sha256": "1da3ae56592e2bf9b01a607511459fc502cf62e845efdb7ca2dca1aaa9e92fdc"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "change": "modified",
+      "bytes": 34752,
+      "sha256": "5fb73c1c01f46b7d89da5b2b0b795a62117426bc7ef465214240bb95a8d80f87"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioPrompt.test.ts",
+      "change": "modified",
+      "bytes": 2379,
+      "sha256": "8b6f4e5312f70cb3ae2bbbe1871bb8f7852223bb84f2ba0c189f1a3bf73d4dc7"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioPrompt.ts",
+      "change": "modified",
+      "bytes": 10344,
+      "sha256": "31aa2f58a904f9790dd12292cb54c5dd58044482afb1b4f61de9265d2d8aa004"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "bytes": 451485,
+      "sha256": "4a1a4af3b41601ceed06dfebac91fe7eb08781a0e32cf20058f40df8c44e9eda"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "140551100208225a92960041b3f81c585ae6cba7ba988ba809b6b8f0e36a3f79"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "bc17eebed819ef7c3e4a81cd9a1a1bb173cfcea3f17ea664b5c697e2e61a8c52"
+    }
+  ],
+  "deletedFiles": [],
+  "sqlMigrationsToApply": [],
+  "newNpmDependencies": [],
+  "verification": {
+    "webTestsPassed": 634,
+    "webTestFiles": 88,
+    "serverTestsPassed": 62,
+    "serverTestsSkipped": 0,
+    "typecheck": "passed",
+    "build": "passed; existing chunk-size warning",
+    "browser": "Chromium 153; 1440x1000, 768x1024, 390x844; mocked AI module; real DOM/IndexedDB/clipboard",
+    "limitations": "See QA_V5.23.1.md"
+  },
+  "manifestIncludesItself": false
+}
