@@ -12,7 +12,7 @@ import FlashcardsPage from "./FlashcardsPage";
 import QuizPage from "./QuizPage";
 import LabPage from "./LabPage";
 import SharedLearningTab, { InboxBoundary } from "./SharedLearningTab";
-const ExamBuilderPage = lazy(() => import("./ExamBuilderPage"));
+const DocumentCreatorPage = lazy(() => import("./DocumentCreatorPage"));
 import ConnectionsPage from "./ConnectionsPage";
 import ClassroomsPage from "./ClassroomsPage";
 import StudyPlanDialog from "./StudyPlanDialog";
@@ -102,7 +102,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
     { id: "overview", label: t("overview"), icon: Layers3 },
     { id: "flashcards", label: t("flashcards"), icon: BookOpen },
     { id: "quiz", label: t("quiz"), icon: ClipboardList },
-    { id: "exams", label: language === "vi" ? "Tạo đề thi" : "Exam studio", icon: FileText },
+    { id: "exams", label: language === "vi" ? "Tạo tài liệu" : "Create documents", icon: FileText },
     { id: "plan", label: t("studyPlan"), icon: CalendarDays },
     { id: "progress", label: t("progress"), icon: BarChart3 },
     { id: "lab", label: t("labNav"), icon: Beaker },
@@ -129,7 +129,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
     switch (id) {
       case "flashcards": return <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>;
       case "quiz": return <QuizPage owner={owner} store={quizzes} accountPlan={accountPlan} onQuizCompleted={onQuizCompleted}/>;
-      case "exams": return <InboxBoundary key={owner} fallback={<section role="alert"><p>{language === "vi" ? "Không thể tải mục tạo đề thi." : "Could not load exam studio."}</p><button className="secondary-button" onClick={() => window.location.reload()}>{t("retry")}</button></section>}><Suspense fallback={<p role="status">{t("loading")}</p>}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={() => pickTab("quiz")}/></Suspense></InboxBoundary>;
+      case "exams": return <InboxBoundary key={owner} fallback={<section role="alert"><p>{language === "vi" ? "Không thể tải mục tạo tài liệu." : "Could not load document studio."}</p><button className="secondary-button" onClick={() => window.location.reload()}>{t("retry")}</button></section>}><Suspense fallback={<p role="status">{t("loading")}</p>}><DocumentCreatorPage key={owner} owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={() => pickTab("quiz")}/></Suspense></InboxBoundary>;
       case "plan": return <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>;
       case "progress": return <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>;
       case "lab": return <LabPage owner={owner} embedded accountPlan={accountPlan}/>;
@@ -164,7 +164,7 @@ function HubOverview({ flashcards, quizzes, onTab, lastTool, onOpenAiPlan, t, la
   const primary = [
     { id: "flashcards" as const, title: t("flashcards"), description: vi ? "Ghi nhớ kiến thức qua các bộ thẻ." : "Remember more with your flashcard decks.", icon: BookOpen, count: flashcards.decks.length },
     { id: "quiz" as const, title: t("quiz"), description: vi ? "Luyện tập và tự kiểm tra kiến thức." : "Practice and test your understanding.", icon: ClipboardList, count: quizzes.quizzes.length },
-    { id: "exams" as const, title: vi ? "Tạo đề thi" : "Exam studio", description: vi ? "Tạo đề bằng AI Auto hoặc prompt Manual." : "Build exams with Auto AI or Manual prompts.", icon: FileText },
+    { id: "exams" as const, title: vi ? "Tạo tài liệu" : "Create documents", description: vi ? "Takenote, bài học HTML và đề thi bằng AI." : "Create notes, HTML lessons and exams with AI.", icon: FileText },
     { id: "lab" as const, title: t("labNav"), description: vi ? "Khám phá kiến thức bằng thực hành." : "Explore ideas through hands-on learning.", icon: Beaker },
   ];
   const secondary = [
@@ -172,7 +172,7 @@ function HubOverview({ flashcards, quizzes, onTab, lastTool, onOpenAiPlan, t, la
     { title: vi ? "Kế hoạch & tiến độ" : "Plan & progress", items: [{ id: "plan" as const, title: t("studyPlan"), icon: CalendarDays }, { id: "progress" as const, title: t("progress"), icon: BarChart3 }, { id: "music" as const, title: vi ? "Nhạc tập trung" : "Focus music", icon: Music2 }] },
     { title: vi ? "Kết nối" : "Connect", items: [{ id: "classrooms" as const, title: vi ? "Lớp học" : "Classrooms", icon: GraduationCap }, { id: "connections" as const, title: vi ? "Bạn bè & tin nhắn" : "Friends & messages", icon: Users }] },
   ];
-  const names: Record<HubTab, string> = { overview: t("learningHub"), flashcards: t("flashcards"), quiz: t("quiz"), exams: vi ? "Tạo đề thi" : "Exam studio", lab: t("labNav"), tools: vi ? "Tài liệu" : "Documents", shared: vi ? "Được chia sẻ" : "Shared", plan: t("studyPlan"), progress: t("progress"), music: vi ? "Nhạc" : "Music", connections: vi ? "Bạn bè" : "Friends", classrooms: vi ? "Lớp học" : "Classrooms" };
+  const names: Record<HubTab, string> = { overview: t("learningHub"), flashcards: t("flashcards"), quiz: t("quiz"), exams: vi ? "Tạo tài liệu" : "Create documents", lab: t("labNav"), tools: vi ? "Tài liệu" : "Documents", shared: vi ? "Được chia sẻ" : "Shared", plan: t("studyPlan"), progress: t("progress"), music: vi ? "Nhạc" : "Music", connections: vi ? "Bạn bè" : "Friends", classrooms: vi ? "Lớp học" : "Classrooms" };
   return <div className="learning-space-home-content">
     {lastTool && <section className="learning-resume"><div><span>{vi ? "MỞ GẦN ĐÂY" : "RECENTLY OPENED"}</span><h2>{names[lastTool]}</h2></div><button className="primary-button" onClick={() => onTab(lastTool)}>{vi ? "Tiếp tục" : "Continue"}<ArrowRight size={17}/></button></section>}
     {plan && tasks.length > 0 && <section className="learning-today"><div className="learning-today-heading"><div><span>{t("today")}</span><h2>{plan.name}</h2></div><button className="text-button" onClick={() => onTab("plan")}>{t("viewDetails")}</button></div><ul>{tasks.map(task => <li key={task.id}>{done.includes(task.id) ? <CheckCircle2 size={17}/> : taskIcon(task.kind)}<span>{task.title}</span>{done.includes(task.id) && <small>{t("completed")}</small>}</li>)}</ul></section>}

@@ -1,4 +1,4 @@
-export type DocumentKind = "pdf" | "docx" | "pptx" | "xlsx";
+export type DocumentKind = "pdf" | "docx" | "pptx" | "xlsx" | "html";
 export type UploadedDocument = {
   id: string;
   owner: string;
@@ -9,10 +9,11 @@ export type UploadedDocument = {
   dataUrl: string;
   folderId: string | null;
   updatedAt: string;
+  generatedKind?: "takenote";
   savedFrom?: { title: string; ownerName: string };
 };
 
-export const DOCUMENT_ACCEPT = ".pdf,.docx,.pptx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const DOCUMENT_ACCEPT = ".html,.htm,text/html,.pdf,.docx,.pptx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 export const MAX_DOCUMENT_BYTES = 40 * 1024 * 1024;
 const DB_NAME = "mindcanvas-documents-v1";
 const DB_VERSION = 2;
@@ -20,6 +21,7 @@ const STORE = "documents";
 
 export function documentKindFor(name: string, mimeType = ""): DocumentKind | null {
   const lower = name.toLocaleLowerCase();
+  if (mimeType === "text/html" || /\.html?$/.test(lower)) return "html";
   if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
   if (/wordprocessingml\.document|msword/.test(mimeType) || lower.endsWith(".docx")) return "docx";
   if (/presentationml\.presentation|powerpoint/.test(mimeType) || lower.endsWith(".pptx")) return "pptx";
@@ -97,7 +99,7 @@ function writeGuestDocuments(rows: UploadedDocument[]) {
 
 export async function saveDocument(owner: string | null, input: Omit<UploadedDocument, "id" | "owner" | "updatedAt"> & Partial<Pick<UploadedDocument, "id" | "updatedAt">>): Promise<UploadedDocument> {
   const kind = input.kind ?? documentKindFor(input.name, input.mimeType);
-  if (!kind) throw new Error("Chỉ hỗ trợ PDF, DOCX, PPTX và XLSX.");
+  if (!kind) throw new Error("Chỉ hỗ trợ HTML, PDF, DOCX, PPTX và XLSX.");
   if (input.size > MAX_DOCUMENT_BYTES) throw new Error("Tài liệu vượt quá 40 MB.");
   const document: UploadedDocument = { ...input, id: input.id ?? crypto.randomUUID(), owner: owner ?? "guest", kind, folderId: input.folderId ?? null, updatedAt: input.updatedAt ?? new Date().toISOString() };
   let database: IDBDatabase;

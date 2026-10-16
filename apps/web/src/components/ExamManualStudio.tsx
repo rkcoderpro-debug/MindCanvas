@@ -13,6 +13,7 @@ import { listSavedExams } from "../lib/examStore";
 import type { SavedExam } from "@mindcanvas/shared";
 import DocxViewer from "./DocxViewer";
 import ExamModeSwitch from "./ExamModeSwitch";
+import ManualAiProviderLinks from "./ManualAiProviderLinks";
 import ExamOnlineRunner, { OnlineExamPreview } from "./ExamOnlineRunner";
 const labels: Record<OnlineType, string> = { mcq: "4 lựa chọn", blank: "Điền vào ô trống", numeric: "Tính toán / nhập kết quả", short: "Trả lời ngắn", essay: "Tự luận" };
 export function onlineExamPayload(exam: OnlineExam) { return { schemaVersion: 1, title: exam.title, description: exam.description, durationMinutes: exam.durationMinutes, questions: exam.questions, warnings: exam.warnings }; }
@@ -148,6 +149,7 @@ export default function ExamManualStudio({ owner, documents = [], accountPlan, o
       <div className="exam-prompt-heading"><p>Prompt tự cập nhật theo thuộc tính. Sao chép rồi gửi cùng file gốc cho AI ngoài.</p><button className="primary-button" disabled={!owner || !prepared.session} onClick={() => void copy()}>Sao chép prompt</button></div>
       {prepared.error && <p role="alert" className="form-error">{prepared.error}</p>}
       <textarea aria-label="Prompt Studio" rows={12} readOnly value={prepared.session?.prompt ?? ""}/>
+      <ManualAiProviderLinks disabled={!!busy || !owner || !prepared.session} prompt={prepared.session?.prompt ?? ""} onPrepare={async () => { const session = await activatePrompt(new AbortController().signal); if (!session) throw new Error("Chưa tạo được prompt."); return session.prompt; }}/>
       <small>{config.output === "word" ? "AI xuất de-thi.docx và dap-an-loi-giai.docx riêng để dùng ngay." : "AI xuất JSON để nhập vào MindCanvas và làm bài trực tiếp."}</small>
     </fieldset>
     <fieldset disabled={!!busy}><legend>Công cụ bổ sung</legend>      <details className="exam-secondary-tools"><summary>Gói gửi AI và file gốc (tùy chọn)</summary><p className="exam-hint">Bạn có thể đính kèm file trực tiếp khi gửi AI ngoài. Chỉ chọn file ở đây nếu muốn tải chung trong một gói.</p>

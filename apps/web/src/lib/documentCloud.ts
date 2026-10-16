@@ -12,6 +12,7 @@ export type CloudDocumentDescriptor = {
 
 const MIME_BY_EXTENSION: Record<DocumentKind, string> = {
   pdf: "application/pdf",
+  html: "text/html",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

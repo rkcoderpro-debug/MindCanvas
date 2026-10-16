@@ -54,3 +54,18 @@ describe("Document Tools localization", () => {
     localStorage.removeItem("mindcanvas:language");
   });
 });
+
+it("opens HTML in a focused sandbox and restores the library when changing format", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+  const documents = [
+    { id: "html-1", owner: "guest", name: "Lesson.html", kind: "html" as const, mimeType: "text/html", dataUrl: "data:text/html;charset=utf-8," + encodeURIComponent("<main><h1>Interactive lesson</h1><button>Try</button></main>"), folderId: null, size: 100, updatedAt: new Date().toISOString() },
+    { id: "docx-1", owner: "guest", name: "Lesson.docx", kind: "docx" as const, mimeType: "application/octet-stream", dataUrl: "", folderId: null, size: 100, updatedAt: new Date().toISOString() },
+  ];
+  await act(async () => root.render(<LanguageProvider><DocumentToolsPage owner={null} documents={documents} onDocumentsChanged={() => {}}/></LanguageProvider>));
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-document-id="html-1"]')!.click());
+  expect(host.querySelector(".html-reading")).not.toBeNull(); expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts"); expect(host.querySelector('a[download="Lesson.html"]')).not.toBeNull();
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-tool-tab="docx"]')!.click());
+  expect(host.querySelector(".html-reading")).toBeNull(); expect(host.querySelector(".library-collapsed")).toBeNull(); expect(host.querySelector('[data-document-id="docx-1"]')).not.toBeNull();
+  await act(async () => root.unmount()); host.remove();
+});

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, FileType2, HardDrive, Search, Upload, Wrench } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
+import { validateHtmlDocument, textFromDataUrl } from "../lib/htmlDocument";
+import { useLearningTool } from "../lib/learningNavigation";
 import { documentKindFor, fileToDataUrl, MAX_DOCUMENT_BYTES, saveDocument, DOCUMENT_ACCEPT, type DocumentKind, type UploadedDocument } from "../lib/documentStore";
 import { downloadOwnedCloudDocument, listOwnedCloudDocuments, type CloudDocumentDescriptor } from "../lib/documentCloud";
 import { saveDocumentToStorage } from "../lib/supabase";
@@ -21,6 +23,7 @@ export async function buildDocx(html: string) {
 
 const filterTabs: Array<{ id: ToolTab; label: string; icon: typeof FileText }> = [
   { id: "all", label: "Tất cả", icon: FileText },
+  { id: "html", label: "HTML", icon: FileText },
   { id: "pdf", label: "PDF", icon: FileText },
   { id: "docx", label: "DOCX", icon: FileType2 },
   { id: "pptx", label: "PPTX", icon: FileSpreadsheet },
@@ -40,6 +43,7 @@ function documentIcon(kind: DocumentKind) {
 export default function DocumentToolsPage({ owner, documents, onDocumentsChanged, accountPlan, onBack }: Props) {
   const { language, t } = useLanguage();
   const [tab, setTab] = useState<ToolTab>("all");
+  const navigation = useLearningTool();
   const [selected, setSelected] = useState<UploadedDocument | null>(null);
   const [query, setQuery] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -72,14 +76,19 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }, [cloudFiles, documents, normalizedQuery, owner, savedSources, tab]);
 
+  const showDocument = (file: UploadedDocument) => {
+    if (navigation) navigation.open("document-viewer", () => { setSelected(file); if (file.kind === "html") setLibraryCollapsed(true); }, () => { setSelected(null); setLibraryCollapsed(false); });
+    else { setSelected(file); if (file.kind === "html") setLibraryCollapsed(true); }
+  };
+  const closeDocument = () => { setSelected(null); setLibraryCollapsed(false); navigation?.back(); };
   const openDocument = async (file: UploadedDocument) => {
     setError(""); setNotice("");
-    if (file.dataUrl) { setSelected(file); return; }
+    if (file.dataUrl) { showDocument(file); return; }
     if (!owner) { setError("Tài liệu này cần đăng nhập để tải từ cloud."); return; }
     setUploading(true);
     try {
       const loaded = await downloadOwnedCloudDocument(owner, file.id);
-      setSelected({ ...loaded, savedFrom: file.savedFrom });
+      showDocument({ ...loaded, savedFrom: file.savedFrom });
       onDocumentsChanged();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể tải tài liệu từ cloud."); }
     finally { setUploading(false); }
@@ -101,13 +110,15 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   const upload = async (file?: File) => {
     if (!file || uploading) return;
     const kind = documentKindFor(file.name, file.type);
-    if (!kind) { setError("Chỉ hỗ trợ PDF, DOCX, PPTX và XLSX."); return; }
+    if (!kind) { setError("Chỉ hỗ trợ HTML, PDF, DOCX, PPTX và XLSX."); return; }
     if (file.size > MAX_DOCUMENT_BYTES) { setError("Tài liệu vượt quá 40 MB."); return; }
     setUploading(true); setError(""); setNotice("");
     try {
-      const saved = await saveDocument(owner, { name: file.name, mimeType: file.type || "application/octet-stream", kind, size: file.size, dataUrl: await fileToDataUrl(file), folderId: null });
+      const dataUrl = await fileToDataUrl(file);
+      if (kind === "html") validateHtmlDocument(textFromDataUrl(dataUrl));
+      const saved = await saveDocument(owner, { name: file.name, mimeType: file.type || "application/octet-stream", kind, size: file.size, dataUrl, folderId: null });
       onDocumentsChanged();
-      setSelected(saved);
+      showDocument(saved);
       setTab(kind);
       if (owner) {
         try {
@@ -123,16 +134,16 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   const libraryTitle = tab === "all" ? "Tài liệu trong thư viện" : `${tab.toUpperCase()} trong thư viện`;
   const SelectedIcon = selected ? documentIcon(selected.kind) : FileText;
 
-  return <section className={`document-tools-page document-tools-shell ${libraryCollapsed ? "library-collapsed" : ""}`} data-library-collapsed={libraryCollapsed ? "true" : "false"}>
+  return <section className={`document-tools-page document-tools-shell ${libraryCollapsed ? "library-collapsed" : ""} ${selected?.kind === "html" ? "html-reading" : ""}`} data-library-collapsed={libraryCollapsed ? "true" : "false"}>
     <header className="document-tools-header">
       <div className="document-tools-header-leading">
-        <button className="text-button document-tools-back" onClick={onBack} aria-label="Quay lại Học tập"><ArrowLeft size={16}/><span>Học tập</span></button>
+        <button className="text-button document-tools-back" onClick={selected ? closeDocument : onBack} aria-label="Quay lại Học tập"><ArrowLeft size={16}/><span>{selected ? "Thư viện" : "Học tập"}</span></button>
         <span className="document-tools-header-divider" aria-hidden="true"/>
         <div className="document-tools-heading-inline"><span className="document-tools-heading-icon"><Wrench size={17}/></span><div><strong>{language === "en" ? t("documentViewer") : "Thư viện tài liệu"}</strong><small><HardDrive size={12}/> Thiết bị{owner ? " và cloud" : ""}</small></div></div>
       </div>
       <div className="document-tools-header-actions">
         <div className="document-tools-tabs" role="tablist" aria-label="Loại tài liệu">
-          {filterTabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} data-tool-tab={id} onClick={() => { setTab(id); setSelected(current => current && (id === "all" || current.kind === id) ? current : null); emitGuideAction(`tools:filter:${id}`); }}><Icon size={16}/><span>{label}</span></button>)}
+          {filterTabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} data-tool-tab={id} onClick={() => { setLibraryCollapsed(false); setTab(id); setSelected(current => current && (id === "all" || current.kind === id) ? current : null); emitGuideAction(`tools:filter:${id}`); }}><Icon size={16}/><span>{label}</span></button>)}
         </div>
         <input ref={input} hidden type="file" accept={DOCUMENT_ACCEPT} onChange={event => { void upload(event.target.files?.[0]); event.currentTarget.value = ""; }}/>
         <button className="primary-button document-tools-upload" data-help-id="tools-upload" disabled={uploading} onClick={() => input.current?.click()}><Upload size={16}/><span>{uploading ? (language === "en" ? "Uploading…" : "Đang tải…") : (language === "en" ? "Upload document" : "Tải tài liệu")}</span></button>
@@ -146,12 +157,12 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
           <label className="document-search tool-document-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm trong thư viện…" aria-label="Tìm tài liệu trong thư viện"/></label>
           <div className="document-library-list">
             {libraryFiles.map(file => { const Icon = documentIcon(file.kind); return <button key={file.id} data-document-id={file.id} data-document-kind={file.kind} className={selected?.id === file.id ? "active" : ""} title={file.name} onClick={() => { void openDocument(file); emitGuideAction("tools:document-open", { documentId: file.id, kind: file.kind }); }}><span className="document-library-file-icon"><Icon size={16}/></span><span className="document-library-file-copy"><strong>{file.name}</strong><small>{file.kind.toUpperCase()} · {file.savedFrom ? `Từ ${file.savedFrom.ownerName}` : cloudFiles.some(row => row.id === file.id) ? "Cloud" : "Thiết bị"}</small></span></button>; })}
-            {!libraryFiles.length && <p className="field-hint document-library-empty">Chưa có tài liệu phù hợp. Hãy tải PDF, DOCX, PPTX hoặc XLSX lên.</p>}
+            {!libraryFiles.length && <p className="field-hint document-library-empty">Chưa có tài liệu phù hợp. Hãy tải HTML, PDF, DOCX, PPTX hoặc XLSX lên.</p>}
           </div>
         </>}
         {libraryCollapsed && <span className="document-library-collapsed-label" aria-hidden="true">{tab.toUpperCase()}</span>}
       </aside>
-      <main className="document-tool-workspace">{selected ? <><div className="document-selected-actions">{selected.savedFrom && <small className="learning-copy-provenance">Đã lưu từ {selected.savedFrom.ownerName} · {selected.savedFrom.title}</small>}<div className="actions">{owner && (cloudFiles.some(row => row.id === selected.id) ? <LearningShareButton kind="document" id={selected.id} title={selected.name} plan={accountPlan} available/> : <button className="secondary-button" disabled={syncingSelected} onClick={() => void publishSelected()}><Upload size={15}/>{syncingSelected ? "Đang tải lên…" : "Lưu lên cloud để chia sẻ"}</button>)}</div></div><DocumentViewer source={selected} dedicated={selected.kind === "pdf"} onReady={detail => emitGuideAction("tools:viewer-ready", { ...detail, documentId: selected.id, kind: selected.kind })}/></> : <div className="tool-empty-state"><SelectedIcon size={38}/><h2>{language === "en" ? "Choose a document to view" : "Chọn tài liệu để xem"}</h2><p>PDF có thể vẽ và xuất bản sao; DOCX, PPTX và XLSX được xem trong trình xem tương ứng. Bản gốc trong thư viện không bị thay đổi.</p></div>}</main>
+      <main className="document-tool-workspace">{selected ? <>{(selected.savedFrom || owner) && <div className="document-selected-actions">{selected.savedFrom && <small className="learning-copy-provenance">Đã lưu từ {selected.savedFrom.ownerName} · {selected.savedFrom.title}</small>}<div className="actions">{owner && (cloudFiles.some(row => row.id === selected.id) ? <LearningShareButton kind="document" id={selected.id} title={selected.name} plan={accountPlan} available/> : <button className="secondary-button" disabled={syncingSelected} onClick={() => void publishSelected()}><Upload size={15}/>{syncingSelected ? "Đang tải lên…" : "Lưu lên cloud để chia sẻ"}</button>)}</div></div>}<DocumentViewer source={selected} dedicated={selected.kind === "pdf"} onClose={closeDocument} onReady={detail => emitGuideAction("tools:viewer-ready", { ...detail, documentId: selected.id, kind: selected.kind })}/></> : <div className="tool-empty-state"><SelectedIcon size={38}/><h2>{language === "en" ? "Choose a document to view" : "Chọn tài liệu để xem"}</h2><p>HTML mở trực tiếp với nội dung tương tác; PDF có thể vẽ và xuất bản sao; DOCX, PPTX và XLSX được xem trong trình xem tương ứng. Bản gốc trong thư viện không bị thay đổi.</p></div>}</main>
     </div>
   </section>;
 }

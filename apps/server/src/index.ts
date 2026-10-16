@@ -16,11 +16,15 @@ import { recommendStudyPlanWithGemini } from "./studyPlan.js";
 import { aiOptionsSchema, mindMapDetailSchema, mindMapOptionsSchema } from "./aiOptions.js";
 import { examQuestionCount, ExamValidationError } from "../../../packages/shared/src/exams.js";
 import { analyzeExam, generateExam, parseExamInput, readExamSource } from "./exams.js";
+import { generateNote, parseNoteInput } from "./takenotes.js";
+import { NoteValidationError } from "../../../packages/shared/src/takenotes.js";
 import { aiScheduler } from "./aiScheduler.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
-app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true })); app.use(express.json({ limit: "1mb" }));
+app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true }));
+app.use("/api/takenotes/generate", express.json({ limit: "6mb" }));
+app.use(express.json({ limit: "1mb" }));
 app.get("/api/health", (_req, res) => res.json(getHealthStatus()));
 
 app.get("/api/account/plan", requireUser, async (req, res) => {
@@ -165,6 +169,17 @@ for (const action of ["analyze", "generate"] as const) app.post(`/api/exams/${ac
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof ExamValidationError) return res.status(400).json({ error: error.message, code: "EXAM_INPUT", retryable: false });
     return sendAiError(res, error, "Exam AI processing failed.");
+  }
+});
+
+app.post("/api/takenotes/generate", requireUser, async (req, res) => {
+  try {
+    const input = parseNoteInput(req.body);
+    const result = await runWithAiQuota(req.userId!, "ai_auto", () => aiScheduler.run(req.userId!, () => generateNote(input)));
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof NoteValidationError || error instanceof ExamValidationError) return res.status(400).json({ error: error.message, code: "NOTE_INPUT", retryable: false });
+    return sendAiError(res, error, "Could not create study document.");
   }
 });
 

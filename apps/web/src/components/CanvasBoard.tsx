@@ -560,7 +560,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     const center = rect ? point(rect.left + rect.width / 2, rect.top + rect.height / 2) : { x: 320, y: 240 };
     for (const [index, file] of files.entries()) {
       const kind = documentKindFor(file.name, file.type);
-      if (!kind) { setMediaError("Chỉ hỗ trợ PDF, DOCX, PPTX và XLSX."); continue; }
+      if (!kind) { setMediaError("Chỉ hỗ trợ HTML, PDF, DOCX, PPTX và XLSX."); continue; }
       if (file.size > MAX_DOCUMENT_BYTES) { setMediaError("Tài liệu vượt quá 40 MB."); continue; }
       try {
         const dataUrl = await fileToDataUrl(file);
@@ -1604,7 +1604,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       <div className="canvas-document-picker">
         <p className="dialog-hint">Chọn tài liệu để chèn vào tâm vùng canvas đang nhìn thấy. Xóa phần tử trên canvas không xóa file trong thư viện.</p>
         <label className="document-search"><Search size={16}/><input autoFocus value={documentQuery} onChange={event => setDocumentQuery(event.target.value)} placeholder="Tìm tài liệu…"/></label>
-        <div className="canvas-document-filter"><button type="button" className={documentKindFilter === "all" ? "active" : ""} onClick={() => setDocumentKindFilter("all")}>Tất cả</button>{(["pdf", "docx", "pptx", "xlsx"] as DocumentKind[]).map(kind => <button type="button" key={kind} className={documentKindFilter === kind ? "active" : ""} onClick={() => setDocumentKindFilter(kind)}>{kind.toUpperCase()}</button>)}</div>
+        <div className="canvas-document-filter"><button type="button" className={documentKindFilter === "all" ? "active" : ""} onClick={() => setDocumentKindFilter("all")}>Tất cả</button>{(["pdf", "docx", "pptx", "xlsx", "html"] as DocumentKind[]).map(kind => <button type="button" key={kind} className={documentKindFilter === kind ? "active" : ""} onClick={() => setDocumentKindFilter(kind)}>{kind.toUpperCase()}</button>)}</div>
         <div className="canvas-document-list">{documents.filter(document => (documentKindFilter === "all" || document.kind === documentKindFilter) && (!documentQuery.trim() || document.name.toLocaleLowerCase().includes(documentQuery.trim().toLocaleLowerCase()))).map(document => <button type="button" className="canvas-document-option" key={document.id} onClick={() => insertLibraryDocument(document)}><FileSpreadsheet size={18}/><span><strong>{document.name}</strong><small>{document.kind.toUpperCase()} · {new Date(document.updatedAt).toLocaleDateString()}</small></span><Plus size={16}/></button>)}{!documents.length && <div className="empty-state"><FileSpreadsheet size={30}/><p>Chưa có tài liệu. Hãy upload trong Quản lý thư mục trước.</p></div>}</div>
       </div>
     </Dialog>}

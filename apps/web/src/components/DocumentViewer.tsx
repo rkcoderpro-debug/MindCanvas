@@ -7,6 +7,8 @@ import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { annotationMapsEqual, cloneAnnotationMap, eraseAnnotationStrokes, type AnnotationStroke, type AnnotationTool } from "../lib/documentAnnotations";
 import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 import DocxViewer from "./DocxViewer";
+import HtmlDocumentViewer from "./HtmlDocumentViewer";
+import { textFromDataUrl } from "../lib/htmlDocument";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type ViewerReadyDetail = { sessionId: string; documentId?: string; kind: DocumentKind };
@@ -513,6 +515,7 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
               </button>
             </>
           )}
+          {kind === "html" && <a className="secondary-button" href={source.dataUrl} download={source.name}><Download size={15}/>Tải HTML</a>}
           <button className="document-fullscreen-toggle" title={fullscreen ? t("exitFullscreen") : t("maximizeCanvas")} onClick={() => void toggleFullscreen()}>
             {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
@@ -540,7 +543,13 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
           )}
         </div>
       ) : kind === "docx" ? <DocxViewer dataUrl={source.dataUrl} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
+        : kind === "html" ? <StoredHtmlViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
         : <OfficeViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })} />}
     </section>
   );
+}
+
+function StoredHtmlViewer({ source, onReady }: { source: Source; onReady: () => void }) {
+  const content = useMemo(() => { try { return { html: textFromDataUrl(source.dataUrl), error: "" }; } catch { return { html: "", error: "Không đọc được nội dung HTML. Hãy nhập lại file UTF-8." }; } }, [source.dataUrl]);
+  return content.error ? <p role="alert" className="form-error">{content.error}</p> : <HtmlDocumentViewer controls={false} html={content.html} title={source.name} onReady={onReady}/>;
 }

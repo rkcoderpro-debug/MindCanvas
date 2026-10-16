@@ -1,0 +1,223 @@
+{
+  "version": "5.25.0",
+  "baseVersion": "5.24.0",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/; no wrapper directory",
+  "files": [
+    {
+      "path": "QA_V5.25.0.md",
+      "change": "added",
+      "bytes": 5346,
+      "sha256": "430f117607cfeb3b5bc32e7269f620517f676119e5acd6571e46c6e7a2a47393"
+    },
+    {
+      "path": "RELEASE_V5.25.0.md",
+      "change": "added",
+      "bytes": 6642,
+      "sha256": "6a64361bae7d764f00e6dbc28a10cc2fbc373b02be84f41b5fd0aea15db81105"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "d583fd0fe6a172fc3485f066080d04c6461816d82396a84eef0bc444aea5d1e9"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "change": "modified",
+      "bytes": 18200,
+      "sha256": "63c341e33f77029a08ee25ac72b59da7c7568edce0ecc6be133fdb1d4bc7c5f1"
+    },
+    {
+      "path": "apps/server/src/takenotes.ts",
+      "change": "added",
+      "bytes": 2358,
+      "sha256": "736a03f2f2ee4505f03b780c6dd3237b68f5ba9a2ba70206e74bf840702349e5"
+    },
+    {
+      "path": "apps/server/tests/takenotes.test.ts",
+      "change": "added",
+      "bytes": 2597,
+      "sha256": "12447015de1727499863e23273cc3b25fcf4580c2f75656f698b383cca4622f2"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "896281856112de807afa2f9ce24ec6ef552759965a9b794779669d9649bbbb37"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "change": "modified",
+      "bytes": 158623,
+      "sha256": "ad30aa079d192304a000087a5e943031067aae64b1afab7fa74d822f7570d024"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.test.tsx",
+      "change": "added",
+      "bytes": 4399,
+      "sha256": "91c0f52be6d6e2650bdedfac0ab5898ba7af19c38e96ed72cd832ce20935475f"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.tsx",
+      "change": "added",
+      "bytes": 11766,
+      "sha256": "08e472460cd642f35a14e532e2dfb9599acb5f80e0d78e430e64c956ce2ce99a"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.test.tsx",
+      "change": "modified",
+      "bytes": 4812,
+      "sha256": "0719233b77a2c24dbe26cfa6000f75a0c54789452fb44b58b12d8a34348bed91"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "change": "modified",
+      "bytes": 13980,
+      "sha256": "3ed4cf6f6ca72217ae5998c91eabb2c9dd55f63f50de3ff8141ceac5c87b472f"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "change": "modified",
+      "bytes": 36433,
+      "sha256": "72a237c5dca72de6aafd15dc224835903bfb96e61b8219f7830ca3d91195ad45"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "change": "modified",
+      "bytes": 26941,
+      "sha256": "a57268a71a6483cffdd9536030b4ac11988f8ee1ef033c947ff256eee1fcbab8"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "change": "modified",
+      "bytes": 30938,
+      "sha256": "ea0449a6ff249b41016216bbce7c47cccaa348818ff9dcc573836781141ebd42"
+    },
+    {
+      "path": "apps/web/src/components/ExamModeSwitch.tsx",
+      "change": "modified",
+      "bytes": 937,
+      "sha256": "0ac7956b4d4476e74d4f4b4b1fb62e2e439ccd3cdddc7a5ce2e740a089dc61c5"
+    },
+    {
+      "path": "apps/web/src/components/HtmlDocumentViewer.tsx",
+      "change": "added",
+      "bytes": 1412,
+      "sha256": "33bff985423ebd623bdcc654f4e3c7473082f0ce7786b373d50da7f9cefe54b0"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "change": "modified",
+      "bytes": 33863,
+      "sha256": "6c1e03afcc441f46518e5f69518909f9f6faae9c1dfcbbc1e6be08e525038307"
+    },
+    {
+      "path": "apps/web/src/components/ManualAiProviderLinks.test.tsx",
+      "change": "added",
+      "bytes": 3037,
+      "sha256": "040c41304add400ddc6cb8078433102ad9f312d733b3598859d027deb1d758ba"
+    },
+    {
+      "path": "apps/web/src/components/ManualAiProviderLinks.tsx",
+      "change": "modified",
+      "bytes": 2740,
+      "sha256": "0db81ddc3f33a2a3ec363d40a321ee37dc6a873a08f3313643c6bdee9428fee6"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.test.tsx",
+      "change": "added",
+      "bytes": 8162,
+      "sha256": "a2bc4c4b9c6a1b30c4c06c07a0a29ee2f1a10e2b05eeba848522716505a27d24"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.tsx",
+      "change": "added",
+      "bytes": 27662,
+      "sha256": "d446bd5db517cbefd615ea74a4613611dbd0e42a1924fd45f312e48d7367884e"
+    },
+    {
+      "path": "apps/web/src/lib/api.ts",
+      "change": "modified",
+      "bytes": 13022,
+      "sha256": "c6fc163c5c9e6f15c9c9d1980c969c6b24c3192648ba4f093dec97e0f5053961"
+    },
+    {
+      "path": "apps/web/src/lib/documentCloud.ts",
+      "change": "modified",
+      "bytes": 3201,
+      "sha256": "d0cd722f70603019ca6c5b8146ac0a1f53f5cf8a62772a8222fdebf603d972ec"
+    },
+    {
+      "path": "apps/web/src/lib/documentStore.ts",
+      "change": "modified",
+      "bytes": 7266,
+      "sha256": "2d697e916c0930380e517c066a57f33b0b625b5b8d7c67ab8b3fd7fb807ec6a2"
+    },
+    {
+      "path": "apps/web/src/lib/htmlDocument.ts",
+      "change": "added",
+      "bytes": 2768,
+      "sha256": "eabd0c0866e75fa0764e62c940735bb443a4dfc08616fef812bad23327a1cf13"
+    },
+    {
+      "path": "apps/web/src/lib/manualProvider.ts",
+      "change": "added",
+      "bytes": 417,
+      "sha256": "e6ce800a93958b54d4819d7d99ed4d370915459c38834c32d572a2496f04378b"
+    },
+    {
+      "path": "apps/web/src/lib/takenote.test.ts",
+      "change": "added",
+      "bytes": 7367,
+      "sha256": "ea1654f29977aab898299664bce6a31cf298186c58f8d908622b26a608752f50"
+    },
+    {
+      "path": "apps/web/src/lib/takenote.ts",
+      "change": "added",
+      "bytes": 5508,
+      "sha256": "b28775c802abb502ec7ca177ab0c4b02250df7ae4fe02dcdb0aff88e331b4795"
+    },
+    {
+      "path": "apps/web/src/lib/takenoteExport.ts",
+      "change": "added",
+      "bytes": 8789,
+      "sha256": "7e8f6c81f6b20d5ca6313f788294956de901ca6c18271abcc8b544916906e68a"
+    },
+    {
+      "path": "apps/web/src/lib/takenoteStore.ts",
+      "change": "added",
+      "bytes": 5524,
+      "sha256": "40c3985053df187d0f5b65392230b2077647245cfa7c13887322f148f1d34507"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "change": "modified",
+      "bytes": 469096,
+      "sha256": "bae8107f80e988e180c6b671863623dba4981ea52f025950011b7d5938a1c5f0"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "d914eba2abb1c01647acbceffa9eb825ac5cd3a0f2a575ee7888884455f458dd"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "cf8b49fb6b6e1ec7df39cc437856a2ae8bd97138f78dd63d04cd8cb6cf790150"
+    },
+    {
+      "path": "packages/shared/src/takenotes.d.ts",
+      "change": "added",
+      "bytes": 838,
+      "sha256": "6923acce0096e5d3037188532409f6c62f4f3ba0baaeeab77d88571194bc4f58"
+    },
+    {
+      "path": "packages/shared/src/takenotes.js",
+      "change": "added",
+      "bytes": 4814,
+      "sha256": "91c0c2637867b88f184a6d96bdb4095f30eac2aecbc8739675534211972d3af4"
+    }
+  ]
+}

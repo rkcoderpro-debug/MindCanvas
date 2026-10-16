@@ -221,3 +221,7 @@ export function analyzeExamSources(settings: import("@mindcanvas/shared").ExamSe
 export function generateExamDraft(settings: import("@mindcanvas/shared").ExamSettings, sources: import("@mindcanvas/shared").ExamSource[], blueprint: import("@mindcanvas/shared").ExamBlueprint, excludedPrompts: string[] = [], signal?: AbortSignal) {
   return accountRequest<{ draft: import("@mindcanvas/shared").ExamDraft }>("/api/exams/generate", { method: "POST", body: JSON.stringify({ settings, sources, blueprint, excludedPrompts }), signal });
 }
+
+export function generateTakenote(settings: import("../../../../packages/shared/src/takenotes.js").NoteSettings, sources: import("@mindcanvas/shared").ExamSource[], signal?: AbortSignal, revision = "", previous = "") {
+  return accountRequest<{ note: import("../../../../packages/shared/src/takenotes.js").NoteResult }>("/api/takenotes/generate", { method: "POST", body: JSON.stringify({ settings, sources, revision, previous }), signal });
+}
