@@ -25,7 +25,8 @@ async function write(store: string, owner: string | null, id: string, value: unk
 export async function loadNoteWorkspace(owner: string | null): Promise<NoteWorkspace> {
   const value = await read<NoteWorkspace>("drafts", owner, "workspace");
   if (!value) return emptyNoteWorkspace();
-  validateNoteSettings(value.settings);
+  value.settings = validateNoteSettings(value.settings);
+  if (value.result) value.result.settings = validateNoteSettings(value.result.settings);
   if (!["auto", "manual"].includes(value.mode) || !Array.isArray(value.sources) || value.sources.length > 6 || typeof value.sourceText !== "string" || value.sourceText.length > 120000 || typeof value.importText !== "string" || value.importText.length > 1500000 || !["markdown", "docx"].includes(value.manualOutput)) throw new Error("Bản nháp Takenote không đọc được.");
   if (value.sources.some(source => !source || typeof source.id !== "string" || typeof source.name !== "string" || typeof source.text !== "string" || !Array.isArray(source.warnings))) throw new Error("Nguồn trong bản nháp Takenote không đọc được.");
   if (value.result && (value.result.owner !== ownerKey(owner) || !["knowledge", "html", "docx"].includes(value.result.format) || typeof value.result.content !== "string" || typeof value.result.title !== "string")) throw new Error("Kết quả trong bản nháp Takenote không đọc được.");

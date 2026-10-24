@@ -5180,3 +5180,8 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .document-tools-shell.html-reading .document-library { display:none; }
 .created-library-controls .document-search { flex:0 1 290px; }
 @media(max-width:680px) { .document-tools-shell.library-collapsed .document-tools-body { grid-template-columns:1fr; } .created-library-controls .document-search { flex-basis:100%; } }
+
+.html-progress-info { flex:none; padding:8px 14px; color:var(--muted); font-size:12px; border-bottom:1px solid var(--line); }
+.html-progress-info summary { cursor:pointer; }
+.html-progress-info p { margin:8px 0 2px; line-height:1.6; }
+.note-hub-settings { margin:12px 0; }

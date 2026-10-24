@@ -17,16 +17,16 @@ beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; globalTh
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function waitFor(check: () => boolean) { for (let i = 0; i < 60; i++) { if (check()) return; await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); } expect(check()).toBe(true); }
 async function mount() { await act(async () => root.render(<LanguageProvider><DocumentCreatorPage owner="alice" documents={[]} quizzes={{} as QuizStore} onOpenQuiz={() => {}} onDocumentsChanged={() => {}}/></LanguageProvider>)); await waitFor(() => !!host.querySelector(".document-type-cards")); }
-const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find(node => node.textContent?.includes(name))!;
+const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find(node => !node.closest("[hidden]") && node.textContent?.includes(name))!;
 async function click(name: string) { expect(button(name), name).toBeTruthy(); await act(async () => button(name).click()); }
 it("starts with document types and retains note configuration when changing type", async () => {
   await mount(); expect(host.querySelector("h1")?.textContent).toBe("Tạo tài liệu"); expect(host.querySelector('[aria-label="Prompt Takenote"]')).toBeNull();
   await click("Tạo Takenote"); await waitFor(() => !!host.querySelector('[aria-label="Nội dung nguồn Takenote"]'));
-  await click("Takenote trực quan HTML"); await click("AI Manual");
+  await click("Learning Hub HTML"); await click("AI Manual");
   expect((host.querySelector('[aria-label="Prompt Takenote"]') as HTMLTextAreaElement).value).toContain("HTML5");
   await click("Đổi loại tài liệu"); await click("Tạo đề thi"); expect(host.textContent).toContain("Existing exam editor");
   await click("Đổi loại tài liệu"); await click("Tạo Takenote");
-  expect(button("Takenote trực quan HTML").getAttribute("aria-pressed")).toBe("true"); expect(button("AI Manual").getAttribute("aria-pressed")).toBe("true");
+  expect(button("Learning Hub HTML").getAttribute("aria-pressed")).toBe("true"); expect(button("AI Manual").getAttribute("aria-pressed")).toBe("true");
 });
 it("combines legacy exams and notes, filters and opens HTML notes in the real viewer", async () => {
   const fixture = examFixture(), exam = { ...fixture, id: crypto.randomUUID(), owner: "alice", updatedAt: new Date().toISOString(), generationMode: "auto" };

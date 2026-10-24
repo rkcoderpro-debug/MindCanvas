@@ -1,4 +1,4 @@
-export type NoteSettings = { format: "knowledge" | "html"; detail: "concise" | "balanced" | "detailed"; organization: "topic" | "chapter"; visuals: string[]; formulas: boolean; tables: boolean; examples: boolean; review: boolean; subject: string; level: string; language: "vi" | "en"; instructions: string };
+export type NoteSettings = { format: "knowledge" | "html"; detail: "concise" | "balanced" | "detailed"; organization: "topic" | "chapter"; questionsPerRound: number; quizDifficulty: "mixed" | "basic" | "applied"; visuals: string[]; formulas: boolean; tables: boolean; examples: boolean; review: boolean; subject: string; level: string; language: "vi" | "en"; instructions: string };
 export type NoteResult = { title: string; content: string; warnings: string[] };
 export const NOTE_LIMITS: { content: number; source: number; sources: number };
 export const NOTE_VISUALS: string[];

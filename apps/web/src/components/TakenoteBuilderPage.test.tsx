@@ -47,12 +47,12 @@ it("imports Manual Markdown without embedding Auto source text and charges one r
 });
 it("blocks unreadable sources and refuses empty Manual HTML before charging", async () => {
   await mount(); await set("Nội dung nguồn Takenote", `[UNREADABLE] ${source}`); await click("Tạo Takenote bằng AI"); expect(api.generate).not.toHaveBeenCalled();
-  await click("AI Manual"); await act(async () => [...host.querySelectorAll("button")].find(node => node.textContent?.includes("Takenote trực quan HTML"))!.click());
+  await click("AI Manual"); await act(async () => [...host.querySelectorAll("button")].find(node => node.textContent?.includes("Learning Hub HTML"))!.click());
   await set("Nội dung kết quả Takenote", "not HTML"); await click("Nhập & xem"); expect(api.usage).not.toHaveBeenCalled(); expect(host.querySelector('[role="alert"]')?.textContent).toContain("HTML");
 });
 it("saves interactive HTML in Documents with original bytes and account isolation", async () => {
   api.generate.mockResolvedValue({ note: { title: "Thử động năng", content: '<html><body><h1>Động năng</h1><button id="go">Thử</button><script>document.querySelector("#go").onclick=()=>document.body.dataset.changed="yes"</script></body></html>', warnings: [] } });
-  await mount(); await act(async () => [...host.querySelectorAll("button")].find(node => node.textContent?.includes("Takenote trực quan HTML"))!.click());
+  await mount(); await act(async () => [...host.querySelectorAll("button")].find(node => node.textContent?.includes("Learning Hub HTML"))!.click());
   await set("Nội dung nguồn Takenote", source); await click("Tạo Takenote bằng AI"); await waitFor(() => !!host.querySelector('.note-result:not([hidden]) iframe'));
   expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
   await click("Lưu vào Tài liệu"); await waitFor(() => host.textContent?.includes("Bạn có thể mở lại") ?? false);

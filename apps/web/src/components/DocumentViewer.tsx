@@ -17,7 +17,7 @@ type Stroke = AnnotationStroke;
 type AnnotationMode = AnnotationTool | "eraser";
 type ActiveStroke = Stroke & { page: number };
 
-type Props = { source: Source; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
+type Props = { source: Source; owner?: string | null; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
 
 function bytesFromDataUrl(dataUrl: string): Uint8Array {
   const raw = dataUrl.split(",", 2)[1] ?? "";
@@ -96,7 +96,7 @@ function OfficeViewer({ source, onReady }: { source: Source; onReady?: () => voi
   return <div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc tài liệu…</p>" }}/>;
 }
 
-export default function DocumentViewer({ source, embedded = false, dedicated = false, enableGuide = true, onClose, onReady }: Props) {
+export default function DocumentViewer({ source, owner = null, embedded = false, dedicated = false, enableGuide = true, onClose, onReady }: Props) {
   const { t } = useLanguage();
   const kind = kindFor(source);
   const viewerSessionId = useMemo(() => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`, [source.dataUrl, source.id]);
@@ -543,13 +543,13 @@ export default function DocumentViewer({ source, embedded = false, dedicated = f
           )}
         </div>
       ) : kind === "docx" ? <DocxViewer dataUrl={source.dataUrl} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
-        : kind === "html" ? <StoredHtmlViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
+        : kind === "html" ? <StoredHtmlViewer source={source} owner={owner} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
         : <OfficeViewer source={source} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })} />}
     </section>
   );
 }
 
-function StoredHtmlViewer({ source, onReady }: { source: Source; onReady: () => void }) {
+function StoredHtmlViewer({ source, onReady, owner }: { source: Source; onReady: () => void; owner: string | null }) {
   const content = useMemo(() => { try { return { html: textFromDataUrl(source.dataUrl), error: "" }; } catch { return { html: "", error: "Không đọc được nội dung HTML. Hãy nhập lại file UTF-8." }; } }, [source.dataUrl]);
-  return content.error ? <p role="alert" className="form-error">{content.error}</p> : <HtmlDocumentViewer controls={false} html={content.html} title={source.name} onReady={onReady}/>;
+  return content.error ? <p role="alert" className="form-error">{content.error}</p> : <HtmlDocumentViewer controls={false} html={content.html} title={source.name} owner={owner} onReady={onReady}/>;
 }
