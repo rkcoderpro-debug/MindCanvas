@@ -105,3 +105,25 @@ it("blocks viewer writes before issuing a request", async () => {
   await expect(persistProject("editor", { ...draft(), accessRole: "viewer", revision: 3 })).rejects.toThrow("quyền xem");
   expect(mocks.from).not.toHaveBeenCalled();
 });
+
+it("acknowledges an owned revisioned PATCH from its exact returned row without downloading media", async () => {
+  const project = { ...draft(), revision: 3, ownerId: "editor", shared: false, accessRole: "owner" as const };
+  const write: any = {};
+  for (const name of ["update", "eq", "select", "abortSignal"]) write[name] = vi.fn(() => write);
+  write.maybeSingle = vi.fn().mockResolvedValue({ data: { id: project.id, revision: 4, updated_at: project.board.updatedAt }, error: null });
+  mocks.from.mockReturnValueOnce(write);
+  await expect(persistProject("editor", project)).resolves.toEqual({ revision: 4, updatedAt: project.board.updatedAt });
+  expect(write.eq.mock.calls).toEqual([["id", project.id], ["revision", 3], ["user_id", "editor"]]);
+  expect(write.select).toHaveBeenCalledWith("id,revision,updated_at");
+  expect(mocks.from).toHaveBeenCalledTimes(1);
+});
+
+it("does not mark a timed out owned write as saved", async () => {
+  const project = { ...draft(), revision: 3, ownerId: "editor", shared: false, accessRole: "owner" as const };
+  const write: any = {};
+  for (const name of ["update", "eq", "select", "abortSignal"]) write[name] = vi.fn(() => write);
+  write.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: { code: "57014", message: "statement timeout" }, status: 500 });
+  mocks.from.mockReturnValueOnce(write);
+  await expect(persistProject("editor", project)).rejects.toMatchObject({ code: "57014", status: 500 });
+  expect(mocks.from).toHaveBeenCalledTimes(1);
+});

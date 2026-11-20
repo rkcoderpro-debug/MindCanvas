@@ -22,7 +22,7 @@ export default function VersionHistory({ versions, loading, working, onClose, on
     </div>
     {loading ? <p className="version-empty">{t("loading")}</p> : !versions.length ? <div className="version-empty"><History size={30}/><p>{t("noVersions")}</p></div> : <ol className="version-list">
       {versions.map(version => <li key={version.id}>
-        <div className="version-meta"><strong>v{version.version}</strong><span><time dateTime={version.createdAt}>{formatDate(version.createdAt)}</time> · {version.source === "cloud" ? <><Cloud size={13}/> {t("cloudVersion")}</> : <><HardDrive size={13}/> {t("localVersion")}</>}</span></div>
+        <div className="version-meta"><strong>{version.label ? `${version.label} · v${version.version}` : `v${version.version}`}</strong><span><time dateTime={version.createdAt}>{formatDate(version.createdAt)}</time> · {version.source === "cloud" ? <><Cloud size={13}/> {t("cloudVersion")}</> : <><HardDrive size={13}/> {t("localVersion")}</>}</span></div>
         <button className="secondary-button" disabled={working} onClick={() => void onRestore(version)}><RotateCcw size={15}/>{t("restore")}</button>
       </li>)}
     </ol>}

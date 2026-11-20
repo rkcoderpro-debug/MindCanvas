@@ -209,7 +209,12 @@ describe("Workspace lifecycle", () => {
     await act(async () => rejectSave({ code: "57014", message: "canceling statement due to statement timeout" }));
     expect(api.board?.id).toBe(target.id);
     expect(api.status).toBe("saveError");
+    expect(api.error).toContain("[57014]");
     expect(store.readCache("A").find(project => project.id === target.id)).toMatchObject({ pending: true, revision: 19 });
+    save.mockResolvedValueOnce(persisted(target, 20));
+    await act(async () => api.flush(target.id));
+    expect(api.status).toBe("saved");
+    expect(api.error).toBe("");
   });
   it("opens an online canvas even if a different canvas is still saving", async () => {
     const original = ownedProject("Original", true);

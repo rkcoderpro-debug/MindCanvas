@@ -1,0 +1,91 @@
+{
+  "version": "5.26.3",
+  "baseVersion": "5.26.2",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/",
+  "files": [
+    {
+      "path": "QA_V5.26.3.md",
+      "change": "added",
+      "bytes": 1212,
+      "sha256": "1bad5e6ae8b69daf86c94b0ac62496572239483ce6a23acfb9cb7db105ffae73"
+    },
+    {
+      "path": "RELEASE_V5.26.3.md",
+      "change": "added",
+      "bytes": 2510,
+      "sha256": "c526568d1b57c3bddd13a985dabc85bb0cb0d5c2c76bc79d292879e420bc453a"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "960a4c2636b5a680d5313054e8ff7c88a9214b783f9e7177f74051b653b4aa6f"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "fe97da3e75d7fcdd2c6c621ba8ae1cd7e7fa2ca6b044bf85d08230f60dc3807c"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "change": "modified",
+      "bytes": 57594,
+      "sha256": "8ff77040a004319fbff6dbbd66a0f5de35ecb756bac57e5ef3597b4ce13e8176"
+    },
+    {
+      "path": "apps/web/src/components/VersionHistory.tsx",
+      "change": "modified",
+      "bytes": 1875,
+      "sha256": "8dc3bf2d0645521c77da661d9399bd1a40ff681a46a3007cc27e7e62f1e37fef"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.test.tsx",
+      "change": "modified",
+      "bytes": 41661,
+      "sha256": "41a45f054ff948f9822514b43ca799b016c636626102fda108cafb10481d2f58"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "change": "modified",
+      "bytes": 55502,
+      "sha256": "ba841c89e38aaaf56ff0b20160e87dc5bf5aca8b4f7fe70ce78d9efbbb963ccc"
+    },
+    {
+      "path": "apps/web/src/lib/offlineProjectCache.ts",
+      "change": "modified",
+      "bytes": 4269,
+      "sha256": "4491099b2f3333f7880f4d95661fa3091102f0f610579cb404f1914c798b3d56"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.test.ts",
+      "change": "modified",
+      "bytes": 8524,
+      "sha256": "dfa7787a8994ac3011093cf95c746e121f178de510ba87d92aaf2640e97c3f58"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "change": "modified",
+      "bytes": 75849,
+      "sha256": "7354b0619df20a44c3d97ae53021e8dd0a1c3f6c80b500fa37852973f81205f7"
+    },
+    {
+      "path": "apps/web/src/lib/sharedPersistence.test.ts",
+      "change": "modified",
+      "bytes": 9444,
+      "sha256": "84a475ccefc72616374bded1308fdb70e5f2509c838ce83b243c2af22fa73a69"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "a7125efd136fc5f980fe00be2ae03166c70b707ed3e9e54cb97f13c71595c081"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "9711ded59d7ab38a207f9bd561dd3f3affed04af8517900d0687e6cfa6ef7a8f"
+    }
+  ]
+}

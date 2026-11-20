@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "fake-indexeddb/auto";
 import { blankBoard } from "./board";
-import { acknowledge, cacheKey, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjects, readCache, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, waitForProjectCache, type CachedProject } from "./projectStore";
+import { acknowledge, cacheKey, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjectVersions, mergeProjects, readCache, readProjectVersions, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, versionCacheKey, waitForProjectCache, type CachedProject } from "./projectStore";
 import { readOfflineProjectCache } from "./offlineProjectCache";
 import { createFlashcard } from "./flashcards";
 const cached = (): CachedProject => { const board = blankBoard("Project"); return { id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: true }; };
@@ -68,6 +68,21 @@ describe("Project isolation and save queue", () => {
     expect(one.version).toBe(1); expect(two.version).toBe(2);
     const history = await fetchProjectVersions(null, first.id);
     expect(history.map(item => item.version)).toEqual([2, 1]); expect(history[0].board.title).toBe("Second"); expect(history.every(item => item.source === "local")).toBe(true);
+  });
+  it("keeps a media-heavy recovery checkpoint in IndexedDB when localStorage cannot store it", async () => {
+    const owner = "large-recovery";
+    const original = blankBoard("Draft with embedded media");
+    const largeImage = "data:image/png;base64," + "A".repeat(11 * 1024 * 1024);
+    const board = { ...original, media: [{ id: "image", kind: "image" as const, name: "Large image", src: largeImage, x: 0, y: 0, width: 120, height: 120 }] };
+    const checkpoint = await createProjectVersion(owner, board, "Local conflict backup", "local");
+    expect(checkpoint.source).toBe("local");
+    expect(localStorage.getItem(versionCacheKey(owner, board.id))).toBeNull();
+    const recovered = (await readProjectVersions(owner, board.id))[0];
+    expect(recovered.id).toBe(checkpoint.id);
+    expect(recovered.board.media[0].src.length).toBe(largeImage.length);
+    expect(await readProjectVersions("other-user", board.id)).toEqual([]);
+    const olderCloud = { ...checkpoint, id: "cloud", source: "cloud" as const, version: 30, createdAt: "2025-01-01T00:00:00.000Z" };
+    expect(mergeProjectVersions([olderCloud], [recovered]).map(item => item.id)).toEqual([checkpoint.id, "cloud"]);
   });
   it("treats viewport-only differences as the same document content", () => {
     const board = blankBoard("Same");

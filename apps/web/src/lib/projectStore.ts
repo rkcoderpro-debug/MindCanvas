@@ -2,7 +2,7 @@ import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
-import { readOfflineProjectCache, writeOfflineProjectCache } from "./offlineProjectCache";
+import { readOfflineProjectCache, readOfflineProjectVersions, updateOfflineProjectVersions, writeOfflineProjectCache } from "./offlineProjectCache";
 import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
 import { deleteFlashcardList, readFlashcardList, writeFlashcardList } from "./flashcardStorage";
 
@@ -178,76 +178,93 @@ export function sameBoardContent(left: BoardState, right: BoardState) {
   };
   return equal(leftContent, rightContent);
 }
-function readVersionCache(owner: string | null, projectId: string): ProjectVersion[] {
-  const raw = localStorage.getItem(versionCacheKey(owner, projectId));
-  if (!raw) return [];
-  const data: unknown = JSON.parse(raw);
+// Cloud and device checkpoints can have independent version numbers. Show
+// the latest recovery point first and dedupe by ID, not version number.
+export function mergeProjectVersions(...groups: ProjectVersion[][]): ProjectVersion[] {
+  return [...new Map(groups.flat().map(version => [version.id, version])).values()]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.version - a.version)
+    .slice(0, MAX_PROJECT_VERSIONS);
+}
+function parseVersionCache(data: unknown, projectId: string): ProjectVersion[] {
   if (!Array.isArray(data)) throw new Error("Invalid local version history.");
   return data.map(item => {
     if (!item || typeof item !== "object") throw new Error("Invalid local version history.");
     const entry = item as Partial<ProjectVersion>;
     const version = entry.version;
-    if (typeof entry.id !== "string" || typeof entry.projectId !== "string" || entry.projectId !== projectId || typeof version !== "number" || !Number.isInteger(version) || version < 1 || typeof entry.createdAt !== "string" || !entry.board) throw new Error("Invalid local version history.");
+    if (typeof entry.id !== "string" || entry.projectId !== projectId || typeof version !== "number" || !Number.isInteger(version) || version < 1 || typeof entry.createdAt !== "string" || !entry.board) throw new Error("Invalid local version history.");
     return { ...entry, version, board: parseBoard(entry.board), source: entry.source === "cloud" ? "cloud" : "local" } as ProjectVersion;
-  }).sort((a, b) => b.version - a.version).slice(0, MAX_PROJECT_VERSIONS);
+  });
 }
-function cacheVersion(owner: string | null, version: ProjectVersion) {
-  const current = readVersionCache(owner, version.projectId);
-  try {
-    localStorage.setItem(versionCacheKey(owner, version.projectId), JSON.stringify([version, ...current.filter(item => item.id !== version.id)].sort((a, b) => b.version - a.version).slice(0, MAX_PROJECT_VERSIONS)));
-  } catch {
-    // Recovery history must never block conflict resolution when a media-heavy
-    // project has exhausted localStorage. A cloud checkpoint remains separate.
-  }
+function readVersionCache(owner: string | null, projectId: string): ProjectVersion[] {
+  const raw = localStorage.getItem(versionCacheKey(owner, projectId));
+  return raw ? parseVersionCache(JSON.parse(raw), projectId) : [];
 }
-function versionFromRow(row: any, source: "cloud" | "local"): ProjectVersion | null {
+function versionFromRow(row: any): ProjectVersion | null {
   try {
     const projectId = String(row.note_id ?? row.project_id);
     const content = row.content?.board ?? row.content;
     const board = parseBoard({ ...content, id: projectId });
-    return { id: String(row.id), projectId, version: Number(row.version), createdAt: String(row.created_at), board, source, label: typeof row.label === "string" ? row.label : undefined };
+    return { id: String(row.id), projectId, version: Number(row.version), createdAt: String(row.created_at), board, source: "cloud", label: typeof row.label === "string" ? row.label : undefined };
   } catch { return null; }
 }
-export function readProjectVersions(owner: string | null, projectId: string) {
-  return readVersionCache(owner, projectId);
+export async function readProjectVersions(owner: string | null, projectId: string) {
+  const legacy = (() => { try { return readVersionCache(owner, projectId); } catch { return []; } })();
+  const records = await readOfflineProjectVersions(versionCacheKey(owner, projectId)).catch(() => []);
+  return mergeProjectVersions(parseVersionCache(records, projectId), legacy);
 }
 export async function fetchProjectVersions(owner: string | null, projectId: string): Promise<ProjectVersion[]> {
-  if (!owner) return readVersionCache(null, projectId);
+  if (!owner || (typeof navigator !== "undefined" && !navigator.onLine)) return readProjectVersions(owner, projectId);
   try {
     const client = await clientFor(owner);
     const { data, error } = await client.from("note_versions").select("id,note_id,version,label,content,created_at").eq("user_id", owner).eq("note_id", projectId).order("version", { ascending: false }).limit(MAX_PROJECT_VERSIONS).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
-    const remote = (data ?? []).map(row => versionFromRow(row, "cloud")).filter((row): row is ProjectVersion => !!row);
-    remote.forEach(version => cacheVersion(owner, version));
-    return remote.length ? remote : readVersionCache(owner, projectId);
+    const remote = (data ?? []).map(versionFromRow).filter((row): row is ProjectVersion => !!row);
+    return mergeProjectVersions(await readProjectVersions(owner, projectId), remote);
   } catch {
-    // History is a recovery aid. A missing migration or temporary network failure
-    // falls back to the owner-scoped local checkpoints without blocking the editor.
-    return readVersionCache(owner, projectId);
+    return readProjectVersions(owner, projectId);
   }
 }
-function createLocalVersion(owner: string | null, board: BoardState, label?: string): ProjectVersion {
-  const current = readVersionCache(owner, board.id), version = (current[0]?.version ?? 0) + 1;
-  const snapshot: ProjectVersion = { id: crypto.randomUUID(), projectId: board.id, version, createdAt: new Date().toISOString(), board: parseBoard(board), source: "local", label };
-  cacheVersion(owner, snapshot);
-  return snapshot;
-}
-export async function createProjectVersion(owner: string | null, board: BoardState, label?: string): Promise<ProjectVersion> {
-  if (!owner) return createLocalVersion(null, board, label);
+async function createLocalVersion(owner: string | null, board: BoardState, label?: string): Promise<ProjectVersion> {
+  const key = versionCacheKey(owner, board.id);
+  const id = crypto.randomUUID(), createdAt = new Date().toISOString();
+  const legacy = (() => { try { return readVersionCache(owner, board.id); } catch { return []; } })();
+  const normalized = parseBoard(board);
+  const build = (existing: ProjectVersion[]): ProjectVersion => ({
+    id, projectId: board.id, version: 1 + Math.max(0, ...existing.map(item => item.version)), createdAt, board: normalized, source: "local", label,
+  });
+  let snapshot: ProjectVersion | undefined;
   try {
-    const client = await clientFor(owner), local = readVersionCache(owner, board.id);
-    const latest = await client.from("note_versions").select("version").eq("user_id", owner).eq("note_id", board.id).order("version", { ascending: false }).limit(1).abortSignal(requestTimeoutSignal(20000)).maybeSingle();
-    if (latest.error) throw latest.error;
-    const version = Math.max(Number(latest.data?.version ?? 0), local[0]?.version ?? 0) + 1;
-    const row = { id: crypto.randomUUID(), note_id: board.id, user_id: owner, version, label: label ?? null, content: { type: "mindcanvas-board", version: 1, board }, created_at: new Date().toISOString() };
-    const result = await client.from("note_versions").insert(row).select("id,note_id,version,label,content,created_at").abortSignal(requestTimeoutSignal(20000)).single();
-    if (result.error) throw result.error;
-    const saved = versionFromRow(result.data, "cloud");
-    if (!saved) throw new Error("Invalid version returned by Supabase.");
-    cacheVersion(owner, saved);
-    return saved;
+    await updateOfflineProjectVersions(key, records => {
+      const existing = mergeProjectVersions(legacy, parseVersionCache(records, board.id));
+      snapshot = build(existing);
+      return mergeProjectVersions([snapshot], existing);
+    });
+    return snapshot!;
   } catch {
-    return createLocalVersion(owner, board, label);
+    // A fallback may fit for small projects. Only report success if writing
+    // the fallback actually succeeded.
+    snapshot = build(readVersionCache(owner, board.id));
+    localStorage.setItem(key, JSON.stringify(mergeProjectVersions([snapshot], readVersionCache(owner, board.id))));
+    return snapshot;
+  }
+}
+export async function createProjectVersion(owner: string | null, board: BoardState, label?: string, mode: "cloud" | "local" = "cloud"): Promise<ProjectVersion> {
+  if (!owner || mode === "local" || (typeof navigator !== "undefined" && !navigator.onLine)) return createLocalVersion(owner, board, label);
+  const device = await createLocalVersion(owner, board, label).catch(() => undefined);
+  try {
+    const client = await clientFor(owner);
+    const latest = await client.from("note_versions").select("version").eq("user_id", owner).eq("note_id", board.id).order("version", { ascending: false }).limit(1).abortSignal(requestTimeoutSignal(8000)).maybeSingle();
+    if (latest.error) throw latest.error;
+    const version = Number(latest.data?.version ?? 0) + 1;
+    const row = { id: device?.id ?? crypto.randomUUID(), note_id: board.id, user_id: owner, version, label: label ?? null, content: { type: "mindcanvas-board", version: 1, board }, created_at: device?.createdAt ?? new Date().toISOString() };
+    // The server already has the checkpoint; only return its small metadata.
+    const result = await client.from("note_versions").insert(row).select("id,version,created_at,label").abortSignal(requestTimeoutSignal(12000)).single();
+    if (result.error) throw result.error;
+    if (result.data?.id !== row.id || Number(result.data.version) !== version || typeof result.data.created_at !== "string") throw new Error("Invalid version acknowledgement.");
+    return { id: row.id, projectId: board.id, version, createdAt: result.data.created_at, board, source: "cloud", label };
+  } catch {
+    if (device) return device;
+    throw new Error("Không thể lưu mốc phiên bản trên đám mây hoặc thiết bị.");
   }
 }
 export function mergeProjects(remote: Project[], cache: CachedProject[], owner: string | null): Project[] {
@@ -394,7 +411,7 @@ function retryableVerificationReadError(error: unknown): boolean {
   const value = error as { status?: unknown; statusCode?: unknown; code?: unknown } | null;
   const status = Number(value?.status ?? value?.statusCode);
   const code = String(value?.code ?? "");
-  if ([408, 409, 425, 429, 404, 406].includes(status) || code === "PGRST116") return true;
+  if ([408, 409, 425, 429, 404, 406].includes(status) || code === "PGRST116" || code === "57014") return true;
   if (status >= 500) return true;
   if (status >= 400) return false;
   if (code === "42501" || code.startsWith("23") || code.startsWith("28")) return false;
@@ -454,16 +471,31 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     throw new ProjectConflictError(project.id);
   }
   const client = await clientFor(owner);
-  const verify = (revision?: number) => verifyProjectWrite(owner, project, revision);
+  const verify = (revision?: number) => verifyProjectWrite(owner, project, revision, {
+    fetchSnapshot: (_owner, id, timeoutMs) => readProjectSnapshot(client, owner, id, timeoutMs),
+  });
+  const owned = project.ownerId === owner && !project.shared && project.accessRole !== "editor";
   const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, thumbnail: project.thumbnail ?? createCanvasThumbnail(project.board), updated_at: project.board.updatedAt };
   const { thumbnail: _thumbnail, ...payloadWithoutThumbnail } = payload;
   const updateWithRevision = async (baseRevision: number) => {
     const nextRevision = baseRevision + 1;
-    let result = await client.from("notes").update({ ...payload, revision: nextRevision }).eq("id", project.id).eq("revision", baseRevision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
-    if (result.error && /thumbnail/i.test(String(result.error.message ?? ""))) result = await client.from("notes").update({ ...payloadWithoutThumbnail, revision: nextRevision }).eq("id", project.id).eq("revision", baseRevision).select("revision").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
-    if (result.error) throw result.error;
+    const columns = "id,revision,updated_at";
+    const write = (body: typeof payloadWithoutThumbnail) => {
+      let request = client.from("notes").update({ ...body, revision: nextRevision }).eq("id", project.id).eq("revision", baseRevision);
+      if (owned) request = request.eq("user_id", owner);
+      return request.select(columns).abortSignal(requestTimeoutSignal(20000)).maybeSingle();
+    };
+    let result = await write(payload);
+    if (result.error && /thumbnail/i.test(String(result.error.message ?? ""))) result = await write(payloadWithoutThumbnail);
+    if (result.error) throw { ...result.error, status: result.status };
     if (!result.data) throw new ProjectConflictError(project.id);
-    return verify(Number(result.data.revision ?? nextRevision));
+    // A successful guarded UPDATE returning this row and its exact next
+    // revision confirms the write. No need to re-download embedded media.
+    if (owned && result.data.id === project.id && result.data.revision === nextRevision &&
+      typeof result.data.updated_at === "string" && Date.parse(result.data.updated_at) === Date.parse(project.board.updatedAt)) {
+      return { revision: nextRevision, updatedAt: result.data.updated_at };
+    }
+    return verify(nextRevision);
   };
   if (project.revision === undefined && project.baseUpdatedAt) {
     // Older caches and pre-revision databases still have updated_at. Refresh
