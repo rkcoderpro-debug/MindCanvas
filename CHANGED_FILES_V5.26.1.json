@@ -1,0 +1,55 @@
+{
+  "version": "5.26.1",
+  "baseVersion": "5.26.0",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/",
+  "files": [
+    {
+      "path": "QA_V5.26.1.md",
+      "change": "added",
+      "bytes": 1409,
+      "sha256": "259b2f3fd936a0b5d10bcffc39ba2229fdda2813c161efec8e256fd9f2936c98"
+    },
+    {
+      "path": "RELEASE_V5.26.1.md",
+      "change": "added",
+      "bytes": 2904,
+      "sha256": "6d6d279d82f73da18ea6cdba30309b736cd0e6e4412179bf11ebf940a1140ac7"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "619600ccdfd74b7de9a20fa128cb7a05d093e60de3306d3af6de11ba562549ae"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "e58fcb9d282aeb1938984733364fe42cc95b4d9fdfacf78bf2f517120d9bb314"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.test.tsx",
+      "change": "modified",
+      "bytes": 38506,
+      "sha256": "038cde46e0d12f8a8a613e5ec3640df8ce911eea9cba0517d59c8d123581f2c9"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "change": "modified",
+      "bytes": 49239,
+      "sha256": "7c123bcb8ba49aadd7e64837154ef1012d3e741631ec23c8b1f873272b72734b"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "f129c8f41c17a3fa7a9d8a356d7e6b63d04da1b0e4ab1cc8b0dd342e0416736f"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "66476fa0c01a6731da8761c6b3447f637e96687d1dd4e8b275ee2c042555760c"
+    }
+  ]
+}

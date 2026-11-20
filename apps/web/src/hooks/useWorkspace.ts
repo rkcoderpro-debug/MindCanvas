@@ -13,6 +13,12 @@ export type WorkspaceConflict = { projectId: string; local: CachedProject; remot
 export type ConflictResolution = "cloud" | "overwrite" | "copy";
 const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
 type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
+function isTemporaryCanvasReadFailure(error: unknown) {
+  const value = error as { code?: string; name?: string; message?: string; status?: number } | null;
+  if (value?.code === "57014" || value?.name === "TimeoutError" || [408, 502, 503, 504].includes(value?.status ?? 0)) return true;
+  // PostgREST can return transport failures as an object with an empty code.
+  return !value?.code && /timeout|timed out|failed to fetch|networkerror|network request failed/i.test(value?.message ?? "");
+}
 async function createRecoveryCheckpoint(owner: string, board: BoardState, label: string) {
   const version = await createProjectVersion(owner, board, label);
   if (version.source === "cloud") return;
@@ -45,6 +51,7 @@ export function useWorkspace(owner: string | null) {
   const alive = useRef(true), queue = useRef(new SaveQueue()), dirty = useRef(false), cacheFailed = useRef(false);
   const conflictRef = useRef<WorkspaceConflict | null>(null);
   const navigation = useRef(0), thumbnailRequests = useRef(new Set<string>());
+  const navigationSyncs = useRef(new Set<string>());
   // Realtime UPDATE events do not carry the originating browser/session. Keep
   // the short-lived save snapshots so the echo of this device's own save is
   // not mistaken for a collaborator edit that should reset Undo/Redo.
@@ -121,12 +128,15 @@ export function useWorkspace(owner: string | null) {
       const accessRole = existing?.accessRole ?? (owner ? "owner" : undefined);
       const shared = existing?.shared ?? (!!existing?.ownerId && existing.ownerId !== owner);
       const changed = !existing?.board || JSON.stringify(existing.board) !== JSON.stringify(active);
-      const pending = !!owner && accessRole !== "viewer" && !existing?.cloudOffline && (existing?.pending === true || changed);
+      // Persist the viewport and normalized legacy fields locally without
+      // turning a read/pan into a full content PATCH.
+      const contentChanged = !existing || !sameBoardContent(normalizeEditor(existing.board), active) || existing.folderId !== folderId.current;
+      const pending = existing?.pending === true || (!!owner && accessRole !== "viewer" && !existing?.cloudOffline && contentChanged);
       const snapshot: CachedProject = {
         ...existing,
         id: active.id,
         title: active.title,
-        updatedAt: active.updatedAt,
+        updatedAt: contentChanged ? active.updatedAt : existing.updatedAt,
         board: active,
         thumbnail: changed ? createCanvasThumbnail(active) : existing?.thumbnail ?? createCanvasThumbnail(active),
         folderId: folderId.current,
@@ -217,6 +227,7 @@ export function useWorkspace(owner: string | null) {
   }, [owner]);
 
   const flush = useCallback(async (projectId?: string): Promise<boolean> => {
+    const originId = current.current?.id;
     // An explicit flush for an older project must not cancel the debounce for
     // the canvas that is currently open.
     if (!projectId || projectId === current.current?.id) clearTimeout(timer.current);
@@ -259,8 +270,8 @@ export function useWorkspace(owner: string | null) {
           const shared = p.shared || (!!p.ownerId && p.ownerId !== owner);
           // A shared cache entry from an earlier session is never allowed to
           // upload itself before this session has fetched its cloud revision.
-          // The active project may still flush a legitimate editor change.
-          if (shared && p.id !== current.current?.id) {
+          // A verified editor may finish a save that began before navigation.
+          if (shared && (p.id !== originId || p.cloudOffline || p.accessRole !== "editor")) {
             heldSharedDraft = true;
             return false;
           }
@@ -328,7 +339,7 @@ export function useWorkspace(owner: string | null) {
           }, 15_000));
           return false;
         }
-        if (alive.current) setStatus(navigator.onLine ? "saveError" : "offline");
+        if (alive.current && (!current.current || current.current.id === targetId)) setStatus(navigator.onLine ? "saveError" : "offline");
         report(err);
         return false;
       }
@@ -347,7 +358,7 @@ export function useWorkspace(owner: string | null) {
       else if (activeId && verificationPendingIds.has(activeId)) setStatus("pending");
       else if (activeResult === false) setStatus(navigator.onLine ? "saveError" : "offline");
       else if (activePending) setStatus(navigator.onLine ? "pending" : "offline");
-      else if (!allSaved) setStatus("saveError");
+      else if (!activeId && !allSaved) setStatus("saveError");
       else setStatus(owner ? "saved" : "localSaved");
     }
     return allSaved;
@@ -526,27 +537,58 @@ export function useWorkspace(owner: string | null) {
     change({ ...version.board, id: snapshot.id, updatedAt: new Date().toISOString() });
     await loadVersions();
   };
+  const checkpointBeforeLeaving = async (ticket: number) => {
+    if (current.current) {
+      checkpointCurrent();
+      // The network may fail, but do not leave an unsaved in-memory edit.
+      await waitForProjectCache(owner);
+    }
+    return alive.current && ticket === navigation.current && !cacheFailed.current;
+  };
+  const syncPendingInBackground = (id: string) => {
+    if (!owner || navigationSyncs.current.has(id) || conflictRef.current?.projectId === id ||
+      !readCache(owner).some(item => item.id === id && item.pending)) return;
+    navigationSyncs.current.add(id);
+    void flush(id).catch(report).finally(() => navigationSyncs.current.delete(id));
+  };
   const open = async (p: Project) => {
     if (p.deletedAt) return;
     const ticket = ++navigation.current;
-    if (owner) await flush();
-    else void flush();
-    if ((owner && cacheFailed.current) || ticket !== navigation.current) return;
+    if (current.current?.id === p.id) return;
+    setError("");
     try {
       let cached = readCache(owner).find(c => c.id === p.id);
-      const shared = !!owner && !!(p.shared || (p.ownerId && p.ownerId !== owner) || cached?.shared || (cached?.ownerId && cached.ownerId !== owner));
+      const shared = !!owner && !!(p.shared || p.accessRole === "editor" || p.accessRole === "viewer" || (p.ownerId && p.ownerId !== owner) || cached?.shared || cached?.accessRole === "editor" || cached?.accessRole === "viewer" || (cached?.ownerId && cached.ownerId !== owner));
       const offline = typeof navigator !== "undefined" && !navigator.onLine;
       // Shared projects are cloud-authoritative. A pending device cache can
       // only be used for offline viewing; it must not win an online open.
       let local = !!cached && (!owner || (!shared && (cached.pending || offline)) || (shared && offline));
-      const snapshot = !local && owner ? await fetchProjectSnapshot(owner, p.id) : undefined;
-      if (shared && cached?.pending && snapshot && cached.folderId === snapshot.folderId && sameBoardContent(cached.board, snapshot.board)) {
+      let snapshot: CachedProject | undefined;
+      let offlineCopy = offline;
+      if (!local && owner) {
+        try { snapshot = await fetchProjectSnapshot(owner, p.id); }
+        catch (err) {
+          if (!cached || cached.deletedAt || shared || !(p.ownerId === owner || cached.ownerId === owner) || !isTemporaryCanvasReadFailure(err)) throw err;
+          // Save still uses the cached revision guard; an older copy cannot
+          // silently overwrite a newer canvas on the server.
+          local = offlineCopy = true;
+        }
+      }
+      if (!alive.current || ticket !== navigation.current) return;
+      if (!await checkpointBeforeLeaving(ticket)) return;
+      const previousId = current.current?.id;
+      cached = readCache(owner).find(c => c.id === p.id);
+      if (!shared && cached?.pending && !snapshot) local = true;
+      if (shared && cached?.pending && snapshot &&
+        (cached.revision === undefined || (snapshot.revision !== undefined && snapshot.revision >= cached.revision)) &&
+        cached.folderId === snapshot.folderId && sameBoardContent(cached.board, snapshot.board)) {
         acknowledge(owner, cached, snapshot.revision, snapshot.updatedAt);
         await waitForProjectCache(owner);
+        if (!alive.current || ticket !== navigation.current) return;
         cached = readCache(owner).find(c => c.id === p.id);
       }
       if (cached && snapshot && (
-        (cached.pending && !sameBoardContent(cached.board, snapshot.board)) ||
+        (cached.pending && (cached.folderId !== snapshot.folderId || !sameBoardContent(cached.board, snapshot.board))) ||
         (cached.revision !== undefined && snapshot.revision !== undefined && snapshot.revision <= cached.revision && !sameBoardContent(cached.board, snapshot.board)) ||
         (cached.revision !== undefined && snapshot.revision !== undefined && snapshot.revision < cached.revision)
       )) {
@@ -558,16 +600,22 @@ export function useWorkspace(owner: string | null) {
       }
       const metadata = local && cached ? cached : snapshot ?? cached ?? p;
       const next = local && cached ? cached.board : snapshot?.board ?? cached?.board;
-      if (!next) throw new Error("Project unavailable");
+      if (!next || metadata.deletedAt) throw new Error("Project unavailable");
       if (!alive.current || ticket !== navigation.current) return;
-      current.current = normalizeEditor(next); folderId.current = metadata.folderId; setBoard(current.current); clearHistory(); setVersions([]);
-      cacheProject(owner, { ...metadata, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), baseUpdatedAt: metadata.baseUpdatedAt ?? (snapshot ? snapshot.updatedAt : undefined), pending: !!cached?.pending || !!(local && snapshot), cloudOffline: shared && offline });
+      const opened = normalizeEditor(next);
+      const entry = { ...metadata, board: opened, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(opened), baseUpdatedAt: metadata.baseUpdatedAt ?? (snapshot ? snapshot.updatedAt : undefined), pending: !!cached?.pending || !!(local && snapshot), cloudOffline: shared && offline,
+        ...(shared && snapshot ? { ownerId: snapshot.ownerId, accessRole: snapshot.accessRole, shared: snapshot.shared } : {}) };
+      cacheProject(owner, entry);
+      if (previousId) syncPendingInBackground(previousId);
+      current.current = opened; folderId.current = metadata.folderId; setBoard(opened); clearHistory(); setVersions([]);
       // Publish the access metadata immediately so a newly accepted viewer
       // cannot get one editable render while the background refresh completes.
-      upsertSummary({ ...metadata, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: metadata.thumbnail ?? createCanvasThumbnail(next), pending: !!cached?.pending || !!(local && snapshot), cloudOffline: shared && offline });
-      const history = await fetchProjectVersions(owner, next.id);
-      if (alive.current && ticket === navigation.current && current.current?.id === next.id) setVersions(history);
-    } catch (err) { report(err); }
+      upsertSummary(entry);
+      setStatus(conflictRef.current?.projectId === p.id ? "saveError" : !owner ? "localSaved" : offlineCopy ? "offline" : entry.pending ? "pending" : "saved");
+      // Opening a pending owned draft does not depend on the same PATCH that
+      // timed out earlier. Leave other drafts to their own queue or manual retry.
+      if (!shared && !offlineCopy && entry.pending) syncPendingInBackground(p.id);
+    } catch (err) { if (ticket === navigation.current) report(err); }
   };
   const create = async (title: string, imported?: BoardState, targetFolderId: string | null = null): Promise<BoardState> => {
     ++navigation.current;
@@ -589,19 +637,16 @@ export function useWorkspace(owner: string | null) {
   };
   const home = async () => {
     const ticket = ++navigation.current;
-    checkpointCurrent();
-    // A failed cloud flush is kept as a pending local snapshot and reported
-    // to the user, but it must not trap navigation in the current canvas. The
-    // guide (and the Workspace button) must still be able to advance while a
-    // retry remains available.
-    if (owner) await flush();
-    else void flush();
-    if (!alive.current || ticket !== navigation.current) return;
-    current.current = null;
-    setBoard(null);
-    clearHistory();
-    setVersions([]);
-    await refresh();
+    try {
+      if (!await checkpointBeforeLeaving(ticket)) return;
+      const id = current.current?.id;
+      if (id) syncPendingInBackground(id);
+      current.current = null;
+      setBoard(null);
+      clearHistory();
+      setVersions([]);
+      await refresh();
+    } catch (err) { if (ticket === navigation.current) report(err); }
   };
   const newFolder = async (name: string): Promise<ProjectFolder> => {
     try {
