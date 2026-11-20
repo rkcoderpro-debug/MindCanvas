@@ -200,10 +200,12 @@ function incomingInvitationFromRow(row: any): IncomingProjectInvitation {
 }
 
 /** Lists only invitations addressed to the currently authenticated email. */
-export async function listMyPendingProjectInvitations() {
+export async function listMyPendingProjectInvitations(signal?: AbortSignal): Promise<IncomingProjectInvitation[]> {
   const client = requireClient();
   await requireSession();
-  const { data, error } = await client.rpc("list_my_pending_project_invitations");
+  if (signal?.aborted) throw new Error("Đã dừng tải lời mời.");
+  const query = client.rpc("list_my_pending_project_invitations");
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
   if (error) throw collaborationRpcError(error);
   return (data ?? []).map(incomingInvitationFromRow);
 }

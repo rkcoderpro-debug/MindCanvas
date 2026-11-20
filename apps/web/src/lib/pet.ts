@@ -1,4 +1,4 @@
-import { getCurrentSession, supabase } from "./supabase";
+import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 
 export const PET_KINDS = ["cat", "dog", "fox", "rabbit", "hamster"] as const;
 export type PetKind = (typeof PET_KINDS)[number];
@@ -235,14 +235,14 @@ export async function recordPetActivity(owner: string | null, seconds: number, a
   const now = new Date();
   const local = recordPetStudy(readPet(owner, now), seconds, now);
   writePet(owner, local);
-  if (!owner || !(await sessionBelongsTo(owner))) return local;
+  if (!owner || (typeof navigator !== "undefined" && !navigator.onLine) || !(await sessionBelongsTo(owner))) return local;
   try {
     const eventId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const { data, error } = await supabase!.rpc("record_pet_activity", {
       p_event_id: eventId,
       p_seconds: Math.min(300, Math.max(1, Math.floor(seconds))),
       p_activity_type: activityType,
-    });
+    }).abortSignal(requestTimeoutSignal(10000));
     const remote = !error ? normalizePet(data) : null;
     if (remote) { const merged = { ...remote, followPointer: local.followPointer }; writePet(owner, merged); return merged; }
   } catch { /* preserve local progress until the next successful sync */ }

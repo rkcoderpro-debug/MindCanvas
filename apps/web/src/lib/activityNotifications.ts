@@ -1,4 +1,4 @@
-import { getCurrentSession, supabase } from "./supabase";
+import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 
 export type ActivityNotification = {
   kind: "message" | "connection_invite" | "learning_invite" | "shared_learning" | "class_invite" | "teacher_invite" | "assignment" | "project_invite";
@@ -12,9 +12,11 @@ export type ActivityNotification = {
   read_at: string | null;
 };
 
-async function rpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+async function rpc<T>(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
   if (!supabase || !(await getCurrentSession())) throw new Error("Đăng nhập để xem thông báo.");
-  const { data, error } = await supabase.rpc(name, args);
+  if (signal?.aborted) throw new Error("Đã dừng tải thông báo.");
+  const request = supabase.rpc(name, args);
+  const { data, error } = await request.abortSignal(signal ?? requestTimeoutSignal(10000));
   if (error) {
     if (error.code === "PGRST202" || /schema cache|could not find the function/i.test(error.message))
       throw new Error("Cần chạy migration 0030 và 0031 trên Supabase để dùng thông báo.");
@@ -23,7 +25,7 @@ async function rpc<T>(name: string, args: Record<string, unknown> = {}): Promise
   return data as T;
 }
 
-export const listActivityNotifications = () => rpc<ActivityNotification[]>("list_activity_notifications");
+export const listActivityNotifications = async (signal?: AbortSignal) => (await rpc<ActivityNotification[]>("list_activity_notifications", {}, signal)) ?? [];
 export const markActivityNotificationRead = (item: ActivityNotification) =>
   rpc<void>("mark_activity_notification_read", { p_kind: item.kind, p_source: item.source_id });
 export const acceptLearningNotification = (id: string) =>

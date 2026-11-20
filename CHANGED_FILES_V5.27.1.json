@@ -1,0 +1,97 @@
+{
+  "version": "5.27.1",
+  "baseVersion": "5.27.0",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/",
+  "files": [
+    {
+      "path": "QA_V5.27.1.md",
+      "change": "added",
+      "bytes": 576,
+      "sha256": "b9a30608378aa0d4c5767abee9ee33fc32adcfe3f15103f27b14c6e7d6c6a34f"
+    },
+    {
+      "path": "RELEASE_V5.27.1.md",
+      "change": "added",
+      "bytes": 2422,
+      "sha256": "30c1cd1e67a0af6d8f0c261a15814fe209fe44b93baf83e3f9f53dc9f0f4a962"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "3006ee0756f22718a9c481e18d2dba5ca0f62d017c4562a6d4506d4eeb851d78"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "4a45f83c9dec66736d66d4b06c6cf0718cebb8fa5e9934dc814ed3bbfa78f56f"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "change": "modified",
+      "bytes": 57610,
+      "sha256": "d9f55cbad4351acfd969de00a209a75e95292d344dadf92fc1408453735656f6"
+    },
+    {
+      "path": "apps/web/src/components/NotificationBell.test.tsx",
+      "change": "modified",
+      "bytes": 5193,
+      "sha256": "ebcddb73380ebdda609bf2cc2e1c7cb9abbf295a01cde5739d4fe06f2fed2007"
+    },
+    {
+      "path": "apps/web/src/components/NotificationBell.tsx",
+      "change": "modified",
+      "bytes": 6064,
+      "sha256": "a32fb536f2e0a7b77a48a06f2646967e589bb5fd01f6d5b13c8ce82c42fb45d5"
+    },
+    {
+      "path": "apps/web/src/components/ShareInbox.test.tsx",
+      "change": "added",
+      "bytes": 2726,
+      "sha256": "adad6cd87c4ac17bd8d8fd693fe7cea5ef120f59478839952b398a2fab742065"
+    },
+    {
+      "path": "apps/web/src/components/ShareInbox.tsx",
+      "change": "modified",
+      "bytes": 3070,
+      "sha256": "23efd06b5fc763177e55ee55e0ac6ddf4fe25572cce3e786ab7922fa2e8b182a"
+    },
+    {
+      "path": "apps/web/src/hooks/useBackgroundRead.ts",
+      "change": "added",
+      "bytes": 3655,
+      "sha256": "62455a37d90a8aaf7b507e8f0a9bc1b92c8ece1a85d6bfddad371311d8677ef8"
+    },
+    {
+      "path": "apps/web/src/lib/activityNotifications.ts",
+      "change": "modified",
+      "bytes": 1871,
+      "sha256": "6beed87cfc5462fce8de9491e25910887b1baa9d13bfd1480e306892330fac9a"
+    },
+    {
+      "path": "apps/web/src/lib/collaboration.ts",
+      "change": "modified",
+      "bytes": 13286,
+      "sha256": "09e8cf48ac469bb5ed3260a9494a1b81a4b25dbc17a162b96b3d5831f561de1a"
+    },
+    {
+      "path": "apps/web/src/lib/pet.ts",
+      "change": "modified",
+      "bytes": 10889,
+      "sha256": "501b24d686696f5cb774abbb4bd7d472eae884caab330a6e528825bcca32cfae"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "1f2cb39a3d837f7081778cb2d6d71fdbf9b108f0bc88317289047508b68457f7"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "d51ed6e15e97a8f767ba75bd663ffd0dea4d90b99dd44cb0e4eb13daafc0bf1f"
+    }
+  ]
+}
