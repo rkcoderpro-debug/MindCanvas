@@ -339,7 +339,7 @@ export function useWorkspace(owner: string | null) {
             try {
               const saved = await persistProject(owner, candidate);
               marker.expectedRevision = saved?.revision;
-              acknowledge(owner, candidate, saved?.revision, saved?.updatedAt);
+              acknowledge(owner, candidate, saved?.revision, saved?.updatedAt, saved?.assetFormat);
               await waitForProjectCache(owner);
               clearTimeout(verificationRetries.current.get(candidate.id));
               verificationRetries.current.delete(candidate.id);
@@ -363,7 +363,7 @@ export function useWorkspace(owner: string | null) {
             if (local.folderId === remote.folderId && sameBoardContent(local.board, remote.board)) {
               // The previous write may have succeeded but its response or
               // readback timed out. Confirm its content instead of resending.
-              acknowledge(owner, local, remote.revision, remote.updatedAt);
+              acknowledge(owner, local, remote.revision, remote.updatedAt, remote.assetFormat);
               await waitForProjectCache(owner);
               const confirmed = readCache(owner).find(item => item.id === local.id);
               if (confirmed && alive.current) setProjects(items => [confirmed, ...items.filter(item => item.id !== confirmed.id)]);
@@ -468,9 +468,9 @@ export function useWorkspace(owner: string | null) {
         return marker.expectedRevision === undefined && sameBoardContent(marker.snapshot.board, update.board);
       });
       if (acknowledged) {
-        acknowledge(owner, acknowledged.snapshot, update.revision ?? acknowledged.expectedRevision, update.updatedAt);
+        acknowledge(owner, acknowledged.snapshot, update.revision ?? acknowledged.expectedRevision, update.updatedAt, update.assetFormat);
         const cached = readCache(owner).find(item => item.id === projectId);
-        if (cached) cacheProject(owner, { ...cached, revision: update.revision ?? cached.revision, baseUpdatedAt: update.updatedAt ?? cached.baseUpdatedAt, pending: cached.pending });
+        if (cached) cacheProject(owner, { ...cached, revision: update.revision ?? cached.revision, baseUpdatedAt: update.updatedAt ?? cached.baseUpdatedAt, assetFormat: update.assetFormat ?? cached.assetFormat, pending: cached.pending });
         const latest = readCache(owner).find(item => item.id === projectId);
         if (alive.current && latest) {
           setProjects(items => [latest, ...items.filter(item => item.id !== latest.id)]);
@@ -482,7 +482,7 @@ export function useWorkspace(owner: string | null) {
       // the same document. Those fields must never erase local history.
       if (sameBoardContent(local, update.board)) {
         const cached = readCache(owner).find(item => item.id === projectId);
-        if (cached && !cached.pending) cacheProject(owner, { ...cached, revision: update.revision ?? cached.revision, baseUpdatedAt: update.updatedAt ?? cached.baseUpdatedAt });
+        if (cached && !cached.pending) cacheProject(owner, { ...cached, revision: update.revision ?? cached.revision, baseUpdatedAt: update.updatedAt ?? cached.baseUpdatedAt, assetFormat: update.assetFormat ?? cached.assetFormat });
         return;
       }
       // A pending edit in a different project should not pause this project's
@@ -494,10 +494,10 @@ export function useWorkspace(owner: string | null) {
       clearHistory();
       const cached = readCache(owner).find(item => item.id === projectId);
       const thumbnail = createCanvasThumbnail(next);
-      if (cached) cacheProject(owner, { ...cached, title: next.title, updatedAt: next.updatedAt, baseUpdatedAt: update.updatedAt ?? cached.baseUpdatedAt, board: next, thumbnail, revision: update.revision ?? cached.revision, pending: false });
-      setProjects(items => items.map(item => item.id === projectId ? { ...item, title: next.title, updatedAt: update.updatedAt ?? next.updatedAt, revision: update.revision ?? item.revision, board: next, thumbnail, pending: false } : item));
+      if (cached) cacheProject(owner, { ...cached, title: next.title, updatedAt: next.updatedAt, baseUpdatedAt: update.updatedAt ?? cached.baseUpdatedAt, assetFormat: update.assetFormat ?? cached.assetFormat, board: next, thumbnail, revision: update.revision ?? cached.revision, pending: false });
+      setProjects(items => items.map(item => item.id === projectId ? { ...item, title: next.title, updatedAt: update.updatedAt ?? next.updatedAt, revision: update.revision ?? item.revision, assetFormat: update.assetFormat ?? item.assetFormat, board: next, thumbnail, pending: false } : item));
       setStatus("saved");
-    });
+    }, undefined, owner);
   }, [owner, board?.id]);
 
   const stage = (next: BoardState, delay = 750) => {
@@ -516,7 +516,7 @@ export function useWorkspace(owner: string | null) {
       const shared = existing?.shared ?? (!!ownerId && ownerId !== owner);
       const accessRole = existing?.accessRole ?? (shared ? "viewer" : owner ? "owner" : undefined);
       const baseUpdatedAt = existing?.baseUpdatedAt ?? (existing && !existing.pending ? existing.updatedAt : undefined);
-      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, baseUpdatedAt, ownerId, accessRole, shared, cloudOffline: existing?.cloudOffline, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: createCanvasThumbnail(next), folderId: folderId.current, pending: !!owner };
+      const p: CachedProject = { favorite: existing?.favorite, deletedAt: existing?.deletedAt, revision: existing?.revision, baseUpdatedAt, assetFormat: existing?.assetFormat, ownerId, accessRole, shared, cloudOffline: existing?.cloudOffline, id: next.id, title: next.title, updatedAt: next.updatedAt, board: next, thumbnail: createCanvasThumbnail(next), folderId: folderId.current, pending: !!owner };
       cacheProject(owner, p); cacheFailed.current = false; upsertSummary(p); dirty.current = !!owner;
       void waitForProjectCache(owner).catch(err => { cacheFailed.current = true; if (alive.current) setStatus("saveError"); report(err); });
       const activeConflict = conflictRef.current?.projectId === next.id ? { ...conflictRef.current, local: p } : null;
@@ -584,7 +584,7 @@ export function useWorkspace(owner: string | null) {
     // checkpoint never drives a second cloud write while autosave is pending.
     const canSaveToCloud = !!owner && cached?.ownerId === owner && !cached.pending && !cached.shared &&
       sameBoardContent(cached.board, snapshot);
-    const version = await createProjectVersion(owner, snapshot, label, canSaveToCloud ? "cloud" : "local");
+    const version = await createProjectVersion(owner, snapshot, label, canSaveToCloud ? "cloud" : "local", cached?.assetFormat);
     if (alive.current && current.current?.id === snapshot.id) setVersions(items => mergeProjectVersions(items, [version]));
     return version;
   };
@@ -693,7 +693,7 @@ export function useWorkspace(owner: string | null) {
       if (shared && cached?.pending && snapshot &&
         (cached.revision === undefined || (snapshot.revision !== undefined && snapshot.revision >= cached.revision)) &&
         cached.folderId === snapshot.folderId && sameBoardContent(cached.board, snapshot.board)) {
-        acknowledge(owner, cached, snapshot.revision, snapshot.updatedAt);
+        acknowledge(owner, cached, snapshot.revision, snapshot.updatedAt, snapshot.assetFormat);
         await waitForProjectCache(owner);
         if (!alive.current || ticket !== navigation.current) return;
         cached = readCache(owner).find(c => c.id === p.id);
@@ -846,21 +846,21 @@ export function useWorkspace(owner: string | null) {
         }
       } else if (resolution === "overwrite") {
         await createRecoveryCheckpoint(owner, latestRemote.board, "Before conflict overwrite");
-        const candidate = { ...latestLocal, revision: latestRemote.revision, baseUpdatedAt: latestRemote.updatedAt, pending: true };
+        const candidate = { ...latestLocal, revision: latestRemote.revision, baseUpdatedAt: latestRemote.updatedAt, assetFormat: latestRemote.assetFormat ?? latestLocal.assetFormat, pending: true };
         cacheProject(owner, candidate);
         upsertSummary(candidate);
         const saved = await persistProject(owner, candidate);
-        acknowledge(owner, candidate, saved.revision, saved.updatedAt);
+        acknowledge(owner, candidate, saved.revision, saved.updatedAt, saved.assetFormat);
         selected = readCache(owner).find(item => item.id === candidate.id) ?? { ...candidate, revision: saved.revision, baseUpdatedAt: saved.updatedAt, pending: false };
       } else {
         const timestamp = new Date().toISOString();
         const copyBoard = { ...structuredClone(latestLocal.board), id: crypto.randomUUID(), title: `${latestLocal.board.title} — ${copySuffix}`, updatedAt: timestamp };
-        const candidate: CachedProject = { ...latestLocal, id: copyBoard.id, title: copyBoard.title, updatedAt: timestamp, board: copyBoard, revision: undefined, pending: true,
+        const candidate: CachedProject = { ...latestLocal, id: copyBoard.id, title: copyBoard.title, updatedAt: timestamp, board: copyBoard, revision: undefined, assetFormat: undefined, pending: true,
           ownerId: owner, accessRole: "owner", shared: false, cloudOffline: false, folderId: null };
         cacheProject(owner, candidate);
         upsertSummary(candidate);
         const saved = await persistProject(owner, candidate);
-        acknowledge(owner, candidate, saved.revision, saved.updatedAt);
+        acknowledge(owner, candidate, saved.revision, saved.updatedAt, saved.assetFormat);
         cacheProject(owner, latestRemote);
         selected = readCache(owner).find(item => item.id === candidate.id) ?? { ...candidate, revision: saved.revision, baseUpdatedAt: saved.updatedAt, pending: false };
       }

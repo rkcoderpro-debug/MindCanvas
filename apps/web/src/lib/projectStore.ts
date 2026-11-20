@@ -1,12 +1,13 @@
 import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
+import { canvasMediaEnabled, canvasMediaTransport, isCompactCanvas, packCloudCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, readOfflineProjectVersions, updateOfflineProjectVersions, writeOfflineProjectCache } from "./offlineProjectCache";
 import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
 import { deleteFlashcardList, readFlashcardList, writeFlashcardList } from "./flashcardStorage";
 
-export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; baseUpdatedAt?: string; board?: BoardState; thumbnail?: CanvasThumbnail; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean };
+export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; baseUpdatedAt?: string; board?: BoardState; thumbnail?: CanvasThumbnail; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean; assetFormat?: 2 };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export class OwnedProjectUnavailableError extends Error {
@@ -148,15 +149,16 @@ export function cacheProject(owner: string | null, project: CachedProject) {
   const entries = readCache(owner);
   writeProjectCache(owner, [project, ...entries.filter(p => p.id !== project.id)]);
 }
-export function acknowledge(owner: string, snapshot: CachedProject, revision = snapshot.revision, baseUpdatedAt = snapshot.updatedAt) {
+export function acknowledge(owner: string, snapshot: CachedProject, revision = snapshot.revision, baseUpdatedAt = snapshot.updatedAt, assetFormat = snapshot.assetFormat) {
   const entries = readCache(owner);
   writeProjectCache(owner, entries.map(p => {
     if (p.id !== snapshot.id) return p;
     const exactSnapshot = JSON.stringify(p.board) === JSON.stringify(snapshot.board) && p.folderId === snapshot.folderId;
-    if (exactSnapshot) return { ...p, pending: false, revision, baseUpdatedAt };
+    const format = assetFormat === 2 ? { assetFormat } : {};
+    if (exactSnapshot) return { ...p, ...format, pending: false, revision, baseUpdatedAt };
     // An edit may arrive while this snapshot is in flight. It is still based on
     // the revision that just saved, so advance its base without marking it clean.
-    return p.revision === snapshot.revision ? { ...p, revision, baseUpdatedAt } : p;
+    return p.revision === snapshot.revision ? { ...p, ...format, revision, baseUpdatedAt } : p;
   }));
 }
 
@@ -199,11 +201,10 @@ function readVersionCache(owner: string | null, projectId: string): ProjectVersi
   const raw = localStorage.getItem(versionCacheKey(owner, projectId));
   return raw ? parseVersionCache(JSON.parse(raw), projectId) : [];
 }
-function versionFromRow(row: any): ProjectVersion | null {
+async function versionFromRow(owner: string, client: NonNullable<typeof supabase>, row: any): Promise<ProjectVersion | null> {
   try {
     const projectId = String(row.note_id ?? row.project_id);
-    const content = row.content?.board ?? row.content;
-    const board = parseBoard({ ...content, id: projectId });
+    const board = await unpackCloudCanvas(owner, projectId, undefined, row.content, canvasMediaTransport(client, requestTimeoutSignal(30000)));
     return { id: String(row.id), projectId, version: Number(row.version), createdAt: String(row.created_at), board, source: "cloud", label: typeof row.label === "string" ? row.label : undefined };
   } catch { return null; }
 }
@@ -218,7 +219,11 @@ export async function fetchProjectVersions(owner: string | null, projectId: stri
     const client = await clientFor(owner);
     const { data, error } = await client.from("note_versions").select("id,note_id,version,label,content,created_at").eq("user_id", owner).eq("note_id", projectId).order("version", { ascending: false }).limit(MAX_PROJECT_VERSIONS).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
-    const remote = (data ?? []).map(versionFromRow).filter((row): row is ProjectVersion => !!row);
+    const remote: ProjectVersion[] = [];
+    for (const row of data ?? []) {
+      const version = await versionFromRow(owner, client, row);
+      if (version) remote.push(version);
+    }
     return mergeProjectVersions(await readProjectVersions(owner, projectId), remote);
   } catch {
     return readProjectVersions(owner, projectId);
@@ -248,7 +253,7 @@ async function createLocalVersion(owner: string | null, board: BoardState, label
     return snapshot;
   }
 }
-export async function createProjectVersion(owner: string | null, board: BoardState, label?: string, mode: "cloud" | "local" = "cloud"): Promise<ProjectVersion> {
+export async function createProjectVersion(owner: string | null, board: BoardState, label?: string, mode: "cloud" | "local" = "cloud", assetFormat?: 2): Promise<ProjectVersion> {
   if (!owner || mode === "local" || (typeof navigator !== "undefined" && !navigator.onLine)) return createLocalVersion(owner, board, label);
   const device = await createLocalVersion(owner, board, label).catch(() => undefined);
   try {
@@ -256,7 +261,10 @@ export async function createProjectVersion(owner: string | null, board: BoardSta
     const latest = await client.from("note_versions").select("version").eq("user_id", owner).eq("note_id", board.id).order("version", { ascending: false }).limit(1).abortSignal(requestTimeoutSignal(8000)).maybeSingle();
     if (latest.error) throw latest.error;
     const version = Number(latest.data?.version ?? 0) + 1;
-    const row = { id: device?.id ?? crypto.randomUUID(), note_id: board.id, user_id: owner, version, label: label ?? null, content: { type: "mindcanvas-board", version: 1, board }, created_at: device?.createdAt ?? new Date().toISOString() };
+    const content = assetFormat === 2
+      ? await packCloudCanvas(owner, board, canvasMediaTransport(client, requestTimeoutSignal(30000)))
+      : { type: "mindcanvas-board", version: 1, board };
+    const row = { id: device?.id ?? crypto.randomUUID(), note_id: board.id, user_id: owner, version, label: label ?? null, content, created_at: device?.createdAt ?? new Date().toISOString() };
     // The server already has the checkpoint; only return its small metadata.
     const result = await client.from("note_versions").insert(row).select("id,version,created_at,label").abortSignal(requestTimeoutSignal(12000)).single();
     if (result.error) throw result.error;
@@ -350,7 +358,8 @@ async function readProjectSnapshot(client: NonNullable<typeof supabase>, owner: 
   }
   if (result.error) throw { ...result.error, status: result.status };
   const data = result.data as any;
-  const board = parseBoard({ ...(data.content?.board ?? data.content), id: data.id, title: data.title });
+  const board = await unpackCloudCanvas(owner, data.id, data.title, data.content, canvasMediaTransport(client, requestTimeoutSignal(30000)));
+  const format = isCompactCanvas(data.content) ? { assetFormat: 2 as const } : {};
   const ownerId = typeof data.user_id === "string" ? data.user_id : owner;
   let accessRole: "owner" | "editor" | "viewer" = ownerId === owner ? "owner" : "viewer";
   if (accessRole !== "owner") {
@@ -360,7 +369,7 @@ async function readProjectSnapshot(client: NonNullable<typeof supabase>, owner: 
     } catch { /* keep the read-only fallback */ }
   }
   const cloudUpdatedAt = String(data.updated_at ?? board.updatedAt);
-  return { id: String(data.id), title: String(data.title), folderId: data.folder_id ?? null, updatedAt: cloudUpdatedAt, baseUpdatedAt: cloudUpdatedAt,
+  return { ...format, id: String(data.id), title: String(data.title), folderId: data.folder_id ?? null, updatedAt: cloudUpdatedAt, baseUpdatedAt: cloudUpdatedAt,
     favorite: !!data.is_favorite, deletedAt: data.deleted_at ?? null, revision: typeof data.revision === "number" ? data.revision : undefined, ownerId, accessRole, shared: ownerId !== owner, thumbnail: isCanvasThumbnail(data.thumbnail) ? data.thumbnail : createCanvasThumbnail(board), board, pending: false };
 }
 
@@ -462,7 +471,12 @@ export async function verifyProjectWrite(owner: string, project: CachedProject, 
   }
   throw new ProjectVerificationError(project.id, lastError);
 }
-export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number; updatedAt?: string }> {
+function isCanvasMediaPilot(projectId: string) {
+  const configured = import.meta.env.VITE_CANVAS_MEDIA_PILOT_IDS as string | undefined;
+  return import.meta.env.VITE_CANVAS_MEDIA_STORAGE === "true" &&
+    (configured ?? "").split(",").some(id => id.trim().toLowerCase() === projectId.toLowerCase());
+}
+export async function persistProject(owner: string, project: CachedProject): Promise<{ revision?: number; updatedAt?: string; assetFormat?: 2 }> {
   if (project.accessRole === "viewer") throw new Error("Bạn chỉ có quyền xem project này.");
   if (project.cloudOffline) throw new Error("Project chia sẻ đang ở chế độ chỉ xem khi ngoại tuyến.");
   // An existing shared draft without a base revision must be reconciled,
@@ -477,11 +491,20 @@ export async function persistProject(owner: string, project: CachedProject): Pro
   const owned = project.ownerId === owner && !project.shared && project.accessRole !== "editor";
   const payload = { id: project.id, folder_id: project.folderId, title: project.board.title, content: { type: "mindcanvas-board", version: 1, board: project.board }, thumbnail: project.thumbnail ?? createCanvasThumbnail(project.board), updated_at: project.board.updatedAt };
   const { thumbnail: _thumbnail, ...payloadWithoutThumbnail } = payload;
-  const updateWithRevision = async (baseRevision: number) => {
+  const updateWithRevision = async (baseRevision: number, baseFormat = project.assetFormat) => {
+    const compact = baseFormat === 2 || (
+      isCanvasMediaPilot(project.id) &&
+      await canvasMediaEnabled(client, project.id, requestTimeoutSignal(5000))
+    );
+    if (compact && project.id !== project.board.id) throw new Error("Canvas không khớp với bản nháp.");
+    const format = compact ? { assetFormat: 2 as const } : {};
+    const content = compact
+      ? await packCloudCanvas(owner, project.board, canvasMediaTransport(client, requestTimeoutSignal(180000)))
+      : payload.content;
     const nextRevision = baseRevision + 1;
     const columns = "id,revision,updated_at";
     const write = (body: typeof payloadWithoutThumbnail) => {
-      let request = client.from("notes").update({ ...body, revision: nextRevision }).eq("id", project.id).eq("revision", baseRevision);
+      let request = client.from("notes").update({ ...body, content, revision: nextRevision }).eq("id", project.id).eq("revision", baseRevision);
       if (owned) request = request.eq("user_id", owner);
       return request.select(columns).abortSignal(requestTimeoutSignal(20000)).maybeSingle();
     };
@@ -493,9 +516,9 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // revision confirms the write. No need to re-download embedded media.
     if (owned && result.data.id === project.id && result.data.revision === nextRevision &&
       typeof result.data.updated_at === "string" && Date.parse(result.data.updated_at) === Date.parse(project.board.updatedAt)) {
-      return { revision: nextRevision, updatedAt: result.data.updated_at };
+      return { ...format, revision: nextRevision, updatedAt: result.data.updated_at };
     }
-    return verify(nextRevision);
+    return { ...await verify(nextRevision), ...format };
   };
   if (project.revision === undefined && project.baseUpdatedAt) {
     // Older caches and pre-revision databases still have updated_at. Refresh
@@ -504,7 +527,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     const base = await fetchProjectSnapshot(owner, project.id);
     if (base.updatedAt !== project.baseUpdatedAt || base.folderId !== project.folderId) throw new ProjectConflictError(project.id);
     if (sameBoardContent(base.board, project.board)) return { revision: base.revision, updatedAt: base.updatedAt };
-    if (base.revision !== undefined) return updateWithRevision(base.revision);
+    if (base.revision !== undefined) return updateWithRevision(base.revision, base.assetFormat);
 
     let legacy = await client.from("notes").update(payload).eq("id", project.id).eq("updated_at", base.updatedAt).select("id").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
     if (legacy.error && /thumbnail/i.test(String(legacy.error.message ?? ""))) {

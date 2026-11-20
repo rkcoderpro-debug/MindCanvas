@@ -1,0 +1,91 @@
+{
+  "version": "5.27.0",
+  "baseVersion": "5.26.3",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/",
+  "files": [
+    {
+      "path": ".env.example",
+      "change": "modified",
+      "bytes": 1270,
+      "sha256": "73fa738194407b887b1587c110be538d09bab37334479e9910ed68ad8e099710"
+    },
+    {
+      "path": "QA_V5.27.0.md",
+      "change": "added",
+      "bytes": 1433,
+      "sha256": "96b87a820e6855464f8bfeef027b245bfe654fac14556814984204e97835f77e"
+    },
+    {
+      "path": "RELEASE_V5.27.0.md",
+      "change": "added",
+      "bytes": 5309,
+      "sha256": "5715c1426aef77c8fce16072e87282f2cfcb6741e8c020c73726af763356f4fe"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "f755d88a0a12a0989517c9b5bf40e6b6b9a87ebb724a0d4889767a07a0219ebf"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "fcafda3eeca6e895b5ef9bed21109cf0841af186f14d9dfbdf7995a982246b75"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "change": "modified",
+      "bytes": 56005,
+      "sha256": "c4d2eee2172a21b1998f9799c5709fa6b7e082486ab21d46fac99cab59372417"
+    },
+    {
+      "path": "apps/web/src/lib/canvasCloudMedia.test.ts",
+      "change": "added",
+      "bytes": 7098,
+      "sha256": "9f59dc4af02d0cf8cd0569ea50958c9cb04a2c14ff3ed5e97588dfc4f2e04e0a"
+    },
+    {
+      "path": "apps/web/src/lib/canvasCloudMedia.ts",
+      "change": "added",
+      "bytes": 8684,
+      "sha256": "7743350852749bb68cc2e1cb48568aa35c76996e22311a5870d1b176c614451e"
+    },
+    {
+      "path": "apps/web/src/lib/collaboration.ts",
+      "change": "modified",
+      "bytes": 13092,
+      "sha256": "66fb179ff07b2e2ab5b0a5063dd7bcea60d0a96b8c34b3c3988cb0448c5af0d2"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "change": "modified",
+      "bytes": 77522,
+      "sha256": "6ca5e7ddf84fdb6635a4343aa66846c9aaf0f565a43a2e5463c083c304e6b748"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "1a04b121450b5b270169ac6374085e55e6a76c8f4b0b5cd3228021e2be2bd857"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "6f6e22ef85c5d0d0ed9f12e8ae6598e16c18e5d4ceeccbf2ba0a26de0b7c0e42"
+    },
+    {
+      "path": "supabase/migrations/0033_canvas_media_pilot.sql",
+      "change": "added",
+      "bytes": 6659,
+      "sha256": "8419e0997b41a4bcafc2c8511e35610c6f58b01654ca41443e416200965b180e"
+    },
+    {
+      "path": "supabase/tests/canvas-media-pilot.pglite.mjs",
+      "change": "added",
+      "bytes": 5937,
+      "sha256": "54ebdebd09cb3d721b2e1785ebd6c9357fd77241f8256a20541f013eec940213"
+    }
+  ]
+}

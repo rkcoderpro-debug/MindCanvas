@@ -1,7 +1,7 @@
 import type { BoardState } from "@mindcanvas/shared";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { getCurrentSession, supabase } from "./supabase";
-import { parseBoard } from "./board";
+import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
+import { canvasMediaTransport, isCompactCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
 
 export type CollaborationRole = "owner" | "editor" | "viewer";
 export type ProjectMember = {
@@ -27,6 +27,7 @@ export type IncomingProjectInvitation = ProjectInvitation & {
   inviterName: string;
 };
 export type CollaborationUpdate = {
+  assetFormat?: 2;
   projectId: string;
   board: BoardState;
   revision?: number;
@@ -225,7 +226,7 @@ export async function declineProjectInvitation(invitationId: string) {
   if (!data) throw new Error("Lời mời đã được xử lý hoặc không còn tồn tại.");
 }
 
-export function subscribeToProject(projectId: string, onUpdate: (update: CollaborationUpdate) => void, onStatus?: (status: string) => void) {
+export function subscribeToProject(projectId: string, onUpdate: (update: CollaborationUpdate) => void, onStatus?: (status: string) => void, account?: string) {
   if (!supabase) return () => undefined;
   let channel: RealtimeChannel | null = supabase.channel("mindcanvas:project:" + projectId);
   channel.on(
@@ -233,20 +234,20 @@ export function subscribeToProject(projectId: string, onUpdate: (update: Collabo
     { event: "UPDATE", schema: "public", table: "notes", filter: "id=eq." + projectId },
     (payload: any) => {
       const row = payload?.new;
-      const raw = row?.content?.board ?? row?.content;
-      if (!row || !raw) return;
-      try {
+      const client = supabase;
+      if (!client || !row?.content || row.id !== projectId) return;
+      const activeChannel = channel;
+      void unpackCloudCanvas(account ?? "", projectId, row.title ?? undefined, row.content,
+        canvasMediaTransport(client, requestTimeoutSignal(30000))).then(board => {
+        if (channel !== activeChannel) return;
         onUpdate({
-          projectId,
-          board: parseBoard({ ...raw, id: String(row.id), title: String(row.title ?? raw.title ?? "Untitled canvas") }),
+          projectId, board, ...(isCompactCanvas(row.content) ? { assetFormat: 2 as const } : {}),
           revision: typeof row.revision === "number" ? row.revision : Number.isFinite(Number(row.revision)) ? Number(row.revision) : undefined,
           title: typeof row.title === "string" ? row.title : undefined,
           folderId: typeof row.folder_id === "string" ? row.folder_id : row.folder_id === null ? null : undefined,
           updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
         });
-      } catch {
-        // Ignore malformed remote rows; the next valid snapshot can recover.
-      }
+      }).catch(() => { /* Do not apply an incomplete board. Reopening retries. */ });
     },
   );
   channel.subscribe(status => onStatus?.(status));
