@@ -1,0 +1,79 @@
+{
+  "version": "5.26.2",
+  "baseVersion": "5.26.1",
+  "extractionRoot": "Project root containing package.json, apps/ and packages/",
+  "files": [
+    {
+      "path": "QA_V5.26.2.md",
+      "change": "added",
+      "bytes": 1229,
+      "sha256": "d8ea5c73d26c086386523967fc168396e346a7ea501299ff9c80466466353a6c"
+    },
+    {
+      "path": "RELEASE_V5.26.2.md",
+      "change": "added",
+      "bytes": 2665,
+      "sha256": "062581b4207e89bbebd606956d40e6e76b92328b080ad27d18104c9b7e03eee8"
+    },
+    {
+      "path": "apps/server/package.json",
+      "change": "modified",
+      "bytes": 813,
+      "sha256": "7cf8dc13db0d5948888a8d0e0bf9bd163d4e8412db2773875c79bb074630c753"
+    },
+    {
+      "path": "apps/web/package.json",
+      "change": "modified",
+      "bytes": 1050,
+      "sha256": "3d749d7c5cd185af8f881e35cce2b3ab0ac2d42c91cff1423b8de4dc02d0686b"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "change": "modified",
+      "bytes": 57738,
+      "sha256": "3d8d657fdefb56d42393f86ca023223f0502d116eda422d45e4f1ed486b43375"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceHome.tsx",
+      "change": "modified",
+      "bytes": 11947,
+      "sha256": "0ae42f1d02aa55196eee19847ff24dddbe5862d4c6093cc67296811a5656193f"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.test.tsx",
+      "change": "modified",
+      "bytes": 41443,
+      "sha256": "c53373f935e29133a2a0e40fbe63a25f004b419f195c09693aad9ffb3a07a313"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "change": "modified",
+      "bytes": 54300,
+      "sha256": "49a2df39f32e95435aaf923633c0fd7116a90e2b6b1e9416d9ebe04b55f4d836"
+    },
+    {
+      "path": "apps/web/src/lib/projectRead.test.ts",
+      "change": "added",
+      "bytes": 3643,
+      "sha256": "b8aa960e3d64161ebc9c7ee68a119a789098acaacc3a24c6d30c488d2b1cb24f"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "change": "modified",
+      "bytes": 73879,
+      "sha256": "02583cc95d2cd021331ed66f97bb6689573027ff3681b5369c333baf10f0fb9a"
+    },
+    {
+      "path": "package-lock.json",
+      "change": "modified",
+      "bytes": 181769,
+      "sha256": "4fdb7e183e673d1c6e966e0c3825d773b8f1c6decc059162ecebe63f6d002a9a"
+    },
+    {
+      "path": "package.json",
+      "change": "modified",
+      "bytes": 708,
+      "sha256": "5b2cf7f46bcc27e96391d9b6fe7f622769e7421866b3290c9d501ed8c5814688"
+    }
+  ]
+}

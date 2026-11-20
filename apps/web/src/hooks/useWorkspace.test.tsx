@@ -228,12 +228,12 @@ describe("Workspace lifecycle", () => {
     expect(api.board).toBeNull();
     expect(store.readCache("A").find(project => project.id === original.id)?.pending).toBe(true);
   });
-  it("opens an owned offline copy on temporary cloud read errors, but not on an access error", async () => {
+  it("keeps an owned copy on a temporary cloud read error but closes a clean copy when access is denied", async () => {
     const target = ownedProject("Cached");
     store.cacheProject("A", target);
     vi.spyOn(store, "fetchProjects").mockResolvedValue([target]);
     vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
-    const cloud = vi.spyOn(store, "fetchProjectSnapshot").mockRejectedValue({ code: "57014", message: "statement timeout" });
+    const cloud = vi.spyOn(store, "revalidateOwnedProject").mockRejectedValue({ code: "57014", message: "statement timeout" });
     const save = vi.spyOn(store, "persistProject");
     await act(async () => root.render(<Harness owner="A"/>));
     await act(async () => api.open(target));
@@ -245,6 +245,56 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.open(target));
     expect(api.board).toBeNull();
     expect(api.error).toContain("42501");
+  });
+  it("opens a clean owned cache while checking the cloud, then applies a newer revision with the local viewport", async () => {
+    const target = ownedProject("Cached canvas");
+    const cloud = { ...target, title: "Updated on another device", revision: 20, board: { ...target.board, title: "Updated on another device" } };
+    store.cacheProject("A", target);
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([target]);
+    vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    let finish!: (snapshot: store.CachedProject) => void;
+    const check = vi.spyOn(store, "revalidateOwnedProject").mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const save = vi.spyOn(store, "persistProject");
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.open(target));
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(api.board?.title).toBe("Cached canvas");
+    const viewport = { x: 100, y: -20, scale: 1.5 };
+    await act(async () => api.navigate({ ...api.board!, viewport }));
+    await act(async () => finish(cloud));
+    expect(api.board).toMatchObject({ title: cloud.title, viewport });
+    expect(store.readCache("A")[0]).toMatchObject({ revision: 20, pending: false });
+    expect(save).not.toHaveBeenCalled();
+  });
+  it("does not replace or quietly rebase a device edit made during a cloud check", async () => {
+    const target = ownedProject("Cached canvas");
+    const cloud = { ...target, title: "Cloud edit", revision: 20, board: { ...target.board, title: "Cloud edit" } };
+    store.cacheProject("A", target);
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([target]);
+    vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    let finish!: (snapshot: store.CachedProject) => void;
+    vi.spyOn(store, "revalidateOwnedProject").mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.open(target));
+    await act(async () => api.change({ ...api.board!, title: "Device edit" }));
+    await act(async () => finish(cloud));
+    expect(api.board?.title).toBe("Device edit");
+    expect(api.canUndo).toBe(true);
+    expect(store.readCache("A")[0]).toMatchObject({ revision: 19, pending: true });
+  });
+  it("coalesces overlapping list refreshes", async () => {
+    const target = ownedProject("On the server");
+    let finish!: (rows: store.Project[]) => void;
+    const list = vi.spyOn(store, "fetchProjects").mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => {
+      const pending = [api.refresh(), api.refresh()];
+      finish([target]);
+      await Promise.all(pending);
+    });
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(api.projects).toHaveLength(1);
   });
   it("keeps shared access cloud-authoritative and never uploads a cached editor draft before verification", async () => {
     const shared = { ...ownedProject("Shared draft", true), ownerId: "other", shared: true, accessRole: "editor" as const };

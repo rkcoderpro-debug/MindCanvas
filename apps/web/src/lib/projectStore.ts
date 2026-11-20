@@ -9,6 +9,9 @@ import { deleteFlashcardList, readFlashcardList, writeFlashcardList } from "./fl
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; baseUpdatedAt?: string; board?: BoardState; thumbnail?: CanvasThumbnail; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean };
 export type ProjectFolder = { id: string; name: string };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
+export class OwnedProjectUnavailableError extends Error {
+  constructor() { super("Canvas này không còn khả dụng trên đám mây."); }
+}
 export class ProjectConflictError extends Error {
   code = "PROJECT_CONFLICT";
   constructor(public projectId?: string, message = "Cloud project changed in another tab or device. Keep the local copy and choose a recovery action.") {
@@ -259,10 +262,15 @@ export function mergeProjects(remote: Project[], cache: CachedProject[], owner: 
       // missing from that list is no longer accessible and must not linger as
       // a false project; offline refreshes do not call this merge function.
       const remoteProject = result.get(p.id);
-      if (remoteProject) result.set(p.id, { ...p, ...remoteProject, board: p.board, pending: p.pending, cloudOffline: false });
+      if (remoteProject) result.set(p.id, { ...p, ...remoteProject, board: p.board, thumbnail: remoteProject.thumbnail ?? p.thumbnail, pending: p.pending, cloudOffline: false });
       else result.delete(p.id);
     } else if (p.pending) result.set(p.id, p);
-    else if (result.has(p.id) && result.get(p.id)!.updatedAt === p.updatedAt) result.set(p.id, { ...p, ...result.get(p.id)!, board: p.board });
+    else {
+      const summary = result.get(p.id);
+      if (summary && summary.updatedAt === p.updatedAt && summary.revision === p.revision) {
+        result.set(p.id, { ...p, ...summary, board: p.board, thumbnail: summary.thumbnail ?? p.thumbnail });
+      }
+    }
   }
   return [...result.values()];
 }
@@ -292,45 +300,80 @@ async function clientFor(owner: string) {
   }
   return supabase;
 }
+const LEGACY_PROJECT_COLUMNS = "id,user_id,title,folder_id,updated_at,is_favorite,deleted_at";
+const PROJECT_COLUMNS = LEGACY_PROJECT_COLUMNS + ",revision";
 export async function fetchProjects(owner: string): Promise<Project[]> {
   const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,thumbnail").order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
-  if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at").order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
-  if (result.error) throw result.error;
+  let result: any = await client.from("notes").select(PROJECT_COLUMNS).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
+  if (result.error && /revision|column/i.test(result.error.message)) result = await client.from("notes").select(LEGACY_PROJECT_COLUMNS).order("updated_at", { ascending: false }).abortSignal(requestTimeoutSignal(20000));
+  if (result.error) throw { ...result.error, status: result.status };
   const data = result.data as any[] | null;
   let memberships: Record<string, "editor" | "viewer"> = {};
   try {
-    const memberResult = await client.from("project_members").select("project_id,role").eq("user_id", owner);
-    if (!memberResult.error) memberships = Object.fromEntries((memberResult.data ?? []).map((row: any) => [String(row.project_id), row.role === "editor" ? "editor" : "viewer"]));
+    if (data?.some(row => row.user_id && row.user_id !== owner)) {
+      const memberResult = await client.from("project_members").select("project_id,role").eq("user_id", owner).abortSignal(requestTimeoutSignal(8000));
+      if (!memberResult.error) memberships = Object.fromEntries((memberResult.data ?? []).map((row: any) => [String(row.project_id), row.role === "editor" ? "editor" : "viewer"]));
+    }
   } catch { /* V4.4 migration may not be applied yet; owner projects still load. */ }
   return (data ?? []).map(p => {
     const ownerId = typeof p.user_id === "string" ? p.user_id : owner;
     return { id: p.id, title: p.title, folderId: p.folder_id, updatedAt: p.updated_at, baseUpdatedAt: p.updated_at, favorite: p.is_favorite, deletedAt: p.deleted_at, revision: typeof p.revision === "number" ? p.revision : undefined,
-      ownerId, accessRole: ownerId === owner ? "owner" : memberships[p.id] ?? "viewer", shared: ownerId !== owner, thumbnail: isCanvasThumbnail(p.thumbnail) ? p.thumbnail : undefined };
+      ownerId, accessRole: ownerId === owner ? "owner" : memberships[p.id] ?? "viewer", shared: ownerId !== owner };
   });
 }
 export async function fetchProjectSnapshot(owner: string, id: string, timeoutMs = 20000): Promise<CachedProject> {
-  const client = await clientFor(owner);
-  let result: any = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,revision,thumbnail,content").eq("id", id).abortSignal(requestTimeoutSignal(timeoutMs)).single();
+  return readProjectSnapshot(await clientFor(owner), owner, id, timeoutMs);
+}
+async function readProjectSnapshot(client: NonNullable<typeof supabase>, owner: string, id: string, timeoutMs: number): Promise<CachedProject> {
+  let result: any = await client.from("notes").select(PROJECT_COLUMNS + ",thumbnail,content").eq("id", id).abortSignal(requestTimeoutSignal(timeoutMs)).single();
   if (result.error && /revision|column/i.test(result.error.message)) {
     // RLS already limits the visible notes. Filtering by the current user here
     // would incorrectly hide a shared note in a legacy schema without revision.
-    result = await client.from("notes").select("id,user_id,title,folder_id,updated_at,is_favorite,deleted_at,content").eq("id", id).abortSignal(requestTimeoutSignal(timeoutMs)).single();
+    result = await client.from("notes").select(LEGACY_PROJECT_COLUMNS + ",content").eq("id", id).abortSignal(requestTimeoutSignal(timeoutMs)).single();
   }
-  if (result.error) throw result.error;
+  if (result.error) throw { ...result.error, status: result.status };
   const data = result.data as any;
   const board = parseBoard({ ...(data.content?.board ?? data.content), id: data.id, title: data.title });
   const ownerId = typeof data.user_id === "string" ? data.user_id : owner;
   let accessRole: "owner" | "editor" | "viewer" = ownerId === owner ? "owner" : "viewer";
   if (accessRole !== "owner") {
     try {
-      const membership = await client.from("project_members").select("role").eq("project_id", id).eq("user_id", owner).maybeSingle();
+      const membership = await client.from("project_members").select("role").eq("project_id", id).eq("user_id", owner).abortSignal(requestTimeoutSignal(8000)).maybeSingle();
       if (!membership.error && membership.data?.role === "editor") accessRole = "editor";
     } catch { /* keep the read-only fallback */ }
   }
   const cloudUpdatedAt = String(data.updated_at ?? board.updatedAt);
   return { id: String(data.id), title: String(data.title), folderId: data.folder_id ?? null, updatedAt: cloudUpdatedAt, baseUpdatedAt: cloudUpdatedAt,
     favorite: !!data.is_favorite, deletedAt: data.deleted_at ?? null, revision: typeof data.revision === "number" ? data.revision : undefined, ownerId, accessRole, shared: ownerId !== owner, thumbnail: isCanvasThumbnail(data.thumbnail) ? data.thumbnail : createCanvasThumbnail(board), board, pending: false };
+}
+
+// The editor already has the board. Check its cloud identity and version before
+// transferring large embedded media again.
+export async function revalidateOwnedProject(owner: string, local: CachedProject): Promise<CachedProject | null> {
+  const client = await clientFor(owner);
+  const read = (columns: string) => client.from("notes").select(columns).eq("id", local.id).eq("user_id", owner).abortSignal(requestTimeoutSignal(8000)).maybeSingle();
+  let { data, error, status } = await read(PROJECT_COLUMNS);
+  if (error && /revision|column/i.test(error.message)) ({ data, error, status } = await read(LEGACY_PROJECT_COLUMNS));
+  if (error) throw { ...error, status };
+  const row = data as { user_id: string; title: string; revision?: number; updated_at: string; deleted_at: string | null; folder_id: string | null; is_favorite: boolean } | null;
+  if (!row || row.user_id !== owner || row.deleted_at) throw new OwnedProjectUnavailableError();
+  if (row.revision === local.revision && Date.parse(row.updated_at) === Date.parse(local.baseUpdatedAt ?? local.updatedAt) && row.title === local.board.title) {
+    if (row.folder_id === local.folderId && !!row.is_favorite === !!local.favorite) return null;
+    return { ...local, folderId: row.folder_id, favorite: !!row.is_favorite };
+  }
+  const snapshot = await readProjectSnapshot(client, owner, local.id, 20000);
+  if (snapshot.deletedAt || snapshot.ownerId !== owner) throw new OwnedProjectUnavailableError();
+  return snapshot;
+}
+export const PROJECT_THUMBNAIL_BATCH_SIZE = 12;
+export async function fetchProjectThumbnails(owner: string, ids: string[]): Promise<Map<string, CanvasThumbnail>> {
+  const thumbnails = new Map<string, CanvasThumbnail>();
+  if (!ids.length) return thumbnails;
+  const client = await clientFor(owner);
+  const { data, error } = await client.from("notes").select("id,thumbnail").in("id", ids).abortSignal(requestTimeoutSignal(8000));
+  if (error) throw error;
+  for (const row of data ?? []) if (isCanvasThumbnail(row.thumbnail)) thumbnails.set(row.id, row.thumbnail);
+  return thumbnails;
 }
 
 export async function fetchBoard(owner: string, id: string): Promise<BoardState> {
@@ -483,12 +526,6 @@ export async function fetchFolders(owner: string | null): Promise<ProjectFolder[
   return data ?? [];
 }
 export type ProjectPatch = { favorite?: boolean; deletedAt?: string | null; title?: string; folderId?: string | null };
-export async function updateProjectThumbnail(owner: string | null, projectId: string, thumbnail: CanvasThumbnail) {
-  if (!owner) return;
-  const client = await clientFor(owner);
-  const { error } = await client.from("notes").update({ thumbnail }).eq("id", projectId).select("id").single();
-  if (error) throw error;
-}
 export async function updateProject(owner: string | null, project: Project, patch: ProjectPatch) {
   // Metadata writes never replace content. Cloud actions must complete before
   // the UI announces success; a failed request leaves the local record intact.
