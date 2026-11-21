@@ -1,3 +1,4 @@
+import { sameBoardState } from "../lib/boardEquality";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
@@ -6,7 +7,7 @@ import { errorMessage } from "../lib/errors";
 import { WorkspaceAuthUnavailableError } from "../lib/authSession";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { subscribeToProject } from "../lib/collaboration";
-import { acknowledge, addFolder, cacheProject, CloudVerificationPendingError, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectThumbnails, fetchProjectVersions, hydrateProjectCache, mergeProjects, mergeProjectVersions, OwnedProjectUnavailableError, persistProject, ProjectConflictError, PROJECT_THUMBNAIL_BATCH_SIZE, readCache, readProjectVersions, revalidateOwnedProject, sameBoardContent, SaveQueue, updateFolder, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
+import { acknowledge, addFolder, cacheProject, CloudVerificationPendingError, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectThumbnails, fetchProjectVersions, hasUndurableProjectCache, hydrateProjectCache, mergeProjects, mergeProjectVersions, OwnedProjectUnavailableError, persistProject, ProjectConflictError, PROJECT_THUMBNAIL_BATCH_SIZE, readCache, readProjectVersions, revalidateOwnedProject, sameBoardContent, SaveQueue, updateFolder, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
 import { createCanvasThumbnail } from "../lib/canvasThumbnail";
 
 export type SaveStatus = "localSaved" | "saved" | "saving" | "pending" | "offline" | "saveError";
@@ -148,13 +149,15 @@ export function useWorkspace(owner: string | null) {
       // CanvasBoard can checkpoint an in-progress pen/eraser gesture directly
       // into the durable cache. Never replace that newer draft with the last
       // React-committed board while leaving the canvas or hiding the page.
-      if (existing?.pending && existing.board.updatedAt >= active.updatedAt && JSON.stringify(existing.board) !== JSON.stringify(active)) {
+      const unchanged = !!existing && sameBoardState(existing.board, active);
+      if (existing?.pending && existing.board.updatedAt >= active.updatedAt && !unchanged) {
         dirty.current = dirty.current || !!existing.pending;
         return;
       }
+      if (unchanged && existing?.folderId === folderId.current && !cacheFailed.current) return;
       const accessRole = existing?.accessRole ?? (owner ? "owner" : undefined);
       const shared = existing?.shared ?? (!!existing?.ownerId && existing.ownerId !== owner);
-      const changed = !existing?.board || JSON.stringify(existing.board) !== JSON.stringify(active);
+      const changed = !unchanged;
       // Persist the viewport and normalized legacy fields locally without
       // turning a read/pan into a full content PATCH.
       const contentChanged = !existing || !sameBoardContent(normalizeEditor(existing.board), active) || existing.folderId !== folderId.current;
@@ -426,7 +429,7 @@ export function useWorkspace(owner: string | null) {
     alive.current = true; void refresh();
     const cameOnline = () => { setOnline(true); void flush(); };
     const wentOffline = () => { setOnline(false); setStatus(cacheFailed.current ? "saveError" : "offline"); };
-    const beforeUnload = (e: BeforeUnloadEvent) => { checkpointCurrent(); if ((owner && dirty.current) || cacheFailed.current) { e.preventDefault(); e.returnValue = ""; } };
+    const beforeUnload = (e: BeforeUnloadEvent) => { checkpointCurrent(); if ((owner && dirty.current) || cacheFailed.current || hasUndurableProjectCache(owner)) { e.preventDefault(); e.returnValue = ""; } };
     const hidden = () => { if (document.visibilityState === "hidden") { checkpointCurrent(); void flush(); } };
     const pageHide = () => { checkpointCurrent(); void flush(); };
     window.addEventListener("online", cameOnline); window.addEventListener("offline", wentOffline);
@@ -534,13 +537,11 @@ export function useWorkspace(owner: string | null) {
     if (activeProject?.accessRole === "viewer" || activeProject?.cloudOffline) return;
     next = normalizeEditor(next, current.current ?? undefined);
     if (current.current && current.current.id !== next.id) return;
-    if (current.current && JSON.stringify(current.current) === JSON.stringify(next)) return;
+    if (current.current && sameBoardState(current.current, next)) return;
     const previous = current.current;
     // Navigation is persisted, but is not a document edit or an undo entry.
     if (previous) {
-      const { viewport: _oldView, updatedAt: _oldTime, ...oldContent } = previous;
-      const { viewport: _newView, updatedAt: _newTime, ...newContent } = next;
-      if (JSON.stringify(oldContent) === JSON.stringify(newContent)) {
+      if (sameBoardContent(previous, next)) {
         stage({ ...next, updatedAt: previous.updatedAt }, 2000);
         return;
       }

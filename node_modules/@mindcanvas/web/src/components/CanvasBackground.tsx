@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { BoardState, CanvasBackgroundPattern } from "@mindcanvas/shared";
 
 const mod = (value: number, size: number) => size ? ((value % size) + size) % size : 0;
@@ -8,7 +9,7 @@ const imageAspect = (fit: "cover" | "contain" | undefined, position: string | un
 
 export const BACKGROUND_OPTIONS: CanvasBackgroundPattern[] = ["dots", "grid", "ruled", "graph", "isometric", "plain"];
 
-export default function CanvasBackground({ board }: { board: BoardState }) {
+function CanvasBackground({ board }: { board: BoardState }) {
   const media = typeof board.background === "object" ? board.background : null;
   const kind = typeof board.background === "string" ? board.background : "plain";
   const { x, y, scale } = board.viewport;
@@ -49,3 +50,8 @@ export default function CanvasBackground({ board }: { board: BoardState }) {
     {media?.overlay && <rect width="100%" height="100%" fill={media.overlay} opacity=".18"/>} 
   </g>;
 }
+
+// While drawing, neither the background image nor viewport changes.
+export default memo(CanvasBackground, (prev, next) => prev.board.background === next.board.background &&
+  prev.board.viewport.x === next.board.viewport.x && prev.board.viewport.y === next.board.viewport.y &&
+  prev.board.viewport.scale === next.board.viewport.scale);

@@ -1,8 +1,10 @@
+import { sameBoardContent, sameBoardState } from "./boardEquality";
+export { sameBoardContent } from "./boardEquality";
 import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
 import { verifyWorkspaceAccount, workspaceAuthError } from "./authSession";
-import { canvasMediaEnabled, reserveCanvasMediaDraft, canvasMediaTransport, isCompactCanvas, packCloudCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
+import { canvasMediaEnabled, reserveCanvasMediaDraft, canvasMediaTransport, hasCanvasMediaManifest, rememberCanvasMediaManifest, isCompactCanvas, packCloudCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, readOfflineProjectVersions, updateOfflineProjectVersions, writeOfflineProjectCache } from "./offlineProjectCache";
 import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
@@ -44,9 +46,12 @@ export const flashcardStudyPlanCacheKey = (owner: string | null) => `mindcanvas:
 export const flashcardStudyDayCacheKey = (owner: string | null) => `mindcanvas:flashcards:v2:${owner ?? "guest"}:study-days`;
 export const flashcardStudyEventQueueCacheKey = (owner: string | null) => `mindcanvas:flashcards:v2:${owner ?? "guest"}:study-events`;
 const memoryCaches = new Map<string, CachedProject[]>();
+const lastLocalJson = new Map<string, string>();
 const memoryOnlyCaches = new Set<string>();
 const hydratedCaches = new Set<string>();
 const cacheWrites = new Map<string, Promise<void>>();
+const undurableCaches = new Set<string>();
+export const hasUndurableProjectCache = (owner: string | null) => undurableCaches.has(cacheKey(owner));
 const cacheWriteErrors = new Map<string, unknown>();
 const cacheGenerations = new Map<string, number>();
 const ownerCacheId = (owner: string | null) => owner ?? "guest";
@@ -59,31 +64,64 @@ function parseProjectCache(value: unknown): CachedProject[] {
     return { ...project, folderId: typeof project.folderId === "string" ? project.folderId : null, pending: !!project.pending, thumbnail: isCanvasThumbnail(project.thumbnail) ? project.thumbnail : undefined, board: parseBoard(project.board) } as CachedProject;
   });
 }
+// Avoid repeatedly serializing an account's inline media on the UI thread.
+// The same IndexedDB format already used for large drafts remains durable.
+const SYNC_LOCAL_CACHE_BUDGET = 512 * 1024;
+function shouldMirrorProjectCache(projects: CachedProject[]) {
+  let estimate = 0;
+  for (const { board } of projects) {
+    estimate += 2048 + (typeof board.background === "object" ? board.background.src.length : 0);
+    for (const media of board.media) estimate += media.src.length + 300;
+    for (const embed of board.embeds) estimate += (embed.url?.length ?? 0) + 300;
+    for (const drawing of board.drawings) estimate += drawing.points.length * 45 + 120;
+    for (const node of board.nodes) estimate += node.label.length * 2 + 250;
+    for (const text of board.texts) estimate += text.text.length * 2 + 250;
+    estimate += (board.shapes.length + board.edges.length) * 220;
+    if (estimate > SYNC_LOCAL_CACHE_BUDGET) return false;
+  }
+  return true;
+}
 function writeProjectCache(owner: string | null, projects: CachedProject[]) {
   const key = cacheKey(owner), normalized = projects.map(project => ({ ...project, board: parseBoard(project.board) }));
+  const generation = (cacheGenerations.get(key) ?? 0) + 1;
   memoryCaches.set(key, normalized);
-  cacheGenerations.set(key, (cacheGenerations.get(key) ?? 0) + 1);
-  let localSaved = false;
-  try {
-    localStorage.setItem(key, JSON.stringify(normalized));
-    memoryOnlyCaches.delete(key);
-    localSaved = true;
-  } catch {
-    // Keep the current session usable when a large canvas exceeds the
-    // localStorage quota. IndexedDB remains the durable fallback.
-    memoryOnlyCaches.add(key);
-  }
-  // Each write stores the whole owner cache. Concurrent IndexedDB transactions
-  // could otherwise commit an older canvas after the latest gesture checkpoint.
+  cacheGenerations.set(key, generation);
+  const saveLocal = () => {
+    try {
+      const raw = JSON.stringify(normalized);
+      localStorage.setItem(key, raw);
+      lastLocalJson.set(key, raw);
+      memoryOnlyCaches.delete(key);
+      return true;
+    } catch { return false; }
+  };
+  const mirror = typeof indexedDB === "undefined" || shouldMirrorProjectCache(normalized);
+  const priorMirror = !mirror ? lastLocalJson.get(key) : undefined;
+  const localSaved = mirror && saveLocal();
+  if (!localSaved) { memoryOnlyCaches.add(key); undurableCaches.add(key); }
+  else undurableCaches.delete(key);
+  // A newer complete snapshot supersedes a queued one that hasn't started.
+  // Never let completion of an old write clear a newer generation's error.
   const previous = cacheWrites.get(key) ?? Promise.resolve();
   const write = previous.catch(() => undefined).then(async () => {
+    if (cacheGenerations.get(key) !== generation) return;
     try {
       await writeOfflineProjectCache(ownerCacheId(owner), normalized);
-      cacheWriteErrors.delete(key);
+      if (cacheGenerations.get(key) === generation) {
+        cacheWriteErrors.delete(key);
+        undurableCaches.delete(key);
+        // Once IndexedDB has committed the full board, an older synchronous
+        // mirror must not resurrect a stale pending flag on reload.
+        if (priorMirror !== undefined) try {
+          if (localStorage.getItem(key) === priorMirror) localStorage.removeItem(key);
+          lastLocalJson.delete(key);
+        } catch { /* IndexedDB is already durable. */ }
+      }
     } catch (error) {
-      if (!localSaved) cacheWriteErrors.set(key, error);
-      // A successful localStorage write is still a durable fallback.
-      if (!localSaved) throw error;
+      if (cacheGenerations.get(key) !== generation) return;
+      if (localSaved || (!mirror && saveLocal())) { cacheWriteErrors.delete(key); undurableCaches.delete(key); return; }
+      cacheWriteErrors.set(key, error);
+      throw error;
     }
   });
   cacheWrites.set(key, write);
@@ -91,7 +129,12 @@ function writeProjectCache(owner: string | null, projects: CachedProject[]) {
 }
 export async function waitForProjectCache(owner: string | null) {
   const key = cacheKey(owner);
-  await cacheWrites.get(key);
+  let write: Promise<void> | undefined;
+  do {
+    write = cacheWrites.get(key);
+    try { await write; }
+    catch (error) { if (write === cacheWrites.get(key)) throw error; }
+  } while (write !== cacheWrites.get(key));
   if (memoryOnlyCaches.has(key) && cacheWriteErrors.has(key)) throw cacheWriteErrors.get(key);
 }
 export function readCache(owner: string | null): CachedProject[] {
@@ -102,7 +145,9 @@ export function readCache(owner: string | null): CachedProject[] {
   if (memoryOnlyCaches.has(key) && memory) return memory;
   const raw = localStorage.getItem(key);
   if (raw) {
+    if (memory && lastLocalJson.get(key) === raw) return memory;
     const parsed = parseProjectCache(JSON.parse(raw));
+    lastLocalJson.set(key, raw);
     memoryCaches.set(key, parsed);
     return parsed;
   }
@@ -110,6 +155,7 @@ export function readCache(owner: string | null): CachedProject[] {
   // write. Otherwise an empty localStorage (for example after sign-out or a
   // test reset) must not resurrect stale data from module memory.
   memoryCaches.delete(key);
+  lastLocalJson.delete(key);
   // Recover only the explicit v2 user cache; never import the old shared demo key.
   const legacy = localStorage.getItem(`mindcanvas:board:v2:${owner ?? "guest"}`);
   if (!legacy) { memoryCaches.set(key, []); return []; }
@@ -154,7 +200,7 @@ export function acknowledge(owner: string, snapshot: CachedProject, revision = s
   const entries = readCache(owner);
   writeProjectCache(owner, entries.map(p => {
     if (p.id !== snapshot.id) return p;
-    const exactSnapshot = JSON.stringify(p.board) === JSON.stringify(snapshot.board) && p.folderId === snapshot.folderId;
+    const exactSnapshot = sameBoardState(p.board, snapshot.board) && p.folderId === snapshot.folderId;
     const format = assetFormat === 2 ? { assetFormat } : {};
     if (exactSnapshot) return { ...p, ...format, pending: false, revision, baseUpdatedAt };
     // An edit may arrive while this snapshot is in flight. It is still based on
@@ -163,24 +209,6 @@ export function acknowledge(owner: string, snapshot: CachedProject, revision = s
   }));
 }
 
-export function sameBoardContent(left: BoardState, right: BoardState) {
-  const { viewport: _leftViewport, updatedAt: _leftUpdatedAt, ...leftContent } = left;
-  const { viewport: _rightViewport, updatedAt: _rightUpdatedAt, ...rightContent } = right;
-  // Postgres jsonb is free to reorder object keys. Arrays still have order,
-  // and undefined object properties are omitted by JSON serialization.
-  const equal = (a: unknown, b: unknown): boolean => {
-    if (a === b) return true;
-    if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
-    if (Array.isArray(a) || Array.isArray(b)) {
-      return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => equal(item === undefined ? null : item, b[i] === undefined ? null : b[i]));
-    }
-    const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
-    const leftKeys = Object.keys(left).filter(key => left[key] !== undefined);
-    const rightKeys = Object.keys(right).filter(key => right[key] !== undefined);
-    return leftKeys.length === rightKeys.length && leftKeys.every(key => Object.prototype.hasOwnProperty.call(right, key) && equal(left[key], right[key]));
-  };
-  return equal(leftContent, rightContent);
-}
 // Cloud and device checkpoints can have independent version numbers. Show
 // the latest recovery point first and dedupe by ID, not version number.
 export function mergeProjectVersions(...groups: ProjectVersion[][]): ProjectVersion[] {
@@ -483,6 +511,13 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     );
     if (compact && project.id !== project.board.id) throw new Error("Canvas không khớp với bản nháp.");
     const format = compact ? { assetFormat: 2 as const } : {};
+    if (baseFormat === 2 && !hasCanvasMediaManifest(owner, project.id)) {
+      // A cached board has the actual media already. Recover just its small
+      // cloud manifest so the first save after reload does not download it all.
+      await client.from("notes").select("content").eq("id", project.id)
+        .filter("content->>version", "eq", "2").abortSignal(requestTimeoutSignal(8000)).single()
+        .then(({ data, error }) => { if (!error) rememberCanvasMediaManifest(owner, project.id, data?.content); }, () => undefined);
+    }
     const content = compact
       ? await packCloudCanvas(owner, project.board, canvasMediaTransport(client, requestTimeoutSignal(180000)))
       : payload.content;
@@ -497,6 +532,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     if (result.error && /thumbnail/i.test(String(result.error.message ?? ""))) result = await write(payloadWithoutThumbnail);
     if (result.error) throw { ...result.error, status: result.status };
     if (!result.data) throw new ProjectConflictError(project.id);
+    if (compact && result.data.id === project.id && result.data.revision === nextRevision) rememberCanvasMediaManifest(owner, project.id, content);
     // A successful guarded UPDATE returning this row and its exact next
     // revision confirms the write. No need to re-download embedded media.
     if (owned && result.data.id === project.id && result.data.revision === nextRevision &&

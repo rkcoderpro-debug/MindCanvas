@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "fake-indexeddb/auto";
 import { blankBoard } from "./board";
-import { acknowledge, cacheKey, cacheProject, createProjectVersion, fetchProjectVersions, mergeProjectVersions, mergeProjects, readCache, readProjectVersions, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, versionCacheKey, waitForProjectCache, type CachedProject } from "./projectStore";
+import { acknowledge, cacheKey, cacheProject, createProjectVersion, fetchProjectVersions, hasUndurableProjectCache, mergeProjectVersions, mergeProjects, readCache, readProjectVersions, readFlashcards, sameBoardContent, SaveQueue, upsertFlashcards, versionCacheKey, waitForProjectCache, type CachedProject } from "./projectStore";
 import { readOfflineProjectCache } from "./offlineProjectCache";
 import { createFlashcard } from "./flashcards";
 const cached = (): CachedProject => { const board = blankBoard("Project"); return { id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, board, pending: true }; };
@@ -40,6 +40,27 @@ describe("Project isolation and save queue", () => {
     const reloaded = await import("./projectStore");
     expect((await reloaded.hydrateProjectCache(owner))[0].board.title).toBe("Stroke kept");
   });
+  it("keeps large media off the synchronous localStorage write path and preserves the final stroke", async () => {
+    const owner = "async-media-backup";
+    const first = cached();
+    cacheProject(owner, first);
+    await waitForProjectCache(owner);
+    const spy = vi.spyOn(Storage.prototype, "setItem");
+    const stamp = "2099-01-01T00:00:00.000Z";
+    const board = { ...first.board, updatedAt: stamp, background: { kind: "image" as const, src: "data:image/png;base64," + "A".repeat(1_500_000) },
+      drawings: [{ id: "stroke", points: [{ x: 10, y: 10 }, { x: 77, y: 100 }], color: "#112233", width: 3, opacity: 1 }] };
+    try {
+      cacheProject(owner, { ...first, board, updatedAt: stamp });
+      acknowledge(owner, { ...first, board, updatedAt: stamp }, 12);
+      expect(readCache(owner)[0].board).toEqual(board);
+      expect(hasUndurableProjectCache(owner)).toBe(true);
+      await waitForProjectCache(owner);
+      expect(hasUndurableProjectCache(owner)).toBe(false);
+      expect(spy.mock.calls.some(([key]) => key === cacheKey(owner))).toBe(false);
+      expect((await readOfflineProjectCache(owner))?.[0]).toMatchObject({ revision: 12, pending: false, board: { background: board.background, drawings: board.drawings } });
+    } finally { spy.mockRestore(); }
+  });
+
   it("commits rapidly changed canvas snapshots to IndexedDB in order", async () => {
     const owner = "ordered-canvas-strokes", first = cached();
     cacheProject(owner, first);

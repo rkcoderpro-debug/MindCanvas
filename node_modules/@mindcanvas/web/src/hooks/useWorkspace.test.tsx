@@ -25,7 +25,7 @@ function Harness({ owner = null }: { owner?: string | null }) { api = useWorkspa
 function CanvasHarness() {
   api = useWorkspace(null);
   return api.board
-    ? <CanvasBoard board={api.board} onChange={api.change} onViewportChange={api.navigate} onUndo={api.undo} onRedo={api.redo} canUndo={api.canUndo} canRedo={api.canRedo} onSave={() => undefined}/>
+    ? <CanvasBoard board={api.board} onChange={api.change} onDraftChange={api.checkpointDraft} onViewportChange={api.navigate} onUndo={api.undo} onRedo={api.redo} canUndo={api.canUndo} canRedo={api.canRedo} onSave={() => undefined}/>
     : <span>Workspace</span>;
 }
 function pointer(target: Element, type: string, x: number, y: number) {
@@ -114,6 +114,24 @@ describe("Workspace lifecycle", () => {
     await act(async () => api.redo()); expect(api.board!.texts[0].text).toBe("saved");
     await act(async () => api.home()); expect(api.board).toBeNull();
     await act(async () => api.open(api.projects.find(p => p.id === id)!)); expect(api.board!.texts[0].text).toBe("saved");
+  });
+  it("commits a short pen gesture once without device writes in the pointer handlers", async () => {
+    await act(async () => root.render(<CanvasHarness/>));
+    await act(async () => api.create("Fast stroke"));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const checkpoint = vi.spyOn(store, "cacheProject");
+    await act(async () => {
+      pointer(svg, "pointerdown", 15, 18);
+      pointer(svg, "pointermove", 30, 40);
+      pointer(svg, "pointermove", 90, 70);
+    });
+    expect(checkpoint).not.toHaveBeenCalled();
+    await act(async () => pointer(svg, "pointerup", 90, 70));
+    expect(checkpoint).toHaveBeenCalledTimes(1);
+    expect(api.board?.drawings[0].points).toHaveLength(3);
+    await act(async () => api.undo());
+    expect(api.board?.drawings).toHaveLength(0);
   });
   it("persists an in-progress drawing draft before leaving the canvas", async () => {
     vi.spyOn(store, "fetchProjects").mockResolvedValue([]); vi.spyOn(store, "fetchFolders").mockResolvedValue([]);

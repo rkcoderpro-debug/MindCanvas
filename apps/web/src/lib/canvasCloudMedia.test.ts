@@ -32,7 +32,7 @@ function setup(project: CachedProject, { failUpload = false, conflict = false } 
   const q = {
     update: vi.fn(patch => { next = { ...row, ...patch }; return q; }),
     insert: vi.fn(payload => ({ abortSignal: async () => { row = { ...row, ...payload }; return { error: null }; } })),
-    eq: vi.fn(() => q), select: vi.fn(() => q), abortSignal: vi.fn(() => q),
+    eq: vi.fn(() => q), filter: vi.fn(() => q), select: vi.fn(() => q), abortSignal: vi.fn(() => q),
     maybeSingle: vi.fn(async () => {
       if (conflict) return { data: null, error: null };
       row = next;
@@ -79,6 +79,33 @@ describe("Pilot canvas saves backed by private media", () => {
     expect(imported.media[0].src).toBe(project.board.media[0].src);
     expect(imported.background).toEqual(project.board.background);
     expect(stored().revision).toBe(23);
+  });
+
+  it("reuses cloud-referenced assets on the first edit after reload without downloading them", async () => {
+    const project = fixture(), { q, files } = setup(project);
+    const compact = await persistProject("owner", project);
+    clearCanvasCloudMediaCache();
+    files.exists.mockClear(); files.upload.mockClear(); files.download.mockClear();
+    const later = { ...project, ...compact, board: { ...project.board, title: "One edit after reloading" } };
+    await expect(persistProject("owner", later)).resolves.toMatchObject({ revision: 23, assetFormat: 2 });
+    expect(q.filter).toHaveBeenCalledWith("content->>version", "eq", "2");
+    expect(q.single).toHaveBeenCalledTimes(1);
+    expect(files.exists).not.toHaveBeenCalled();
+    expect(files.download).not.toHaveBeenCalled();
+    expect(files.upload).not.toHaveBeenCalled();
+  });
+
+  it("still saves new assets when an old cloud manifest is reused", async () => {
+    const project = fixture(), { files } = setup(project);
+    const compact = await persistProject("owner", project);
+    clearCanvasCloudMediaCache();
+    files.exists.mockClear(); files.upload.mockClear(); files.download.mockClear();
+    const later = { ...project, ...compact, board: { ...project.board, media: [...project.board.media,
+      { ...project.board.media[0], id: "new-asset", src: "data:image/png;base64,YQ==" }] } };
+    await expect(persistProject("owner", later)).resolves.toMatchObject({ revision: 23, assetFormat: 2 });
+    expect(files.exists).toHaveBeenCalledTimes(1);
+    expect(files.upload).toHaveBeenCalledTimes(1);
+    expect(files.download).not.toHaveBeenCalled();
   });
 
   it("does not publish a reference, or PATCH the original large JSON, if upload fails", async () => {

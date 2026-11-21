@@ -1,3 +1,4 @@
+import { sameBoardContent, sameBoardState } from "../lib/boardEquality";
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, Film, Frame as FrameIcon, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
@@ -211,6 +212,14 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "rect", icon: Square, key: "R" }, { id: "ellipse", icon: Circle, key: "O" },
   { id: "triangle", icon: Triangle, key: "G" }, { id: "frame", icon: FrameIcon, key: "F" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
+const drawingPaths = new WeakMap<Vec2[], string>();
+function drawingPath(points: Vec2[]) {
+  const cached = drawingPaths.get(points);
+  if (cached !== undefined) return cached;
+  const path = pathData(points);
+  drawingPaths.set(points, path);
+  return path;
+}
 const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
 export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, documents = [], onDocumentSaved }: Props) {
   const { t } = useLanguage();
@@ -218,14 +227,22 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), backgroundInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), iosTouchActive = useRef(false), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
-  const draftCheckpointAt = useRef(0);
+  const drawingFrame = useRef<number | null>(null);
+  const draftCheckpointTimer = useRef<number | null>(null);
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  const clearDrawingWork = () => {
+    if (drawingFrame.current !== null) window.cancelAnimationFrame(drawingFrame.current);
+    if (draftCheckpointTimer.current !== null) window.clearTimeout(draftCheckpointTimer.current);
+    drawingFrame.current = null;
+    draftCheckpointTimer.current = null;
+  };
+  useEffect(() => clearDrawingWork, []);
   const iosTouchFallback = isIOSDevice();
   const boardRef = useRef(board);
   const onChange = (next: BoardState) => {
     const before = boardRef.current;
-    const { viewport: _nextViewport, updatedAt: _nextUpdatedAt, ...nextContent } = next;
-    const { viewport: _beforeViewport, updatedAt: _beforeUpdatedAt, ...beforeContent } = before;
-    const viewportOnly = JSON.stringify(nextContent) === JSON.stringify(beforeContent);
+    const viewportOnly = sameBoardContent(before, next);
     if (viewportOnly && onViewportChange) {
       const navigated = { ...before, viewport: next.viewport };
       boardRef.current = navigated;
@@ -280,14 +297,19 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const [drawingSizes, setDrawingSizes] = useState<DrawingToolSizes>(readDrawingSizes);
   const [eraserCursor, setEraserCursor] = useState<Vec2 | null>(null);
   useEffect(() => { boardRef.current = board; onChangeRef.current = onChange; }, [board, onChangeProp, readOnly]);
-  const iosMedia = board.media.filter(media => media.src.startsWith("data:") && ["image", "video", "audio"].includes(media.kind));
-  const iosMediaSignature = iosTouchFallback ? JSON.stringify(iosMedia.map(media => [media.id, media.src])) : "";
+  const iosMediaRef = useRef<Array<{ id: string; src: string }>>([]);
+  const nextIOSMedia = iosTouchFallback ? board.media.filter(media => media.src.startsWith("data:") && ["image", "video", "audio"].includes(media.kind)) : [];
+  if (nextIOSMedia.length !== iosMediaRef.current.length || nextIOSMedia.some((item, index) => {
+    const previous = iosMediaRef.current[index];
+    return item.id !== previous?.id || item.src !== previous.src;
+  })) iosMediaRef.current = nextIOSMedia;
+  const iosMedia = iosMediaRef.current;
   const b = preview ?? editing?.fresh ?? board;
   const libraryDocumentFor = (embed: CanvasEmbed) => embed.kind === "document" && embed.documentId ? documents.find(document => document.id === embed.documentId) ?? null : null;
   const documentUrlFor = (embed: CanvasEmbed) => libraryDocumentFor(embed)?.dataUrl || embed.url;
   const documentKindForEmbed = (embed: CanvasEmbed) => libraryDocumentFor(embed)?.kind ?? (documentKindFor(embed.fileName || embed.title || "", embed.mimeType || "") || "pdf");
   useEffect(() => {
-    if (!iosTouchFallback || !iosMediaSignature || typeof fetch !== "function" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+    if (!iosTouchFallback || !iosMedia.length || typeof fetch !== "function" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
       setIOSMediaSources(current => Object.keys(current).length ? {} : current);
       return;
     }
@@ -315,7 +337,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       alive = false;
       createdUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch {} });
     };
-  }, [iosTouchFallback, iosMediaSignature]);
+  }, [iosTouchFallback, iosMedia]);
   const iosOverlaySignature = iosTouchFallback ? JSON.stringify([
     b.viewport,
     ...b.media.filter(media => !media.hidden && media.kind !== "image").map(media => ["media", media.id, media.x, media.y, media.width, media.height, media.rotation ?? 0, media.opacity ?? 1]),
@@ -745,12 +767,15 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     if (shouldUseIOSNativeTouch(e)) return;
     selectElementAt({ pointerId: e.pointerId, pointerType: e.pointerType, button: e.button, clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation(), capture: true }, s);
   };
-  const checkpointGestureDraft = (next: BoardState, force = false) => {
-    if (!onDraftChange) return;
-    const now = performance.now();
-    if (!force && now - draftCheckpointAt.current < 180) return;
-    draftCheckpointAt.current = now;
-    onDraftChange(next);
+  const checkpointGestureDraft = () => {
+    const active = gesture.current;
+    if (!active || !onDraftChangeRef.current || draftCheckpointTimer.current !== null) return;
+    // Defer recovery writes outside pointer handlers. A short, completed
+    // stroke is checkpointed by onChange, once, with its final points.
+    draftCheckpointTimer.current = window.setTimeout(() => {
+      draftCheckpointTimer.current = null;
+      if (gesture.current === active && !sameBoardState(active.base, active.next)) onDraftChangeRef.current?.(active.next);
+    }, 280);
   };
   const begin = (input: CanvasPointerInput) => {
     const interactionBoard = wheelPending.current ?? board;
@@ -809,16 +834,16 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       setTool("select"); return;
     } else if (effectiveTool === "pen" || effectiveTool === "highlighter") {
       const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p], color: effectiveTool === "highlighter" ? palette.highlighter : ink, width: effectiveTool === "highlighter" ? drawingSizes.highlighter : drawingSizes.pen, opacity: effectiveTool === "highlighter" ? .3 : 1 }] };
-      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft(next, true);
+      setSelected(null); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "draw", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft();
     } else if (effectiveTool === "eraser") {
       const radius = drawingSizes.eraser / 2, next = eraseDrawingPaths(base, [p], radius);
-      setSelected(null); setEraserCursor(p); setPreview(next); setInputMode("erasing"); gesture.current = { mode: "erase", start: p, screen: p, base, pointer: input.pointerId, next, eraseRadius: radius, erasePoints: [p] }; checkpointGestureDraft(next, true);
+      setSelected(null); setEraserCursor(p); setPreview(next); setInputMode("erasing"); gesture.current = { mode: "erase", start: p, screen: p, base, pointer: input.pointerId, next, eraseRadius: radius, erasePoints: [p] }; checkpointGestureDraft();
     } else if (effectiveTool === "line") {
       const id = crypto.randomUUID(), next = { ...base, drawings: [...base.drawings, { id, points: [p, p], color: ink, width: strokeWidth, opacity: 1 }] };
-      setSelected({ kind: "drawings", id }); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "line", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft(next, true);
+      setSelected({ kind: "drawings", id }); setPreview(next); setInputMode("drawing"); gesture.current = { mode: "line", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft();
     } else if (effectiveTool === "rect" || effectiveTool === "ellipse" || effectiveTool === "triangle") {
       const id = crypto.randomUUID(), next = { ...base, shapes: [...base.shapes, { id, kind: effectiveTool, x: p.x, y: p.y, width: 1, height: 1, color: palette.fill }] };
-      setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft(next, true);
+      setSelected({ kind: "shapes", id }); setPreview(next); gesture.current = { mode: "shape", start: p, screen: p, base, pointer: input.pointerId, next }; checkpointGestureDraft();
     }
     if (input.capture) svg.current?.setPointerCapture(input.pointerId);
   };
@@ -869,15 +894,25 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
       const previous = g.erasePoints?.at(-1) ?? g.start;
       next = eraseDrawingPaths(g.next, [previous, p], g.eraseRadius ?? drawingSizes.eraser / 2);
       g.erasePoints = [...(g.erasePoints ?? [g.start]), p];
-      setEraserCursor(p);
     }
     if (g.mode === "line") {
       const path = g.next.drawings.at(-1)!;
       next = { ...g.next, drawings: [...g.base.drawings, { ...path, points: [g.start, p] }] };
     }
     if (g.mode === "shape") next = { ...g.next, shapes: [...g.base.shapes, { ...g.next.shapes.at(-1)!, x: Math.min(p.x, g.start.x), y: Math.min(p.y, g.start.y), width: Math.max(1, Math.abs(dx)), height: Math.max(1, Math.abs(dy)) }] };
-    g.next = next; setPreview(next);
-    if (["draw", "erase", "line", "shape"].includes(g.mode)) checkpointGestureDraft(next);
+    g.next = next;
+    if ((g.mode === "draw" || g.mode === "erase") && typeof window.requestAnimationFrame === "function") {
+      if (drawingFrame.current === null) drawingFrame.current = window.requestAnimationFrame(() => {
+        drawingFrame.current = null;
+        if (gesture.current !== g) return;
+        setPreview(g.next);
+        if (g.mode === "erase") setEraserCursor(g.erasePoints?.at(-1) ?? null);
+      });
+    } else {
+      setPreview(next);
+      if (g.mode === "erase") setEraserCursor(p);
+    }
+    if (["draw", "erase", "line", "shape"].includes(g.mode)) checkpointGestureDraft();
   };
   const move = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (shouldUseIOSNativeTouch(e)) return;
@@ -886,16 +921,16 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
   const finish = (cancel = false, releaseCapture = true) => {
     const g = gesture.current; if (!g) { setInputMode(pinch.current ? "pinching" : "idle"); return; }
     stopAutoPan(); autoPanLastAt.current = null;
+    clearDrawingWork();
     gesture.current = null; setPreview(null); setEraserCursor(null); setMarquee(null); setDropTarget(null); setGuides([]);
     if (g.mode === "marquee") { if (cancel) setSelections(g.selections ?? []); }
     if (!cancel && g.reparent && g.target) {
       g.next = reparentNode(g.next, g.selection!.id, g.target);
       g.next = autoLayoutMindMap(g.next, g.target);
     }
-    if (!cancel && JSON.stringify(g.base) !== JSON.stringify(g.next)) {
-      if (["draw", "erase", "line", "shape"].includes(g.mode)) checkpointGestureDraft(g.next, true);
+    if (!cancel && !sameBoardState(g.base, g.next)) {
       if ((g.mode === "pan" || g.mode === "zoom") && onViewportChange) onViewportChange({ ...boardRef.current, viewport: g.next.viewport });
-      else onChange(g.next);
+      else onChangeRef.current(g.next);
     }
     if (!cancel) {
       if (["draw", "line", "shape"].includes(g.mode)) emitGuideAction("canvas:draw");
@@ -942,7 +977,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     const active = pinch.current;
     if (!active) return false;
     pinch.current = null; setPreview(null); setInputMode("idle");
-    if (!cancel && JSON.stringify(active.base.viewport) !== JSON.stringify(active.next.viewport)) {
+    if (!cancel && (active.base.viewport.x !== active.next.viewport.x || active.base.viewport.y !== active.next.viewport.y || active.base.viewport.scale !== active.next.viewport.scale)) {
       if (onViewportChange) onViewportChange(active.next);
       else onChange(active.next);
     }
@@ -973,6 +1008,7 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
     finishPinch(cancel, () => e.preventDefault(), () => e.stopPropagation());
   };
   const cancelActiveInput = () => {
+    clearDrawingWork();
     stopAutoPan(); autoPanLastAt.current = null; autoPanPointer.current = null;
     const activeGesture = gesture.current;
     gesture.current = null; pinch.current = null; touchPoints.current.clear(); iosTouchActive.current = false;
@@ -1435,8 +1471,8 @@ export default function CanvasBoard({ board, onChange: onChangeProp, onDraftChan
           {b.shapes.filter(s => !hiddenElements.has(s.id)).map(s => <g key={s.id} data-element={s.id} className={`canvas-connectable ${connectorSource?.id === s.id ? "connector-source" : ""} ${connectorPulseIds.has(s.id) ? "connector-pulse" : ""}`} opacity={s.opacity ?? 1} transform={`rotate(${s.rotation ?? 0} ${s.x + s.width / 2} ${s.y + s.height / 2})`} onPointerDown={e => selectElement(e, { kind: "shapes", id: s.id })}>
             {s.kind === "frame" ? <g className="canvas-frame-shape"><rect x={s.x} y={s.y} width={s.width} height={s.height} rx="8" fill="var(--surface)" fillOpacity=".24" stroke="var(--accent)" strokeWidth="3" strokeDasharray="10 6"/><text x={s.x + 16} y={s.y + 26} fill="var(--muted)" fontSize="14" fontWeight="600">{s.frameName ?? "Frame"}</text></g> : s.kind === "rect" ? <rect x={s.x} y={s.y} width={s.width} height={s.height} rx="6" fill={s.color} stroke="var(--element-stroke)"/> : s.kind === "ellipse" ? <ellipse cx={s.x + s.width / 2} cy={s.y + s.height / 2} rx={s.width / 2} ry={s.height / 2} fill={s.color} stroke="var(--element-stroke)"/> : <polygon points={`${s.x + s.width / 2},${s.y} ${s.x + s.width},${s.y + s.height} ${s.x},${s.y + s.height}`} fill={s.color} stroke="var(--element-stroke)" strokeLinejoin="round"/>}</g>)}
           {b.drawings.filter(p => !hiddenElements.has(p.id)).map(p => { const r = elementBounds(b, { kind: "drawings", id: p.id })!; return <g key={p.id} data-element={p.id} transform={`rotate(${p.rotation ?? 0} ${r.x + r.width / 2} ${r.y + r.height / 2})`} onPointerDown={e => selectElement(e, { kind: "drawings", id: p.id })}>
-            <path d={pathData(p.points)} fill="none" stroke={p.color} strokeWidth={p.width} opacity={p.opacity} strokeLinecap="round" strokeLinejoin="round"/>
-            <path d={pathData(p.points)} fill="none" stroke="transparent" strokeWidth={Math.max(12 / b.viewport.scale, p.width)} pointerEvents={interactive ? "stroke" : "none"}/></g>; })}
+            <path d={drawingPath(p.points)} fill="none" stroke={p.color} strokeWidth={p.width} opacity={p.opacity} strokeLinecap="round" strokeLinejoin="round"/>
+            <path d={drawingPath(p.points)} fill="none" stroke="transparent" strokeWidth={Math.max(12 / b.viewport.scale, p.width)} pointerEvents={interactive ? "stroke" : "none"}/></g>; })}
           {b.edges.map(e => {
             if (hiddenElements.has(e.id) || hiddenElements.has(e.source) || hiddenElements.has(e.target)) return null;
             const s = [...b.nodes, ...b.shapes].find(n => n.id === e.source), d = [...b.nodes, ...b.shapes].find(n => n.id === e.target); if (!s || !d) return null;

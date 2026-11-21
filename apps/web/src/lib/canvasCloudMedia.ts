@@ -20,21 +20,39 @@ type MediaTransport = {
 type SourceCacheEntry = { path: string; value: string };
 const sources = new Map<string, SourceCacheEntry>();
 const knownObjects = new Set<string>();
+const knownManifests = new Set<string>();
 let cachedBytes = 0;
 
 export function clearCanvasCloudMediaCache() {
-  sources.clear(); knownObjects.clear(); cachedBytes = 0;
+  sources.clear(); knownObjects.clear(); knownManifests.clear(); cachedBytes = 0;
 }
 export function isCompactCanvas(value: unknown): boolean {
   const envelope = value as Partial<CloudRow> | null;
   return envelope?.type === "mindcanvas-board" && envelope.version === 2;
 }
+function remember(set: Set<string>, key: string, limit: number) {
+  if (set.has(key)) return;
+  if (set.size >= limit) set.delete(set.values().next().value!);
+  set.add(key);
+}
+const manifestKey = (scope: string, id: string) => scope + "/" + id.toLowerCase();
+export const hasCanvasMediaManifest = (scope: string, id: string) => knownManifests.has(manifestKey(scope, id));
+
+/** Only pass a manifest returned by an authorized cloud read or an acknowledged write. */
+export function rememberCanvasMediaManifest(scope: string, id: string, value: unknown) {
+  if (!isCompactCanvas(value) || !PROJECT_ID.test(id)) return;
+  const board = (value as CloudRow).board;
+  if (board?.id !== id || !Array.isArray(board.media) || !Array.isArray(board.embeds)) return;
+  const refs = [typeof board.background === "object" ? board.background?.src : undefined,
+    ...board.media.map(item => item?.src), ...board.embeds.filter(item => item?.kind === "document").map(item => item.url)];
+  for (const ref of refs) if (typeof ref === "string" && ref.startsWith(REF) && DIGEST.test(ref.slice(REF.length))) {
+    remember(knownObjects, scope + "/" + pathFor(id, ref.slice(REF.length)), 2048);
+  }
+  remember(knownManifests, manifestKey(scope, id), 256);
+}
 function cache(scope: string, path: string, value: string) {
   const key = scope + "/" + path;
-  if (!knownObjects.has(key)) {
-    if (knownObjects.size >= 2048) knownObjects.delete(knownObjects.values().next().value!);
-    knownObjects.add(key);
-  }
+  remember(knownObjects, key, 2048);
   if (sources.has(key) || value.length > CACHE_BYTES) return;
   while (cachedBytes + value.length > CACHE_BYTES && sources.size) {
     const oldest = sources.keys().next().value!;
@@ -54,16 +72,21 @@ function pathFor(projectId: string, digest: string) {
 function checkSource(value: string, pattern: RegExp) {
   if (typeof value !== "string" || !pattern.test(value) || value.length > MAX_ASSET_BYTES) throw new Error("Tệp nhúng của canvas không hợp lệ hoặc vượt giới hạn lưu trữ.");
 }
-async function mapSources(board: BoardState, visit: (src: string, pattern: RegExp) => Promise<string>) {
-  const background = typeof board.background === "object"
+async function mapSources(board: BoardState, visit: (src: string, pattern: RegExp) => Promise<string>, parallel = false) {
+  const backgroundFor = async () => typeof board.background === "object"
     ? { ...board.background, src: await visit(board.background.src, MEDIA_SOURCE) } : board.background;
-  const media: BoardState["media"] = [];
-  for (const item of board.media) media.push({ ...item, src: await visit(item.src, MEDIA_SOURCE) });
-  const embeds: BoardState["embeds"] = [];
-  for (const item of board.embeds) {
-    embeds.push(item.kind === "document" && typeof item.url === "string" && (DOCUMENT_SOURCE.test(item.url) || item.url.startsWith(REF))
-      ? { ...item, url: await visit(item.url, DOCUMENT_SOURCE) } : item);
+  const mediaFor = async (item: BoardState["media"][number]) => ({ ...item, src: await visit(item.src, MEDIA_SOURCE) });
+  const embedFor = async (item: BoardState["embeds"][number]) =>
+    item.kind === "document" && typeof item.url === "string" && (DOCUMENT_SOURCE.test(item.url) || item.url.startsWith(REF))
+      ? { ...item, url: await visit(item.url, DOCUMENT_SOURCE) } : item;
+  if (parallel) {
+    const [background, media, embeds] = await Promise.all([backgroundFor(), Promise.all(board.media.map(mediaFor)), Promise.all(board.embeds.map(embedFor))]);
+    return { ...board, background, media, embeds };
   }
+  const background = await backgroundFor();
+  const media: BoardState["media"] = [], embeds: BoardState["embeds"] = [];
+  for (const item of board.media) media.push(await mediaFor(item));
+  for (const item of board.embeds) embeds.push(await embedFor(item));
   return { ...board, background, media, embeds };
 }
 async function verifyObject(io: MediaTransport, path: string, digest: string, pattern: RegExp) {
@@ -92,7 +115,7 @@ export async function packCloudCanvas(scope: string, board: BoardState, io: Medi
   // Persist files before publishing references. Never send an inline fallback
   // if a file fails to upload or if the note later fails its revision check.
   for (const [path, { source, digest, pattern }] of required) {
-    if (knownObjects.has(scope + "/" + path)) continue;
+    if (knownObjects.has(scope + "/" + path)) { cache(scope, path, source); continue; }
     if (await io.exists(path)) await verifyObject(io, path, digest, pattern);
     else {
       try { await io.put(path, new Blob([source], { type: "application/octet-stream" })); }
@@ -112,18 +135,39 @@ export async function unpackCloudCanvas(scope: string, id: string, title: string
   const board = { ...raw, id, title: title ?? raw?.title };
   if (!isCompactCanvas(value)) return parseBoard(board);
   if (envelope?.board?.id !== id || !Array.isArray(board.media) || !Array.isArray(board.embeds)) throw new Error("Dữ liệu ảnh của canvas không hợp lệ.");
+  // Download at most four distinct assets concurrently. Duplicate references
+  // (for example image and background) share one verified download.
+  const pending = new Map<string, Promise<string>>();
+  let running = 0, failed = false;
+  const waiting: Array<() => void> = [];
+  const load = async (path: string, digest: string, pattern: RegExp) => {
+    if (running >= 4) await new Promise<void>(resolve => waiting.push(resolve));
+    else running++;
+    try {
+      if (failed) throw new Error("Canvas media load stopped");
+      return await verifyObject(io, path, digest, pattern);
+    } catch (error) { failed = true; throw error; }
+    finally {
+      const next = waiting.shift();
+      if (next) next(); else running--;
+    }
+  };
   const restored = await mapSources(board, async (reference, pattern) => {
     if (typeof reference !== "string" || !reference.startsWith(REF)) throw new Error("Canvas thiếu tham chiếu ảnh đã lưu.");
     const digest = reference.slice(REF.length);
     const path = pathFor(id, digest);
     const existing = sources.get(scope + "/" + path)?.value;
-    const source = existing ?? await verifyObject(io, path, digest, pattern);
+    if (!existing && !pending.has(path)) pending.set(path, load(path, digest, pattern));
+    const source = existing ?? await pending.get(path)!;
     checkSource(source, pattern);
     cache(scope, path, source);
     return source;
-  });
-  return parseBoard(restored);
+  }, true);
+  const parsed = parseBoard(restored);
+  rememberCanvasMediaManifest(scope, id, value);
+  return parsed;
 }
+
 export function canvasMediaTransport(client: SupabaseClient, signal?: AbortSignal): MediaTransport {
   const bucket = () => client.storage.from(CANVAS_MEDIA_BUCKET);
   // upload()/exists() do not accept AbortSignal. Stop the draft pipeline

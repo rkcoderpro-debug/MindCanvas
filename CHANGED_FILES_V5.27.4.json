@@ -1,0 +1,77 @@
+{
+  "version": "5.27.4",
+  "baseVersion": "5.27.3",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.27.4.md",
+      "bytes": 2405,
+      "sha256": "bee525e23e9b0580f1efbff9de27dcdf857036d365336e36155fd9c9ee58180e"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "92228e4a8285fd5c4c5ba5231ae71dc6b05c720d20fe73ea9caa52115cb3b352"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "80a11c3d6d5f6dabe465584ee42b47c9f8fb2b19f2a71dc6c703d866a6f97ce3"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBackground.tsx",
+      "bytes": 4642,
+      "sha256": "66a1983e5cbb3c90777216d68e08527ae9d96fd8d3e397451e4d2ee862434288"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "bytes": 160355,
+      "sha256": "fb8e5c467fce0649346a21ce67d8f3240fb497b59afdeab453e716e6cadedc90"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.test.tsx",
+      "bytes": 43639,
+      "sha256": "4496e23c05e49c2cb451a5c92e338e9f6519b1798296a5e0671028972c2c2be9"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "bytes": 56370,
+      "sha256": "bdcd80c98ad94b6b4b8870f213c9fc63f0411c7b49e80f9138d3f6ef592dd84b"
+    },
+    {
+      "path": "apps/web/src/lib/boardEquality.ts",
+      "bytes": 1373,
+      "sha256": "7ebefd24df70b083e33b22a51a839712741f17ab500c017452a0515c27361168"
+    },
+    {
+      "path": "apps/web/src/lib/canvasCloudMedia.test.ts",
+      "bytes": 10594,
+      "sha256": "8a0226a027c7af5e3482300c29d690fb3df3068ba9152f1e01372ed1d76994ff"
+    },
+    {
+      "path": "apps/web/src/lib/canvasCloudMedia.ts",
+      "bytes": 11678,
+      "sha256": "2bf98cf23d8c0f72c5ceb78dda96b93dc98dbc2f781a29365b83815b4ef63165"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.test.ts",
+      "bytes": 9838,
+      "sha256": "5956bd7a33a30efbab3d53db23aa91194b80326e16a37cad7a720cc730a99302"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "bytes": 80034,
+      "sha256": "50e1e853e8a2a403a3a5463e6307f5bb3f64a9c30949ece846e0ed099ea4270a"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "ac3677ae4b6e79f33b23230a86e7b38f6f63bd7a41a08879889fa0b17123983b"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "e80e1ed0e9c64003a9b7d202a059b8ed086b2a663f5589652185ce1fa48c6919"
+    }
+  ]
+}
