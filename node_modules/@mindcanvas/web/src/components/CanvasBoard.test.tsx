@@ -224,6 +224,45 @@ describe("Canvas interactions", () => {
     expect(current.drawings).toHaveLength(1);
   });
 
+  it("paints coalesced pen samples on the live layer and commits the final pen position once", async () => {
+    const b = { ...blankBoard(), viewport: { x: 25, y: 10, scale: 2 } };
+    await act(async () => root.render(<Harness initial={b}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    const live = host.querySelector(".canvas-live-ink")!;
+    await act(async () => pointer(svg, "pointerdown", 45, 30));
+    const move = new MouseEvent("pointermove", { bubbles: true, cancelable: true, clientX: 85, clientY: 60 });
+    Object.defineProperties(move, { pointerId: { value: 1 }, pointerType: { value: "mouse" }, getCoalescedEvents: {
+      value: () => [{ clientX: 55, clientY: 35 }, { clientX: 65, clientY: 55 }],
+    }});
+    await act(async () => {
+      svg.dispatchEvent(move);
+      await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+    });
+    expect(live.querySelector("path")?.getAttribute("d")).toBe("M10,10 L15,12.5 L20,22.5 L30,25");
+    expect(svg.querySelectorAll('[data-layer-stack] > [data-element]')).toHaveLength(0);
+    expect(commit).not.toHaveBeenCalled();
+    await act(async () => pointer(svg, "pointerup", 95, 80));
+    expect(live.querySelector("path")).toBeNull();
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(svg.querySelector('[data-layer-stack] path')?.getAttribute("d")).toBe("M10,10 L15,12.5 L20,22.5 L30,25 L35,35");
+  });
+
+  it("keeps the in-progress stroke including its last samples when the window loses focus", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    await act(async () => (host.querySelector('[aria-label="Bút"]') as HTMLButtonElement).click());
+    const svg = host.querySelector("svg.canvas-svg")!;
+    await act(async () => {
+      pointer(svg, "pointerdown", 10, 50);
+      pointer(svg, "pointermove", 30, 60);
+      pointer(svg, "pointermove", 50, 80);
+      window.dispatchEvent(new Event("blur"));
+    });
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(current.drawings[0].points.at(-1)).toEqual({ x: 50, y: 80 });
+    expect(host.querySelector(".canvas-live-ink path")).toBeNull();
+  });
+
   it("erases only the touched part of a vector stroke in one commit", async () => {
     const b = { ...blankBoard(), nodes: [{ id: "node", label: "Keep", x: 260, y: 30, width: 190, height: 76 }], drawings: [{ id: "stroke", points: [{ x: 0, y: 100 }, { x: 120, y: 100 }], color: "#123456", width: 4, opacity: 1 }] };
     await act(async () => root.render(<Harness initial={b}/>));
