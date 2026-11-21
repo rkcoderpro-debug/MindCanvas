@@ -31,6 +31,7 @@ function setup(project: CachedProject, { failUpload = false, conflict = false } 
   let next: typeof row;
   const q = {
     update: vi.fn(patch => { next = { ...row, ...patch }; return q; }),
+    insert: vi.fn(payload => ({ abortSignal: async () => { row = { ...row, ...payload }; return { error: null }; } })),
     eq: vi.fn(() => q), select: vi.fn(() => q), abortSignal: vi.fn(() => q),
     maybeSingle: vi.fn(async () => {
       if (conflict) return { data: null, error: null };
@@ -118,5 +119,36 @@ describe("Pilot canvas saves backed by private media", () => {
     await expect(unpackCloudCanvas("other-user", crypto.randomUUID(), undefined, stored().content, {
       exists: async () => true, put: async () => undefined, get: async () => { throw new Error("must not request arbitrary object"); },
     })).rejects.toThrow("không hợp lệ");
+  });
+});
+
+
+describe("Global canvas media rollout", () => {
+  beforeEach(() => vi.stubEnv("VITE_CANVAS_MEDIA_MODE", "all"));
+
+  it("converts an existing canvas outside the pilot on its next save", async () => {
+    const project = fixture(), { q } = setup(project);
+    vi.stubEnv("VITE_CANVAS_MEDIA_PILOT_IDS", "");
+    await expect(persistProject("owner", project)).resolves.toMatchObject({ revision: 22, assetFormat: 2 });
+    expect(supa.rpc).toHaveBeenCalledWith("canvas_media_enabled", { p_project_id: project.id });
+    expect(q.update.mock.calls[0][0].content.version).toBe(2);
+  });
+
+  it("publishes a new imported canvas directly as v2 only after media uploads", async () => {
+    const project = { ...fixture(), revision: undefined }, { q, files } = setup(project);
+    vi.stubEnv("VITE_CANVAS_MEDIA_PILOT_IDS", "");
+    await expect(persistProject("owner", project)).resolves.toMatchObject({ revision: 0, assetFormat: 2 });
+    expect(supa.rpc).toHaveBeenCalledWith("canvas_media_reserve_draft", { p_project_id: project.id });
+    expect(q.insert.mock.calls[0][0]).toMatchObject({ revision: 0, content: { version: 2 } });
+    expect(files.upload).toHaveBeenCalledTimes(2);
+    expect(files.upload.mock.invocationCallOrder[1]).toBeLessThan(q.insert.mock.invocationCallOrder[0]);
+    expect(q.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed new upload as a draft without creating a cloud placeholder", async () => {
+    const project = { ...fixture(), revision: undefined }, { q } = setup(project, { failUpload: true });
+    await expect(persistProject("owner", project)).rejects.toThrow("Storage disconnected");
+    expect(q.insert).not.toHaveBeenCalled();
+    expect(q.update).not.toHaveBeenCalled();
   });
 });

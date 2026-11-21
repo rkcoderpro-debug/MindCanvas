@@ -1,7 +1,8 @@
 import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
-import { canvasMediaEnabled, canvasMediaTransport, isCompactCanvas, packCloudCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
+import { verifyWorkspaceAccount, workspaceAuthError } from "./authSession";
+import { canvasMediaEnabled, reserveCanvasMediaDraft, canvasMediaTransport, isCompactCanvas, packCloudCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
 import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, readOfflineProjectVersions, updateOfflineProjectVersions, writeOfflineProjectCache } from "./offlineProjectCache";
 import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
@@ -300,29 +301,10 @@ export function mergeProjects(remote: Project[], cache: CachedProject[], owner: 
   return [...result.values()];
 }
 async function clientFor(owner: string) {
-  const session = await getCurrentSession();
+  const session = await getCurrentSession().catch(error => { throw workspaceAuthError(error); });
   if (!supabase || !session || session.user.id !== owner) throw new Error("Phiên đăng nhập đã thay đổi. Hãy đăng nhập lại.");
-
-  // getSession() only reads the browser cache.  A stale/expired access token
-  // can therefore look valid here while Postgres receives no authenticated
-  // identity and rejects an insert with 42501.  Verify the token with the
-  // Supabase Auth endpoint before any cloud read/write.  The optional guard
-  // keeps lightweight unit-test clients (which only implement `from`) valid.
-  const auth = (supabase as unknown as {
-    auth?: {
-      getUser?: () => Promise<{ data?: { user?: { id?: string } | null }; error?: { message?: string } | null }>;
-      refreshSession?: () => Promise<{ error?: { message?: string } | null }>;
-    };
-  }).auth;
-  if (typeof auth?.getUser === "function") {
-    let verified = await auth.getUser();
-    if (verified.error && typeof auth.refreshSession === "function") {
-      const refreshed = await auth.refreshSession();
-      if (!refreshed.error) verified = await auth.getUser();
-    }
-    if (verified.error) throw new Error("Phiên Supabase đã hết hạn. Hãy đăng nhập lại rồi thử lưu.");
-    if (verified.data?.user?.id !== owner) throw new Error("Tài khoản Supabase hiện tại không khớp với workspace. Hãy đăng nhập lại.");
-  }
+  // Do not rely on the cached user object as proof of a valid Auth session.
+  if (typeof supabase.auth?.getUser === "function") await verifyWorkspaceAccount(supabase.auth, owner, session.access_token);
   return supabase;
 }
 const LEGACY_PROJECT_COLUMNS = "id,user_id,title,folder_id,updated_at,is_favorite,deleted_at";
@@ -471,6 +453,9 @@ export async function verifyProjectWrite(owner: string, project: CachedProject, 
   }
   throw new ProjectVerificationError(project.id, lastError);
 }
+function isGlobalCanvasMediaEnabled() {
+  return import.meta.env.VITE_CANVAS_MEDIA_STORAGE === "true" && import.meta.env.VITE_CANVAS_MEDIA_MODE === "all";
+}
 function isCanvasMediaPilot(projectId: string) {
   const configured = import.meta.env.VITE_CANVAS_MEDIA_PILOT_IDS as string | undefined;
   return import.meta.env.VITE_CANVAS_MEDIA_STORAGE === "true" &&
@@ -493,7 +478,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
   const { thumbnail: _thumbnail, ...payloadWithoutThumbnail } = payload;
   const updateWithRevision = async (baseRevision: number, baseFormat = project.assetFormat) => {
     const compact = baseFormat === 2 || (
-      isCanvasMediaPilot(project.id) &&
+      (isGlobalCanvasMediaEnabled() || isCanvasMediaPilot(project.id)) &&
       await canvasMediaEnabled(client, project.id, requestTimeoutSignal(5000))
     );
     if (compact && project.id !== project.board.id) throw new Error("Canvas không khớp với bản nháp.");
@@ -526,7 +511,7 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     // INSERT for a project that already exists.
     const base = await fetchProjectSnapshot(owner, project.id);
     if (base.updatedAt !== project.baseUpdatedAt || base.folderId !== project.folderId) throw new ProjectConflictError(project.id);
-    if (sameBoardContent(base.board, project.board)) return { revision: base.revision, updatedAt: base.updatedAt };
+    if (sameBoardContent(base.board, project.board)) return { revision: base.revision, updatedAt: base.updatedAt, ...(base.assetFormat === 2 ? { assetFormat: 2 as const } : {}) };
     if (base.revision !== undefined) return updateWithRevision(base.revision, base.assetFormat);
 
     let legacy = await client.from("notes").update(payload).eq("id", project.id).eq("updated_at", base.updatedAt).select("id").abortSignal(requestTimeoutSignal(20000)).maybeSingle();
@@ -538,6 +523,25 @@ export async function persistProject(owner: string, project: CachedProject): Pro
     return verify(undefined);
   }
   if (project.revision === undefined) {
+    if (isGlobalCanvasMediaEnabled()) {
+      if (project.id !== project.board.id) throw new Error("Canvas không khớp với bản nháp.");
+      let ready: boolean;
+      try { ready = await reserveCanvasMediaDraft(client, project.id, requestTimeoutSignal(8000)); }
+      catch (error) {
+        if ((error as { code?: string } | null)?.code === "23505") throw new ProjectConflictError(project.id);
+        throw error;
+      }
+      if (ready) {
+        const content = await packCloudCanvas(owner, project.board, canvasMediaTransport(client, requestTimeoutSignal(180000)));
+        const insert = (body: typeof payloadWithoutThumbnail) => client.from("notes")
+          .insert({ ...body, user_id: owner, content, revision: 0 }).abortSignal(requestTimeoutSignal(20000));
+        let result = await insert(payload);
+        if (result.error && /thumbnail/i.test(String(result.error.message ?? ""))) result = await insert(payloadWithoutThumbnail);
+        if (result.error?.code === "23505") throw new ProjectConflictError(project.id);
+        if (result.error) throw { ...result.error, status: result.status };
+        return { ...await verify(0), assetFormat: 2 };
+      }
+    }
     // A newly created canvas must go through INSERT, not UPSERT.  UPSERT is
     // an INSERT ... ON CONFLICT UPDATE and can unexpectedly require the
     // editor/update policy (or attempt to change ownership) even for a fresh

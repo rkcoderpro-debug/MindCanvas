@@ -3,6 +3,7 @@ import type { BoardState, CanvasThumbnail } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
 import { normalizeEditor } from "../lib/editorCommands";
 import { errorMessage } from "../lib/errors";
+import { WorkspaceAuthUnavailableError } from "../lib/authSession";
 import { updateProject, type ProjectPatch } from "../lib/projectStore";
 import { subscribeToProject } from "../lib/collaboration";
 import { acknowledge, addFolder, cacheProject, CloudVerificationPendingError, createProjectVersion, deleteFolder, fetchBoard, fetchFolders, fetchProjectSnapshot, fetchProjects, fetchProjectThumbnails, fetchProjectVersions, hydrateProjectCache, mergeProjects, mergeProjectVersions, OwnedProjectUnavailableError, persistProject, ProjectConflictError, PROJECT_THUMBNAIL_BATCH_SIZE, readCache, readProjectVersions, revalidateOwnedProject, sameBoardContent, SaveQueue, updateFolder, waitForProjectCache, type CachedProject, type Project, type ProjectFolder, type ProjectVersion } from "../lib/projectStore";
@@ -15,7 +16,8 @@ const LOCAL_SAVE_MATCH_WINDOW_MS = 120_000;
 type LocalSaveMarker = { projectId: string; snapshot: CachedProject; expectedRevision?: number; createdAt: number };
 function isTemporaryCanvasReadFailure(error: unknown) {
   const value = error as { code?: string; name?: string; message?: string; status?: number } | null;
-  if (value?.code === "57014" || value?.name === "TimeoutError" || [408, 500, 502, 503, 504, 520, 522, 524].includes(value?.status ?? 0)) return true;
+  const status = value?.status ?? 0;
+  if (value?.code === "WORKSPACE_AUTH_UNAVAILABLE" || value?.code === "57014" || value?.name === "TimeoutError" || status === 408 || status === 429 || (status >= 500 && status < 600)) return true;
   // PostgREST can return transport failures as an object with an empty code.
   return !value?.code && /timeout|timed out|failed to fetch|networkerror|network request failed/i.test(value?.message ?? "");
 }
@@ -390,7 +392,9 @@ export function useWorkspace(owner: string | null) {
           setStatus(navigator.onLine ? "saveError" : "offline");
           if (!cacheFailed.current && isTemporaryCanvasReadFailure(err)) {
             const code = (err as { code?: string } | null)?.code;
-            const notice = `Bản nháp đã được giữ trên thiết bị. Đám mây chưa xác nhận lần lưu này${code === "57014" ? " [57014]" : ""}. Hãy thử đồng bộ lại.`;
+            const notice = err instanceof WorkspaceAuthUnavailableError
+              ? "Bản nháp đã được giữ trên thiết bị. Supabase tạm thời không xác thực được phiên. Hãy thử đồng bộ lại."
+              : `Bản nháp đã được giữ trên thiết bị. Đám mây chưa xác nhận lần lưu này${code === "57014" ? " [57014]" : ""}. Hãy thử đồng bộ lại.`;
             saveNotices.current.set(targetId, notice);
             setError(notice);
           } else report(err);
@@ -663,7 +667,7 @@ export function useWorkspace(owner: string | null) {
   const open = async (p: Project) => {
     if (p.deletedAt) return;
     const ticket = ++navigation.current;
-    if (current.current?.id === p.id) return;
+    if (current.current?.id === p.id) return true;
     setError("");
     try {
       let cached = readCache(owner).find(c => c.id === p.id);
@@ -727,6 +731,7 @@ export function useWorkspace(owner: string | null) {
       // timed out earlier. Leave other drafts to their own queue or manual retry.
       if (!shared && !offlineCopy && entry.pending) syncPendingInBackground(p.id);
       else if (owner && cachedOwnerCopy && !offlineCopy) void checkOpenedCopy(owner, ticket, entry);
+      return true;
     } catch (err) { if (ticket === navigation.current) report(err); }
   };
   const create = async (title: string, imported?: BoardState, targetFolderId: string | null = null): Promise<BoardState> => {

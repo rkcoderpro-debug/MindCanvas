@@ -1,0 +1,17 @@
+// @vitest-environment jsdom
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import { publishLab,publishedLabToLocal,deletePublishedLab,listPublishedLabProjects } from './learningShare';
+import { emptyLabEditor } from '../components/LabEditorDialog';
+const mocks=vi.hoisted(()=>({upsert:vi.fn(),single:vi.fn(),select:vi.fn(),remove:vi.fn(),eq:vi.fn()}));
+vi.mock('./supabase',()=>({getCurrentSession:async()=>({user:{id:'owner'}}),supabase:{from:()=>({upsert:mocks.upsert,select:mocks.select,delete:mocks.remove})}}));
+beforeEach(()=>{vi.clearAllMocks();mocks.upsert.mockImplementation(()=>({select:()=>({single:mocks.single})}));mocks.single.mockResolvedValue({data:{id:'lab'},error:null});mocks.select.mockImplementation(()=>({eq:()=>({order:async()=>({data:[],error:null})})}));mocks.remove.mockImplementation(()=>({eq:mocks.eq}));mocks.eq.mockImplementation(()=>({eq:async()=>({data:null,error:null})}));});
+describe('Lab cloud metadata and ordering',()=>{
+  it('uploads mode, cover, viewer and private authoring notes and restores them for the owner',async()=>{
+    const lab={...emptyLabEditor(),id:'lab',title:'Trace',mode:'algorithm' as const,programHtml:'<main>Algorithm</main>',thumbnail:'data:image/png;base64,YQ==',sourceText:'owner notes',visualStyle:'3d' as const};await publishLab(lab,'owner');const payload=mocks.upsert.mock.calls[0][0];expect(payload).toMatchObject({lab_mode:'algorithm',thumbnail:lab.thumbnail,creation_config:{sourceText:'owner notes',visualStyle:'3d'}});const restored=publishedLabToLocal({...payload,learner_level:'9',created_at:'2026',updated_at:'2026'});expect(restored).toMatchObject({mode:'algorithm',thumbnail:lab.thumbnail,sourceText:'owner notes',visualStyle:'3d'});
+  });
+  it('restores an old cloud Lab with optional metadata omitted',()=>{const lab=publishedLabToLocal({id:'old',user_id:'owner',title:'Old',subject:'other',learner_level:'',program_html:'<main>Old</main>',allow_external_resources:false,created_at:'2026',updated_at:'2026'});expect(lab.mode).toBe('freeform');expect(lab.viewerConfig?.presentation).toBe('auto');expect(lab.request).toBe('');});
+  it('serializes writes and deletion so an older save cannot recreate a deleted Lab',async()=>{
+    let release!:()=>void;mocks.single.mockImplementationOnce(()=>new Promise(resolve=>{release=()=>resolve({data:{id:'lab'},error:null});}));const lab={...emptyLabEditor(),id:'ordered',title:'Ordered',programHtml:'<main>One</main>'};const first=publishLab(lab,'owner');const second=publishLab({...lab,programHtml:'<main>Two</main>'},'owner');const removed=deletePublishedLab(lab.id,'owner');await vi.waitFor(()=>expect(mocks.single).toHaveBeenCalledTimes(1));expect(mocks.remove).not.toHaveBeenCalled();release();await Promise.all([first,second,removed]);expect(mocks.upsert.mock.calls.map(call=>call[0].program_html)).toEqual(['<main>One</main>','<main>Two</main>']);expect(mocks.remove).toHaveBeenCalledOnce();
+  });
+  it('reports the required migration and keeps failed queues usable',async()=>{mocks.single.mockResolvedValueOnce({data:null,error:{code:'42703',message:'column lab_mode does not exist'}});const lab={...emptyLabEditor(),id:'missing',title:'Missing',programHtml:'<main>Lab</main>'};await expect(publishLab(lab,'owner')).rejects.toThrow('0032_v5_20_0_lab_library.sql');await expect(publishLab(lab,'owner')).resolves.toEqual({id:'lab'});await expect(listPublishedLabProjects('owner')).resolves.toEqual([]);});
+});

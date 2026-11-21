@@ -160,3 +160,10 @@ export async function canvasMediaEnabled(client: SupabaseClient, id: string, sig
   if (error) throw error;
   return data === true;
 }
+
+export async function reserveCanvasMediaDraft(client: SupabaseClient, id: string, signal: AbortSignal) {
+  const { data, error } = await client.rpc("canvas_media_reserve_draft", { p_project_id: id }).abortSignal(signal);
+  if (error?.code === "PGRST202") throw new Error("Cần áp dụng migration 0034 trước khi bật đồng bộ ảnh cho tất cả canvas.");
+  if (error) throw error;
+  return data === true;
+}

@@ -1,10 +1,23 @@
+import { rememberCanvasForSignIn } from "./canvasLinks";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim()
   || (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
+const authUserEndpoint = url?.replace(/\/+$/, "") + "/auth/v1/user";
+
+function fetchWithAuthDeadline(input: RequestInfo | URL, init?: RequestInit) {
+  // getUser() does not accept a signal. Bound only its network read: login,
+  // token refresh, writes and Storage keep their own time limits.
+  if (input === authUserEndpoint && init?.method?.toUpperCase() === "GET" && !init.signal) {
+    return fetch(input, { ...init, signal: requestTimeoutSignal(8_000) });
+  }
+  return fetch(input, init);
+}
+
 export const supabase: SupabaseClient | null = url && anonKey ? createClient(url, anonKey, {
+  global: { fetch: fetchWithAuthDeadline },
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 }) : null;
 export const isSupabaseConfigured = Boolean(supabase);
@@ -52,6 +65,7 @@ export async function signInWithGoogle() {
   if (connectionInvite) {
     try { localStorage.setItem("mindcanvas:pending-connection-invite", connectionInvite); } catch {}
   }
+  rememberCanvasForSignIn();
   const redirectTo = window.location.origin;
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } });
 }

@@ -12,7 +12,7 @@ export function learningTabFromUrl(): HubTab | null {
 }
 export function learningUrl(tab: HubTab | null) {
   const url = new URL(window.location.href);
-  if (tab) url.searchParams.set("learn", tab); else url.searchParams.delete("learn");
+  if (tab) { url.searchParams.set("learn", tab); url.searchParams.delete("canvas"); } else url.searchParams.delete("learn");
   return `${url.pathname}${url.search}${url.hash}`;
 }
 export function enterLearningSpace(tab: HubTab = "overview") {

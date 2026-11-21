@@ -3,7 +3,7 @@ import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { ArrowLeft, CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { ArrowLeft, CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, Link2, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
 import Dialog from "./components/Dialog";
 import FloatingTimer from "./components/FloatingTimer";
@@ -21,6 +21,8 @@ import { acceptLearning } from "./lib/learningShare";
 import { respondConnectionInvitation } from "./lib/connections";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { useCanvasLinks } from "./hooks/useCanvasLinks";
+import { canvasPermalink } from "./lib/canvasLinks";
 import { usePwaInstall } from "./lib/pwa";
 import { isToolbarPosition, TOOLBAR_POSITIONS, type ToolbarPosition } from "./lib/editorPreferences";
 import { readToolbarToolVisibility, saveToolbarToolVisibility } from "./lib/toolbarPreferences";
@@ -117,14 +119,6 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{ tab: "connections" | "shared" | "classrooms"; peerId?: string; classId?: string; nonce: number } | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(() => learningTabFromUrl() ? "__learning" : null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
-  useEffect(() => {
-    const restore = () => {
-      const learning = learningTabFromUrl();
-      if (learning && !["__learning", "__flashcards", "__lab"].includes(filter ?? "")) { void ws.home(); setFilter("__learning"); setRecent(false); setNotificationDestination(null); }
-      else if (!learning && ["__learning", "__flashcards", "__lab"].includes(filter ?? "")) { setFilter(null); setRecent(false); }
-    };
-    window.addEventListener("popstate", restore); return () => window.removeEventListener("popstate", restore);
-  }, [filter]);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
   const [petVisible, setPetVisible] = useState(() => { try { return localStorage.getItem("mindcanvas:pet-visible") !== "false"; } catch { return true; } });
@@ -171,6 +165,30 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const [manualGuideId, setManualGuideId] = useState<string | null>(null);
   const [guideProgress, setGuideProgress] = useState(() => readGuideProgress(user?.id ?? null));
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
+  const [copiedCanvas, setCopiedCanvas] = useState<{ id: string; ok: boolean } | null>(null);
+  const canvasLinks = useCanvasLinks({
+    authenticated: !!user,
+    blockedByInvite: inviteState === "waiting" || inviteState === "accepting" ||
+      (!!learningInvite && learningInviteState === "waiting") || (!!connectionInvite && connectionInviteState === "waiting"),
+    activeId: ws.board?.id ?? null,
+    loading: ws.loading,
+    projects: ws.projects,
+    open: ws.open,
+    home: ws.home,
+    resetView: canvas => {
+      const learning = !canvas && learningTabFromUrl();
+      if (learning && ["__learning", "__flashcards", "__lab"].includes(filter ?? "") && !ws.board) return;
+      setFilter(learning ? "__learning" : null); setRecent(false); setNotificationDestination(null);
+      setMobileProjectMenuOpen(false); setCanvasFullscreen(false); setModal(null);
+    },
+  });
+  const copyCanvasLink = async () => {
+    const id = ws.board?.id; if (!id) return;
+    try {
+      await navigator.clipboard.writeText(canvasPermalink(id));
+      setCopiedCanvas({ id, ok: true });
+    } catch { setCopiedCanvas({ id, ok: false }); }
+  };
   const fileInput = useRef<HTMLInputElement>(null);
   // Sync conflicts are reported in the small save badge and Sync Center.
   // They must not open a full-width banner after every autosave.
@@ -187,6 +205,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     catch (err) { ws.setError(errorMessage(err, "Không thể lưu tài liệu vào thư viện.")); return undefined; }
   };
   const home = () => {
+    canvasLinks.leaveUnopenedLink();
     leaveLearningSpace();
     setMobileProjectMenuOpen(false);
     setAiPanelMode("closed");
@@ -355,7 +374,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
   };
-  const openView = (view: SidebarView) => { if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview"); else leaveLearningSpace(); void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
+  const openView = (view: SidebarView) => { canvasLinks.leaveUnopenedLink(); if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview"); else leaveLearningSpace(); void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
   const openNotification = (item: ActivityNotification) => {
     void ws.home(); setRecent(false);
     if (item.target === "workspace") { setFilter(null); setNotificationDestination(null); return; }
@@ -453,6 +472,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       {pwa.updateReady && <div className="update-banner" role="status"><span>{t("updateReady")}</span><button onClick={pwa.applyUpdate}>{t("updateNow")}</button></div>}
       {ws.conflict && <AutoResolveCloudConflict conflict={ws.conflict} onResolve={() => ws.resolveConflict("cloud", t("copySuffix"))}/>}
       {message && <div className="error-banner" role="alert"><span>{t("error")}: {message}</span><button onClick={() => { ws.setError(""); onClearAuthError(); if (ws.conflict) void ws.resolveConflict("cloud", t("copySuffix")); else void ws.flush().then(saved => { if (saved) void ws.refresh(); }); }}>{t("retry")}</button>{!ws.conflict && <button aria-label={t("close")} onClick={() => { ws.setError(""); onClearAuthError(); }}><X size={16}/></button>}</div>}
+      {canvasLinks.guestCanvasLink && !ws.board && <div className="invite-banner" role="status"><span>{t(isSupabaseConfigured ? "canvasLinkSignIn" : "canvasLinkUnavailable")}</span>{isSupabaseConfigured && <button className="primary-button" onClick={() => void auth()}>{t("login")}</button>}</div>}
       {inviteState === "waiting" && <div className="invite-banner" role="status"><span><strong>{t("invitePendingTitle")}</strong><small>{t("invitePendingHint")}</small></span><button className="primary-button" onClick={() => void auth()}>{t("login")}</button></div>}
       {learningInvite && !user && <div className="invite-banner" role="status"><span><strong>Lời mời học liệu</strong><small>Đăng nhập bằng email được mời để nhận quyền học.</small></span><button className="primary-button" onClick={() => void auth()}>Đăng nhập</button></div>}
       {learningInvite && learningInviteState === "accepted" && <div className="invite-banner success" role="status">Đã nhận học liệu. Mở mục “Được chia sẻ với tôi” trong Không gian học tập.</div>}
@@ -466,8 +486,9 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       <Suspense fallback={<RouteLoading/>}>{modal === "share" && ws.board ? <ShareDialog projectId={ws.board.id} title={ws.board.title} isAuthenticated={!!user} onSignIn={isSupabaseConfigured ? () => void auth() : undefined} onClose={() => setModal(null)}/> : ws.board ? <>
         <div className="editor-heading canvas-editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} disabled={readOnly} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
           {!readOnly && <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>}
-          {ws.projects.find(project => project.id === ws.board!.id)?.accessRole === "owner" && <button className="secondary-button" onClick={() => setModal("share")}><Share2 size={17}/>{t("shareProject")}</button>}<button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
+          {ws.projects.find(project => project.id === ws.board!.id)?.accessRole === "owner" && <button className="secondary-button" onClick={() => setModal("share")}><Share2 size={17}/>{t("shareProject")}</button>}<button type="button" className="secondary-button" title={t(!user || currentProject?.revision === undefined ? "canvasLinkLocalHint" : "copyCanvasLink")} onClick={() => void copyCanvasLink()}><Link2 size={17}/>{t(copiedCanvas?.id === ws.board.id && copiedCanvas.ok ? "shareCopied" : "copyCanvasLink")}</button><button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button>
           {!readOnly && <button className="primary-button" onClick={() => setAiPanelMode("open")}><Sparkles size={17}/>{t("ai")}</button>}</div></div>
+        {copiedCanvas?.id === ws.board.id && <div className="shared-readonly-banner" role="status">{t(copiedCanvas.ok ? (!user || currentProject?.revision === undefined ? "canvasLinkLocalHint" : "canvasLinkCopied") : "canvasLinkCopyFallback")}</div>}
         {readOnly && <div className="shared-readonly-banner">{currentProject?.cloudOffline ? t("sharedOffline") : t("viewerProject")}</div>}
         {mobileProjectMenuOpen && <div className="mobile-project-sheet-backdrop" role="presentation" onClick={() => setMobileProjectMenuOpen(false)}><aside className="mobile-project-sheet" role="dialog" aria-modal="true" aria-label={t("projectActions")} onClick={event => event.stopPropagation()}>
           <header><div><strong>{ws.board.title}</strong><small>{t(ws.status)}</small></div><button type="button" className="icon-button" aria-label={t("close")} onClick={() => setMobileProjectMenuOpen(false)}><X size={20}/></button></header>
@@ -478,6 +499,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
             {iosDevice && !readOnly && <button type="button" disabled={working} onClick={() => { setWorking(true); void ws.flush(ws.board?.id).finally(() => { setWorking(false); setMobileProjectMenuOpen(false); }); }}><Save size={19}/><span>{working ? t("saving") : t("save")}</span></button>}
             {!readOnly && <button type="button" onClick={() => { setMobileProjectMenuOpen(false); setModal("versions"); void ws.loadVersions(); }}><History size={19}/><span>{t("versionHistory")}</span></button>}
             {!readOnly && <button type="button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setMobileProjectMenuOpen(false); setModal("move"); }}><FolderPlus size={19}/><span>{t("move")}</span></button>}
+            <button type="button" onClick={() => { void copyCanvasLink(); setMobileProjectMenuOpen(false); }}><Link2 size={19}/><span>{t("copyCanvasLink")}</span></button>
             {mobileShareVisible && <button type="button" onClick={() => { setMobileProjectMenuOpen(false); setModal("share"); }}><Share2 size={19}/><span>{t("shareProject")}</span></button>}
             <button type="button" onClick={() => { exportBoard(ws.board!); setMobileProjectMenuOpen(false); }}><Download size={19}/><span>{t("export")}</span></button>
             <button type="button" onClick={() => { exportCanvasSvgFile(ws.board!); setMobileProjectMenuOpen(false); }}><Download size={19}/><span>{t("exportSvg")}</span></button>

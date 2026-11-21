@@ -24,6 +24,45 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); await waitForProjectCache(null); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace UI", () => {
+  it("opens a bookmarked canvas, copies its URL, and restores it on browser Back", async () => {
+    const board = blankBoard("Bookmarked canvas");
+    cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
+    const link = `/?canvas=${board.id}`;
+    window.history.replaceState(null, "", link);
+    const writeText = vi.fn(async () => {});
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    try {
+      await import("./components/CanvasBoard");
+      await act(async () => root.render(<App/>));
+      await waitForUI(() => expect(host.querySelector(".canvas-open-mode")).not.toBeNull());
+      const copy = [...host.querySelectorAll<HTMLButtonElement>(".canvas-editor-heading button")].find(button => button.textContent === "Sao chép link canvas");
+      expect(copy).toBeTruthy();
+      await act(async () => copy?.click());
+      expect(writeText).toHaveBeenCalledWith(new URL(link, window.location.origin).toString());
+      await act(async () => (host.querySelector(".brand") as HTMLButtonElement).click());
+      await waitForUI(() => expect(window.location.search).toBe(""));
+      await act(async () => window.history.back());
+      await waitForUI(() => {
+        expect(window.location.search).toBe(`?canvas=${board.id}`);
+        expect(host.querySelector(".canvas-open-mode")).not.toBeNull();
+      });
+      await act(async () => window.history.forward());
+      await waitForUI(() => expect(host.querySelector(".canvas-open-mode")).toBeNull());
+      await act(async () => (host.querySelector(".project-open") as HTMLButtonElement).click());
+      await waitForUI(() => expect(window.location.search).toBe(`?canvas=${board.id}`));
+    } finally {
+      if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+      else Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
+  it("does not open an unavailable local canvas from a URL", async () => {
+    window.history.replaceState(null, "", "/?canvas=3f710a1f-840c-4e5e-97f4-ad50c1d69501");
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.textContent).toContain("Canvas này không có trên thiết bị hiện tại."));
+    expect(host.querySelector(".canvas-open-mode")).toBeNull();
+  });
   it("starts new users at 280px and keeps workspace shortcuts collapsed", async () => {
     await act(async () => root.render(<App/>));
     expect(localStorage.getItem("mindcanvas:sidebar-width")).toBe("280");

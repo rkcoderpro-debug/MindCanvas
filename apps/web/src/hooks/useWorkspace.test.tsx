@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorkspace } from "./useWorkspace";
 import * as store from "../lib/projectStore";
+import { WorkspaceAuthUnavailableError } from "../lib/authSession";
 import { arrangeMindMapMultiSided, blankBoard } from "../lib/board";
 import { rotateMindMapSubtree } from "../lib/editorCommands";
 import CanvasBoard from "../components/CanvasBoard";
@@ -216,6 +217,22 @@ describe("Workspace lifecycle", () => {
     expect(api.status).toBe("saved");
     expect(api.error).toBe("");
   });
+  it("keeps a pending canvas through an Auth outage and clears the notice after save succeeds", async () => {
+    const project = ownedProject("Draft with auth outage", true);
+    store.cacheProject("A", project);
+    vi.spyOn(store, "fetchProjects").mockResolvedValue([project]);
+    vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
+    const save = vi.spyOn(store, "persistProject").mockRejectedValueOnce(new WorkspaceAuthUnavailableError(525));
+    await act(async () => root.render(<Harness owner="A"/>));
+    await act(async () => api.open(project));
+    expect(api.error).toContain("tạm thời không xác thực");
+    expect(api.error).not.toContain("đăng nhập lại");
+    expect(store.readCache("A").find(item => item.id === project.id)?.pending).toBe(true);
+    save.mockResolvedValue(persisted(project, 20));
+    await act(async () => api.flush(project.id));
+    expect(api.status).toBe("saved");
+    expect(api.error).toBe("");
+  });
   it("opens an online canvas even if a different canvas is still saving", async () => {
     const original = ownedProject("Original", true);
     const target = ownedProject("Target");
@@ -353,7 +370,7 @@ describe("Workspace lifecycle", () => {
     vi.spyOn(store, "fetchFolders").mockResolvedValue([]);
     vi.spyOn(store, "fetchProjectSnapshot").mockImplementation(async (_owner, id) => id === slow.id ? delayed : fast);
     await act(async () => root.render(<Harness owner="A"/>));
-    let opening!: Promise<void>;
+    let opening!: ReturnType<typeof api.open>;
     await act(async () => { opening = api.open(slow); });
     await act(async () => api.open(fast));
     await act(async () => { finishRead(slow); await opening; });

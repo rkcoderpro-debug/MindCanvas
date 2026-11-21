@@ -1,0 +1,150 @@
+{
+  "version": "5.27.3",
+  "baseVersions": [
+    "5.27.1",
+    "5.27.2"
+  ],
+  "extractionRoot": "Project root containing package.json, apps/, packages/ and supabase/",
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 1304,
+      "sha256": "6a6ce3e08969a004809f5f220db2a57fc81204cb259838aada4fca19de260230"
+    },
+    {
+      "path": "QA_V5.27.2.md",
+      "bytes": 863,
+      "sha256": "6b2ba836d727eb6a871f2c61a21d587cc27cb008fb2815dd53d22f43ea745e90"
+    },
+    {
+      "path": "QA_V5.27.3.md",
+      "bytes": 1292,
+      "sha256": "6165abc21b9ea8f069831a344165791b249696ff684281d8fa299b071459b1f7"
+    },
+    {
+      "path": "RELEASE_V5.27.2.md",
+      "bytes": 2569,
+      "sha256": "09b2103effd6565009e03ccd1de4c0ed695a7d7b83b8217f66c205e268113d4f"
+    },
+    {
+      "path": "RELEASE_V5.27.3.md",
+      "bytes": 3864,
+      "sha256": "d231d0adcb1fefd7d50679e91e1649e2d2e6970b75edb46800dd36025855fd8f"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "d73a040125d008c82584f62951b186138aab569de980a42c94a38a621d01a616"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "2bd1dcd43fd9b355696d922e569f15837fdf2c3ee5d8c829da592d3ec78127a0"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 32933,
+      "sha256": "2e35167b3678b587049d313e71b3b6bb3ff19cb0c9efaae91719bd7a03ba09a9"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 59422,
+      "sha256": "10766683da28ff74de007ad713d2a4abf5abb4abd3b300a3d977f0ced0be4c5a"
+    },
+    {
+      "path": "apps/web/src/hooks/useCanvasLinks.ts",
+      "bytes": 3453,
+      "sha256": "1426c13d1f2f457128f40a588403344e6d79727f869bad908fda60d0317649f8"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.test.tsx",
+      "bytes": 42702,
+      "sha256": "f1a113c9f5c3fe157be27a86d8c405c5f947443eefe25185f96f444a2ae90493"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "bytes": 56400,
+      "sha256": "66c5911616e62d89529398dbd59b4d6b021a8277fda5ead1536dff345f974dd7"
+    },
+    {
+      "path": "apps/web/src/lib/authSession.test.ts",
+      "bytes": 5847,
+      "sha256": "45a579d167068143576f64abb5f92ef6144e415f8fd8e155211baa51038e6182"
+    },
+    {
+      "path": "apps/web/src/lib/authSession.ts",
+      "bytes": 4952,
+      "sha256": "6301dfb94534c922b3ac11c8701bed8f909d77eb7a59e85eeb35087f9ff7b82d"
+    },
+    {
+      "path": "apps/web/src/lib/canvasCloudMedia.test.ts",
+      "bytes": 8943,
+      "sha256": "e730425474b28d3b8f70be5d4b1570d34600d293162242b6ab71f3771ec6ee5c"
+    },
+    {
+      "path": "apps/web/src/lib/canvasCloudMedia.ts",
+      "bytes": 9105,
+      "sha256": "4718181d42126e25884e815075ed8306589faaf45ff9274c29fcd69141844564"
+    },
+    {
+      "path": "apps/web/src/lib/canvasLinks.test.ts",
+      "bytes": 1267,
+      "sha256": "e749a62df2796aa984a5d2f8498f89073d8775466c8b1457d462e056ecab3fb0"
+    },
+    {
+      "path": "apps/web/src/lib/canvasLinks.ts",
+      "bytes": 2253,
+      "sha256": "44b7f29c721cdee518a77f20ce84da947f2d60b55b64b63230a09d33e8dd66df"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "bytes": 118009,
+      "sha256": "cf18dc825f663a10f61c446f6673006a231d32e1d487ae6300ff61a79f73e3d0"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 6744,
+      "sha256": "92b366e2b5ee2c3602923008d8229a11b6ab1ada1c756e66202612685284618d"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "bytes": 78112,
+      "sha256": "ec9e18021d6f756e0a21024e43c3149cd07b780d54f784ec1ccd2874f9800548"
+    },
+    {
+      "path": "apps/web/src/lib/supabase.ts",
+      "bytes": 11996,
+      "sha256": "14d91ddd625244e010a3331bd3e1a382c24ef310ec940061df52640c4c5178ca"
+    },
+    {
+      "path": "apps/web/src/lib/supabaseConfig.test.ts",
+      "bytes": 2945,
+      "sha256": "80842712d0889339e6cc2634f1b3ad5954aecf3200c985c293f368a1b2c56d9c"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "9a50225a6319ae495e005fdf3bea6bdd2049f721ed587b9356d6105aa22d373f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "e9e3b7835992c16c806dfa0f514ed68330ce18e7b43ba6cb286321ab2561a3c7"
+    },
+    {
+      "path": "supabase/migrations/0033_canvas_media_pilot.sql",
+      "bytes": 6659,
+      "sha256": "8419e0997b41a4bcafc2c8511e35610c6f58b01654ca41443e416200965b180e"
+    },
+    {
+      "path": "supabase/migrations/0034_canvas_media_rollout.sql",
+      "bytes": 13474,
+      "sha256": "ac51c1c9d290dc850191946ac04a2ec0faeab4e21d96c486de35cbacd91780c1"
+    },
+    {
+      "path": "supabase/tests/canvas-media-pilot.pglite.mjs",
+      "bytes": 10975,
+      "sha256": "962793502baf522045135d97a6725c1d496e25771a7d7138dc4d35ceea21c9af"
+    }
+  ]
+}
