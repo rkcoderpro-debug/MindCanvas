@@ -1,0 +1,52 @@
+{
+  "version": "5.27.6",
+  "baseVersion": "5.27.5",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.27.6.md",
+      "bytes": 1099,
+      "sha256": "11025d20c2482804785b31410a7fd8081be152ce5f1187b444302a2c1374ef18"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "760d28e6f1f54e27c1f90415886b54404a92a4d52f55a6d350282a632ab7caf4"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "bd4be2114d06d3efc006d90114542d13685eca4ce69a9a1aced0dabf1f9f837c"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.test.tsx",
+      "bytes": 59265,
+      "sha256": "18e39b6320007e1d302c27bbb68ac5ac7d0588f5068b2079cfcac8e7c0fb5de7"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.test.tsx",
+      "bytes": 43777,
+      "sha256": "61aa4db2a964a9e8ef1704da5dcd04df70aaee71d756c517d30f7f233a394129"
+    },
+    {
+      "path": "apps/web/src/lib/liveInk.test.ts",
+      "bytes": 3376,
+      "sha256": "5c469f987dba0f1d44534666a16ee38a5af6bf630584e2d19ee633497cb72915"
+    },
+    {
+      "path": "apps/web/src/lib/liveInk.ts",
+      "bytes": 6207,
+      "sha256": "202135f4b7efa23203675c278157087a845b5161132e8b8495409f4d201ed002"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "0aee4d9b4f44b1399cf5cb287844523823fd4c446e8366269a4a2bb9ccd634d6"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "cae627908c1362b3c0a8cbda0c600e0671a182717a43c08f55326bf230956896"
+    }
+  ]
+}

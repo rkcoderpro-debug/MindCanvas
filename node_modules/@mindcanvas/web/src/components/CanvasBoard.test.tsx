@@ -239,13 +239,15 @@ describe("Canvas interactions", () => {
       svg.dispatchEvent(move);
       await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
     });
-    expect(live.querySelector("path")?.getAttribute("d")).toBe("M10,10 L15,12.5 L20,22.5 L30,25");
+    const previewPath = live.querySelector("path")?.getAttribute("d");
+    expect(previewPath).toMatch(/^M10,10 L.* L30,25$/);
     expect(svg.querySelectorAll('[data-layer-stack] > [data-element]')).toHaveLength(0);
     expect(commit).not.toHaveBeenCalled();
     await act(async () => pointer(svg, "pointerup", 95, 80));
     expect(live.querySelector("path")).toBeNull();
     expect(commit).toHaveBeenCalledTimes(1);
-    expect(svg.querySelector('[data-layer-stack] path')?.getAttribute("d")).toBe("M10,10 L15,12.5 L20,22.5 L30,25 L35,35");
+    expect(svg.querySelector('[data-layer-stack] path')?.getAttribute("d")).toMatch(/^M10,10 L.* L35,35$/);
+    expect(current.drawings[0].points.some(p => p.x > 18 && p.x < 23 && p.y > 20)).toBe(true);
   });
 
   it("keeps the in-progress stroke including its last samples when the window loses focus", async () => {

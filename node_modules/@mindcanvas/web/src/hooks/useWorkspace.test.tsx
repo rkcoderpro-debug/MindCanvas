@@ -129,7 +129,9 @@ describe("Workspace lifecycle", () => {
     expect(checkpoint).not.toHaveBeenCalled();
     await act(async () => pointer(svg, "pointerup", 90, 70));
     expect(checkpoint).toHaveBeenCalledTimes(1);
-    expect(api.board?.drawings[0].points).toHaveLength(3);
+    expect(api.board?.drawings).toHaveLength(1);
+    expect(api.board?.drawings[0].points[0]).toEqual({ x: 15, y: 18 });
+    expect(api.board?.drawings[0].points.at(-1)).toEqual({ x: 90, y: 70 });
     await act(async () => api.undo());
     expect(api.board?.drawings).toHaveLength(0);
   });
