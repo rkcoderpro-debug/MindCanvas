@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createQuizTest, type QuizAttempt, type QuizQuestion, type QuizTest } from "../lib/quiz";
-import { deleteQuizTest, fetchQuizAttempts, fetchQuizTests, recordQuizAttempt, upsertQuizTest } from "../lib/quizStore";
+import { deleteQuizTest, fetchQuizAttempts, fetchQuizTests, recordQuizAttempt, saveQuizStudio, upsertQuizTest } from "../lib/quizStore";
 import { listMyLearningCopySources } from "../lib/learningShare";
 
 export function useQuizzes(owner: string | null) {
@@ -47,6 +47,16 @@ export function useQuizzes(owner: string | null) {
 
   const createQuiz = useCallback(async (input: { title: string; description?: string; questions: QuizQuestion[]; sourceDocumentId?: string | null }) => saveQuiz(createQuizTest(input)), [saveQuiz]);
 
+  const createStudioQuiz = useCallback(async (
+    input: { title: string; description: string; questions: QuizQuestion[] },
+    mode: "manual" | "ai_manual", id: string,
+  ) => {
+    const result = await saveQuizStudio(owner, { ...createQuizTest(input), id }, mode);
+    setQuizzes(items => [result.item, ...items.filter(item => item.id !== result.item.id)]);
+    setSource(result.source);
+    return result.item;
+  }, [owner]);
+
   const removeQuiz = useCallback(async (quiz: QuizTest) => {
     setBusy(true); setError("");
     try {
@@ -67,7 +77,7 @@ export function useQuizzes(owner: string | null) {
     return result.item;
   }, [owner]);
 
-  return { quizzes, attempts, loading, busy, error, setError, source, refresh, saveQuiz, createQuiz, removeQuiz, saveAttempt };
+  return { quizzes, attempts, loading, busy, error, setError, source, refresh, saveQuiz, createQuiz, createStudioQuiz, removeQuiz, saveAttempt };
 }
 
 export type QuizStore = ReturnType<typeof useQuizzes>;

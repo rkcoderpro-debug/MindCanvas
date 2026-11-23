@@ -1,5 +1,5 @@
 import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
-import { createQuizTest, parseQuizResult, type QuizAttempt, type QuizMode, type QuizQuestion, type QuizTest } from "./quiz";
+import { createQuizTest, parseQuizResult, QuizManualUsageLimitError, QuizQuestionLimitError, type QuizAttempt, type QuizMode, type QuizQuestion, type QuizTest } from "./quiz";
 
 type RepositoryResult<T> = { items: T[]; source: "cloud" | "local" };
 type ItemResult<T> = { item: T; source: "cloud" | "local" };
@@ -98,6 +98,28 @@ export async function upsertQuizTest(owner: string | null, quiz: QuizTest): Prom
   const saved = { ...quiz, source: "local" as const };
   cacheTest(owner, saved);
   return { item: saved, source: "local" };
+}
+
+export async function saveQuizStudio(owner: string | null, quiz: QuizTest, mode: "manual" | "ai_manual"): Promise<ItemResult<QuizTest>> {
+  if (!owner) {
+    if (mode !== "manual") throw new Error("Sign in before importing an AI Manual quiz.");
+    return upsertQuizTest(null, quiz);
+  }
+  const client = await clientFor(owner);
+  const { data, error } = await client.rpc("create_quiz_studio", {
+    p_quiz_id: quiz.id, p_title: quiz.title, p_description: quiz.description,
+    p_questions: quiz.questions, p_mode: mode,
+  }).abortSignal(requestTimeoutSignal(20000));
+  if (error?.code === "MCQ01") {
+    const limit = Number(error.details);
+    if (Number.isSafeInteger(limit) && limit >= 1) throw new QuizQuestionLimitError(quiz.questions.length, limit);
+  }
+  if (error?.code === "P0001" && mode === "ai_manual") throw new QuizManualUsageLimitError();
+  if (error) throw new Error(error.message);
+  const saved = quizFromRow(data, "cloud");
+  if (!saved) throw new Error("Invalid quiz response.");
+  cacheTest(owner, saved);
+  return { item: saved, source: "cloud" };
 }
 
 export async function deleteQuizTest(owner: string | null, quiz: QuizTest) {

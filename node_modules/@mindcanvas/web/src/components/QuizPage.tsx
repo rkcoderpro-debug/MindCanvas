@@ -1,70 +1,30 @@
-import ContentLanguageField, { useContentLanguage } from "./ContentLanguageField";
 import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Award, Check, CheckCircle2, ClipboardList, FileUp, Play, RotateCcw, Trash2, X } from "lucide-react";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
-import { consumeAiManualUsage, generateQuizFromFile, type GeneratedQuizFromFile } from "../lib/api";
-import { aiErrorMessage } from "../lib/aiErrors";
-import { MAX_FILE_BYTES } from "../lib/board";
-import { allowsQuizNavigation, buildQuizPrompt, formatQuizPercent, parseManualQuiz, prepareQuizQuestions, QuizQuestionLimitError, QuizValidationError, scoreQuiz, type QuizMode, type QuizOrder, type QuizQuestion, type QuizTest } from "../lib/quiz";
+import { allowsQuizNavigation, formatQuizPercent, prepareQuizQuestions, scoreQuiz, type QuizMode, type QuizOrder, type QuizQuestion, type QuizTest } from "../lib/quiz";
 import { formatTimerTime } from "../lib/timer";
 import type { QuizStore } from "../hooks/useQuizzes";
-import { AiModeSwitch, type AiMode } from "./AiModeSwitch";
-import AiQualityControls from "./AiQualityControls";
-import Dialog from "./Dialog";
-import { writeClipboardText } from "../lib/aiSource";
-import { saveDocumentToStorage } from "../lib/supabase";
-import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
-import ManualAiProviderLinks from "./ManualAiProviderLinks";
 import { LearningShareButton } from "./LearningShareDialog";
 import { ActivityViewport, BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
-import FormulaText, { splitFormulaText } from "./FormulaText";
+import FormulaText from "./FormulaText";
+import QuizCreateDialog from "./QuizCreateDialog";
 
-type QuizDraft = { title: string; description: string; questions: QuizQuestion[]; provider: string; model: string; sourceDocumentId?: string | null };
 type AnswerReveal = "instant" | "submit";
-
-function parseQuestionCount(raw: string, max: number): { value: number | null; error: "required" | "integer" | "minimum" | "maximum" | null } {
-  const text = raw.trim();
-  if (!text) return { value: null, error: "required" };
-  if (!/^\d+$/.test(text)) return { value: null, error: "integer" };
-  const value = Number(text);
-  if (!Number.isSafeInteger(value)) return { value: null, error: "maximum" };
-  if (value < 3) return { value: null, error: "minimum" };
-  if (value > max) return { value: null, error: "maximum" };
-  return { value, error: null };
-}
-
-function draftFrom(value: { title: string; description: string; questions: Array<{ id?: string; prompt: string; options: [string, string, string, string]; correctIndex: 0 | 1 | 2 | 3; explanation: string; sourcePage?: number | null; topic?: string }>; provider: string; model: string; sourceDocumentId?: string | null }) {
-  return { title: value.title, description: value.description, questions: value.questions.map((question, index) => ({ ...question, id: question.id || `question-${index + 1}-${crypto.randomUUID()}`, sourcePage: question.sourcePage ?? null })), provider: value.provider, model: value.model, sourceDocumentId: value.sourceDocumentId } satisfies QuizDraft;
-}
 
 function modeLabel(t: ReturnType<typeof useLanguage>["t"], mode: QuizMode) {
   return mode === "learn" ? t("quizModeLearn") : mode === "practice" ? t("quizModePractice") : mode === "exam" ? t("quizModeExam") : t("quizModeReview");
 }
 
-function FormulaPreview({ text }: { text: string }) {
-  return splitFormulaText(text).some(part => part.kind === "math") ? <div className="quiz-formula-preview"><FormulaText text={text}/></div> : null;
-}
-
 export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }: { owner: string | null; store: QuizStore; accountPlan?: AccountPlan; onQuizCompleted?: (quizId: string) => Promise<void> }) {
   const { t, language } = useLanguage();
-  const [outputLanguage, setOutputLanguage] = useContentLanguage("quiz");
   const navigation = useLearningTool();
-  const listScroll = useListScrollReturn(), learningActive = useLearningActive(), quizSourceFormId = useId();
+  const listScroll = useListScrollReturn(), learningActive = useLearningActive();
   const [sessionVisible, setSessionVisible] = useState(false);
   const [dialog, setDialog] = useState(false);
+  const [studioSession, setStudioSession] = useState(0);
   const [quizFilter, setQuizFilter] = useState<"all" | "saved">("all");
-  const [mode, setMode] = useState<AiMode>(owner ? "auto" : "manual");
-  const [file, setFile] = useState<File | null>(null);
-  const [manualText, setManualText] = useState("");
-  const [manualJson, setManualJson] = useState("");
-  const [questionCountDraft, setQuestionCountDraft] = useState(() => String(Math.min(10, Math.max(3, accountPlan?.maxCards ?? 50))));
-  const [questionCountTouched, setQuestionCountTouched] = useState(false);
-  const [aiOptions, setAiOptions] = useState<AiGenerationOptions>(DEFAULT_AI_OPTIONS);
-  const [manualUsageConsumed, setManualUsageConsumed] = useState(false);
-  const [manualCopied, setManualCopied] = useState(false);
-  const [draft, setDraft] = useState<QuizDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [activeQuiz, setActiveQuiz] = useState<QuizTest | null>(null);
@@ -82,67 +42,9 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
   const [examEndsAt, setExamEndsAt] = useState(0);
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const activityFocus = useActivityFocus(learningActive && sessionVisible);
-  const controller = useRef<AbortController | null>(null);
   const answersRef = useRef<Array<number | null>>([]);
   const examSubmittingRef = useRef(false);
   const submitQuizRef = useRef<() => Promise<void>>(async () => undefined);
-  const maxAllowedQuestions = Math.min(100, Math.max(3, accountPlan?.maxCards ?? 50));
-  const questionCount = parseQuestionCount(questionCountDraft, maxAllowedQuestions);
-  const questionCountError = questionCount.error && (questionCountTouched || questionCountDraft.trim())
-    ? t(({ required: "quizQuestionCountRequired", integer: "quizQuestionCountInteger", minimum: "quizQuestionCountMinimum", maximum: "quizQuestionCountMaximum" } as const)[questionCount.error], { max: maxAllowedQuestions })
-    : "";
-  const manualPrompt = useMemo(() => questionCount.value === null ? "" : buildQuizPrompt({ text: manualText || undefined, fileName: file?.name, maxQuestions: questionCount.value, language: outputLanguage, options: aiOptions }), [aiOptions, file?.name, outputLanguage, manualText, questionCount.value]);
-
-  useEffect(() => () => controller.current?.abort(), []);
-
-  const closeDialog = () => { if (busy && !controller.current) return; controller.current?.abort(); controller.current = null; setDialog(false); setBusy(false); };
-  const resetDialog = () => { controller.current?.abort(); setDialog(false); setDraft(null); setError(""); setManualJson(""); setManualText(""); setFile(null); setManualCopied(false); setManualUsageConsumed(false); setAiOptions(DEFAULT_AI_OPTIONS); };
-  const openDialog = () => { setDialog(true); };
-  const switchMode = (next: AiMode) => { setMode(next); setDraft(null); setError(""); setManualJson(""); setManualUsageConsumed(false); };
-  const copyPrompt = async () => { if (questionCount.value === null) { setQuestionCountTouched(true); return; } try { await writeClipboardText(manualPrompt); setManualCopied(true); window.setTimeout(() => setManualCopied(false), 2000); } catch { setError(t("clipboardWriteError")); } };
-
-  const generate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (questionCount.value === null) { setQuestionCountTouched(true); return; }
-    if (!file) { setError(t("quizFileRequired")); return; }
-    if (file.size > MAX_FILE_BYTES) { setError(t("fileTooLarge")); return; }
-    if (!owner) { setError(t("loginRequired")); return; }
-    setBusy(true); setError("");
-    const request = new AbortController(); controller.current = request;
-    try {
-      const generated = await generateQuizFromFile(file, questionCount.value, request.signal, aiOptions, outputLanguage);
-      if (request.signal.aborted) return;
-      if (generated.provider === "demo" || !generated.questions?.length) throw new Error(t("quizGenerateError"));
-      await saveDocumentToStorage(file, generated.source.id, generated.source.text, generated.source.pageCount);
-      if (request.signal.aborted) return;
-      setDraft(draftFrom({ ...generated, provider: generated.provider, model: generated.model, sourceDocumentId: (generated as GeneratedQuizFromFile).sourceDocumentId }));
-    } catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "quizGenerateError")); }
-    finally { if (controller.current === request) { controller.current = null; setBusy(false); } }
-  };
-
-  const validateManual = async () => {
-    if (questionCount.value === null) { setQuestionCountTouched(true); return; }
-    if (!owner) { setError(t("manualRequiresLogin")); return; }
-    setBusy(true); setError("");
-    try {
-      const parsed = parseManualQuiz(manualJson, questionCount.value);
-      if (!manualUsageConsumed) { await consumeAiManualUsage(); setManualUsageConsumed(true); }
-      setDraft(draftFrom({ ...parsed, provider: "manual", model: "Manual AI" }));
-    } catch (err) {
-      setError(err instanceof QuizQuestionLimitError ? t("quizQuestionLimitExceeded", { count: err.count, max: err.limit }) : err instanceof QuizValidationError ? t("quizInvalidResult") : aiErrorMessage(err, t, "aiManualQuotaError"));
-    } finally { setBusy(false); }
-  };
-
-  const updateQuestion = (index: number, patch: Partial<QuizQuestion>) => setDraft(current => current ? { ...current, questions: current.questions.map((question, questionIndex) => questionIndex === index ? { ...question, ...patch } : question) } : current);
-  const updateOption = (index: number, optionIndex: number, value: string) => setDraft(current => current ? { ...current, questions: current.questions.map((question, questionIndex) => { if (questionIndex !== index) return question; const options = [...question.options] as [string, string, string, string]; options[optionIndex] = value; return { ...question, options }; }) } : current);
-  const applyDraft = async () => {
-    if (!draft) return;
-    setBusy(true); setError("");
-    try { await store.createQuiz({ title: draft.title.trim(), description: draft.description.trim(), questions: draft.questions, sourceDocumentId: draft.sourceDocumentId ?? null }); resetDialog(); }
-    catch (err) { setError(err instanceof Error ? err.message : t("quizSaveError")); }
-    finally { setBusy(false); }
-  };
-
   const startQuiz = (quiz: QuizTest, requestedMode: QuizMode = launchMode, requestedOrder: QuizOrder = launchOrder) => {
     const questions = prepareQuizQuestions(quiz, requestedMode, requestedOrder, store.attempts);
     if (!questions.length) { setError(""); store.setError(t("quizNoReviewQuestions")); return; }
@@ -213,12 +115,7 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
   const visibleQuizzes = store.quizzes.filter(quiz => quizFilter === "all" || !!quiz.savedFrom);
   const savedQuizCount = store.quizzes.filter(quiz => !!quiz.savedFrom).length;
 
-  return <section className="quiz-page"><header className="quiz-heading"><div><span className="eyebrow">QUIZ STUDIO</span><h2>{t("quiz")}</h2><p>{t("quizHint")}</p></div><button className="primary-button" onClick={openDialog}><FileUp size={17}/>{t("createQuiz")}</button></header><div className="learning-copy-filter" aria-label="Lọc Quiz"><button aria-pressed={quizFilter === "all"} onClick={() => setQuizFilter("all")}>Tất cả <small>{store.quizzes.length}</small></button><button aria-pressed={quizFilter === "saved"} onClick={() => setQuizFilter("saved")}>Đã lưu <small>{savedQuizCount}</small></button></div>{store.error && <div className="flashcards-error" role="alert"><span>{store.error}</span><button className="icon-button" onClick={() => store.setError("")}><X size={15}/></button></div>}{store.loading ? <p>{t("loading")}</p> : !store.quizzes.length ? <div className="quiz-empty"><ClipboardList size={44}/><h3>{t("noQuizzes")}</h3><p>{t("noQuizzesHint")}</p></div> : <><section className="quiz-mode-panel"><div><strong>{t("quizHowToStudy")}</strong><small>{launchMode === "review" ? t("quizReviewModeHint") : t("quizModesHint")}</small></div><label>{t("quizMode")}<select value={launchMode} onChange={event => { const next = event.target.value as QuizMode; setLaunchMode(next); setLaunchReveal(next === "learn" || next === "review" ? "instant" : "submit"); }}><option value="learn">{t("quizModeLearn")}</option><option value="practice">{t("quizModePractice")}</option><option value="exam">{t("quizModeExam")}</option><option value="review">{t("quizModeReview")}</option></select></label><label>{t("quizOrder")}<select value={launchOrder} onChange={event => setLaunchOrder(event.target.value as QuizOrder)}><option value="sequential">{t("quizOrderSequential")}</option><option value="random">{t("quizOrderRandom")}</option></select></label><label>{t("quizRevealWhen")}<select value={launchReveal} onChange={event => setLaunchReveal(event.target.value as AnswerReveal)}><option value="instant">{t("quizRevealInstant")}</option><option value="submit">{t("quizRevealSubmit")}</option></select></label></section><div className="quiz-list">{visibleQuizzes.map(quiz => { const attempts = store.attempts.filter(attempt => attempt.quizId === quiz.id); const best = attempts.reduce((value, attempt) => Math.max(value, attempt.total ? Math.round(attempt.score / attempt.total * 100) : 0), 0); return <article className="quiz-test-card" key={quiz.id}><div className="quiz-card-icon"><ClipboardList size={22}/></div><div className="quiz-card-copy"><h3>{quiz.title}</h3><p>{quiz.description || t("quizQuickHint")}</p><small>{quiz.questions.length} {t("quizQuestions").toLocaleLowerCase()} · {attempts.length} {t("quizAttempts").toLocaleLowerCase()}{best ? ` · ${t("bestScore")}: ${best}%` : ""}</small>{quiz.savedFrom && <small className="learning-copy-provenance">Bản lưu từ {quiz.savedFrom.ownerName} · {quiz.savedFrom.title}</small>}</div><div className="quiz-card-actions"><LearningShareButton kind="quiz" id={quiz.id} title={quiz.title} plan={accountPlan} available={!!owner && quiz.source === "cloud"}/><button className="primary-button" onClick={() => startQuiz(quiz)}><Play size={16}/>{launchMode === "review" ? t("reviewQuiz") : t("startQuiz")}</button><button className="icon-button danger" aria-label={`${t("deleteQuiz")}: ${quiz.title}`} onClick={() => void store.removeQuiz(quiz)}><Trash2 size={16}/></button></div></article>; })}{!visibleQuizzes.length && <p className="learning-copy-empty">{quizFilter === "saved" ? "Chưa có Quiz nào được lưu từ mục chia sẻ." : t("noQuizzesHint")}</p>}</div></>}{dialog && <Dialog workspace title={t("createQuiz")} onClose={closeDialog} dismissible={!busy || !!controller.current}
-    footer={<footer className="actions quiz-create-actions">
-      {draft ? <><button type="button" className="secondary-button" disabled={busy} onClick={() => setDraft(null)}>{t("backToSource")}</button><button type="button" className="primary-button" disabled={busy || !draft.questions.length} onClick={() => void applyDraft()}><Check size={16}/>{busy ? t("saving") : t("saveQuiz")}</button></> :
-      mode === "auto" ? <button type="submit" form={quizSourceFormId} className="primary-button" disabled={busy || !file}>{busy ? t("generating") : t("generateQuiz")}</button> :
-      <button type="button" className="primary-button" disabled={busy || !manualJson.trim()} onClick={() => void validateManual()}>{busy ? t("validating") : t("validateResult")}</button>}
-    </footer>}><AiModeSwitch mode={mode} autoAvailable={!!owner} onChange={switchMode}/>{!draft && <ContentLanguageField value={outputLanguage} onChange={setOutputLanguage} disabled={busy}/>}{mode === "auto" ? <form id={quizSourceFormId} className="quiz-create-form" onSubmit={event => void generate(event)}><p>{t("quizAutoHint")}</p><details className="quiz-advanced-settings"><summary>{language === "vi" ? "Độ khó và độ chi tiết" : "Difficulty and detail"}</summary><AiQualityControls options={aiOptions} onChange={setAiOptions}/></details><label className="upload-drop quiz-upload"><span><FileUp size={22}/>{t("quizChooseFile")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} onChange={event => { const next = event.target.files?.[0] ?? null; setFile(next); setError(next && next.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/>{file && <small>{file.name}</small>}</label><label>{t("maxQuestions")}<input type="text" inputMode="numeric" autoComplete="off" value={questionCountDraft} onChange={event => setQuestionCountDraft(event.target.value)} onBlur={() => setQuestionCountTouched(true)} aria-invalid={!!questionCountError} aria-describedby={questionCountError ? "quiz-question-count-error" : undefined}/></label>{questionCountError && <small className="form-error" id="quiz-question-count-error" role="alert">{questionCountError}</small>}{error && <p className="form-error" role="alert">{error}</p>}</form> : !draft ? <div className="quiz-manual-form"><p className="ai-manual-note">{t("quizManualHint")}</p><details className="quiz-advanced-settings"><summary>{language === "vi" ? "Độ khó và độ chi tiết" : "Difficulty and detail"}</summary><AiQualityControls options={aiOptions} onChange={setAiOptions}/></details><label>{t("quizSourceText")}<textarea rows={7} value={manualText} onChange={event => setManualText(event.target.value)} placeholder={t("quizSourcePlaceholder")}/></label><label className="upload-drop"><span><FileUp size={20}/>{t("quizManualFile")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" onChange={event => setFile(event.target.files?.[0] ?? null)}/>{file && <small>{file.name}</small>}</label><label>{t("maxQuestions")}<input type="text" inputMode="numeric" autoComplete="off" value={questionCountDraft} onChange={event => setQuestionCountDraft(event.target.value)} onBlur={() => setQuestionCountTouched(true)} aria-invalid={!!questionCountError} aria-describedby={questionCountError ? "quiz-question-count-error" : undefined}/></label>{questionCountError && <small className="form-error" id="quiz-question-count-error" role="alert">{questionCountError}</small>}<label><span>{t("aiManualPrompt")}</span><textarea readOnly rows={8} value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void copyPrompt()}><ClipboardList size={15}/>{manualCopied ? t("copiedPrompt") : t("copyPrompt")}</button><ManualAiProviderLinks onBlocked={() => setError(t("popupBlocked"))}/></div><label><span>{t("aiManualJsonLabel")}</span><textarea rows={8} value={manualJson} onChange={event => setManualJson(event.target.value)} placeholder={t("quizJsonPlaceholder")}/></label>{error && <p className="form-error" role="alert">{error}</p>}</div> : <div className="quiz-preview-form"><div className="quiz-preview-heading"><div><span className="eyebrow">{draft.provider}</span><h3>{t("quizPreview")}</h3><small>{draft.model}</small></div><strong>{draft.questions.length} {t("quizQuestions").toLocaleLowerCase()}</strong></div><label>{t("quizTitle")}<input value={draft.title} onChange={event => setDraft(current => current ? { ...current, title: event.target.value } : current)}/></label><label>{t("quizDescription")}<textarea rows={2} value={draft.description} onChange={event => setDraft(current => current ? { ...current, description: event.target.value } : current)}/></label><p className="quiz-formula-help">{"Công thức: $x^2$, $$\\frac{a}{b}$$, hóa học: $\\ce{H2O}$. Trong JSON, viết \\ thành \\\\."}</p><div className="quiz-preview-list">{draft.questions.map((question, index) => <article className="quiz-preview-question" key={question.id}><div className="quiz-preview-question-header"><strong>#{index + 1}</strong><button className="icon-button danger" type="button" onClick={() => setDraft(current => current ? { ...current, questions: current.questions.filter((_, questionIndex) => questionIndex !== index) } : current)}><Trash2 size={14}/></button></div><label>{t("questionSide")}<textarea rows={2} value={question.prompt} onChange={event => updateQuestion(index, { prompt: event.target.value })}/></label><FormulaPreview text={question.prompt}/><div className="quiz-option-editor">{question.options.map((option, optionIndex) => <div className="quiz-option-draft" key={optionIndex}><label><span className="quiz-option-badge">{String.fromCharCode(65 + optionIndex)}</span><textarea rows={1} aria-label={String.fromCharCode(65 + optionIndex)} value={option} onChange={event => updateOption(index, optionIndex, event.target.value)}/></label><FormulaPreview text={option}/></div>)}</div><label>{t("correctAnswer")}<select value={question.correctIndex} onChange={event => updateQuestion(index, { correctIndex: Number(event.target.value) as 0 | 1 | 2 | 3 })}>{question.options.map((_, optionIndex) => <option value={optionIndex} key={optionIndex}>{String.fromCharCode(65 + optionIndex)}</option>)}</select></label><label>{t("explanation")}<textarea rows={2} value={question.explanation} onChange={event => updateQuestion(index, { explanation: event.target.value })}/></label><FormulaPreview text={question.explanation}/></article>)}</div>{error && <p className="form-error" role="alert">{error}</p>}</div>}</Dialog>}</section>;
+  return <section className="quiz-page"><header className="quiz-heading"><div><span className="eyebrow">QUIZ STUDIO</span><h2>{t("quiz")}</h2><p>{t("quizHint")}</p></div><button className="primary-button" onClick={() => setDialog(true)}><FileUp size={17}/>{t("createQuiz")}</button></header><div className="learning-copy-filter" aria-label="Lọc Quiz"><button aria-pressed={quizFilter === "all"} onClick={() => setQuizFilter("all")}>Tất cả <small>{store.quizzes.length}</small></button><button aria-pressed={quizFilter === "saved"} onClick={() => setQuizFilter("saved")}>Đã lưu <small>{savedQuizCount}</small></button></div>{store.error && <div className="flashcards-error" role="alert"><span>{store.error}</span><button className="icon-button" onClick={() => store.setError("")}><X size={15}/></button></div>}{store.loading ? <p>{t("loading")}</p> : !store.quizzes.length ? <div className="quiz-empty"><ClipboardList size={44}/><h3>{t("noQuizzes")}</h3><p>{t("noQuizzesHint")}</p></div> : <><section className="quiz-mode-panel"><div><strong>{t("quizHowToStudy")}</strong><small>{launchMode === "review" ? t("quizReviewModeHint") : t("quizModesHint")}</small></div><label>{t("quizMode")}<select value={launchMode} onChange={event => { const next = event.target.value as QuizMode; setLaunchMode(next); setLaunchReveal(next === "learn" || next === "review" ? "instant" : "submit"); }}><option value="learn">{t("quizModeLearn")}</option><option value="practice">{t("quizModePractice")}</option><option value="exam">{t("quizModeExam")}</option><option value="review">{t("quizModeReview")}</option></select></label><label>{t("quizOrder")}<select value={launchOrder} onChange={event => setLaunchOrder(event.target.value as QuizOrder)}><option value="sequential">{t("quizOrderSequential")}</option><option value="random">{t("quizOrderRandom")}</option></select></label><label>{t("quizRevealWhen")}<select value={launchReveal} onChange={event => setLaunchReveal(event.target.value as AnswerReveal)}><option value="instant">{t("quizRevealInstant")}</option><option value="submit">{t("quizRevealSubmit")}</option></select></label></section><div className="quiz-list">{visibleQuizzes.map(quiz => { const attempts = store.attempts.filter(attempt => attempt.quizId === quiz.id); const best = attempts.reduce((value, attempt) => Math.max(value, attempt.total ? Math.round(attempt.score / attempt.total * 100) : 0), 0); return <article className="quiz-test-card" key={quiz.id}><div className="quiz-card-icon"><ClipboardList size={22}/></div><div className="quiz-card-copy"><h3>{quiz.title}</h3><p>{quiz.description || t("quizQuickHint")}</p><small>{quiz.questions.length} {t("quizQuestions").toLocaleLowerCase()} · {attempts.length} {t("quizAttempts").toLocaleLowerCase()}{best ? ` · ${t("bestScore")}: ${best}%` : ""}</small>{quiz.savedFrom && <small className="learning-copy-provenance">Bản lưu từ {quiz.savedFrom.ownerName} · {quiz.savedFrom.title}</small>}</div><div className="quiz-card-actions"><LearningShareButton kind="quiz" id={quiz.id} title={quiz.title} plan={accountPlan} available={!!owner && quiz.source === "cloud"}/><button className="primary-button" onClick={() => startQuiz(quiz)}><Play size={16}/>{launchMode === "review" ? t("reviewQuiz") : t("startQuiz")}</button><button className="icon-button danger" aria-label={`${t("deleteQuiz")}: ${quiz.title}`} onClick={() => void store.removeQuiz(quiz)}><Trash2 size={16}/></button></div></article>; })}{!visibleQuizzes.length && <p className="learning-copy-empty">{quizFilter === "saved" ? "Chưa có Quiz nào được lưu từ mục chia sẻ." : t("noQuizzesHint")}</p>}</div></>}<QuizCreateDialog key={`${owner ?? "guest"}:${studioSession}`} open={dialog} owner={owner} store={store} accountPlan={accountPlan} onClose={() => setDialog(false)} onCreated={() => { setDialog(false); setStudioSession(value => value + 1); }}/></section>;
 }
 
 function QuizResult({ quiz, score, answers, onRetake, t }: { quiz: QuizTest; score: number; answers: Array<number | null>; onRetake: () => void; t: ReturnType<typeof useLanguage>["t"] }) {

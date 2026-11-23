@@ -1,0 +1,97 @@
+{
+  "version": "5.28.0",
+  "baseVersion": "5.27.9",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.28.0.md",
+      "bytes": 1572,
+      "sha256": "5632086565b7940cf5f7a99b7ce510cf0e09b9c782bb9a56103506ead470b4fd"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "f356c93908dbb7a7ce7c4a714c945f63566e692dfff7dccf623935646162f808"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "8a1a9733daaee127b379698add3cdac31a0e9bd0f9b8151bfdaf9a7dbfb138f2"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "811c6c321b6f8609d96a847757171972ec352d26a70656edf21694790ecc52a8"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "04eaf07a340d2ccb2810f62e898b1bfe0b23e9bf9c414bfb47cf4f499efa4020"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "bytes": 2723,
+      "sha256": "6e406fd285bc40fe894c342fdb72f1747962492b4cb06b7da6d2772b9f4e6037"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 16992,
+      "sha256": "ac3e1981764e32b73c39a7315d9081604e29f653edd46a9f6e15ff4469b4eadb"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.reveal.test.tsx",
+      "bytes": 11656,
+      "sha256": "2ad330b12477d5fef57116a131dbda1538b9ce5b97f920ab62f5cdc003ee01f7"
+    },
+    {
+      "path": "apps/web/src/components/QuizCreateDialog.tsx",
+      "bytes": 18102,
+      "sha256": "e990f0c42608cd61061695ce1f29d5f0e9fbee934ce6467522b016f11ae37aba"
+    },
+    {
+      "path": "apps/web/src/components/QuizCreateDialog.test.tsx",
+      "bytes": 6861,
+      "sha256": "f264867f68352a0e85ac2d6587d9b584e34d97bec511ecf62395e55f4b7de823"
+    },
+    {
+      "path": "apps/web/src/components/QuizDraftEditor.tsx",
+      "bytes": 6205,
+      "sha256": "8c8576b0fbecaf8d24612a0bd8af658aef35696fca90d4d1f5717f0f05ba579b"
+    },
+    {
+      "path": "apps/web/src/hooks/useQuizzes.ts",
+      "bytes": 3774,
+      "sha256": "c1a5542ecb2dca8738fa84505f0763a3ea2d9fc7c8382ad03bae88b83972f788"
+    },
+    {
+      "path": "apps/web/src/lib/quiz.ts",
+      "bytes": 9274,
+      "sha256": "98e4e95514310306d8a2ec4f5e831b8b66c6d495e24463152a9b5af809d9312c"
+    },
+    {
+      "path": "apps/web/src/lib/quizStore.ts",
+      "bytes": 9495,
+      "sha256": "097c0755de7608ccb02782903943bb5b74ef48c038d2a10eff5c7f2547938d56"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "bytes": 121045,
+      "sha256": "5ad7f13f530fe8d729735f54aa6c82798d870ad803866b37157065fc8897b29b"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 486538,
+      "sha256": "e68bf24a8c988a7787ccab6cc40d47ef2cfda8beda0c8bad8ad359580d9ce7ed"
+    },
+    {
+      "path": "supabase/migrations/0035_quiz_studio_manual.sql",
+      "bytes": 5132,
+      "sha256": "debd99cb8b191f639f8f1652889dce91fe3c11c154ddf04fb808ab0c8beff07d"
+    },
+    {
+      "path": "supabase/tests/quiz-studio.pglite.mjs",
+      "bytes": 4960,
+      "sha256": "31508f5823a498c171314a320c1b4eaa6b605805828581e37e546cfd7a424000"
+    }
+  ]
+}

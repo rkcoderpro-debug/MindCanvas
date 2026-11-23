@@ -96,23 +96,24 @@ it("filters the native Quiz library to saved copies", async () => {
 
 it("lets users clear and retype the manual question count, then validates the limit", async () => {
   await act(async () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click());
+  await act(async () => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click());
   const input = await typeQuestionCount("");
   expect(input.value).toBe("");
-  expect(host.querySelector("#quiz-question-count-error")).toBeNull();
+  expect(host.querySelector('small.form-error[id$="-count-error"]')).toBeNull();
   await act(async () => { input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
-  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("Enter the number");
+  expect(host.querySelector('small.form-error[id$="-count-error"]')?.textContent).toContain("Enter the number");
   await typeQuestionCount("20");
-  expect(host.querySelector("#quiz-question-count-error")).toBeNull();
-  expect((host.querySelector('.quiz-manual-form textarea[readonly]') as HTMLTextAreaElement).value).toContain("20");
+  expect(host.querySelector('small.form-error[id$="-count-error"]')).toBeNull();
+  expect((host.querySelector('.quiz-studio-prompt textarea[readonly]') as HTMLTextAreaElement).value).toContain("20");
   await typeQuestionCount("51");
   expect(input.value).toBe("51");
-  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("50");
+  expect(host.querySelector('small.form-error[id$="-count-error"]')?.textContent).toContain("50");
   expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect((host.querySelector('.quiz-manual-form textarea[readonly]') as HTMLTextAreaElement).value).toBe("");
+  expect((host.querySelector('.quiz-studio-prompt textarea[readonly]') as HTMLTextAreaElement).value).toBe("");
   await typeQuestionCount("2.5");
-  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("whole number");
+  expect(host.querySelector('small.form-error[id$="-count-error"]')?.textContent).toContain("whole number");
   await typeQuestionCount("2");
-  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("at least 3");
+  expect(host.querySelector('small.form-error[id$="-count-error"]')?.textContent).toContain("at least 3");
 });
 
 it("uses the same free typing and validation in AI Auto", async () => {
@@ -123,34 +124,16 @@ it("uses the same free typing and validation in AI Auto", async () => {
   await typeQuestionCount("20");
   expect(input.value).toBe("20");
   await typeQuestionCount("51");
-  expect(host.querySelector("#quiz-question-count-error")?.textContent).toContain("50");
+  expect(host.querySelector('small.form-error[id$="-count-error"]')?.textContent).toContain("50");
   expect(input.value).toBe("51");
-});
-
-it("shows the actual question count when a manual result exceeds the selected maximum", async () => {
-  await act(async () => root.render(<LanguageProvider><QuizPage owner="user-1" store={store}/></LanguageProvider>));
-  await act(async () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click());
-  await act(async () => (host.querySelectorAll('.ai-mode-switch [role="tab"]')[1] as HTMLButtonElement).click());
-  const textarea = host.querySelector('.quiz-manual-form textarea:not([readonly])') as HTMLTextAreaElement;
-  const result = { title: "Unit 1", description: "Number", questions: Array.from({ length: 20 }, (_, index) => ({
-    prompt: `Question ${index + 1}?`, options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "Because A.", sourcePage: 2,
-  })) };
-  const json = host.querySelectorAll('.quiz-manual-form textarea:not([readonly])')[1] as HTMLTextAreaElement;
-  expect(textarea).toBeTruthy();
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(json, JSON.stringify(result));
-    json.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => (host.querySelector('.quiz-create-actions .primary-button') as HTMLButtonElement).click());
-  expect(host.querySelector('.quiz-manual-form .form-error')?.textContent).toContain("20 questions");
-  expect(host.querySelector('.quiz-manual-form .form-error')?.textContent).toContain("10");
 });
 
 it("keeps the quiz draft when dismissed outside and uses the chosen content language in the manual prompt", async () => {
   const open = () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click();
   await act(async () => open());
+  await act(async () => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click());
   expect(host.querySelector(".dialog-workspace > .dialog-titlebar button")).toBeTruthy();
-  expect(host.querySelector(".dialog-workspace > .quiz-create-actions button")).toBeTruthy();
+  expect(host.querySelector(".dialog-workspace > .quiz-studio-footer button")).toBeTruthy();
   const select = host.querySelector(".content-language-field select") as HTMLSelectElement;
   await act(async () => { select.value = "vi"; select.dispatchEvent(new Event("change", { bubbles: true })); });
   await typeQuestionCount("17");
@@ -162,7 +145,7 @@ it("keeps the quiz draft when dismissed outside and uses the chosen content lang
   await act(async () => { pointer(dialog, "pointerdown", 1, 1); pointer(dialog, "pointerup", 2, 2); });
   expect(host.querySelector("dialog")).toBeNull();
   await act(async () => open());
-  expect((host.querySelector(".quiz-manual-form textarea[readonly]") as HTMLTextAreaElement).value).toMatch(/quiz in Vietnamese[\s\S]+17 clear questions/);
+  expect((host.querySelector(".quiz-studio-prompt textarea[readonly]") as HTMLTextAreaElement).value).toMatch(/quiz in Vietnamese[\s\S]+17 clear questions/);
   expect((host.querySelector(".content-language-field select") as HTMLSelectElement).value).toBe("vi");
   expect(host.querySelector(".quiz-heading button")?.textContent).toContain("Create");
 });
