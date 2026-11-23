@@ -76,13 +76,13 @@ it.each(["again", "good"] as const)("records one %s study event under rapid taps
   await act(async () => root.render(<LanguageProvider><FlashcardsPage owner={null} projects={[]} store={store}/></LanguageProvider>));
   const start = Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Start review");
   expect(start).toBeTruthy(); await act(async () => start!.click());
-  await act(async () => (host.querySelector(".review-card-scene") as HTMLElement).click());
-  const good = host.querySelector(`.rating-${rating}`) as HTMLButtonElement;
+  await act(async () => (document.querySelector("[data-learning-viewport] .review-card-scene") as HTMLElement).click());
+  const good = document.querySelector(`[data-learning-viewport] .rating-${rating}`) as HTMLButtonElement;
   await act(async () => { good.click(); good.click(); });
   expect(reviewCard).toHaveBeenCalledTimes(1);
   await act(async () => finishReview());
   expect(recordStudy).toHaveBeenCalledTimes(1);
   expect(recordStudy.mock.calls[0][0]).toMatchObject({ cardId: "card-1", rating, goalUnit: 1 });
-  expect(host.querySelector(".review-card-scene")?.textContent).toContain("Second front");
-  expect(host.querySelector(".review-card-scene")?.textContent).not.toContain("Second back");
+  expect(document.querySelector("[data-learning-viewport] .review-card-scene")?.textContent).toContain("Second front");
+  expect(document.querySelector("[data-learning-viewport] .review-card-scene")?.textContent).not.toContain("Second back");
 });

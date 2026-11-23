@@ -18,7 +18,7 @@ import { saveDocumentToStorage } from "../lib/supabase";
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
 import ManualAiProviderLinks from "./ManualAiProviderLinks";
 import { LearningShareButton } from "./LearningShareDialog";
-import { BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
+import { ActivityViewport, BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import FormulaText, { splitFormulaText } from "./FormulaText";
 
 type QuizDraft = { title: string; description: string; questions: QuizQuestion[]; provider: string; model: string; sourceDocumentId?: string | null };
@@ -195,7 +195,7 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
     const immediateFeedback = activeReveal === "instant";
     const freeNavigation = activeReveal === "submit" || allowsQuizNavigation(currentMode);
     const feedbackVisible = immediateFeedback && answerRevealed;
-    return <section ref={activityFocus} className="quiz-page activity-screen activity-quiz" aria-label={activeQuiz.title}>
+    return <ActivityViewport ref={activityFocus} className="activity-screen activity-quiz" aria-label={activeQuiz.title}>
       <PageNavigation back={<BackButton onClick={leaveQuiz}>{language === "vi" ? "Danh sách Quiz" : "Quiz list"}</BackButton>} title={activeQuiz.title}
         context={<><span>{modeLabel(t, currentMode)} · {t(activeReveal === "instant" ? "quizRevealInstant" : "quizRevealSubmit")}</span><b>{questionIndex + 1} / {activeQuiz.questions.length}</b>{currentMode === "exam" && !result && <strong className="quiz-exam-clock">{formatTimerTime(examSeconds, true)}</strong>}</>}
         actions={<LearningShareButton kind="quiz" id={activeQuiz.id} title={activeQuiz.title} plan={accountPlan} available={!!owner && activeQuiz.source === "cloud"}/>}/>
@@ -207,7 +207,7 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
         <footer className="quiz-runner-actions"><button className="secondary-button" disabled={questionIndex === 0} onClick={() => goToQuestion(questionIndex - 1)}>{t("previousQuestion")}</button>{freeNavigation && questionIndex < activeQuiz.questions.length - 1 && <button className="secondary-button quiz-early-submit" disabled={busy} onClick={() => void submitQuiz()}>{t("submitQuiz")}</button>}{questionIndex < activeQuiz.questions.length - 1 ? <button className="primary-button" disabled={!freeNavigation && !feedbackVisible} onClick={() => goToQuestion(questionIndex + 1)}>{t("nextQuestion")}<Play size={15}/></button> : <button className="primary-button" disabled={(!freeNavigation && !feedbackVisible) || busy} onClick={() => void submitQuiz()}><CheckCircle2 size={16}/>{busy ? t("saving") : t("submitQuiz")}</button>}</footer>
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>}
-    </section>;
+    </ActivityViewport>;
   }
 
   const visibleQuizzes = store.quizzes.filter(quiz => quizFilter === "all" || !!quiz.savedFrom);

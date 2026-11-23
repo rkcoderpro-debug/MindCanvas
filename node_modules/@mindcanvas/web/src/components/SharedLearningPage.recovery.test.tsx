@@ -86,12 +86,13 @@ it("grades one shared card once on rapid taps", async () => {
   api.cards.mockResolvedValue({ cards: [{ id: "card", front: "Front", back: "Back", content_version: 1 }], progress: [] });
   let finish!: () => void; api.rate.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
   await mount(); await act(async () => (host.querySelector(".shared-learning-item .primary-button") as HTMLButtonElement).click());
-  await act(async () => (host.querySelector(".shared-flip") as HTMLButtonElement).click());
-  const good = host.querySelectorAll(".shared-ratings button")[2] as HTMLButtonElement;
+  const player = document.querySelector("[data-learning-viewport]")!;
+  await act(async () => player.querySelector<HTMLButtonElement>(".shared-flip")!.click());
+  const good = player.querySelectorAll(".shared-ratings button")[2] as HTMLButtonElement;
   await act(async () => { good.click(); good.click(); });
   expect(api.rate).toHaveBeenCalledTimes(1);
   await act(async () => finish());
-  expect(host.querySelector(".shared-flip")?.textContent).toContain("Front");
+  expect(player.querySelector(".shared-flip")?.textContent).toContain("Front");
 });
 it("handles null empty lists without crashing", async () => {
   api.shares.mockResolvedValue(null); api.invites.mockResolvedValue(null); api.copies.mockResolvedValue(null);

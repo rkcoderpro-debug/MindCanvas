@@ -54,12 +54,13 @@ describe("shared Lab CDN consent", () => {
     const openButton = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Chạy Lab"));
     expect(openButton).toBeTruthy();
     await act(async () => { openButton!.click(); await Promise.resolve(); });
-    expect(host.querySelector("iframe.shared-lab-frame")).toBeNull();
+    const player = document.querySelector("[data-learning-viewport]")!;
+    expect(player.querySelector("iframe.shared-lab-frame")).toBeNull();
 
-    const consentButton = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cho phép tải thư viện"));
+    const consentButton = [...player.querySelectorAll("button")].find(button => button.textContent?.includes("Cho phép tải thư viện"));
     expect(consentButton).toBeTruthy();
     await act(async () => consentButton!.click());
-    const frame = host.querySelector("iframe.shared-lab-frame");
+    const frame = player.querySelector("iframe.shared-lab-frame");
     expect(frame?.getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame?.getAttribute("srcdoc")).toContain("https://unpkg.com/react");
     expect(frame?.getAttribute("srcdoc")).toContain("connect-src 'none'");

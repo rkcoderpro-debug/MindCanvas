@@ -1,6 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
+import { createPortal } from "react-dom";
+import { useLearningActive } from "../lib/learningNavigation";
+import type { ButtonHTMLAttributes, ComponentPropsWithRef, ReactNode, Ref } from "react";
 
 export function BackButton({ children, className = "", buttonRef, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode; buttonRef?: Ref<HTMLButtonElement> }) {
   return <button {...props} ref={buttonRef} type="button" className={`page-back-button ${className}`}><ArrowLeft size={17} aria-hidden="true"/><span>{children}</span></button>;
@@ -12,6 +14,13 @@ export function PageNavigation({ back, title, context, actions }: { back: ReactN
     <div className="page-navigation-identity"><h2 title={title}>{title}</h2>{context && <div className="page-navigation-context">{context}</div>}</div>
     {actions && <div className="page-navigation-actions">{actions}</div>}
   </header>;
+}
+
+/** Fixed panels must not inherit the animated/transformed Learning Hub's bounds. */
+export function ActivityViewport({ as: Tag = "section", inline = false, ...props }: ComponentPropsWithRef<"section"> & { as?: "section" | "main"; inline?: boolean }) {
+  const active = useLearningActive();
+  if (inline) return <Tag {...props}/>;
+  return createPortal(<Tag {...props} data-learning-viewport="" hidden={!active} inert={!active}/>, document.body);
 }
 
 /** Keep the reader's place even when a detail view temporarily replaces the list. */

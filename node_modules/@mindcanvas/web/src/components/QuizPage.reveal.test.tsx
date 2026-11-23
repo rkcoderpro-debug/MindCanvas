@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import QuizPage from "./QuizPage";
 import { LanguageProvider } from "../lib/i18n";
+import { LearningToolScope } from "../lib/learningNavigation";
 import type { QuizStore } from "../hooks/useQuizzes";
 import type { QuizTest } from "../lib/quiz";
 
@@ -53,10 +54,10 @@ afterEach(async () => {
 
 it("reveals the selected question immediately and locks its answer", async () => {
   await act(async () => (host.querySelector(".quiz-card-actions .primary-button") as HTMLButtonElement).click());
-  await act(async () => (host.querySelectorAll(".quiz-options button")[0] as HTMLButtonElement).click());
-  expect(host.querySelector(".quiz-feedback")?.textContent).toContain("First explanation");
-  expect(host.querySelector(".quiz-options button.correct")?.textContent).toContain("Correct");
-  expect((host.querySelector(".quiz-options button") as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => (document.querySelectorAll("[data-learning-viewport] .quiz-options button")[0] as HTMLButtonElement).click());
+  expect(document.querySelector("[data-learning-viewport] .quiz-feedback")?.textContent).toContain("First explanation");
+  expect(document.querySelector("[data-learning-viewport] .quiz-options button.correct")?.textContent).toContain("Correct");
+  expect((document.querySelector("[data-learning-viewport] .quiz-options button") as HTMLButtonElement).disabled).toBe(true);
 });
 
 it("separates the answer letter from a rendered fraction", async () => {
@@ -64,7 +65,7 @@ it("separates the answer letter from a rendered fraction", async () => {
   const mathStore = { ...store, quizzes: [mathQuiz] } as QuizStore;
   await act(async () => root.render(<LanguageProvider><QuizPage owner={null} store={mathStore}/></LanguageProvider>));
   await act(async () => (host.querySelector(".quiz-card-actions .primary-button") as HTMLButtonElement).click());
-  const option = host.querySelector(".quiz-options button") as HTMLButtonElement;
+  const option = document.querySelector("[data-learning-viewport] .quiz-options button") as HTMLButtonElement;
   expect(option.querySelector(":scope > .quiz-option-label")?.textContent).toBe("A");
   expect(option.querySelector(":scope > .quiz-option-content .katex")).not.toBeNull();
   expect(option.querySelector(".quiz-option-label .katex")).toBeNull();
@@ -74,16 +75,16 @@ it("keeps answers hidden and editable until submission in delayed mode", async (
   const reveal = host.querySelectorAll(".quiz-mode-panel select")[2] as HTMLSelectElement;
   await act(async () => { reveal.value = "submit"; reveal.dispatchEvent(new Event("change", { bubbles: true })); });
   await act(async () => (host.querySelector(".quiz-card-actions .primary-button") as HTMLButtonElement).click());
-  await act(async () => (host.querySelectorAll(".quiz-options button")[0] as HTMLButtonElement).click());
-  expect(host.querySelector(".quiz-feedback")).toBeNull();
-  expect(host.querySelector(".quiz-options button.correct")).toBeNull();
-  await act(async () => (host.querySelectorAll(".quiz-options button")[1] as HTMLButtonElement).click());
-  await act(async () => (host.querySelector(".quiz-runner-actions .primary-button") as HTMLButtonElement).click());
-  await act(async () => (host.querySelectorAll(".quiz-options button")[0] as HTMLButtonElement).click());
-  expect(host.querySelector(".quiz-feedback")).toBeNull();
-  await act(async () => (host.querySelector(".quiz-runner-actions .primary-button") as HTMLButtonElement).click());
+  await act(async () => (document.querySelectorAll("[data-learning-viewport] .quiz-options button")[0] as HTMLButtonElement).click());
+  expect(document.querySelector("[data-learning-viewport] .quiz-feedback")).toBeNull();
+  expect(document.querySelector("[data-learning-viewport] .quiz-options button.correct")).toBeNull();
+  await act(async () => (document.querySelectorAll("[data-learning-viewport] .quiz-options button")[1] as HTMLButtonElement).click());
+  await act(async () => (document.querySelector("[data-learning-viewport] .quiz-runner-actions .primary-button") as HTMLButtonElement).click());
+  await act(async () => (document.querySelectorAll("[data-learning-viewport] .quiz-options button")[0] as HTMLButtonElement).click());
+  expect(document.querySelector("[data-learning-viewport] .quiz-feedback")).toBeNull();
+  await act(async () => (document.querySelector("[data-learning-viewport] .quiz-runner-actions .primary-button") as HTMLButtonElement).click());
   expect(saveAttempt).toHaveBeenCalledWith(expect.objectContaining({ answers: [1, 0], score: 2 }));
-  expect(host.querySelector(".quiz-answer-review")?.textContent).toContain("First explanation");
+  expect(document.querySelector("[data-learning-viewport] .quiz-answer-review")?.textContent).toContain("First explanation");
 });
 
 it("filters the native Quiz library to saved copies", async () => {
@@ -164,4 +165,30 @@ it("keeps the quiz draft when dismissed outside and uses the chosen content lang
   expect((host.querySelector(".quiz-manual-form textarea[readonly]") as HTMLTextAreaElement).value).toMatch(/quiz in Vietnamese[\s\S]+17 clear questions/);
   expect((host.querySelector(".content-language-field select") as HTMLSelectElement).value).toBe("vi");
   expect(host.querySelector(".quiz-heading button")?.textContent).toContain("Create");
+});
+
+it("mounts the quiz outside transformed learning pages, preserves its answer when hidden, and cleans up on return", async () => {
+  const render = async (active: boolean) => act(async () => root.render(
+    <LanguageProvider><div style={{ transform: "translateY(0)", height: 70 }}>
+      <LearningToolScope tab="quiz" active={active}><QuizPage owner={null} store={store}/></LearningToolScope>
+    </div></LanguageProvider>,
+  ));
+  await render(true);
+  await act(async () => host.querySelector<HTMLButtonElement>(".quiz-card-actions .primary-button")!.click());
+  const player = document.querySelector<HTMLElement>("[data-learning-viewport]")!;
+  expect(player.parentElement).toBe(document.body);
+  const answer = player.querySelector<HTMLButtonElement>(".quiz-options button:nth-child(2)")!;
+  await act(async () => answer.click());
+  expect(answer.matches(".selected.correct")).toBe(true);
+
+  await render(false);
+  expect(player.hidden).toBe(true);
+  expect(player.hasAttribute("inert")).toBe(true);
+  await render(true);
+  expect(document.querySelector("[data-learning-viewport]")).toBe(player);
+  expect(player.hidden).toBe(false);
+  expect(answer.matches(".selected.correct")).toBe(true);
+  await act(async () => player.querySelector<HTMLButtonElement>(".page-back-button")!.click());
+  expect(player.isConnected).toBe(false);
+  expect(host.querySelector(".quiz-list")).toBeTruthy();
 });

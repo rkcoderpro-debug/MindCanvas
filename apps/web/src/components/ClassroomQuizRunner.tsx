@@ -1,4 +1,5 @@
-import { BackButton, PageNavigation } from "./PageNavigation";
+import { ActivityViewport, BackButton } from "./PageNavigation";
+import { useLearningActive } from "../lib/learningNavigation";
 import { useEffect, useRef, useState } from "react";
 import { Award, CheckCircle2, Play } from "lucide-react";
 import { formatQuizPercent } from "../lib/quiz";
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export default function ClassroomQuizRunner({ title, assignmentTitle, session, answers, result, busy, error, onAnswer, onSubmit, onClose }: Props) {
+  const learningActive = useLearningActive();
   const [questionIndex, setQuestionIndex] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -26,13 +28,14 @@ export default function ClassroomQuizRunner({ title, assignmentTitle, session, a
   const question = session.questions[questionIndex];
 
   useEffect(() => {
+    if (!learningActive) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    return () => previousFocus?.focus();
-  }, []);
+    closeRef.current?.focus({ preventScroll: true });
+    return () => previousFocus?.focus({ preventScroll: true });
+  }, [learningActive]);
   useEffect(() => { if (panelRef.current) panelRef.current.scrollTop = 0; }, [questionIndex, result]);
 
-  return <div className="classrooms-quiz-overlay" onKeyDown={event => { if (event.key === "Escape" && !busy) onClose(); }}>
+  return <ActivityViewport className="classrooms-quiz-overlay" onKeyDown={event => { if (event.key === "Escape" && !busy) onClose(); }}>
     <div className="classrooms-quiz-panel activity-quiz activity-classroom" ref={panelRef} role="dialog" aria-modal="true" aria-label={`Làm Quiz: ${title}`}>
       <div className="quiz-runner-header classrooms-quiz-header">
         <BackButton buttonRef={closeRef} disabled={busy} onClick={onClose}>Về lớp học</BackButton>
@@ -68,5 +71,5 @@ export default function ClassroomQuizRunner({ title, assignmentTitle, session, a
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>}
     </div>
-  </div>;
+  </ActivityViewport>;
 }

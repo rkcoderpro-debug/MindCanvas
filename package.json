@@ -1,7 +1,7 @@
 {
   "name": "mindcanvas",
   "private": true,
-  "version": "5.27.7",
+  "version": "5.27.8",
   "workspaces": [
     "apps/*",
     "packages/*"

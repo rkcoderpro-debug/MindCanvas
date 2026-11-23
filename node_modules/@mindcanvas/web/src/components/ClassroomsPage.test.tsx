@@ -87,7 +87,7 @@ it("runs an assigned Quiz one question at a time and keeps answers private until
   await act(async () => root.render(<ClassroomsPage owner="student" quizzes={[]}/>));
   await act(async () => (Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Làm Quiz") as HTMLButtonElement).click());
   expect(startSharedQuiz).toHaveBeenCalledWith("quiz-1");
-  const dialog = host.querySelector('[role="dialog"]') as HTMLElement;
+  const dialog = document.querySelector('[data-learning-viewport] [role="dialog"]') as HTMLElement;
   expect(dialog.querySelectorAll(".quiz-question-card")).toHaveLength(1);
   expect(dialog.querySelector(".quiz-question-card")?.textContent).toContain("Tính");
   expect(dialog.querySelector(".quiz-question-card")?.textContent).not.toContain("Bằng 4");

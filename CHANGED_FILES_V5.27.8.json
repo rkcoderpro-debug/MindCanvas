@@ -1,0 +1,97 @@
+{
+  "version": "5.27.8",
+  "baseVersion": "5.27.7",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.27.8.md",
+      "bytes": 1082,
+      "sha256": "a26e9a358b116a8d94d154b7b06f9b5687df0a83122cce384017118146c6114e"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "55a0ab9f33f4f733a17a4456732b91d1aa90c879c9a099f9e21ecc994d677c6d"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "12e22935eaae33aa99623cf20732653d2243ef1c162e782f6fd0bc2f48e6ff48"
+    },
+    {
+      "path": "apps/web/src/components/ClassroomQuizRunner.tsx",
+      "bytes": 6179,
+      "sha256": "5470564244b57cf103c80ee992e73e4fa9de89df449febef0b2e155337d084de"
+    },
+    {
+      "path": "apps/web/src/components/ClassroomsPage.test.tsx",
+      "bytes": 11541,
+      "sha256": "b33a98aa0c89f9bb7045e2f3f7d57afac3795d9e2749f9385335a0e6e263f51e"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.review.test.tsx",
+      "bytes": 6459,
+      "sha256": "4cbebf27769e63479ca3c0a3ea4185c7359d2c1a800f07bc953feb76d4c92707"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 56499,
+      "sha256": "5571b81b31f3ef3268121ce680eb4c12dc65d04afeded231d2ac7701c449bd07"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.test.tsx",
+      "bytes": 9174,
+      "sha256": "0bc138c660802d816c4c884035fbb12c691f0a77b086a6168b5f1b72131dde12"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.tsx",
+      "bytes": 21562,
+      "sha256": "21176c3a65298ca237ae02d6dd7d33000be884c088b3db7413ba262b09b38763"
+    },
+    {
+      "path": "apps/web/src/components/PageNavigation.tsx",
+      "bytes": 3507,
+      "sha256": "04c6c4598c1197b2395cb4892d0727af6c5f28faaf65ba2aaf60401240525cf6"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.reveal.test.tsx",
+      "bytes": 12856,
+      "sha256": "3f50122332c6576ed3f295a73d104dfeedf1626c2d54b4177cfa854598f5187f"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 31474,
+      "sha256": "caee7a3c761c164a72a0abf0fc70f1ff00115b7fcf9666c981cefb0d3e0f0dba"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.externalLab.test.tsx",
+      "bytes": 2932,
+      "sha256": "7424d1655f24f7b8d3cfe053ed9c01e352a499d2319edf334bf1f054e57ecff4"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.recovery.test.tsx",
+      "bytes": 7188,
+      "sha256": "693ca6b52fa94acaa09c60ab4b9d0fb4aaaf36597eb4bfcef82aed333b082590"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 24422,
+      "sha256": "0dc0dd630bd8ba98b43e3f415f84e164c3af88c497f82e8fe671733af2359440"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 480536,
+      "sha256": "07df55ddf8f585f03aa24a74a51618eabd84295ec33b4ecab68b984dd4f2219c"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "f46fa540e7c90db34a0f6d82b1623a2987318d61f3166c9d52d53e3a090a5430"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "d08495f6c88692bc66a8cdcce4746c92f7ae721d4d2ef3738a0d3eb1ce70de86"
+    }
+  ]
+}
