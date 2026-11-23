@@ -1,0 +1,327 @@
+{
+  "version": "5.27.7",
+  "baseVersion": "5.27.6",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.27.7.md",
+      "bytes": 2017,
+      "sha256": "f8fc0d4d967698268ab943d43c4e7646e7d40abec77e0b09a58320a9bf2b9a92"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "01f51994be34b5ef0883e8ec520d553644ecc39242ead74df6d97a5e7bc06a94"
+    },
+    {
+      "path": "apps/server/src/exams.ts",
+      "bytes": 10383,
+      "sha256": "2b9714ae386c21540ca0131ae9dc86bb3a8427fac50f32cf532375848477cc10"
+    },
+    {
+      "path": "apps/server/src/flashcards.ts",
+      "bytes": 3831,
+      "sha256": "3bda5dc8ae54279e0913946436aa359deec1fe1f2e6ae444aeda4fa0e7d9f230"
+    },
+    {
+      "path": "apps/server/src/gemini.ts",
+      "bytes": 13961,
+      "sha256": "7e35b3ff8de8ecb4557d01da823fe8029281b9a5f2c7ea5f847614cc0e8e0211"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "bytes": 18458,
+      "sha256": "5895da759bb89ae858be4ba31b57538baa41b7165086c94351486a73cc420a5b"
+    },
+    {
+      "path": "apps/server/src/providers.ts",
+      "bytes": 5080,
+      "sha256": "4567ff7bca9894ed3a6e64f0f75937ea08ce6ac737770ae6defbf3d6de07f23d"
+    },
+    {
+      "path": "apps/server/src/quiz.ts",
+      "bytes": 5081,
+      "sha256": "60793e6091e271412e227b2616693403172946d08a7507bc458b28ba0beff4d1"
+    },
+    {
+      "path": "apps/server/tests/quiz.test.ts",
+      "bytes": 2209,
+      "sha256": "07d4110c0b244c5c562d269431cee979d0b9f5cd432746a4d7b02e13c4af6c42"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "a5bbf2bca9f4d05c64bc3fa623097d655b4f1f5b197e02bae0d7655a13cb7d65"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 59563,
+      "sha256": "d7761d79c821a08652681ab690620516ac02247c2eb3bb559098f8f74ebec798"
+    },
+    {
+      "path": "apps/web/src/components/AdminDashboard.tsx",
+      "bytes": 11073,
+      "sha256": "9f1e5df58f4087e8f26537417094b879a8ac719de471f62e8e3aed4e548e5bf7"
+    },
+    {
+      "path": "apps/web/src/components/AiPanel.test.tsx",
+      "bytes": 7113,
+      "sha256": "c6daafd779f3aad645d68b71925dccb7e6b5d17f6ed127f1f325ba1852e1424f"
+    },
+    {
+      "path": "apps/web/src/components/AiPanel.tsx",
+      "bytes": 20045,
+      "sha256": "e7351d3197d3902c7b19cad5ba5b5507ad68c60c4ed385025e94c77cd1e5c121"
+    },
+    {
+      "path": "apps/web/src/components/AiSelectionPanel.tsx",
+      "bytes": 11266,
+      "sha256": "e52fea909681d0e7ccfd307f67f090993232a6fa580b69d2de28fdb024f7702f"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "bytes": 163395,
+      "sha256": "b436ff2f5f46159de8d25b3dad0a81a78f60dc433833540d52f668ccde977d90"
+    },
+    {
+      "path": "apps/web/src/components/ClassQuizReviewDialog.tsx",
+      "bytes": 3729,
+      "sha256": "7836c6068aa929fca08f056f0e0887cb20d46d7251edc6518b7e72caeb5c075d"
+    },
+    {
+      "path": "apps/web/src/components/ClassroomQuizRunner.tsx",
+      "bytes": 5949,
+      "sha256": "c70431e9c69e627fb91b54d5147b402220445b14c62884a3a8d9c1706de444b0"
+    },
+    {
+      "path": "apps/web/src/components/ContentLanguageField.tsx",
+      "bytes": 1571,
+      "sha256": "d7e154d0c47c77899b1400d7eaad698d7598f889978ec2c1ab694da5f840b26f"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "bytes": 2613,
+      "sha256": "a0e4d77d5cd49645c4fec31c2da478a32952c592e588b9be1eefa3d447b3b66b"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.test.tsx",
+      "bytes": 4404,
+      "sha256": "f16a59df4a44357f46b5be1975690ec00d406f01a2eca083ae208c7990e7017c"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.tsx",
+      "bytes": 12350,
+      "sha256": "f8fc4e9ce1d0564e7af5b141ea80c07eb067bcdc8a2e25f23d4ffbc26390e251"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 14077,
+      "sha256": "5bee38a54e7a24244d2411c61fa1c4d0579ce04c9308b6e9c28185aac6f194bc"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.test.tsx",
+      "bytes": 14492,
+      "sha256": "60cb101d98ac6eef7ea1f257f8d0807e48813bed52def6ac7e72f9d03d37a8af"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "bytes": 27252,
+      "sha256": "10561124c78165debe5fcbceabd551aa9b92a9135ab67fdcac6ba817e540c84d"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.test.tsx",
+      "bytes": 13979,
+      "sha256": "f1a219d4d935744122ef736c5aa99f3e6e6076f0035f429a80d8fd0e74789dfb"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "bytes": 31336,
+      "sha256": "35cc01dd9ee1ec7ef200cffc0229e840666d86e996e929c4a2d02114e445e0c7"
+    },
+    {
+      "path": "apps/web/src/components/ExamOnlineRunner.tsx",
+      "bytes": 10884,
+      "sha256": "5e53ae9cd9642b1ddec67e19c36f86ab5183069bfbc6e9ae8329b415b8e7ffe7"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 56463,
+      "sha256": "d6ca85303666d838831862ce410f7bdfe91abd1fea30705c963f815333723546"
+    },
+    {
+      "path": "apps/web/src/components/LabEditorDialog.tsx",
+      "bytes": 17947,
+      "sha256": "1bd5d25a3aaa51d8864a054c7af29cd677ab5e22bd207bf9600c86bf78678443"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.test.tsx",
+      "bytes": 9060,
+      "sha256": "bafeb98a4e015ab5fb3ddc7fdd941578fe57ed138b9affc7687f6b8a2cf4eb51"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.tsx",
+      "bytes": 21510,
+      "sha256": "40af52bb81a2c8fe5bf1cd31ec0167577dbb68b06bd6d83368b193d8c0521f76"
+    },
+    {
+      "path": "apps/web/src/components/LabViewer.tsx",
+      "bytes": 7821,
+      "sha256": "8802b898659a52ea6e9fa784c1d9bfff74c874853c9a5ef13b86bfc26880b00d"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 34221,
+      "sha256": "25f5de6b4fc397b1ae8944d32bd54adfefab6eee0be3ba69625621af83b3a0cc"
+    },
+    {
+      "path": "apps/web/src/components/PageNavigation.tsx",
+      "bytes": 2929,
+      "sha256": "eb6c3681ef4446ccd12c1cfd8edeb4132ee4b6379451e4c8ea492e6d2de83d0e"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.reveal.test.tsx",
+      "bytes": 10991,
+      "sha256": "fa3255b7632b457c8d23f561bdbbb5f9953c83c35dd98f43913e19893692e74b"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 31448,
+      "sha256": "131f60858acaff0d7032b776941799101bf77f8d40339a1836cb69db808bca03"
+    },
+    {
+      "path": "apps/web/src/components/ShareDialog.tsx",
+      "bytes": 9296,
+      "sha256": "715a2329a149c0d57874ef4cbf011515a9c9fe1c4c74cb718e75184105e40eb5"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 24371,
+      "sha256": "127f3bd45b1eeefbeb8fe473c086ce538e9b881f354c1215d0b5433f499e404c"
+    },
+    {
+      "path": "apps/web/src/components/StudyPlanDialog.tsx",
+      "bytes": 24954,
+      "sha256": "15903df7a1e0d54a9a8ea590ede3af80990929b034da933de3ed0b68be5d9ea5"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.test.tsx",
+      "bytes": 8144,
+      "sha256": "dfd16d25dc8df7de9bd413844c253e22b3d8ad6fa548b6d92e70acd61061c99d"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.tsx",
+      "bytes": 29641,
+      "sha256": "32a821ab99b0ed12f065ebd93edd4ca243d0fe8ec506789dfcad5cce38c7828a"
+    },
+    {
+      "path": "apps/web/src/lib/api.ts",
+      "bytes": 13418,
+      "sha256": "39642af893fba1174158b5a262ebf5a46a8e469158618f78317663e70aaca90e"
+    },
+    {
+      "path": "apps/web/src/lib/contentLanguage.ts",
+      "bytes": 908,
+      "sha256": "89b36bd0650f6e616483017a4f39b9822a5d2964235a8a49d0270e41d7ff4010"
+    },
+    {
+      "path": "apps/web/src/lib/examManual.ts",
+      "bytes": 10990,
+      "sha256": "36c62c6ab2488146abc987a0a03635ffd829e5b1f0af8289e23579c78c60d522"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioPrompt.ts",
+      "bytes": 10810,
+      "sha256": "247b1a534d2a5a27493db9c0dedca05a67b899d68813026839a51a31360d9278"
+    },
+    {
+      "path": "apps/web/src/lib/examStudioStore.ts",
+      "bytes": 14886,
+      "sha256": "90017159d24e7845c19bcd28a65b2bb712491b12e89092e7592d28f784ffe72a"
+    },
+    {
+      "path": "apps/web/src/lib/examWorkspace.ts",
+      "bytes": 5414,
+      "sha256": "d9f5e86712f10e79c9dd9889acc1413a90724fee9f0621980c13cec5b12353bd"
+    },
+    {
+      "path": "apps/web/src/lib/lab.ts",
+      "bytes": 21757,
+      "sha256": "2b01e4bedfe5b7e03453af4bfdafdfbf233538ef6ac503a99b6aeb973b842d6b"
+    },
+    {
+      "path": "apps/web/src/lib/learningHub.test.ts",
+      "bytes": 12834,
+      "sha256": "aede277cfc74321dea2a64390d7726f3692bf512891d762e2e4667f0d2f48740"
+    },
+    {
+      "path": "apps/web/src/lib/manualAi.ts",
+      "bytes": 21904,
+      "sha256": "e97b200d8d58dac81f099aae6837bf78602c4280f77489034af9662a75f49798"
+    },
+    {
+      "path": "apps/web/src/lib/quiz.ts",
+      "bytes": 8557,
+      "sha256": "7f9818cd169825e24249d2b6bdff32e02a48ebfdccf4dad88153a6d66a7f29b7"
+    },
+    {
+      "path": "apps/web/src/lib/takenoteStore.ts",
+      "bytes": 5815,
+      "sha256": "06681587f2b8f934fad5c607d7d11c01a3c5a087f9230728b53769ec8f40bd0b"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 480342,
+      "sha256": "1918a8835c3a6e463d44ae3fd52ec1dbbc2078013d7f94dea879e85dfb25cf89"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "bda655d686466a02c9c993b29f57404fe4bd57b8868c3d7dd79fbe7b27c49b3e"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "cd6ffc9ccd60f8b0397d891a060fa18bfd7cbea64c69061ba3a3e06e55046496"
+    },
+    {
+      "path": "packages/shared/src/contentLanguage.d.ts",
+      "bytes": 182,
+      "sha256": "545bfec97b4ec86185f7e0a99ae457e5476e50f22585ddddb57522362f08b753"
+    },
+    {
+      "path": "packages/shared/src/contentLanguage.js",
+      "bytes": 964,
+      "sha256": "c9b72b61d5ea7a016e6b6bfb6ad3a0e58ed14e73afd597c0bb5ad41f0ac840c7"
+    },
+    {
+      "path": "packages/shared/src/exams.d.ts",
+      "bytes": 2694,
+      "sha256": "4c4f241696745c3788c1af57e052ff992f5be608b93531205ad94b7670f2ed31"
+    },
+    {
+      "path": "packages/shared/src/exams.js",
+      "bytes": 9538,
+      "sha256": "8890e75c0ea47579c89265183e2c4567ee253840a6c04cac0bc90b560360f686"
+    },
+    {
+      "path": "packages/shared/src/learningHub.d.ts",
+      "bytes": 2692,
+      "sha256": "a150393ec34070eaba068896de63d703457b06abf6ee2b15d53d9bd16fde28a5"
+    },
+    {
+      "path": "packages/shared/src/learningHub.js",
+      "bytes": 27997,
+      "sha256": "a55661ab256a1364d8742233b2bb526fc19575515f1096ae93521b4de4ffec82"
+    },
+    {
+      "path": "packages/shared/src/takenotes.d.ts",
+      "bytes": 979,
+      "sha256": "0bb24d0b263acbfcb2f6265aa54dfd68a635b6f0e8b654be2ccd7aa5d4123cfa"
+    },
+    {
+      "path": "packages/shared/src/takenotes.js",
+      "bytes": 7299,
+      "sha256": "7a36c116f10ba06674c402aeb52d06e193fd6b7c06ffa8f0c9891b10c3867542"
+    }
+  ]
+}

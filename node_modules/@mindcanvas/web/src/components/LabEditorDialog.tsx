@@ -1,3 +1,4 @@
+import ContentLanguageField, { useContentLanguage } from "./ContentLanguageField";
 import { useEffect, useRef, useState } from "react";
 import { Check, Clipboard, Code2, FileUp, ImagePlus, Play, Save, Sparkles } from "lucide-react";
 import Dialog from "./Dialog";
@@ -14,6 +15,7 @@ export function emptyLabEditor(): LabProject {
   return { id: "", title: "", mode: "freeform", visualStyle: "2d", viewerConfig: DEFAULT_LAB_VIEWER, subject: "other", learnerLevel: "", sourceFileName: "", sourceText: "", request: "", designPrompt: "", planPrompt: "", programPrompt: "", programHtml: "", allowExternalResources: false, design: null, createdAt: "", updatedAt: "" };
 }
 export default function LabEditorDialog({ owner, initial, onClose, onSave }: { owner: string | null; initial?: LabProject; onClose: () => void; onSave: (draft: LabProject) => Promise<void> }) {
+  const [outputLanguage, setOutputLanguage] = useContentLanguage("lab");
   const { language } = useLanguage(), vi = language === "vi";
   const [draft, setDraft] = useState<LabProject>(initial ?? emptyLabEditor());
   const [workflow, setWorkflow] = useState<"import" | "ai">("import"), [inputMode, setInputMode] = useState<"file" | "paste">("file");
@@ -48,7 +50,18 @@ export default function LabEditorDialog({ owner, initial, onClose, onSave }: { o
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-  const close = () => { if (!busy && (!dirty || window.confirm(vi ? "Đóng mà chưa lưu thay đổi vào Lab? Bản đã lưu vẫn được giữ." : "Close without saving these changes to the Lab?"))) onClose(); };
+  const close = async () => {
+    if (busy || saveLock.current) return;
+    if (!dirty) { onClose(); return; }
+    saveLock.current = true; setBusy(true);
+    try {
+      await draftWrites.current.catch(() => {});
+      await writeLabDraft(owner, { editor: draft, workflow, visual, pending: true });
+      onClose();
+    } catch {
+      setError(vi ? "Chưa giữ được bản nháp. Hãy tải HTML xuống hoặc thử đóng lại." : "The draft could not be kept. Download the HTML or try closing again.");
+    } finally { saveLock.current = false; setBusy(false); }
+  };
   async function chooseHtml(file?: File) {
     if (!file) return;
     setError("");
@@ -78,17 +91,17 @@ export default function LabEditorDialog({ owner, initial, onClose, onSave }: { o
     finally { saveLock.current = false; setBusy(false); }
   }
   const mode = draft.mode ?? "freeform", info = labModeInfo(mode, language);
-  return <Dialog title={initial ? (vi ? "Chỉnh sửa Lab" : "Edit Lab") : (vi ? "Thêm Lab" : "Add Lab")} onClose={close} dismissible={!busy}>
+  return <Dialog workspace title={initial ? (vi ? "Chỉnh sửa Lab" : "Edit Lab") : (vi ? "Thêm Lab" : "Add Lab")} onClose={close} dismissible={!busy} footer={<footer className="lab-editor-footer lab-footer-actions"><button className="secondary-button" disabled={busy} onClick={close}>{vi ? "Hủy" : "Cancel"}</button><div className="lab-actions"><button className="secondary-button" disabled={busy} onClick={() => { if (checkHtml()) { setPreview({ ...draft }); emitGuideAction("lab:run"); } }}><Play size={16}/>{vi ? "Xem thử" : "Preview"}</button><button className="primary-button" disabled={busy} onClick={() => void save()}><Save size={17}/>{busy ? (vi ? "Đang lưu…" : "Saving…") : (vi ? "Lưu Lab" : "Save Lab")}</button></div></footer>}>
     <div className="lab-editor lab-step-card">
       {restored && <div className="lab-draft-recovery"><span>{vi ? "Có bản nháp chưa lưu." : "An unsaved draft is available."}</span><button className="secondary-button" onClick={() => { if (restoreRef.current) { setDraft(restoreRef.current); setVisual(restoreRef.current.visualStyle ?? "2d"); setInputMode("paste"); } setRestored(false); }}>{vi ? "Khôi phục bản nháp" : "Restore draft"}</button><button className="secondary-button" onClick={() => setRestored(false)}>{vi ? "Bỏ qua" : "Dismiss"}</button></div>}
       <div className="lab-editor-tabs" role="tablist" aria-label={vi ? "Cách tạo Lab" : "Creation method"}><button role="tab" aria-selected={workflow === "import"} onClick={() => setWorkflow("import")}><FileUp size={18}/>{vi ? "Tôi đã có HTML" : "Import HTML"}</button><button role="tab" aria-selected={workflow === "ai"} onClick={() => { setWorkflow("ai"); if (mode === "freeform" && !draft.request) update("mode", "animation"); }}><Sparkles size={18}/>{vi ? "Tạo bằng AI" : "Create with AI"}</button></div>
       <label>{vi ? "Tên Lab" : "Lab name"}<input autoFocus value={draft.title} maxLength={200} onChange={e => update("title", e.target.value)} placeholder={vi ? "Ví dụ: Quá trình điện phân" : "Example: Electrolysis"}/></label>
-      {workflow === "ai" && <section className="lab-ai-setup"><h3>{vi ? "Bạn muốn người học trải nghiệm gì?" : "What will learners experience?"}</h3><div className="lab-mode-grid">{LAB_MODES.map(item => { const data = labModeInfo(item, language); return <button type="button" className={`lab-mode-option ${mode === item ? "selected" : ""}`} aria-pressed={mode === item} key={item} onClick={() => update("mode", item)}><span>{data.label}{mode === item && <Check size={16}/>}</span><small>{data.hint}</small></button>; })}</div>
+      {workflow === "ai" && <section className="lab-ai-setup"><h3>{vi ? "Bạn muốn người học trải nghiệm gì?" : "What will learners experience?"}</h3><ContentLanguageField value={outputLanguage} onChange={next => { setOutputLanguage(next); update("designPrompt", ""); setCopied(false); }}/><div className="lab-mode-grid">{LAB_MODES.map(item => { const data = labModeInfo(item, language); return <button type="button" className={`lab-mode-option ${mode === item ? "selected" : ""}`} aria-pressed={mode === item} key={item} onClick={() => update("mode", item)}><span>{data.label}{mode === item && <Check size={16}/>}</span><small>{data.hint}</small></button>; })}</div>
         <div className="lab-mode-example"><strong>{vi ? "Ví dụ" : "Example"}</strong><p>{info.example}</p><button className="secondary-button" onClick={() => { if (!draft.request || window.confirm(vi ? "Thay yêu cầu hiện tại bằng ví dụ?" : "Replace the current request with this example?")) update("request", info.example); }}>{vi ? "Dùng ví dụ" : "Use example"}</button></div>
         <div className="lab-editor-fields"><label>{vi ? "Trình độ người học" : "Learner level"}<input value={draft.learnerLevel} maxLength={120} onChange={e => update("learnerLevel", e.target.value)} placeholder={vi ? "Ví dụ: lớp 9" : "Example: grade 9"}/></label><label>{vi ? "Cách thể hiện" : "Visual style"}<select value={visual} onChange={e => { const value = e.target.value as "2d" | "3d"; setVisual(value); update("visualStyle", value); }}><option value="2d">2D</option><option value="3d">3D</option></select></label></div>
         <label>{vi ? "Mục tiêu và yêu cầu tương tác" : "Learning goals and interactions"}<textarea rows={4} maxLength={12000} value={draft.request} onChange={e => update("request", e.target.value)} placeholder={info.example}/></label>
         <details><summary>{vi ? "Tài liệu nguồn và ghi chú" : "Source material and notes"}</summary><label className="lab-file-drop">{vi ? "Thêm tài liệu nguồn" : "Add source material"}<input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.json,.csv" onChange={e => { const file = e.target.files?.[0]; if (!file) return; update("sourceFileName", file.name); if (/\.(txt|md|json|csv)$/i.test(file.name) && file.size <= LAB_LIMITS.maxSourceText) void file.text().then(text => update("sourceText", text)).catch(() => setError(vi ? "Không đọc được nguồn." : "Could not read source.")); }}/></label><small>{draft.sourceFileName} · {vi ? "Với PDF/DOCX/PPTX, gửi tệp gốc cùng prompt cho AI." : "For PDF/DOCX/PPTX, upload the original to your AI provider."}</small><label>{vi ? "Văn bản tham khảo" : "Reference text"}<textarea rows={3} maxLength={LAB_LIMITS.maxSourceText} value={draft.sourceText} onChange={e => update("sourceText", e.target.value)}/></label></details>
-        <div className="lab-actions"><button className="primary-button" onClick={() => { if (!draft.request.trim()) { setError(vi ? "Nhập mục tiêu và yêu cầu trước." : "Enter goals and requirements first."); return; } const prompt = buildLabPlanPrompt({ ...draft, language, mode, visualStyle: visual }); setDraft(old => ({ ...old, designPrompt: prompt, programPrompt: prompt })); setError(""); emitGuideAction("lab:prompt"); }}><Sparkles size={17}/>{vi ? "Tạo prompt HTML" : "Create HTML prompt"}</button>{draft.designPrompt && <button className="secondary-button" onClick={() => void copyTextWithFallback(draft.designPrompt).then(ok => { setCopied(ok); if (!ok) setError(vi ? "Hãy mở prompt và sao chép thủ công." : "Open the prompt and copy manually."); })}><Clipboard size={17}/>{copied ? (vi ? "Đã sao chép" : "Copied") : (vi ? "Sao chép prompt" : "Copy prompt")}</button>}</div>
+        <div className="lab-actions"><button className="primary-button" onClick={() => { if (!draft.request.trim()) { setError(vi ? "Nhập mục tiêu và yêu cầu trước." : "Enter goals and requirements first."); return; } const prompt = buildLabPlanPrompt({ ...draft, language: outputLanguage, mode, visualStyle: visual }); setDraft(old => ({ ...old, designPrompt: prompt, programPrompt: prompt })); setError(""); emitGuideAction("lab:prompt"); }}><Sparkles size={17}/>{vi ? "Tạo prompt HTML" : "Create HTML prompt"}</button>{draft.designPrompt && <button className="secondary-button" onClick={() => void copyTextWithFallback(draft.designPrompt).then(ok => { setCopied(ok); if (!ok) setError(vi ? "Hãy mở prompt và sao chép thủ công." : "Open the prompt and copy manually."); })}><Clipboard size={17}/>{copied ? (vi ? "Đã sao chép" : "Copied") : (vi ? "Sao chép prompt" : "Copy prompt")}</button>}</div>
         {draft.designPrompt && <details className="lab-prompt-output"><summary>{vi ? "Xem prompt đã tạo" : "View generated prompt"}</summary><textarea rows={8} aria-label="Prompt" readOnly value={draft.designPrompt}/></details>}
         <p className="lab-editor-help">{vi ? "Gửi prompt và tài liệu cho AI bạn chọn, rồi thêm HTML trả về ở bên dưới. MindCanvas chưa tạo HTML trực tiếp." : "Send the prompt and source to your AI provider, then import the returned HTML below."}</p>
       </section>}
@@ -103,6 +116,5 @@ export default function LabEditorDialog({ owner, initial, onClose, onSave }: { o
       {error && <p className="form-error" role="alert">{error}</p>}
       {preview && <LabViewer html={preview.programHtml} title={preview.title || "Preview"} allowExternalResources={preview.allowExternalResources} viewerConfig={preview.viewerConfig} onThumbnail={(image, manual) => setDraft(old => old.programHtml === preview.programHtml && (!old.thumbnail || manual) ? { ...old, thumbnail: image } : old)}/>}
     </div>
-    <footer className="lab-editor-footer lab-footer-actions"><button className="secondary-button" disabled={busy} onClick={close}>{vi ? "Hủy" : "Cancel"}</button><div className="lab-actions"><button className="secondary-button" disabled={busy} onClick={() => { if (checkHtml()) { setPreview({ ...draft }); emitGuideAction("lab:run"); } }}><Play size={16}/>{vi ? "Xem thử" : "Preview"}</button><button className="primary-button" disabled={busy} onClick={() => void save()}><Save size={17}/>{busy ? (vi ? "Đang lưu…" : "Saving…") : (vi ? "Lưu Lab" : "Save Lab")}</button></div></footer>
   </Dialog>;
 }

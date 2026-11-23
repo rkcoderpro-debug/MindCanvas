@@ -183,8 +183,9 @@ app.post("/api/takenotes/generate", requireUser, async (req, res) => {
   }
 });
 
-const aiInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional(), ...aiOptionsSchema.shape, detail: mindMapDetailSchema });
-const mindMapInput = z.object({ text: z.string().min(1).max(120000), documentId: z.string().optional(), ...mindMapOptionsSchema.shape, detail: mindMapDetailSchema, unlimited: z.coerce.boolean().default(false) });
+const contentLanguageSchema = z.enum(["vi", "en"]).optional();
+const aiInput = z.object({ language: contentLanguageSchema, text: z.string().min(1).max(120000), documentId: z.string().optional(), ...aiOptionsSchema.shape, detail: mindMapDetailSchema });
+const mindMapInput = z.object({ language: contentLanguageSchema, text: z.string().min(1).max(120000), documentId: z.string().optional(), ...mindMapOptionsSchema.shape, detail: mindMapDetailSchema, unlimited: z.coerce.boolean().default(false) });
 app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   const parsed = mindMapInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid document input." });
   try {
@@ -196,7 +197,7 @@ app.post("/api/ai/mind-map", requireUser, async (req, res) => {
   catch (error) { return sendAiError(res, error, "AI processing failed."); }
 });
 
-const aiFileInput = z.object({ task: z.enum(["mind-map", "flashcards", "quiz"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20), ...aiOptionsSchema.shape, ...mindMapOptionsSchema.shape, detail: mindMapDetailSchema, unlimited: z.coerce.boolean().default(false) });
+const aiFileInput = z.object({ language: contentLanguageSchema, task: z.enum(["mind-map", "flashcards", "quiz"]), maxCards: z.coerce.number().int().min(3).max(MAX_FLASHCARDS).default(20), ...aiOptionsSchema.shape, ...mindMapOptionsSchema.shape, detail: mindMapDetailSchema, unlimited: z.coerce.boolean().default(false) });
 app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) => {
   const parsed = aiFileInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid file AI request." });
@@ -212,10 +213,10 @@ app.post("/api/ai/file", requireUser, upload.single("file"), async (req, res) =>
       const source = await extractDocument(req.file!.buffer, req.file!.originalname, req.file!.mimetype);
       const documentId = crypto.randomUUID();
       const generated: any = parsed.data.task === "mind-map"
-        ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image, depth: parsed.data.depth, detail: parsed.data.detail }))
+        ? await aiScheduler.run(req.userId!, () => generateWithFallback({ text: source.text, documentId, image: source.image, language: parsed.data.language, depth: parsed.data.depth, detail: parsed.data.detail }))
         : parsed.data.task === "flashcards"
-          ? await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth }))
-          : await aiScheduler.run(req.userId!, () => generateQuizWithGemini({ text: source.text, documentId, maxQuestions: Math.min(MAX_QUIZ_QUESTIONS, parsed.data.maxCards), image: source.image, difficulty: parsed.data.difficulty, depth: parsed.data.depth }));
+          ? await aiScheduler.run(req.userId!, () => generateFlashcardsWithGemini({ text: source.text, documentId, maxCards: parsed.data.maxCards, image: source.image, language: parsed.data.language, difficulty: parsed.data.difficulty, depth: parsed.data.depth }))
+          : await aiScheduler.run(req.userId!, () => generateQuizWithGemini({ text: source.text, documentId, maxQuestions: Math.min(MAX_QUIZ_QUESTIONS, parsed.data.maxCards), image: source.image, language: parsed.data.language, difficulty: parsed.data.difficulty, depth: parsed.data.depth }));
       return { source, documentId, result: generated };
     });
     const { source, documentId, result } = generatedBundle;

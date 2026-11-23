@@ -48,7 +48,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount()); host.remove(); localStorage.removeItem("mindcanvas:language");
+  await act(async () => root.unmount()); host.remove(); localStorage.removeItem("mindcanvas:language"); localStorage.removeItem("mindcanvas.output-language.quiz");
 });
 
 it("reveals the selected question immediately and locks its answer", async () => {
@@ -140,7 +140,28 @@ it("shows the actual question count when a manual result exceeds the selected ma
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(json, JSON.stringify(result));
     json.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(async () => (host.querySelector('.quiz-manual-form .actions .primary-button') as HTMLButtonElement).click());
+  await act(async () => (host.querySelector('.quiz-create-actions .primary-button') as HTMLButtonElement).click());
   expect(host.querySelector('.quiz-manual-form .form-error')?.textContent).toContain("20 questions");
   expect(host.querySelector('.quiz-manual-form .form-error')?.textContent).toContain("10");
+});
+
+it("keeps the quiz draft when dismissed outside and uses the chosen content language in the manual prompt", async () => {
+  const open = () => (host.querySelector(".quiz-heading button") as HTMLButtonElement).click();
+  await act(async () => open());
+  expect(host.querySelector(".dialog-workspace > .dialog-titlebar button")).toBeTruthy();
+  expect(host.querySelector(".dialog-workspace > .quiz-create-actions button")).toBeTruthy();
+  const select = host.querySelector(".content-language-field select") as HTMLSelectElement;
+  await act(async () => { select.value = "vi"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  await typeQuestionCount("17");
+  const dialog = host.querySelector("dialog")!;
+  vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue({ left: 10, right: 100, top: 10, bottom: 100 } as DOMRect);
+  const pointer = (target: EventTarget, name: string, x: number, y: number) => target.dispatchEvent(new MouseEvent(name, { bubbles: true, button: 0, clientX: x, clientY: y }));
+  await act(async () => { pointer(dialog.querySelector("textarea")!, "pointerdown", 30, 30); pointer(dialog, "pointerup", 1, 1); });
+  expect(host.querySelector("dialog")).toBeTruthy();
+  await act(async () => { pointer(dialog, "pointerdown", 1, 1); pointer(dialog, "pointerup", 2, 2); });
+  expect(host.querySelector("dialog")).toBeNull();
+  await act(async () => open());
+  expect((host.querySelector(".quiz-manual-form textarea[readonly]") as HTMLTextAreaElement).value).toMatch(/quiz in Vietnamese[\s\S]+17 clear questions/);
+  expect((host.querySelector(".content-language-field select") as HTMLSelectElement).value).toBe("vi");
+  expect(host.querySelector(".quiz-heading button")?.textContent).toContain("Create");
 });

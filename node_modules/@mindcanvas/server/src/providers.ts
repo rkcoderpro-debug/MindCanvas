@@ -1,3 +1,4 @@
+import type { ContentLanguage } from "../../../packages/shared/src/contentLanguage.js";
 import { config } from "./config.js";
 import { generateGemini, type GeminiImageInput } from "./gemini.js";
 import { parseLenientJson } from "./json.js";
@@ -6,7 +7,7 @@ import type { AiGenerationOptions, MindMapDetail } from "./aiOptions.js";
 type AIProviderName = "experiential-labs" | "gemini" | "demo";
 type StructuredMindMap = { title: string; nodes: Array<{ id: string; label: string; parentId?: string; sourcePage?: number }>; edges: Array<{ id: string; source: string; target: string; label?: string }>; sourceDocumentId?: string };
 
-export type GenerateInput = { text: string; documentId?: string; image?: GeminiImageInput; difficulty?: AiGenerationOptions["difficulty"]; depth?: AiGenerationOptions["depth"]; detail?: MindMapDetail };
+export type GenerateInput = { text: string; documentId?: string; image?: GeminiImageInput; language?: ContentLanguage; difficulty?: AiGenerationOptions["difficulty"]; depth?: AiGenerationOptions["depth"]; detail?: MindMapDetail };
 export type ProviderResult = { provider: AIProviderName; model: string; graph: StructuredMindMap };
 
 export interface AIProvider {

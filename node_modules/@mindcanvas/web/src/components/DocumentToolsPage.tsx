@@ -1,5 +1,6 @@
+import { BackButton } from "./PageNavigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, FileType2, HardDrive, Search, Upload, Wrench } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, FileType2, HardDrive, Search, Upload, Wrench } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
 import { validateHtmlDocument, textFromDataUrl } from "../lib/htmlDocument";
 import { useLearningTool } from "../lib/learningNavigation";
@@ -137,7 +138,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   return <section className={`document-tools-page document-tools-shell ${libraryCollapsed ? "library-collapsed" : ""} ${selected?.kind === "html" ? "html-reading" : ""}`} data-library-collapsed={libraryCollapsed ? "true" : "false"}>
     <header className="document-tools-header">
       <div className="document-tools-header-leading">
-        <button className="text-button document-tools-back" onClick={selected ? closeDocument : onBack} aria-label="Quay lại Học tập"><ArrowLeft size={16}/><span>{selected ? "Thư viện" : "Học tập"}</span></button>
+        {(selected || onBack) && <BackButton className="document-tools-back" onClick={selected ? closeDocument : onBack}>{selected ? (language === "en" ? "Document library" : "Thư viện tài liệu") : (language === "en" ? "Learning Space" : "Học tập")}</BackButton>}
         <span className="document-tools-header-divider" aria-hidden="true"/>
         <div className="document-tools-heading-inline"><span className="document-tools-heading-icon"><Wrench size={17}/></span><div><strong>{language === "en" ? t("documentViewer") : "Thư viện tài liệu"}</strong><small><HardDrive size={12}/> Thiết bị{owner ? " và cloud" : ""}</small></div></div>
       </div>

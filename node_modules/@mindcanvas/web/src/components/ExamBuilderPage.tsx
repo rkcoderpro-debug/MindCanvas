@@ -1,3 +1,7 @@
+import { BackButton } from "./PageNavigation";
+import ContentLanguageField from "./ContentLanguageField";
+import { readContentLanguage, rememberContentLanguage } from "../lib/contentLanguage";
+import { useLanguage } from "../lib/i18n";
 import { useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, FileUp, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
@@ -20,7 +24,9 @@ import ExamPlanEditor from "./ExamPlanEditor";
 export const EXAM_FILE_ACCEPT = ".pdf,.docx,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
 const MAX_FILE = 10 * 1024 * 1024;
 export default function ExamBuilderPage({ owner, documents = [], quizzes, accountPlan, onOpenQuiz }: { owner: string | null; documents?: UploadedDocument[]; quizzes: QuizStore; accountPlan?: AccountPlan; onOpenQuiz: () => void }) {
-  const initial = useMemo(() => { try { return { work: loadExamWorkspace(owner), error: "" }; } catch { return { work: emptyExamWorkspace(), error: "Không thể khôi phục bản nháp trên thiết bị. Hãy kiểm tra quyền lưu trữ của trình duyệt." }; } }, [owner]);
+  const { language: interfaceLanguage } = useLanguage();
+  const initialLanguage = readContentLanguage("exam-auto", interfaceLanguage, true);
+  const initial = useMemo(() => { try { return { work: loadExamWorkspace(owner, initialLanguage), error: "" }; } catch { return { work: emptyExamWorkspace(initialLanguage), error: "Không thể khôi phục bản nháp trên thiết bị. Hãy kiểm tra quyền lưu trữ của trình duyệt." }; } }, [owner]);
   const [work, setWork] = useState(initial.work);
   const [error, setError] = useState(initial.error), [notice, setNotice] = useState("");
   const [persistError, setPersistError] = useState("");
@@ -154,7 +160,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
   const selectedReference = result?.sources.find(source => source.id === reference?.sourceId);
   if (isManual) return <ExamManualStudio key={owner} owner={owner} documents={documents} accountPlan={accountPlan} onAuto={() => setWork(current => ({ ...current, aiMode: "auto" }))}/>;
   return <section className="exam-builder-page">
-    <header className="exam-builder-heading"><div><span className="eyebrow">EXAM STUDIO</span><h1>Tạo đề thi bằng AI</h1><p>Tải đề mẫu, tài liệu hoặc nhập nội dung để AI tạo đề cho bạn.</p></div><button className="secondary-button" disabled={!!busy} onClick={() => { setShowResult(false); setPaste(""); setWork(emptyExamWorkspace()); setAnswers(false); setReference(null); setError(""); }}>Tạo đề mới</button></header>
+    <header className="exam-builder-heading"><div><span className="eyebrow">EXAM STUDIO</span><h1>Tạo đề thi bằng AI</h1><p>Tải đề mẫu, tài liệu hoặc nhập nội dung để AI tạo đề cho bạn.</p></div><button className="secondary-button" disabled={!!busy} onClick={() => { setShowResult(false); setPaste(""); setWork(emptyExamWorkspace(initialLanguage)); setAnswers(false); setReference(null); setError(""); }}>Tạo đề mới</button></header>
     <ExamModeSwitch mode="auto" disabled={!!busy} onChange={mode => { setWork(current => ({ ...current, aiMode: mode })); setError(""); setNotice(""); }}/>
     {error && <p role="alert" className="form-error">{error}</p>}{persistError && <p role="alert" className="form-error">{persistError}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}{busy && <p role="status" className="exam-busy"><RefreshCw size={16}/>{busy}</p>}
     <div className="exam-builder-layout exam-creation-layout"><div className="exam-builder-controls" hidden={showResult && !!result}><fieldset disabled={!!busy}>
@@ -163,7 +169,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       <label>Cách tạo<select value={work.settings.mode} onChange={event => setting({ mode: event.target.value as ExamSettings["mode"] })}><option value="materials" disabled={work.settings.format === "paper"}>Theo tài liệu</option><option value="template">Tương tự đề mẫu</option></select></label>
       <label>Độ khó<select aria-label="Độ khó" value={work.settings.difficulty} onChange={event => setting({ difficulty: event.target.value as ExamSettings["difficulty"] })}><option value="easy">Dễ · nhận biết, áp dụng trực tiếp</option><option value="medium">Vừa · hiểu và vận dụng</option><option value="hard">Khó · suy luận nhiều bước</option></select></label>
       </div><details><summary>Tùy chọn nâng cao</summary><div className="exam-fields"><label>Môn học<input value={work.settings.subject} maxLength={160} onChange={event => setting({ subject: event.target.value })}/></label><label>Lớp / trình độ<input value={work.settings.level} maxLength={160} onChange={event => setting({ level: event.target.value })}/></label></div>
-      <label>Ngôn ngữ đề<select aria-label="Ngôn ngữ Auto" value={work.settings.language} onChange={event => setting({ language: event.target.value as "vi" | "en" })}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+      <ContentLanguageField bilingual value={work.settings.language} onChange={value => { rememberContentLanguage("exam-auto", value); setting({ language: value }); }} />
       </details></fieldset><fieldset disabled={!!busy}><legend>File mẫu hoặc nội dung tạo đề</legend><div className="exam-source-grid"><div>
       {work.settings.mode === "template" && <label className="exam-upload"><FileUp size={17}/>Chọn đề mẫu<input aria-label="Chọn đề mẫu" type="file" accept={EXAM_FILE_ACCEPT} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "template"); }}/></label>}
       <label className="exam-upload"><FileUp size={17}/>{work.settings.mode === "template" ? "Tài liệu kiến thức bổ sung" : "Tải tài liệu"}<input aria-label="Tải tài liệu" type="file" multiple accept={EXAM_FILE_ACCEPT} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "material"); }}/></label>
@@ -182,7 +188,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       {!owner && <p className="exam-warning">Đăng nhập để đọc file và dùng AI.</p>}
     </details></fieldset>
     {work.blueprint && <details className="exam-secondary-tools"><summary>Điều chỉnh cấu trúc đề</summary><ExamPlanEditor plan={work.blueprint} format={work.settings.format} maxQuestions={maxQuestions} busy={!!busy} confirmed={work.planConfirmed} canGenerate={work.sourceConfirmed && !!owner} onChange={updatePlan} onConfirm={value => setWork(current => ({ ...current, planConfirmed: value }))} onGenerate={() => void generate()}/></details>}
-    </div>{result && <main className="exam-result-view" hidden={!showResult}><button className="secondary-button exam-back-button" disabled={!!busy} onClick={backToSetup}>Quay lại thiết lập</button>
+    </div>{result && <main className="exam-result-view" hidden={!showResult}><BackButton className="exam-back-button" disabled={!!busy} onClick={backToSetup}>Thiết lập đề</BackButton>
       <div className="exam-result-toolbar"><button className="secondary-button" aria-expanded={answers} onClick={() => { setAnswers(value => !value); setReference(null); }}>{answers ? "Xem đề" : "Đáp án & lời giải"}</button><button className="secondary-button" disabled={!!busy} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? "Xong chỉnh sửa" : "Chỉnh sửa đề"}</button><button className="secondary-button" disabled={!!busy} onClick={() => void save(false)}><Save size={16}/>Lưu đề</button>
         {result.settings.format === "quiz" ? <><button className="primary-button" disabled={!!busy || quizzes.busy || quizzes.loading} onClick={() => void save(true)}>Lưu vào Quiz</button>{result.quizId && <button className="secondary-button" onClick={onOpenQuiz}>Đi tới Quiz</button>}</> : <button className="primary-button" disabled={!!busy} onClick={() => void run("Đang chuẩn bị PDF…", async () => { await exportExamPdf(result); if (alive.current) setNotice("Trong hộp thoại in, chọn Lưu thành PDF. Đề ở trước; đáp án và lời giải bắt đầu ở phần riêng phía sau."); })}>Xuất PDF</button>}
       </div>

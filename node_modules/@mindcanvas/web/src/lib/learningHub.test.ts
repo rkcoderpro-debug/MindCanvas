@@ -120,3 +120,27 @@ it("accepts progress only from its current frame and token, and stops listening 
     await act(async () => root.unmount());
   } finally { host.remove(); if (descriptor) Object.defineProperty(globalThis, "crypto", descriptor); }
 });
+
+it("round-trips a bilingual offline hub without duplicating quiz choices or the correct answer", () => {
+  const hub = fixtureHub();
+  hub.language = "vi-en";
+  hub.title = "Năng lượng\nEnergy";
+  for (const chapter of hub.chapters) for (const q of chapter.questions) {
+    q.prompt += "\nEnergy question";
+    q.options[0].text = "Đúng\nTrue";
+    q.options[1].text = "Sai\nFalse";
+  }
+  const html = renderLearningHub(hub);
+  expect(readLearningHub(html)?.language).toBe("vi-en");
+  const dom = new JSDOM(html, { runScripts: "dangerously" }), doc: Document = dom.window.document;
+  try {
+    expect(doc.documentElement.lang).toBe("vi");
+    expect(doc.querySelector("main h1")?.textContent).toBe("Năng lượng\nEnergy");
+    [...doc.querySelectorAll<HTMLButtonElement>("nav button")].find(b => b.textContent?.includes("Chương 1"))!.click();
+    [...doc.querySelectorAll<HTMLButtonElement>("main button")].find(b => b.textContent === "Làm quiz chương này")!.click();
+    const choices = [...doc.querySelectorAll<HTMLButtonElement>(".choices button")];
+    expect(choices).toHaveLength(2);
+    choices.find(b => b.textContent === "Đúng\nTrue")!.click();
+    expect(doc.querySelector(".feedback")?.textContent).toContain("Chính xác");
+  } finally { dom.window.close(); }
+});

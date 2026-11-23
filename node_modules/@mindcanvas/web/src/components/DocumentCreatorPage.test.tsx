@@ -24,8 +24,8 @@ it("starts with document types and retains note configuration when changing type
   await click("Tạo Takenote"); await waitFor(() => !!host.querySelector('[aria-label="Nội dung nguồn Takenote"]'));
   await click("Learning Hub HTML"); await click("AI Manual");
   expect((host.querySelector('[aria-label="Prompt Takenote"]') as HTMLTextAreaElement).value).toContain("HTML5");
-  await click("Đổi loại tài liệu"); await click("Tạo đề thi"); expect(host.textContent).toContain("Existing exam editor");
-  await click("Đổi loại tài liệu"); await click("Tạo Takenote");
+  await click("Thư viện tài liệu"); await click("Tạo đề thi"); expect(host.textContent).toContain("Existing exam editor");
+  await click("Thư viện tài liệu"); await click("Tạo Takenote");
   expect(button("Learning Hub HTML").getAttribute("aria-pressed")).toBe("true"); expect(button("AI Manual").getAttribute("aria-pressed")).toBe("true");
 });
 it("combines legacy exams and notes, filters and opens HTML notes in the real viewer", async () => {
@@ -36,6 +36,6 @@ it("combines legacy exams and notes, filters and opens HTML notes in the real vi
   await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Lọc tài liệu đã tạo"] button')].find(node => node.textContent === "Takenote")!.click()); expect(host.querySelectorAll(".created-document-open")).toHaveLength(1);
   await click("Energy lesson"); await waitFor(() => !!host.querySelector('.note-result:not([hidden]) iframe'));
   expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts"); expect(host.querySelector("iframe")?.getAttribute("srcdoc")).toContain("Energy lesson");
-  await click("Quay lại thiết lập"); await click("Đổi loại tài liệu"); await click("Energy lesson");
+  await click("Thiết lập Takenote"); await click("Thư viện tài liệu"); await click("Energy lesson");
   await waitFor(() => !!host.querySelector('.note-result:not([hidden]) iframe'));
 });

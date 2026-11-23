@@ -58,7 +58,7 @@ describe("AI Manual mind-map flow", () => {
     expect(beforeGenerate).not.toHaveBeenCalled();
   });
 
-  it("exposes mind-map depth controls and forwards them to generation", async () => {
+  it("forwards mind-map depth and the selected output language independently from the interface", async () => {
     vi.mocked(generateMindMap).mockResolvedValue({ provider: "gemini", graph: { title: "Map", nodes: [{ id: "root", label: "Root" }], edges: [] } });
     await act(async () => root.render(<LanguageProvider><AiPanel projectId="project" canUse={true} beforeGenerate={async () => true} onClose={() => undefined} onApply={() => undefined}/></LanguageProvider>));
 
@@ -70,6 +70,10 @@ describe("AI Manual mind-map flow", () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(detail, "detailed");
     await act(async () => detail.dispatchEvent(new Event("change", { bubbles: true })));
 
+    const output = host.querySelector<HTMLSelectElement>(".content-language-field select")!;
+    output.value = "en";
+    await act(async () => output.dispatchEvent(new Event("change", { bubbles: true })));
+
     const textTab = host.querySelector<HTMLButtonElement>('.ai-source-tabs button[role="tab"]')!;
     await act(async () => textTab.click());
     const source = host.querySelector<HTMLTextAreaElement>(".ai-text-source textarea")!;
@@ -77,7 +81,7 @@ describe("AI Manual mind-map flow", () => {
     await act(async () => source.dispatchEvent(new Event("input", { bubbles: true })));
     await act(async () => (host.querySelector(".actions .primary-button") as HTMLButtonElement).click());
 
-    expect(generateMindMap).toHaveBeenCalledWith("Source text", undefined, expect.any(AbortSignal), { difficulty: "balanced", depth: "detailed" }, "detailed", false);
+    expect(generateMindMap).toHaveBeenCalledWith("Source text", undefined, expect.any(AbortSignal), { difficulty: "balanced", depth: "detailed" }, "detailed", false, "en");
   });
 
   it("keeps an Auto request alive while minimized and notifies when it finishes", async () => {

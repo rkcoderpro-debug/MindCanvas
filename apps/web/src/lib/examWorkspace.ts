@@ -1,12 +1,13 @@
+import type { DocumentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import { type ExamSettings, type ExamSource, type ExamBlueprint, type SavedExam, validateExamSettings } from "@mindcanvas/shared";
 import type { QuizQuestion } from "./quiz";
 import { emptyManualExam, validateManualAttributes, type ManualExamWorkspace } from "./examManual";
 export type ExamWorkspace = { settings: ExamSettings; sources: ExamSource[]; blueprint: ExamBlueprint | null; result: SavedExam | null; sourceConfirmed: boolean; planConfirmed: boolean; aiMode?: "auto" | "manual"; manual?: ManualExamWorkspace };
-export const emptyExamWorkspace = (): ExamWorkspace => ({ settings: { format: "quiz", mode: "materials", difficulty: "medium", subject: "Tổng hợp", level: "Theo tài liệu", language: "vi" }, sources: [], blueprint: null, result: null, sourceConfirmed: false, planConfirmed: false });
+export const emptyExamWorkspace = (language: DocumentLanguage = "vi"): ExamWorkspace => ({ settings: { format: "quiz", mode: "materials", difficulty: "medium", subject: "Tổng hợp", level: "Theo tài liệu", language }, sources: [], blueprint: null, result: null, sourceConfirmed: false, planConfirmed: false });
 const key = (owner: string | null) => `mindcanvas:exam-workspace:v1:${owner ?? "guest"}`;
-export function loadExamWorkspace(owner: string | null): ExamWorkspace {
+export function loadExamWorkspace(owner: string | null, language: DocumentLanguage = "vi"): ExamWorkspace {
   const raw = localStorage.getItem(key(owner));
-  if (!raw) return emptyExamWorkspace();
+  if (!raw) return emptyExamWorkspace(language);
   if (raw.length > 4000000) throw new Error("Bản nháp lưu trên thiết bị vượt giới hạn.");
   const data = JSON.parse(raw) as ExamWorkspace;
   validateExamSettings(data.settings);

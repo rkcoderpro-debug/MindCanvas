@@ -1,3 +1,4 @@
+import type { DocumentLanguage } from "./contentLanguage.js";
 export type HubRef = { sourceId: string; location: string };
 export type HubGoal = { id: string; title: string; sourceRefs: HubRef[] };
 export type HubSimulation = { inputLabel: string; inputUnit: string; outputLabel: string; outputUnit: string; coefficient: number; power: 1 | 2 | 3; offset: number; min: number; max: number; initial: number; step: number; equation: string; assumptions: string };
@@ -5,7 +6,7 @@ export type HubObjective = HubGoal & { explanation: string; terms: string; examp
 export type HubQuestion = { id: string; objectiveId: string; prompt: string; options: { id: string; text: string }[]; answerId: string; explanation: string; difficulty: "basic" | "applied" };
 export type HubChapter = { id: string; title: string; summary: string; objectives: HubObjective[]; questions: HubQuestion[] };
 export type HubOutline = { title: string; summary: string; warnings: string[]; chapters: { id: string; title: string; summary: string; objectives: HubGoal[] }[] };
-export type LearningHub = Omit<HubOutline, "chapters"> & { version: 1; language: "vi" | "en"; questionsPerRound: number; difficulty: "mixed" | "basic" | "applied"; sources?: { id: string; name: string }[]; chapters: HubChapter[] };
+export type LearningHub = Omit<HubOutline, "chapters"> & { version: 1; language: DocumentLanguage; questionsPerRound: number; difficulty: "mixed" | "basic" | "applied"; sources?: { id: string; name: string }[]; chapters: HubChapter[] };
 export type HubProgress = { read: string[]; attempts: Record<string, { tries: number; correct: number; lastCorrect: boolean }> };
 export type HubEvent = { kind: "read"; objectiveId: string } | { kind: "answer"; questionId: string; answerId: string };
 export function validateHubOutline(value: unknown, sourceIds?: string[]): HubOutline;

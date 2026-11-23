@@ -95,7 +95,7 @@ function parseJsonObject(raw: string): JsonObject {
 function languageInstruction(language: string): string {
   return language === "vi"
     ? "Write labels and content in Vietnamese."
-    : "Write labels and content in the same language as the source.";
+    : "Write labels and content in English, regardless of the source language.";
 }
 
 function mindMapDetailInstruction(detail: MindMapDetail): string {

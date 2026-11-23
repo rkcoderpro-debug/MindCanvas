@@ -1,3 +1,4 @@
+import { contentLanguageInstruction } from "../../../../packages/shared/src/contentLanguage.js";
 import { examQuestionCount, validateExamSettings, validateExamSources, validateExamBlueprint, validateExamDraft, type ExamBlueprint, type ExamDraft, type ExamSettings, type ExamSource } from "@mindcanvas/shared";
 
 export type ManualExamAttributes = { questionCount: number | null; durationMinutes: number | null; pointsPerQuestion: number | null; instructions: string };
@@ -20,7 +21,7 @@ export function createManualExamSession(settings: ExamSettings, sources: ExamSou
   const example = { blueprint: { title: "Tên đề", durationMinutes: 45, warnings: [], sections: [{ id: "section-1", title: "Phần I", instructions: "", type: "mcq", count: 1, points: 1, optionsCount: 4 }] }, draft: { title: "Tên đề", description: "", warnings: [], sections: [{ id: "section-1", title: "Phần I", instructions: "", questions: [{ id: "q1", type: "mcq", prompt: "Câu hỏi mới", points: 1, options: ["Lựa chọn 1", "Lựa chọn 2", "Lựa chọn 3", "Lựa chọn 4"], correctIndex: 0, answer: "Lựa chọn 1", explanation: "Lời giải đầy đủ", rubric: [], references: [{ sourceId: sources[0].id, page: null, excerpt: "Trích nguyên văn thực sự có trong nguồn" }] }] }] } };
   const prompt = [
     "Create a MindCanvas exam. Return ONLY a UTF-8 JSON object {blueprint,draft}, optionally as mindcanvas-exam.json. No prose or Markdown fences. The example describes the schema, not the requested question count/content.",
-    `Settings: ${JSON.stringify(settings)}. Output language: ${settings.language === "vi" ? "Vietnamese" : "English"}.`,
+    `Settings: ${JSON.stringify(settings)}. ${contentLanguageInstruction(settings.language)}`,
     "Difficulty: easy = recall and direct application; medium = understanding and application; hard = justified multi-step reasoning, without going outside the sources.",
     `Requested attributes: ${JSON.stringify(attributes)}. A null attribute means preserve the supplied template, or choose a suitable value for materials. Hard limit: ${maxQuestions} questions, 12 sections, 1000 total points; duration 5..300 minutes.`,
     settings.mode === "template" ? "Follow the template's sections, question types, option counts and scoring unless a requested non-null attribute overrides them. Generate new situations/questions, not copied or lightly paraphrased template questions." : "Build suitable sections from the supplied learning material.",

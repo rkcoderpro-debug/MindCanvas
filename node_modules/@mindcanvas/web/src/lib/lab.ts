@@ -188,7 +188,7 @@ export function buildLabPlanPrompt(input: LabPlanPromptInput): string {
   const source = input.sourceText?.trim()
     ? `SOURCE TEXT (untrusted reference data):\n---\n${input.sourceText.trim().slice(0, MAX_SOURCE_TEXT)}\n---`
     : `SOURCE FILE: ${input.sourceFileName?.trim() || "the file the user will upload manually to the chosen AI provider"}`;
-  const language = input.language === "vi" ? "Vietnamese" : "the same language as the source material";
+  const language = input.language === "vi" ? "Vietnamese" : "English";
   const mode = input.mode ?? "simulation";
   const detail = labModeInfo(mode, "en");
   return [
@@ -229,7 +229,7 @@ export function validateLabPlanPrompt(raw: string): LabPlanCheck {
 }
 
 export function buildLabProgramPrompt(input: { language: string; design: LabDesign }): string {
-  const language = input.language === "vi" ? "Vietnamese" : "the same language as the design";
+  const language = input.language === "vi" ? "Vietnamese" : "English";
   return [
     "You are generating a self-contained interactive simulation for MindCanvas Lab.",
     `Use ${language} for labels, explanations, and safety notes.`,

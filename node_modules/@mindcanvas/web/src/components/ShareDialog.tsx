@@ -1,5 +1,6 @@
+import { BackButton } from "./PageNavigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Clipboard, Mail, Share2, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Check, Clipboard, Mail, Share2, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { isIOSDevice } from "../lib/canvasInput";
 import { canUseNativeShare, copyTextWithFallback, shareProjectLink } from "../lib/share";
@@ -139,7 +140,7 @@ export default function ShareDialog({ projectId, title, onClose, isAuthenticated
   return <section className="share-page" aria-labelledby="share-page-title">
     <header className="share-page-header">
       <div className="share-page-title-group">
-        <button type="button" className="secondary-button share-page-back" onClick={onClose}><ArrowLeft size={17}/>{t("workspace")}</button>
+        <BackButton className="share-page-back" onClick={onClose}>{t("workspace")}</BackButton>
         <div>
           <p className="eyebrow">{t("shareProject")}</p>
           <h1 id="share-page-title">{t("shareProject")}</h1>

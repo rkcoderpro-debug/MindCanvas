@@ -113,7 +113,7 @@ it("creates from direct text in one action and opens a separate full-width resul
   await set('[aria-label="Văn bản nguồn"]', examFixture().sources[0].text); await click("Tạo đề bằng AI");
   expect(api.analyze).toHaveBeenCalledTimes(1); expect(api.generate).toHaveBeenCalledTimes(1);
   expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(true); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(false);
-  await click("Quay lại thiết lập"); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(false); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(true);
+  await click("Thiết lập đề"); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(false); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(true);
   expect((host.querySelector('[aria-label="Nội dung Văn bản"]') as HTMLTextAreaElement).value).toContain("Water freezes");
 });
 it("accepts an uploaded template in the one-action flow", async () => {
@@ -145,5 +145,5 @@ it("returns to setup from a restored result even without an inner browser histor
   const work = emptyExamWorkspace(); work.result = examFixture(); persistExamWorkspace("user-a", work);
   await act(async () => root.render(<LearningNavigationProvider owner="user-a" initialTab="exams"><LearningToolScope tab="exams" active={true}><ExamBuilderPage owner="user-a" quizzes={quizzes} onOpenQuiz={() => {}}/></LearningToolScope></LearningNavigationProvider>));
   expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(false);
-  await click("Quay lại thiết lập"); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(false);
+  await click("Thiết lập đề"); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(false);
 });

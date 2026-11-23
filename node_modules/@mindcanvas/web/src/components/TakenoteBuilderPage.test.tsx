@@ -24,7 +24,7 @@ it("creates a source-grounded Auto note, saves it and returns to the retained se
   api.generate.mockResolvedValue(response); await mount("alice", true); await set("Nội dung nguồn Takenote", source); await click("Tạo Takenote bằng AI");
   await waitFor(() => !!host.querySelector('.note-result:not([hidden]) .takenote-content'));
   expect(api.generate).toHaveBeenCalledTimes(1); expect(api.generate.mock.calls[0][1][0].text).toBe(source); expect((await listNotes("alice"))[0].title).toBe("Động năng");
-  await click("Quay lại thiết lập"); expect(host.querySelector('.note-result')?.hasAttribute("hidden")).toBe(true); expect(host.textContent).toContain("Nội dung đã nhập");
+  await click("Thiết lập Takenote"); expect(host.querySelector('.note-result')?.hasAttribute("hidden")).toBe(true); expect(host.textContent).toContain("Nội dung đã nhập");
   await waitFor(() => !!host.querySelector('[aria-label="Nội dung Nội dung đã nhập"]'));
 });
 it("keeps source text after AI failure and restores the owner's draft after remount", async () => {

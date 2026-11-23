@@ -45,7 +45,20 @@ describe('Lab library user workflows', () => {
   it('requires explicit CDN consent and preserves the iframe across fullscreen changes', async () => {
     await saveStoredLab(null,{...sample,allowExternalResources:true,programHtml:'<html><body><script src="https://unpkg.com/react"></script></body></html>'}); await render(); await act(async()=>host.querySelector<HTMLButtonElement>('button[aria-label="Mở Lab: Điện phân"]')!.click()); expect(host.querySelector('iframe')).toBeNull(); await click('Cho phép tải thư viện và chạy'); const frame=host.querySelector('iframe'); expect(frame).toBeTruthy(); const fs=host.querySelector<HTMLButtonElement>('button[aria-label="Toàn màn hình"]')!; await act(async()=>fs.click()); expect(host.querySelector('iframe')).toBe(frame); await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))); expect(host.querySelector('iframe')).toBe(frame); await click('Thư viện Lab'); expect(host.querySelector('iframe')).toBeNull();
   });
-  it('renders fifty Labs as static cards and filters by mode', async () => {
-    for(let i=0;i<50;i++) await saveStoredLab(null,{...sample,title:`Lab ${i}`,mode:i%2?'algorithm':'animation'}); await render(); expect(host.querySelectorAll('.lab-library-card')).toHaveLength(51); expect(host.querySelector('iframe')).toBeNull(); const select=host.querySelector<HTMLSelectElement>('select[aria-label="Lọc chế độ"]')!; await act(async()=>{select.value='algorithm';select.dispatchEvent(new Event('change',{bubbles:true}));}); expect(host.querySelectorAll('.lab-library-card')).toHaveLength(25);
+  it('pages a large Lab library without loading players, and resets the page when filtering', async () => {
+    for (let i = 0; i < 50; i++) await saveStoredLab(null, { ...sample, title: `Lab ${i}`, mode: i % 2 ? "algorithm" : "animation" });
+    await render();
+    const cards = () => [...host.querySelectorAll<HTMLButtonElement>(".lab-card-open")].map(button => button.getAttribute("aria-label"));
+    const first = cards();
+    expect(first.length).toBeGreaterThan(0); expect(first.length).toBeLessThan(51);
+    expect(host.querySelector(".lab-library-pagination")?.textContent).toContain("51 Lab");
+    const next = [...host.querySelectorAll<HTMLButtonElement>(".lab-library-pagination button")].find(button => button.textContent === "Trang sau")!;
+    await act(async () => next.click());
+    expect(cards().some(title => first.includes(title))).toBe(false);
+    expect(host.querySelector("iframe")).toBeNull();
+    const select = host.querySelector<HTMLSelectElement>('select[aria-label="Lọc chế độ"]')!;
+    await act(async () => { select.value = "algorithm"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(host.querySelector(".lab-library-pagination")?.textContent).toContain("25 Lab");
+    expect((host.querySelector(".lab-library-pagination button") as HTMLButtonElement).disabled).toBe(true);
   });
 });

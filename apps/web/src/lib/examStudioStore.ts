@@ -1,3 +1,4 @@
+import type { DocumentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import { validateOnlineExam, type OnlineAttempt, type OnlineExam, type OriginalInfo } from "./examOnline";
 import { readLocalBytes } from "./examManualSource";
 import { originalArchivePath, type StudioConfig, type StudioPrompt, emptyStudioConfig } from "./examStudioPrompt";
@@ -111,12 +112,12 @@ export function validateOnlineAttempt(exam: OnlineExam, value: OnlineAttempt): O
 }
 export async function loadOnlineAttempt(owner: string | null, exam: OnlineExam) { const attempt = await read<OnlineAttempt>("attempts", owner, `${exam.id}:${exam.revision}`); return attempt ? validateOnlineAttempt(exam, attempt) : null; }
 export async function saveOnlineAttempt(owner: string | null, exam: OnlineExam, attempt: OnlineAttempt) { validateOnlineAttempt(exam, attempt); await write("attempts", owner, `${exam.id}:${exam.revision}`, attempt, { examId: exam.id }); }
-export const emptyStudioWorkspace = (): StudioWorkspace => ({ config: emptyStudioConfig(), sources: [], session: null, importText: "", selectedId: null });
+export const emptyStudioWorkspace = (language: DocumentLanguage = "vi"): StudioWorkspace => ({ config: { ...emptyStudioConfig(), language }, sources: [], session: null, importText: "", selectedId: null });
 const workspaceKey = (owner: string | null) => `mindcanvas:exam-studio:v2:${own(owner)}`;
-export function loadStudioWorkspace(owner: string | null): StudioWorkspace {
-  const raw = localStorage.getItem(workspaceKey(owner)); if (!raw) return emptyStudioWorkspace(); if (raw.length > 3000000) throw new Error("Bản nháp đề vượt 3 MB.");
+export function loadStudioWorkspace(owner: string | null, language: DocumentLanguage = "vi"): StudioWorkspace {
+  const raw = localStorage.getItem(workspaceKey(owner)); if (!raw) return emptyStudioWorkspace(language); if (raw.length > 3000000) throw new Error("Bản nháp đề vượt 3 MB.");
   const value = JSON.parse(raw) as StudioWorkspace;
-  if (!value?.config || !["word", "online"].includes(value.config.output) || !Array.isArray(value.config.types) || typeof value.config.subject !== "string" || typeof value.config.level !== "string" || typeof value.config.instructions !== "string" || !["vi", "en"].includes(value.config.language) || !["easy", "medium", "hard"].includes(value.config.difficulty) || !Array.isArray(value.sources) || value.sources.length > 6 || value.sources.some(source => !source || typeof source.id !== "string" || typeof source.name !== "string") || typeof value.importText !== "string" || value.importText.length > 2000000 || (value.separateText !== undefined && (typeof value.separateText !== "string" || value.separateText.length > 120000)) || (value.session && (typeof value.session.id !== "string" || typeof value.session.prompt !== "string" || value.session.prompt.length > 100000 || !value.session.config || !Array.isArray(value.session.sources)))) throw new Error("Bản nháp Manual không đọc được.");
+  if (!value?.config || !["word", "online"].includes(value.config.output) || !Array.isArray(value.config.types) || typeof value.config.subject !== "string" || typeof value.config.level !== "string" || typeof value.config.instructions !== "string" || !["vi", "en", "vi-en"].includes(value.config.language) || !["easy", "medium", "hard"].includes(value.config.difficulty) || !Array.isArray(value.sources) || value.sources.length > 6 || value.sources.some(source => !source || typeof source.id !== "string" || typeof source.name !== "string") || typeof value.importText !== "string" || value.importText.length > 2000000 || (value.separateText !== undefined && (typeof value.separateText !== "string" || value.separateText.length > 120000)) || (value.session && (typeof value.session.id !== "string" || typeof value.session.prompt !== "string" || value.session.prompt.length > 100000 || !value.session.config || !Array.isArray(value.session.sources)))) throw new Error("Bản nháp Manual không đọc được.");
   return value;
 }
 export function persistStudioWorkspace(owner: string | null, value: StudioWorkspace) { const raw = JSON.stringify(value); if (raw.length > 3000000) throw new Error("Bản nháp vượt 3 MB; hãy lưu JSON vào file riêng."); localStorage.setItem(workspaceKey(owner), raw); }

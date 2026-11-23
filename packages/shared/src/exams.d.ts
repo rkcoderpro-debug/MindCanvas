@@ -1,3 +1,4 @@
+import type { DocumentLanguage } from "./contentLanguage.js";
 export type ExamFormat = "quiz" | "paper";
 export type ExamDifficulty = "easy" | "medium" | "hard";
 export type ExamQuestionType = "mcq" | "short" | "essay" | "truefalse" | "other";
@@ -7,7 +8,7 @@ export type ExamSettings = {
     difficulty: ExamDifficulty;
     subject: string;
     level: string;
-    language: "vi" | "en";
+    language: DocumentLanguage;
 };
 export type ExamSource = {
     id: string;

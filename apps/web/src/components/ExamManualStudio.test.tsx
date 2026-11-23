@@ -86,7 +86,7 @@ it("imports a no-upload exam and returns from the result without losing JSON", a
   const raw = studioRawExam(); raw.questions.forEach(q => q.references = []);
   await input('[aria-label="JSON đề tương tác"]', JSON.stringify(raw)); await click("Nhập đề tương tác");
   expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(false); expect(host.querySelector(".exam-builder-controls")?.hasAttribute("hidden")).toBe(true);
-  await click("Quay lại thiết lập"); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(true);
+  await click("Thiết lập đề"); expect(host.querySelector(".exam-result-view")?.hasAttribute("hidden")).toBe(true);
   expect((host.querySelector('[aria-label="JSON đề tương tác"]') as HTMLTextAreaElement).value).toContain("schemaVersion"); noAuto();
 });
 it("retries Word quota with a stable ID and keeps unfinished JSON when prompt settings change", async () => {

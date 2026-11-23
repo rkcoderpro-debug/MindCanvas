@@ -1,3 +1,4 @@
+import ContentLanguageField, { useContentLanguage } from "./ContentLanguageField";
 import { useEffect, useRef, useState } from "react";
 import { BrainCircuit, ClipboardPaste, FilePenLine, ListTree, Network, Sparkles, WandSparkles, X } from "lucide-react";
 import { consumeAiManualUsage, transformSelection, type SelectionAiAction, type SelectionAiResult, type SelectionMindMapScope } from "../lib/api";
@@ -17,15 +18,17 @@ const actions: Array<{ id: SelectionAiAction; icon: typeof Sparkles; label: "aiS
   { id: "organize", icon: Network, label: "aiOrganize" },
 ];
 
-export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sourceRevision, onClose, onApply }: {
+export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sourceRevision, visible = true, onClose, onApply }: {
   sourceText: string;
   canUse: boolean;
   mindMapScope?: SelectionMindMapScope;
   sourceRevision: string;
+  visible?: boolean;
   onClose: () => void;
   onApply: (result: SelectionAiResult) => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
+  const [outputLanguage, setOutputLanguage] = useContentLanguage("selection");
   const [action, setAction] = useState<SelectionAiAction>(mindMapScope ? "organize" : "summarize");
   const [aiMode, setAiMode] = useState<AiMode>(canUse ? "auto" : "manual");
   const [result, setResult] = useState<SelectionAiResult | null>(null);
@@ -40,7 +43,7 @@ export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sou
   const changeAction = (nextAction: SelectionAiAction) => { setAction(nextAction); setResult(null); setError(""); clearManual(); };
   const createManualPrompt = () => {
     if (!sourceText.trim()) return;
-    setManualPrompt(buildSelectionPrompt({ action, text: sourceText, language, scope: mindMapScope }));
+    setManualPrompt(buildSelectionPrompt({ action, text: sourceText, language: outputLanguage, scope: mindMapScope }));
     setManualJson(""); setManualCopied(false); setResult(null); setError("");
   };
   const copyManualPrompt = async () => {
@@ -69,14 +72,14 @@ export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sou
     const request = new AbortController(); controller.current = request;
     setBusy(true); setError(""); setResult(null);
     try {
-      const generated = await transformSelection(action, sourceText, language, request.signal, mindMapScope);
-      setResult({ ...generated, sourceRevision });
+      const generated = await transformSelection(action, sourceText, outputLanguage, request.signal, mindMapScope);
+      if (!request.signal.aborted) setResult({ ...generated, sourceRevision });
     }
     catch (err) { if (!request.signal.aborted) setError(aiErrorMessage(err, t, "aiSelectionError")); }
-    finally { if (!request.signal.aborted) setBusy(false); }
+    finally { if (controller.current === request) { controller.current = null; setBusy(false); } }
   };
 
-  const close = () => { if (busy) controller.current?.abort(); onClose(); };
+  const close = () => { if (busy && !controller.current) return; controller.current?.abort(); controller.current = null; setBusy(false); onClose(); };
   const updateOperationLabel = (index: number, value: string) => setResult(current => current ? { ...current, operations: current.operations.map((operation, operationIndex) => operationIndex === index && "label" in operation ? { ...operation, label: value } : operation) } : current);
   const removeOperation = (index: number) => setResult(current => current ? { ...current, operations: current.operations.filter((_, operationIndex) => operationIndex !== index) } : current);
   const apply = () => {
@@ -85,8 +88,10 @@ export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sou
     onApply(result);
   };
   const manualStep: ManualStep = result ? "preview" : manualJson.trim() ? "result" : manualPrompt ? "gemini" : "source";
-  return <Dialog title={t("aiSelectionTitle")} onClose={close}>
+  if (!visible) return null;
+  return <Dialog workspace title={t("aiSelectionTitle")} onClose={close} footer={<footer className="actions"><button type="button" className="secondary-button" onClick={close}>{t("cancel")}</button>{result ? <button type="button" className="primary-button" disabled={!result.text.trim() || (result.action === "expand" && !result.ideas.some(idea => idea.trim())) || (result.action === "organize" && !result.operations.length)} onClick={() => apply()}>{t("apply")}</button> : <button type="button" className="primary-button" disabled={busy || !sourceText.trim()} onClick={() => void generate()}><Sparkles size={16}/>{aiMode === "manual" ? t("createPrompt") : t("generatePreview")}</button>}</footer>}>
     <p className="dialog-intro">{t("aiSelectionHint")}</p>
+    <ContentLanguageField value={outputLanguage} onChange={next => { setOutputLanguage(next); clearManual(); setResult(null); }} disabled={busy}/>
     <AiModeSwitch mode={aiMode} autoAvailable={canUse} onChange={changeAiMode} />
     {aiMode === "manual" ? <p className="ai-manual-note">{t("aiManualHint")} {t("aiManualUsageHint")} {t("manualNoLoginHint")}</p> : !canUse && <p className="form-error" role="alert">{t("loginRequired")}</p>}
     {aiMode === "manual" && <ManualSteps current={manualStep} />}
@@ -108,6 +113,5 @@ export default function AiSelectionPanel({ sourceText, canUse, mindMapScope, sou
       {result.action === "organize" && <div className="ai-operations"><strong>{t("aiMindMapOperations")}</strong><small>{t("aiOperationHint")}</small>{result.operations.length ? result.operations.map((operation, index) => <div className={`ai-operation ai-operation-${operation.op}`} key={`${operation.op}-${index}`}><span className="ai-operation-kind">{t(operation.op === "add" ? "aiOperationAdd" : operation.op === "update" ? "aiOperationUpdate" : operation.op === "remove" ? "aiOperationRemove" : "aiOperationLink")}</span>{"label" in operation && operation.label !== undefined && <input aria-label={`${t("label")} ${index + 1}`} maxLength={10_000} value={operation.label} onChange={event => updateOperationLabel(index, event.target.value)}/>}<small>{operation.op === "add" ? `${operation.id} → ${operation.parentId || mindMapScope?.rootId || "root"}` : operation.op === "link" ? `${operation.source} → ${operation.target}` : operation.id}</small><button type="button" className="icon-button" aria-label={t("delete")} onClick={() => removeOperation(index)}><X size={15}/></button></div>) : <small>{t("aiNoOperations")}</small>}</div>}
       <small>{result.provider === "manual" ? t("manualProvider") : result.provider} · {result.model} · {t("previewChanges")}</small>
     </div>}
-    <footer className="actions"><button type="button" className="secondary-button" onClick={close}>{t("cancel")}</button>{result ? <button type="button" className="primary-button" disabled={!result.text.trim() || (result.action === "expand" && !result.ideas.some(idea => idea.trim())) || (result.action === "organize" && !result.operations.length)} onClick={() => apply()}>{t("apply")}</button> : <button type="button" className="primary-button" disabled={busy || !sourceText.trim()} onClick={() => void generate()}><Sparkles size={16}/>{aiMode === "manual" ? t("createPrompt") : t("generatePreview")}</button>}</footer>
   </Dialog>;
 }

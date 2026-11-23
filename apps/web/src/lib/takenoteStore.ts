@@ -1,9 +1,10 @@
+import type { DocumentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import type { ExamSource } from "@mindcanvas/shared";
 import type { OriginalInfo } from "./examOnline";
 import { emptyNoteSettings, validateNoteResult, validateNoteSettings, type NoteResult, type NoteSettings } from "../../../../packages/shared/src/takenotes.js";
 export type SavedNote = NoteResult & { id: string; owner: string; format: NoteSettings["format"] | "docx"; updatedAt: string; docxDataUrl?: string; documentId?: string; sources?: ExamSource[]; generationMode?: "auto" | "manual"; settings: NoteSettings };
 export type NoteWorkspace = { settings: NoteSettings; mode: "auto" | "manual"; sources: ExamSource[]; sourceText: string; result: SavedNote | null; importText: string; manualOutput: "markdown" | "docx"; manualSources?: OriginalInfo[]; manualSession?: { id: string; signature: string; consumed: boolean } };
-export const emptyNoteWorkspace = (): NoteWorkspace => ({ settings: emptyNoteSettings(), mode: "auto", sources: [], sourceText: "", result: null, importText: "", manualOutput: "markdown" });
+export const emptyNoteWorkspace = (language: DocumentLanguage = "vi"): NoteWorkspace => ({ settings: { ...emptyNoteSettings(), language }, mode: "auto", sources: [], sourceText: "", result: null, importText: "", manualOutput: "markdown" });
 const ownerKey = (owner: string | null) => owner ?? "guest";
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -22,9 +23,9 @@ async function write(store: string, owner: string | null, id: string, value: unk
   try { await new Promise<void>((resolve, reject) => { const tx = database.transaction(store, "readwrite"); tx.objectStore(store).put({ key: `${ownerKey(owner)}:${id}`, owner: ownerKey(owner), value }); tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(tx.error ?? new Error("Không lưu được Takenote.")); }); }
   finally { database.close(); }
 }
-export async function loadNoteWorkspace(owner: string | null): Promise<NoteWorkspace> {
+export async function loadNoteWorkspace(owner: string | null, language: DocumentLanguage = "vi"): Promise<NoteWorkspace> {
   const value = await read<NoteWorkspace>("drafts", owner, "workspace");
-  if (!value) return emptyNoteWorkspace();
+  if (!value) return emptyNoteWorkspace(language);
   value.settings = validateNoteSettings(value.settings);
   if (value.result) value.result.settings = validateNoteSettings(value.result.settings);
   if (!["auto", "manual"].includes(value.mode) || !Array.isArray(value.sources) || value.sources.length > 6 || typeof value.sourceText !== "string" || value.sourceText.length > 120000 || typeof value.importText !== "string" || value.importText.length > 1500000 || !["markdown", "docx"].includes(value.manualOutput)) throw new Error("Bản nháp Takenote không đọc được.");

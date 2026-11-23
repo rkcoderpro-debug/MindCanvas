@@ -1,6 +1,7 @@
-import { useLearningTool } from "../lib/learningNavigation";
+import { BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
+import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Beaker, Cloud, Download, MoreHorizontal, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Beaker, Cloud, Download, MoreHorizontal, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { type LabProject } from "../lib/lab";
 import { cleanLabViewer, LAB_MODES, labModeInfo, type LabMode } from "../lib/labModes";
@@ -28,19 +29,41 @@ function matchesCloud(lab: LabProject, row: PublishedLabProject) {
 export default function LabPage({ owner, onOpenLearning, embedded = false, accountPlan }: { owner: string | null; onOpenLearning?: () => void; embedded?: boolean; accountPlan?: AccountPlan }) {
   const { language } = useLanguage(), vi = language === "vi";
   const navigation = useLearningTool();
-  const openLab = (id: string) => { if (navigation) navigation.open(`lab-${id}`, () => setActiveId(id), () => setActiveId(null)); else setActiveId(id); setError(""); };
-  const backToLabs = () => { setActiveId(null); navigation?.back(); };
+  const listScroll = useListScrollReturn(), learningActive = useLearningActive();
+  const openLab = (id: string) => { listScroll.remember(); if (navigation) navigation.open(`lab-${id}`, () => setActiveId(id), () => { setActiveId(null); listScroll.restore(); }); else setActiveId(id); setError(""); };
+  const backToLabs = () => { listScroll.restore(); setActiveId(null); navigation?.back(); };
   const [labs, setLabs] = useState<LabProject[]>([]), [ready, setReady] = useState(false), [busy, setBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null), [editor, setEditor] = useState<{ initial?: LabProject } | null>(null);
   const [deleting, setDeleting] = useState<LabProject | null>(null), [query, setQuery] = useState(""), [filter, setFilter] = useState<"all" | LabMode>("all");
   const [subject, setSubject] = useState("all"), [sort, setSort] = useState("updated"), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [published, setPublished] = useState<string[]>([]), [sources, setSources] = useState<Record<string, string>>({});
+  const shelf = useRef<HTMLElement>(null);
+  const [page, setPage] = useState(0), [pageSize, setPageSize] = useState(3);
+  useEffect(() => {
+    const node = shelf.current;
+    const measure = () => {
+      const width = node?.clientWidth || window.innerWidth;
+      const columns = width < 480 ? 1 : width < 720 ? 2 : Math.min(5, Math.floor(width / 230));
+      const rows = window.innerHeight >= 840 ? 2 : 1;
+      const next = columns * rows;
+      setPageSize(previous => previous === next ? previous : next);
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (node) observer?.observe(node);
+    window.addEventListener("resize", measure);
+    measure();
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
   const ownerRef = useRef(owner); ownerRef.current = owner;
   const importRef = useRef<HTMLInputElement>(null), operationLock = useRef(false);
   const cloudAllowed = !!owner && canShare("lab", accountPlan?.effectivePlanId);
   const active = labs.find(lab => lab.id === activeId);
+  const activityFocus = useActivityFocus(learningActive && !!active);
   const visible = labs.filter(lab => (subject === "all" || lab.subject === subject) && (filter === "all" || (lab.mode ?? "freeform") === filter) && (!query.trim() || `${lab.title} ${labModeInfo(lab.mode ?? "freeform", language).label}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
     .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, language) : b.updatedAt.localeCompare(a.updatedAt));
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize)), currentPage = Math.min(page, pageCount - 1);
+  const pageLabs = visible.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  useEffect(() => { setPage(0); }, [query, filter, subject, sort, owner]);
   useEffect(() => {
     let alive = true; setReady(false); setBusy(false); setDeleting(null); setActiveId(null); setEditor(null); setLabs([]); setPublished([]); setSources({}); setError(""); setNotice("");
     void (async () => {
@@ -141,7 +164,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     <button type="button" onClick={() => downloadHtml(lab)}><Download size={16}/>{vi ? "Tải HTML" : "Download HTML"}</button>
     {!lab.systemDemo && <button type="button" className="text-danger-button" disabled={busy} onClick={() => { setDeleting(lab); setError(""); }}><Trash2 size={16}/>{vi ? "Xóa Lab" : "Delete Lab"}</button>}
   </div></details>;
-  return <section className={`lab-page lab-library ${embedded ? "lab-page-embedded" : ""}`}>
+  return <section ref={shelf} className={`lab-page lab-library ${embedded ? "lab-page-embedded" : ""}${active ? " lab-has-player" : ""}`}>
     {!active && <header className="lab-library-header"><div><span className="eyebrow">LAB</span><h1><Beaker size={26}/>{vi ? "Lab của tôi" : "My Labs"}</h1><p>{vi ? "Mở Lab để khám phá, thực hành và học theo cách của bạn." : "Explore, practice and learn with your interactive Labs."}</p></div><div className="lab-library-actions">
       {!embedded && onOpenLearning && <button className="secondary-button" onClick={onOpenLearning}>{vi ? "Không gian học tập" : "Learning Space"}</button>}
       <button className="primary-button lab-add-button" disabled={!ready || busy} onClick={() => setEditor({})}><Plus size={18}/>{vi ? "Thêm Lab" : "Add Lab"}</button>
@@ -150,10 +173,12 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     </div></header>}
     {error && <p className="form-error lab-library-message" role="alert">{error}</p>}{notice && <p className="lab-library-message" role="status">{notice}</p>}
     {!ready && !error && <p role="status">{vi ? "Đang tải thư viện Lab…" : "Loading Labs…"}</p>}
-    {active ? <main className="lab-detail"><header><button className="secondary-button" onClick={backToLabs}><ArrowLeft size={17}/>{vi ? "Thư viện Lab" : "Lab library"}</button><div><h2>{active.title}</h2><small>{labModeInfo(active.mode ?? "freeform", language).label}</small></div>{menu(active)}</header><LabViewer key={active.id} html={active.programHtml} title={active.title} allowExternalResources={active.allowExternalResources} viewerConfig={active.viewerConfig} onThumbnail={!active.thumbnail && !active.systemDemo ? image => void cacheCover(active, image) : undefined}/></main>
+    {active ? <main ref={activityFocus} className="lab-detail activity-screen activity-lab"><PageNavigation back={<BackButton onClick={backToLabs}>{vi ? "Thư viện Lab" : "Lab library"}</BackButton>} title={active.title} context={labModeInfo(active.mode ?? "freeform", language).label} actions={menu(active)}/><LabViewer fitViewport key={active.id} html={active.programHtml} title={active.title} allowExternalResources={active.allowExternalResources} viewerConfig={active.viewerConfig} onThumbnail={!active.thumbnail && !active.systemDemo ? image => void cacheCover(active, image) : undefined}/></main>
       : ready && <><div className="lab-library-filters"><label className="lab-library-search"><Search size={19}/><input aria-label={vi ? "Tìm Lab" : "Search Labs"} placeholder={vi ? "Tìm Lab…" : "Search Labs…"} value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label={vi ? "Lọc chế độ" : "Filter modes"} value={filter} onChange={e => setFilter(e.target.value as "all" | LabMode)}><option value="all">{vi ? "Tất cả chế độ" : "All modes"}</option>{LAB_MODES.map(mode => <option value={mode} key={mode}>{labModeInfo(mode, language).label}</option>)}</select><select aria-label={vi ? "Lọc môn" : "Filter subject"} value={subject} onChange={e => setSubject(e.target.value)}><option value="all">{vi ? "Tất cả môn" : "All subjects"}</option><option value="physics">{vi ? "Vật lý" : "Physics"}</option><option value="chemistry">{vi ? "Hóa học" : "Chemistry"}</option><option value="other">{vi ? "Khác" : "Other"}</option></select><select aria-label={vi ? "Sắp xếp Lab" : "Sort Labs"} value={sort} onChange={e => setSort(e.target.value)}><option value="updated">{vi ? "Cập nhật gần nhất" : "Recently updated"}</option><option value="title">{vi ? "Tên Lab" : "Name"}</option></select></div>
-      <div className="lab-library-count">{visible.length} {vi ? "Lab" : "Labs"}</div>
-      {visible.length ? <div className="lab-library-grid">{visible.map(lab => <article className="lab-library-card" key={lab.id}>
+      <div className="lab-library-pagination"><span>{visible.length} {vi ? "Lab" : "Labs"}</span>
+        {pageCount > 1 && <nav aria-label={vi ? "Trang thư viện Lab" : "Lab library pages"}><button type="button" className="secondary-button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{vi ? "Trang trước" : "Previous page"}</button><span aria-live="polite">{currentPage + 1} / {pageCount}</span><button type="button" className="secondary-button" disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>{vi ? "Trang sau" : "Next page"}</button></nav>}
+      </div>
+      {visible.length ? <div className="lab-library-grid lab-library-paged">{pageLabs.map(lab => <article className="lab-library-card" key={lab.id}>
         <button className={`lab-card-open lab-cover-${lab.mode ?? "freeform"}`} aria-label={`${vi ? "Mở Lab" : "Open Lab"}: ${lab.title}`} onClick={() => openLab(lab.id)}><div className="lab-card-cover">{lab.thumbnail ? <img src={lab.thumbnail} alt="" loading="lazy"/> : <div className="lab-card-placeholder"><Beaker size={46}/><span>{labModeInfo(lab.mode ?? "freeform", language).label}</span></div>}</div><div className="lab-card-description"><h2>{lab.title}</h2><span>{labModeInfo(lab.mode ?? "freeform", language).label}</span><small>{new Date(lab.updatedAt).toLocaleDateString(vi ? "vi-VN" : "en-US")}{lab.systemDemo ? " · Demo" : ""}</small>{sources[lab.id] && <small>{vi ? "Đã lưu từ" : "Saved from"} {sources[lab.id]}</small>}</div></button>{menu(lab)}<span className={`lab-sync-state ${published.includes(lab.id) ? "synced" : ""}`}>{lab.systemDemo ? (vi ? "Lab mẫu" : "Example") : published.includes(lab.id) ? (vi ? "Đã đồng bộ" : "Synced") : (vi ? "Trên thiết bị" : "On device")}</span>
       </article>)}</div> : <div className="lab-library-empty"><Beaker size={42}/><h2>{vi ? "Chưa có Lab phù hợp" : "No matching Labs"}</h2><p>{vi ? "Đổi bộ lọc hoặc thêm Lab từ tệp HTML của bạn." : "Change filters or add your HTML Lab."}</p><button className="primary-button" onClick={() => setEditor({})}><Plus size={17}/>{vi ? "Thêm Lab" : "Add Lab"}</button></div>}</>}
     {editor && <LabEditorDialog key={`${owner}:${editor.initial?.id ?? "new"}`} owner={owner} initial={editor.initial} onClose={() => setEditor(null)} onSave={save}/>}

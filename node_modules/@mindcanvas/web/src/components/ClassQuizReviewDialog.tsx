@@ -1,3 +1,4 @@
+import { BackButton } from "./PageNavigation";
 import { useEffect, useRef } from "react";
 import { Award, CheckCircle2, CircleHelp, X, XCircle } from "lucide-react";
 import { formatQuizPercent } from "../lib/quiz";
@@ -33,7 +34,7 @@ export default function ClassQuizReviewDialog({ title, review, onClose }: { titl
       <div className="class-review-hero"><Award size={32}/><strong>{percent}%</strong><span>{review.score}/{review.total} câu đúng · {rank}</span><small>Nhận xét tự động theo kết quả Quiz; điểm bài tập do giáo viên chấm riêng.</small></div>
       <div className="class-review-stats"><div><CheckCircle2 size={19}/><strong>{correct}</strong><span>Đúng</span></div><div><XCircle size={19}/><strong>{wrong}</strong><span>Sai</span></div><div><CircleHelp size={19}/><strong>{skipped}</strong><span>Bỏ trống</span></div></div>
       <details className="class-review-details"><summary>Xem lại từng câu</summary><div className="quiz-answer-review">{review.questions.map(question => <article key={question.number}><div><strong>#{question.number}</strong><span className={question.correct ? "correct" : "incorrect"}><FormulaText text={question.prompt}/></span></div><p><b>Bạn chọn:</b> {question.answer === null ? "Chưa trả lời" : <FormulaText text={question.options[question.answer] ?? ""}/>}</p>{!question.correct && <p><b>Đáp án đúng:</b> <FormulaText text={question.options[question.correct_index] ?? ""}/></p>}{question.explanation && <p><b>Giải thích:</b> <FormulaText text={question.explanation}/></p>}</article>)}</div></details>
-      <footer><button type="button" className="primary-button" onClick={onClose}>Quay lại bài tập</button></footer>
+      <footer><BackButton onClick={onClose}>Về bài tập</BackButton></footer>
     </div>
   </div>;
 }

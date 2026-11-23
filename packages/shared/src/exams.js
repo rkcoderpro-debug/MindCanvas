@@ -24,7 +24,7 @@ export const examQuestionCount = (plan) => plan.sections.reduce((sum, section) =
 export const examTotalPoints = (plan) => Math.round(plan.sections.reduce((sum, section) => sum + section.count * section.points, 0) * 100) / 100;
 export function validateExamSettings(value) {
     const input = record(value);
-    if ((input.format !== "quiz" && input.format !== "paper") || (input.mode !== "template" && input.mode !== "materials") || !["easy", "medium", "hard"].includes(String(input.difficulty)) || (input.language !== "vi" && input.language !== "en"))
+    if ((input.format !== "quiz" && input.format !== "paper") || (input.mode !== "template" && input.mode !== "materials") || !["easy", "medium", "hard"].includes(String(input.difficulty)) || !["vi", "en", "vi-en"].includes(input.language))
         return fail("Thiết lập đề thi không hợp lệ.");
     if (input.format === "paper" && input.mode !== "template")
         return fail("Đề nhiều dạng cần một đề mẫu để giữ cấu trúc.");

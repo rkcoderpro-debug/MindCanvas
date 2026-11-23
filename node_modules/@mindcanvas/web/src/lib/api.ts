@@ -1,3 +1,4 @@
+import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import type { MindMapAiOperation, MindMapEdge, StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
 import type { AccountPlan, PlanId, SubscriptionHistoryRecord } from "./account";
@@ -112,12 +113,12 @@ export async function uploadDocument(file: File, signal?: AbortSignal) {
 /** Kept as a compatibility alias for earlier V3 clients. */
 export const uploadPdf = uploadDocument;
 
-export async function generateMindMap(text: string, documentId?: string, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium", unlimited = false) {
+export async function generateMindMap(text: string, documentId?: string, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium", unlimited = false, language?: ContentLanguage) {
   const response = await fetch(`${apiBase}/api/ai/mind-map`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ text, documentId, depth: options.depth, detail, unlimited }),
+    body: JSON.stringify({ text, documentId, depth: options.depth, detail, unlimited, language }),
   });
   if (!response.ok) await responseError(response, `AI HTTP ${response.status}`);
   return response.json() as Promise<{ provider: string; graph: StructuredMindMap }>;
@@ -126,12 +127,13 @@ export async function generateMindMap(text: string, documentId?: string, signal?
 export type AiFileSource = { id: string; kind: "pdf" | "docx" | "pptx" | "text" | "image"; fileName: string; mimeType: string; text: string; pageCount?: number };
 export type GeneratedMindMap = { provider: string; model?: string; graph: StructuredMindMap; source: AiFileSource };
 
-async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium", unlimited = false) {
+async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" | "quiz", maxCards: number | undefined, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium", unlimited = false, language?: ContentLanguage) {
   const body = new FormData();
   body.append("file", file);
   body.append("task", task);
   if (maxCards !== undefined) body.append("maxCards", String(maxCards));
   body.append("depth", options.depth);
+  if (language) body.append("language", language);
   if (task === "mind-map") {
     body.append("detail", detail);
     if (unlimited) body.append("unlimited", "true");
@@ -143,8 +145,8 @@ async function generateFromFile<T>(file: File, task: "mind-map" | "flashcards" |
   return response.json() as Promise<T>;
 }
 
-export function generateMindMapFromFile(file: File, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium", unlimited = false) {
-  return generateFromFile<GeneratedMindMap>(file, "mind-map", undefined, signal, options, detail, unlimited);
+export function generateMindMapFromFile(file: File, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, detail: MindMapDetail = "medium", unlimited = false, language?: ContentLanguage) {
+  return generateFromFile<GeneratedMindMap>(file, "mind-map", undefined, signal, options, detail, unlimited, language);
 }
 
 export type GeneratedFlashcard = { front: string; back: string; sourcePage?: number };
@@ -164,19 +166,19 @@ export function selectionRevision(text: string, scope?: SelectionMindMapScope) {
 }
 export type SelectionAiResult = { provider: string; model: string; action: SelectionAiAction; title: string; text: string; ideas: string[]; operations: MindMapAiOperation[]; sourceRevision?: string };
 
-export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
+export async function generateFlashcards(text: string, documentId?: string, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, language?: ContentLanguage) {
   const response = await fetch(`${apiBase}/api/ai/flashcards`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ text, documentId, maxCards, ...options }),
+    body: JSON.stringify({ text, documentId, maxCards, language, ...options }),
   });
   if (!response.ok) await responseError(response, `AI HTTP ${response.status}`);
   return response.json() as Promise<GeneratedFlashcards>;
 }
 
-export function generateFlashcardsFromFile(file: File, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
-  return generateFromFile<GeneratedFlashcardsFromFile>(file, "flashcards", maxCards, signal, options);
+export function generateFlashcardsFromFile(file: File, maxCards = 20, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, language?: ContentLanguage) {
+  return generateFromFile<GeneratedFlashcardsFromFile>(file, "flashcards", maxCards, signal, options, undefined, false, language);
 }
 
 export type GeneratedQuizQuestion = { id?: string; prompt: string; options: [string, string, string, string]; correctIndex: 0 | 1 | 2 | 3; explanation: string; sourcePage?: number; topic?: string };
@@ -187,8 +189,8 @@ export function generateQuiz(text: string, documentId?: string, maxQuestions = 1
   return accountRequest<GeneratedQuiz>("/api/ai/quiz", { method: "POST", body: JSON.stringify({ text, documentId, maxQuestions, language, ...options }), signal });
 }
 
-export function generateQuizFromFile(file: File, maxQuestions = 10, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS) {
-  return generateFromFile<GeneratedQuizFromFile>(file, "quiz", maxQuestions, signal, options);
+export function generateQuizFromFile(file: File, maxQuestions = 10, signal?: AbortSignal, options: AiGenerationOptions = DEFAULT_AI_OPTIONS, language?: ContentLanguage) {
+  return generateFromFile<GeneratedQuizFromFile>(file, "quiz", maxQuestions, signal, options, undefined, false, language);
 }
 
 export type StudyPlanCardSignal = { due: boolean; repetitions: number; lapses: number; intervalDays: number };

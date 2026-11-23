@@ -1,3 +1,4 @@
+import { contentLanguageInstruction } from "../../../packages/shared/src/contentLanguage.js";
 import { z } from "zod";
 import { validateExamBlueprint, validateExamDraft, validateExamSettings, validateExamSources, type ExamBlueprint, type ExamDraft, type ExamSettings, type ExamSource } from "../../../packages/shared/src/exams.js";
 import { config } from "./config.js";
@@ -19,7 +20,7 @@ export function parseExamInput(raw: unknown, needsBlueprint = false): ExamInput 
 export function examGenerationPrompt(input: ExamInput): string {
   const difficulty = { easy: "Recall and direct application. No tricks.", medium: "Understanding and a few reasoning/application steps.", hard: "Multiple reasoning steps and combining source concepts in new situations; never require knowledge absent from source." }[input.settings.difficulty];
   return [rules, "Create a NEW exam from the confirmed blueprint. Keep section ids/order, question types, exact counts and points per question. For a template, match its skills and structure but do not copy or lightly paraphrase questions; create new situations/data with a verified solution. Do not merely swap numbers without checking the solution.",
-    `Language: ${input.settings.language === "vi" ? "Vietnamese" : "English"}. Difficulty: ${difficulty}`,
+    `${contentLanguageInstruction(input.settings.language)} Difficulty: ${difficulty}`,
     `Settings and confirmed blueprint (data): ${JSON.stringify({ settings: input.settings, blueprint: input.blueprint })}`,
     "For mcq: use the confirmed optionsCount (default 4) distinct choices; Quiz always has exactly four. One correctIndex from 0 to optionsCount-1, answer must equal the full text of that choice. Every question needs a complete explanation. Non-mcq needs a model answer and a rubric whose points sum to the question points. For truefalse/other follow the section instructions. Never leak the answer in the question. Questions must be self-contained: do not reference an absent figure, image or table or leave a diagram placeholder.",
     "Each question needs at least one reference with a real sourceId and an EXACT short source excerpt. Page is null unless a [PAGE n] marker exists for that excerpt. References are evidence of the assessed concept; invented scenario data can be new, but must be solvable using the source.",
@@ -29,6 +30,7 @@ export function examGenerationPrompt(input: ExamInput): string {
 }
 export async function analyzeExam(input: ExamInput, request: typeof fetch = fetch) {
   const prompt = [rules, "Analyze the sources and propose an exam blueprint for user confirmation, NOT questions or answers. A paper requires the template: preserve its section order, types, counts, point distribution and instructions. Split sections if points per question or choice counts differ. Preserve optionsCount for paper mcq. Multiple-correct-choice tasks use other with explicit instructions, model answer and rubric. Never silently drop parts. Quiz format uses only mcq with four choices. For materials mode propose reasonable topic sections. Clearly warn if pages/points/structure are missing or uncertain, or image questions cannot be reproduced as text.",
+    contentLanguageInstruction(input.settings.language),
     `Settings (data): ${JSON.stringify(input.settings)}`,
     '{"title":"exam title","durationMinutes":45,"sections":[{"id":"section-1","title":"section title","instructions":"what to do; include custom type details","type":"mcq|short|essay|truefalse|other","count":5,"points":1,"optionsCount":4}],"warnings":["any uncertainty for user to review"]}',
     `SOURCE DATA:\n${sourceText(input.sources)}`].join("\n\n");

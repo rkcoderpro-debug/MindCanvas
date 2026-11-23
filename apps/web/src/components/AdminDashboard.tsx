@@ -1,5 +1,6 @@
+import { BackButton } from "./PageNavigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, Check, Database, LoaderCircle, RefreshCw, Search, ShieldCheck, UserRound, Users } from "lucide-react";
+import { BarChart3, Check, Database, LoaderCircle, RefreshCw, Search, ShieldCheck, UserRound, Users } from "lucide-react";
 import { assignAdminPlan, getAdminSummary, getAdminUserDetail, getAdminUsers, type AdminSummary, type AdminUserDetail, type AdminUserSummary } from "../lib/api";
 import { PLAN_CATALOG, formatStorage, formatVnd, usagePercent, type PlanId } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -70,7 +71,7 @@ export default function AdminDashboard({ onBack, ownerId, onRunGuide }: { onBack
   const submitSearch = (event: React.FormEvent) => { event.preventDefault(); setQuery(draftQuery); };
 
   return <main className="admin-page">
-    <header className="admin-page-header"><div><button type="button" className="secondary-button admin-back-button" onClick={onBack}><ArrowLeft size={16}/>{t("adminBack")}</button><div className="admin-title-row"><span className="admin-title-icon"><ShieldCheck size={22}/></span><div><h1>{t("adminDashboard")}</h1><p>{t("adminDashboardHint")}</p></div></div></div><button type="button" className="icon-button" title={t("refresh")} aria-label={t("refresh")} onClick={() => void load()} disabled={loading}><RefreshCw size={18}/></button></header>
+    <header className="admin-page-header"><div><BackButton className="admin-back-button" onClick={onBack}>{t("adminBack")}</BackButton><div className="admin-title-row"><span className="admin-title-icon"><ShieldCheck size={22}/></span><div><h1>{t("adminDashboard")}</h1><p>{t("adminDashboardHint")}</p></div></div></div><button type="button" className="icon-button" title={t("refresh")} aria-label={t("refresh")} onClick={() => void load()} disabled={loading}><RefreshCw size={18}/></button></header>
     {error && <p className="form-error" role="alert">{error}</p>}
     {summary && <section className="admin-stats" aria-label={t("adminService")}>
       <article><UserRound size={18}/><span>{t("adminUserCount")}</span><strong>{summary.totalUsers}</strong></article>

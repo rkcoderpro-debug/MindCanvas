@@ -24,3 +24,20 @@ test("parses a four-choice quiz preview at the selected limit", () => {
 test("rejects duplicate quiz options", () => {
   assert.throws(() => parseQuizPreview(JSON.stringify({ ...quiz, questions: [{ ...quiz.questions[0], options: ["A", "A", "B", "C"] }] }), 10));
 });
+
+test("the requested language reaches the Auto quiz prompt for an opposite-language source", async () => {
+  const { config } = await import("../src/config.js");
+  const { generateQuizWithGemini } = await import("../src/quiz.js");
+  config.GEMINI_API_KEY = "test-placeholder-key"; config.GEMINI_MODELS = "gemini-quiz-language-test";
+  for (const [language, requested, text] of [
+    ["en", "English", "Nước có công thức hóa học H₂O."],
+    ["vi", "Vietnamese", "Water has the chemical formula H₂O."],
+  ] as const) {
+    await generateQuizWithGemini({ text, language, maxQuestions: 3 }, async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.match(body.contents[0].parts[0].text, new RegExp(`in ${requested}, regardless of the source language`));
+      assert.ok(body.contents[0].parts[0].text.includes(text));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(quiz) }] } }] }));
+    });
+  }
+});
