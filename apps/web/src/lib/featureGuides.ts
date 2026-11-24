@@ -135,11 +135,6 @@ export function practiceActionsForGuide(
         labelVi: "Tạo hình chữ nhật",
         labelEn: "Create a rectangle",
       },
-      {
-        id: "canvas:frame-created",
-        labelVi: "Tạo một Frame",
-        labelEn: "Create a frame",
-      },
     ],
     "learning-hub": [
       { id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" },
@@ -423,9 +418,9 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     category: "canvas",
     titleVi: "Điều khiển canvas",
     titleEn: "Canvas controls",
-    summaryVi: "Tạo canvas thực hành rồi dùng Pen, Hand, Eraser, Rectangle và Frame.",
+    summaryVi: "Tạo canvas thực hành rồi dùng Pen, Hand, Eraser và Rectangle.",
     summaryEn:
-      "Create a practice canvas, then use Pen, Hand, Eraser, Rectangle and Frame.",
+      "Create a practice canvas, then use Pen, Hand, Eraser and Rectangle.",
     gifSrc: "/guides/canvas-controls.gif",
     demo: "canvas",
     outcomeVi:
@@ -585,30 +580,6 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Nhấn và kéo trên canvas để tạo một hình chữ nhật có kích thước tùy ý.",
         bodyEn:
           "Press and drag on the canvas to create a rectangle of any size.",
-      },
-      {
-        target: '[data-tool="frame"]',
-        titleVi: "Chọn Frame",
-        titleEn: "Choose Frame",
-        bodyVi: "Bấm Frame rồi chọn preset A4, A5 hoặc B5. Bấm vào canvas để đặt khung bố cục.",
-        bodyEn: "Click Frame, choose an A4, A5, or B5 preset, then click the canvas to place a layout frame.",
-      },
-      {
-        target: ".canvas-svg",
-        completion: {
-          type: "action",
-          actions: [
-            {
-              id: "canvas:frame-created",
-              labelVi: "Tạo một Frame",
-              labelEn: "Create a frame",
-            },
-          ],
-        },
-        titleVi: "Đặt Frame lên canvas",
-        titleEn: "Place the Frame",
-        bodyVi: "Bấm một vị trí trống trên canvas để đặt Frame. Bạn có thể chọn, kéo hoặc xóa khung sau đó.",
-        bodyEn: "Click an empty spot on the canvas to place the Frame. You can select, move, or delete it afterwards.",
       },
       {
         kind: "practice",

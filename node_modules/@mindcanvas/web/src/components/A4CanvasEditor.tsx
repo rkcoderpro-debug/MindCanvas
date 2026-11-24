@@ -4,6 +4,7 @@ import type { BoardState, CanvasPaper } from "@mindcanvas/shared";
 import CanvasBoard from "./CanvasBoard";
 import Dialog from "./Dialog";
 import { useLanguage } from "../lib/i18n";
+import { readWheelDelta } from "../lib/canvasViewport";
 import { sameBoardContent } from "../lib/boardEquality";
 import {
   A4_COLS, A4_FONT, A4_HEIGHT, A4_LINE, A4_LINES, A4_MARGIN, A4_MAX_PAGES, A4_WIDTH,
@@ -24,7 +25,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
   const [size, setSize] = useState({ width: 760, height: 600 });
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [zoom, setZoom] = useState<number | null>(null);
-  const [typing, setTyping] = useState(false);
+  const [typing, setTyping] = useState(true);
   const [composition, setComposition] = useState<{ index: number; text: string } | null>(null);
   const [jump, setJump] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -58,6 +59,28 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     observer?.observe(el);
     return () => observer?.disconnect();
   }, []);
+  useEffect(() => {
+    const el = container.current; if (!el) return;
+    const scrollPaper = (event: WheelEvent) => {
+      if (event.defaultPrevented || !event.cancelable || event.ctrlKey || event.metaKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".inspector, .drawing-toolbar, .canvas-tools-sheet, .canvas-embed-body, .canvas-media video, .canvas-media audio, select, input[type=range]")) return;
+      const delta = readWheelDelta(event);
+      const horizontal = event.shiftKey || event.altKey;
+      const dx = delta.x || (horizontal ? delta.y : 0);
+      const dy = horizontal ? 0 : delta.y;
+      if (!dx && !dy) return;
+      // The sticky SVG/editor can consume native scrolling (especially over
+      // a textarea or when an inline editor has focus). Move the paper scroller.
+      event.preventDefault();
+      el.scrollLeft += dx;
+      el.scrollTop += dy;
+      setPosition({ left: el.scrollLeft, top: el.scrollTop });
+    };
+    el.addEventListener("wheel", scrollPaper, { passive: false });
+    return () => el.removeEventListener("wheel", scrollPaper);
+  }, []);
+
   useLayoutEffect(() => {
     if (jump === null || !container.current) return;
     container.current.scrollTop = jump * stride * scale;
@@ -209,6 +232,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
             paperSurface={{
               clip: graphicId,
               nativeScroll: allowWriting || readOnly,
+              onToolChosen: () => { setTyping(false); setComposition(null); },
               artwork: <><defs><clipPath id={graphicId}>{visible.map(index => <rect key={index} x={0} y={index * stride} width={A4_WIDTH} height={A4_HEIGHT}/>)}</clipPath></defs>{visible.map(paper)}</>,
               liveClip: <defs><clipPath id={graphicId + "-live"}>{visible.map(index => <rect key={index} x={viewport.x} y={viewport.y + index * stride * scale} width={A4_WIDTH * scale} height={A4_HEIGHT * scale}/>)}</clipPath></defs>,
               contains: point => point.x >= 0 && point.x <= A4_WIDTH && point.y >= 0 && point.y < shownCount * stride && point.y % stride < A4_HEIGHT,

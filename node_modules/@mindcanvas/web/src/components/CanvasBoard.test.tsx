@@ -603,17 +603,18 @@ describe("Canvas interactions", () => {
     expect(host.querySelector('[data-element] polygon')).not.toBeNull();
   });
 
-  it("creates a preset frame and exposes A4/A5/B5 choices", async () => {
-    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+  it("renders saved Frames but no longer offers Frame creation or the F shortcut", async () => {
+    const existing = { id: "old-frame", kind: "frame" as const, frameTemplate: "b5" as const, frameName: "B5 dọc", color: "#ffffff", x: 30, y: 40, width: 665, height: 945 };
+    await act(async () => root.render(<Harness initial={{ ...blankBoard(), shapes: [existing] }}/>));
     const svg = host.querySelector("svg.canvas-svg")!;
-    const frameButton = host.querySelector('[aria-label="Frame"]') as HTMLButtonElement;
-    expect(frameButton).not.toBeNull();
-    await act(async () => frameButton.click());
-    expect(host.querySelector('[data-help-id="canvas-frame-template-a4"]')).not.toBeNull();
-    await act(async () => (host.querySelector('[data-help-id="canvas-frame-template-b5"]') as HTMLButtonElement).click());
-    await act(async () => pointer(svg, "pointerdown", 30, 40));
-    expect(current.shapes[0]).toMatchObject({ kind: "frame", frameTemplate: "b5", frameName: "B5 dọc", x: 30, y: 40, width: 665, height: 945 });
-    expect(host.querySelector('.canvas-frame-shape')).not.toBeNull();
+    expect(host.querySelector('[data-tool="frame"]')).toBeNull();
+    expect(host.querySelector(".canvas-frame-shape")).not.toBeNull();
+    await act(async () => {
+      svg.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true }));
+      pointer(svg, "pointerdown", 10, 10);
+      pointer(svg, "pointerup", 10, 10);
+    });
+    expect(current.shapes).toEqual([existing]);
   });
 
   it("lets XPen use shape tools even when a barrel button is reported", async () => {

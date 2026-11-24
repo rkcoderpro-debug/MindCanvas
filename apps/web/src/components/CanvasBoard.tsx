@@ -1,9 +1,9 @@
 import { actualPointerSamples, LiveInk } from "../lib/liveInk";
 import { sameBoardContent, sameBoardState } from "../lib/boardEquality";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, Film, Frame as FrameIcon, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, Film, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
-import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, CANVAS_FRAME_TEMPLATES, clamp, connect, connectorGeometry, createFrameShape, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type CanvasFrameTemplate, type Selection } from "../lib/board";
+import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
 import { canvasTextColor, readableTextColor } from "../lib/color";
 import { THEME_CANVAS_PALETTES } from "../lib/theme";
@@ -35,6 +35,7 @@ export type CanvasPaperSurface = {
   artwork: ReactNode;
   clip: string;
   nativeScroll?: boolean;
+  onToolChosen: () => void;
   liveClip: ReactNode;
   overlay: (viewport: BoardState["viewport"]) => ReactNode;
   contains: (point: Vec2) => boolean;
@@ -219,7 +220,7 @@ const tools: { id: ToolMode; icon: typeof Hand; key: string }[] = [
   { id: "text", icon: Type, key: "T" }, { id: "pen", icon: PenLine, key: "P" },
   { id: "highlighter", icon: Highlighter, key: "H" }, { id: "eraser", icon: Eraser, key: "E" }, { id: "line", icon: Minus, key: "L" },
   { id: "rect", icon: Square, key: "R" }, { id: "ellipse", icon: Circle, key: "O" },
-  { id: "triangle", icon: Triangle, key: "G" }, { id: "frame", icon: FrameIcon, key: "F" }, { id: "connector", icon: ArrowUpRight, key: "C" },
+  { id: "triangle", icon: Triangle, key: "G" }, { id: "connector", icon: ArrowUpRight, key: "C" },
 ];
 const drawingPaths = new WeakMap<Vec2[], string>();
 function drawingPath(points: Vec2[]) {
@@ -292,7 +293,8 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hasCopy, setHasCopy] = useState(hasCanvasClipboard);
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false), [connectorSource, setConnectorSource] = useState<Selection | null>(null), [connectorPulse, setConnectorPulse] = useState<string[]>([]);
-  const [frameTemplate, setFrameTemplate] = useState<CanvasFrameTemplate>("a4");
+  const inspectorOpenButton = useRef<HTMLButtonElement>(null), inspectorCloseButton = useRef<HTMLButtonElement>(null);
+  const inspectorFocus = useRef(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => !paperSurface && (typeof window === "undefined" || window.innerWidth > 620));
   const [toolbarExpanded, setToolbarExpanded] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
   const [toolbarOverflowing, setToolbarOverflowing] = useState(false);
@@ -318,6 +320,11 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
   const [ink, setInk] = useState(palette.ink), [strokeWidth, setStrokeWidth] = useState(3);
   const [drawingSizes, setDrawingSizes] = useState<DrawingToolSizes>(readDrawingSizes);
   const [eraserCursor, setEraserCursor] = useState<Vec2 | null>(null);
+  useLayoutEffect(() => {
+    if (!paperSurface || !inspectorFocus.current) return;
+    inspectorFocus.current = false;
+    (inspectorOpen ? inspectorCloseButton.current : inspectorOpenButton.current)?.focus({ preventScroll: true });
+  }, [inspectorOpen, !!paperSurface]);
   useLayoutEffect(() => {
     inlineEditor.current?.focus({ preventScroll: true });
   }, [editing?.selection.id]);
@@ -879,14 +886,6 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       autoPanPointer.current = { x: input.clientX, y: input.clientY }; autoPanLastAt.current = performance.now(); scheduleAutoPan();
     } else if (effectiveTool === "connector") {
       setConnectorSource(null); setSelected(null); return;
-    } else if (effectiveTool === "frame") {
-      const frameShape = createFrameShape(frameTemplate, p.x, p.y);
-      const next = { ...base, shapes: [...base.shapes, frameShape] };
-      setSelected({ kind: "shapes", id: frameShape.id });
-      onChange(next);
-      emitGuideAction("canvas:frame-created");
-      setTool("select");
-      return;
     } else if (effectiveTool === "text") {
       const id = crypto.randomUUID();
       edit({ kind: "texts", id }, { ...base, texts: [...base.texts, { id, x: p.x, y: p.y + 16, text: "", width: 260, height: 42, fontSize: 16, color: "#18213b" }] });
@@ -1308,12 +1307,13 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
           e.preventDefault();
           if (!e.repeat && !keyboardToolPresses.current.has(e.key.toLowerCase())) {
             keyboardToolPresses.current.set(e.key.toLowerCase(), { tool: temporary, previous: tool, startedAt: performance.now() });
+            paperSurface?.onToolChosen();
             setTemporaryTool(temporary);
           }
           return;
         }
         const item = tools.find(i => i.key.length === 1 && i.key.toLowerCase() === e.key.toLowerCase());
-        if (item) setTool(item.id);
+        if (item) { paperSurface?.onToolChosen(); setTool(item.id); }
       }
     };
     const keyup = (e: KeyboardEvent) => {
@@ -1414,7 +1414,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
   const hiddenToolbarTools = tools.filter(item => !visibleToolIds.includes(item.id));
   const ActiveToolIcon = activeToolDefinition.icon;
   const chooseTool = (id: ToolMode) => {
-    finishEdit(); setTool(id); setSelected(null); setMobileMoreOpen(false);
+    finishEdit(); paperSurface?.onToolChosen(); setTool(id); setSelected(null); setMobileMoreOpen(false);
     if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 620px)").matches) setToolbarExpanded(false);
   };
   const beginToolbarToolPress = (event: ReactPointerEvent<HTMLButtonElement>, id: ToolMode) => {
@@ -1425,6 +1425,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       setTool(active.previous);
     }
     finishEdit();
+    paperSurface?.onToolChosen();
     const previous = tool;
     setTool(id);
     setMobileMoreOpen(false);
@@ -1450,7 +1451,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
     onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => endToolbarToolPress(event, id),
     onClick: (event: ReactMouseEvent<HTMLButtonElement>) => { if (event.detail === 0) chooseTool(id); },
   });
-  return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode}>
+  return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""} ${paperSurface ? "paper-canvas" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode} data-inspector-open={inspectorOpen && !readOnly}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addCanvasFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -1487,10 +1488,6 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       {!readOnly && drawingTool && drawingSizeRange && <div className={`drawing-size-control drawing-size-${drawingTool}`} role="group" aria-label={t(drawingSizeLabelKey[drawingTool])}>
         <ActiveToolIcon size={14}/><span className="drawing-size-label">{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} style={{ "--range-progress": drawingSizeProgress } as CSSProperties} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(18, Math.max(6, drawingSize / 3))}px`, height: `${Math.min(18, Math.max(6, drawingSize / 3))}px` }}/>
       </div>}
-      {!readOnly && activeToolMode === "frame" && <div className="frame-template-control" role="group" aria-label="Mẫu Frame">
-        <FrameIcon size={14}/><span className="frame-template-label">Frame</span>
-        {(Object.entries(CANVAS_FRAME_TEMPLATES) as Array<[CanvasFrameTemplate, typeof CANVAS_FRAME_TEMPLATES[CanvasFrameTemplate]]>).map(([id, preset]) => <button key={id} type="button" data-help-id={`canvas-frame-template-${id}`} className={frameTemplate === id ? "selected" : ""} aria-pressed={frameTemplate === id} onClick={() => setFrameTemplate(id)}>{preset.label}</button>)}
-      </div>}
       <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={`${iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"},${DOCUMENT_ACCEPT}`} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addCanvasFiles(files); }}/>
       <svg ref={svg} tabIndex={0} aria-label="Canvas" data-selection-tool={activeToolMode === "select" ? "pointer" : undefined} className={`canvas-svg tool-${activeToolMode} ${activeToolMode === "select" ? "selection-pointer" : ""}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e); }} onPointerCancelCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e, true); }}
@@ -1519,7 +1516,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
             const allowCanvasPointer = (event: ReactPointerEvent) => {
               const target = event.target instanceof Element ? event.target : null;
               const onPdfPage = !!target?.closest(".pdf-page-stack, .pdf-page-shell, .document-pdf-body");
-              const drawingMode = ["pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle", "frame"].includes(activeToolMode);
+              const drawingMode = ["pen", "highlighter", "eraser", "line", "rect", "ellipse", "triangle"].includes(activeToolMode);
               if (activeToolMode === "hand" || event.ctrlKey || event.metaKey || (drawingMode && onPdfPage) || ((activeToolMode === "select" || activeToolMode === "connector") && onPdfPage)) return;
               event.stopPropagation();
             };
@@ -1611,7 +1608,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
               style={{ fontSize: selectedEl && "fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16, fontWeight: selectedEl && "bold" in selectedEl && selectedEl.bold ? 700 : 400, fontStyle: selectedEl && "italic" in selectedEl && selectedEl.italic ? "italic" : "normal", textDecoration: selectedEl && "underline" in selectedEl && selectedEl.underline ? "underline" : "none", textAlign: selectedEl && "textAlign" in selectedEl ? selectedEl.textAlign ?? "left" : "left" }}
               value={editing.value} onChange={e => { const next = { ...editing, value: e.target.value }; editRef.current = next; setEditing(next); }}
               onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onBlur={() => finishEdit()}
-              onKeyDown={e => { e.stopPropagation(); if (e.nativeEvent.isComposing) return; if (e.key === "Escape") { e.preventDefault(); finishEdit(true); } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); finishEdit(); } }}/></foreignObject>}
+              onKeyDown={e => { e.stopPropagation(); if (e.nativeEvent.isComposing) return; if (e.key === "Escape") { e.preventDefault(); finishEdit(true); } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey || (paperSurface && !e.shiftKey))) { e.preventDefault(); finishEdit(); } }}/></foreignObject>}
         </g>
       </svg>
       <svg className="canvas-live-ink" aria-hidden="true" focusable="false">
@@ -1636,7 +1633,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       </div>}
       {mobileMoreOpen && !readOnly && <div className="canvas-tools-sheet-backdrop" onClick={() => setMobileMoreOpen(false)}><aside className="canvas-tools-sheet" aria-label={t("moreTools")} onClick={event => event.stopPropagation()}>
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
-        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "frame", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
+        <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           {!paperSurface && <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>}
           <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
           <button onClick={() => { setDocumentPanelOpen(true); setMobileMoreOpen(false); }}><FileSpreadsheet size={19}/><span>Tài liệu</span></button>
@@ -1656,10 +1653,10 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
       {((inputMode === "drawing" || inputMode === "erasing") && ["pen", "highlighter", "eraser"].includes(activeToolMode)) && <div className="pen-mode-badge" role="status">{activeToolMode === "eraser" ? <Eraser size={14}/> : <PenLine size={14}/>}<span>{t(activeToolMode)}</span></div>}
       {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
-      <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle", "frame"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div>
+      <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div>
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <div className="canvas-mobile-dock">
-        <button type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => setInspectorOpen(value => !value)}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>
+        {(!paperSurface || (!inspectorOpen && !readOnly)) && <button ref={inspectorOpenButton} type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => { inspectorFocus.current = true; setInspectorOpen(value => !value); }}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>}
         <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
       </div>
       {mindMapLayoutSummary && <aside className="mind-map-layout-report" aria-label={t("mindMapLayoutReport")}>
@@ -1674,7 +1671,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       </aside>}
       <div className={`zoom-control ${showMobileZoomControls ? "mobile-zoom-visible" : "mobile-zoom-hidden"}`}><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={resetZoom}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
-    {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => setInspectorOpen(false)}><X size={19}/></button></div>
+    {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button ref={inspectorCloseButton} type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => { inspectorFocus.current = true; setInspectorOpen(false); }}><X size={19}/></button></div>
       <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={backgroundPattern === option ? "active" : ""} aria-pressed={backgroundPattern === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div><input ref={backgroundInput} hidden type="file" accept="image/*,video/*,.mov,.m4v,.webm" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void addBackgroundFile(file); }}/><div className="canvas-background-media-control">{backgroundMedia ? <><div className="canvas-background-file"><span className={`background-media-icon ${backgroundMedia.kind}`}>{backgroundMedia.kind === "video" ? <Film size={14}/> : <ImagePlus size={14}/>}</span><span title={backgroundMedia.name}>{backgroundMedia.name || t(backgroundMedia.kind === "video" ? "video" : "image")}</span></div><button type="button" className="icon-button" aria-label={t("clearCanvasBackground")} title={t("clearCanvasBackground")} onClick={() => onChange({ ...board, background: "dots" })}><Trash2 size={15}/></button></> : <button type="button" className="secondary-button" onClick={openBackgroundPicker}><ImagePlus size={15}/>{t("uploadCanvasBackground")}</button>}{backgroundMedia && <button type="button" className="secondary-button" onClick={openBackgroundPicker}><ImagePlus size={15}/>{t("replace")}</button>}<small className="field-hint">{canUseCanvasBackground ? t("canvasBackgroundHint") : t("backgroundProOnly")}</small></div>{backgroundMedia && <div className="canvas-background-adjustments"><label>{t("backgroundMediaOpacity")}<input type="range" min=".1" max="1" step=".05" value={backgroundMedia.opacity ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, opacity: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBlur")}<input type="range" min="0" max="24" step="1" value={backgroundMedia.blur ?? 0} onChange={event => onChange({ ...board, background: { ...backgroundMedia, blur: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBrightness")}<input type="range" min=".5" max="1.5" step=".05" value={backgroundMedia.brightness ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, brightness: Number(event.target.value) } })}/></label><label>{t("backgroundMediaFit")}<select value={backgroundMedia.fit ?? "cover"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, fit: event.target.value as "cover" | "contain" } })}><option value="cover">{t("backgroundFitCover")}</option><option value="contain">{t("backgroundFitContain")}</option></select></label><label>{t("backgroundMediaPosition")}<select value={backgroundMedia.position ?? "center"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, position: event.target.value } })}><option value="center">{t("center")}</option><option value="top">{t("alignTop")}</option><option value="right">{t("alignRight")}</option><option value="bottom">{t("alignBottom")}</option><option value="left">{t("alignLeft")}</option></select></label></div>}</section>
       {backgroundMedia && <section className="canvas-background-overlay-control"><label>{t("backgroundMediaOverlay")}<input type="color" value={backgroundMedia.overlay ?? "#000000"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, overlay: event.target.value } })}/></label></section>}
       {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}

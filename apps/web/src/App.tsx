@@ -7,6 +7,7 @@ import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
 import { ArrowLeft, CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, LayoutGrid, Link2, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
+import CanvasProjectActions, { type CanvasProjectAction } from "./components/CanvasProjectActions";
 import Dialog from "./components/Dialog";
 import FloatingTimer from "./components/FloatingTimer";
 import PetCompanion from "./components/PetCompanion";
@@ -276,6 +277,20 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   // projects so the feature is not missing on Android. Authenticated cloud
   // projects still remain owner-only; guests receive the sign-in path.
   const mobileShareVisible = !readOnly && (currentProject?.accessRole === "owner" || !currentProject?.accessRole);
+  const canvasProjectActions: CanvasProjectAction[] = [];
+  if (ws.board) {
+    const currentBoard = ws.board;
+    if (!readOnly) canvasProjectActions.push({ id: "move", label: t("move"), icon: <FolderPlus size={17}/>,
+      run: () => { setFolder(currentProject?.folderId ?? ""); setModal("move"); } });
+    if (currentProject?.accessRole === "owner") canvasProjectActions.push({ id: "share", label: t("shareProject"), icon: <Share2 size={17}/>,
+      run: () => setModal("share") });
+    canvasProjectActions.push(
+      { id: "link", label: t(copiedCanvas?.id === currentBoard.id && copiedCanvas.ok ? "shareCopied" : "copyCanvasLink"), icon: <Link2 size={17}/>,
+        title: t(!user || currentProject?.revision === undefined ? "canvasLinkLocalHint" : "copyCanvasLink"), run: () => void copyCanvasLink() },
+      { id: "export", label: t("export"), icon: <Download size={17}/>, title: t("exportHint"), run: () => exportBoard(currentBoard) },
+    );
+  }
+
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") { event.preventDefault(); setCommandOpen(value => !value); }
@@ -491,8 +506,8 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       {user && <ShareInbox owner={user.id} onAccepted={(projectId, title, role) => { setFilter("__shared"); setRecent(false); void ws.refresh(true); void ws.open({ id: projectId, title, folderId: null, updatedAt: new Date().toISOString(), shared: true, accessRole: role }); }} />}
       <Suspense fallback={<RouteLoading/>}>{modal === "share" && ws.board ? <ShareDialog projectId={ws.board.id} title={ws.board.title} isAuthenticated={!!user} onSignIn={isSupabaseConfigured ? () => void auth() : undefined} onClose={() => setModal(null)}/> : ws.board ? <>
         <div className="editor-heading canvas-editor-heading"><TitleInput key={ws.board.id} value={ws.board.title} label={t("rename")} disabled={readOnly} onCommit={title => ws.change({ ...ws.board!, title })}/><div className="actions">
-          {!readOnly && <button className="secondary-button" onClick={() => { setFolder(ws.projects.find(p => p.id === ws.board!.id)?.folderId ?? ""); setModal("move"); }}><FolderPlus size={17}/>{t("move")}</button>}
-          {ws.projects.find(project => project.id === ws.board!.id)?.accessRole === "owner" && <button className="secondary-button" onClick={() => setModal("share")}><Share2 size={17}/>{t("shareProject")}</button>}<button type="button" className="secondary-button" title={t(!user || currentProject?.revision === undefined ? "canvasLinkLocalHint" : "copyCanvasLink")} onClick={() => void copyCanvasLink()}><Link2 size={17}/>{t(copiedCanvas?.id === ws.board.id && copiedCanvas.ok ? "shareCopied" : "copyCanvasLink")}</button><button className="secondary-button" title={t("exportHint")} onClick={() => exportBoard(ws.board!)}><Download size={17}/>{t("export")}</button>{!isA4 && <><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button></>}
+          <CanvasProjectActions key={ws.board.id} actions={canvasProjectActions}/>
+          {!isA4 && <><button className="secondary-button" title={t("exportSvgHint")} onClick={() => exportCanvasSvgFile(ws.board!)}><Download size={17}/>{t("exportSvg")}</button><button className="secondary-button" title={t("exportPngHint")} onClick={() => void exportCanvasPngFile(ws.board!).catch(err => ws.setError(errorMessage(err, t("error"))))}><Download size={17}/>{t("exportPng")}</button></>}
           {!readOnly && !isA4 && <button className="primary-button" onClick={() => setAiPanelMode("open")}><Sparkles size={17}/>{t("ai")}</button>}</div></div>
         {copiedCanvas?.id === ws.board.id && <div className="shared-readonly-banner" role="status">{t(copiedCanvas.ok ? (!user || currentProject?.revision === undefined ? "canvasLinkLocalHint" : "canvasLinkCopied") : "canvasLinkCopyFallback")}</div>}
         {readOnly && <div className="shared-readonly-banner">{currentProject?.cloudOffline ? t("sharedOffline") : t("viewerProject")}</div>}

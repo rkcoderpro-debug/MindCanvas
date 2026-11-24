@@ -13,7 +13,7 @@ const MAX_TEXT = 40_000;
 const geometry = ["texts", "shapes", "media", "embeds"] as const;
 
 export const newA4Page = (text = "", flows = false): CanvasPage => ({ id: crypto.randomUUID(), text, ...(flows ? { flows } : {}) });
-export const newA4Layout = (): A4CanvasLayout => ({ mode: "separate", paper: "plain", pages: [newA4Page()] });
+export const newA4Layout = (): A4CanvasLayout => ({ mode: "separate", paper: "ruled", pages: [newA4Page()] });
 export const pageStride = (layout: A4CanvasLayout) => A4_HEIGHT + (layout.mode === "separate" ? A4_GAP : 0);
 export const a4PageIndex = (y: number) => Math.max(0, Math.floor(y / A4_HEIGHT));
 export const a4ViewY = (y: number, stride: number) => y + a4PageIndex(y) * (stride - A4_HEIGHT);

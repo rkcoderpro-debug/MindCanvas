@@ -647,10 +647,6 @@ p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 .drawing-size-control label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawing-size-control label input { grid-column: 1 / -1; width: 100%; }
 .drawing-size-control output { min-width: 35px; color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
-.frame-template-control { position: absolute; z-index: 12; top: 60px; left: 8px; display: flex; align-items: center; gap: 6px; min-height: 42px; padding: 7px 9px; color: var(--accent); background: var(--control-bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px var(--shadow); backdrop-filter: blur(14px); }
-.frame-template-control .frame-template-label { color: var(--muted); font-size: 11px; font-weight: 700; }
-.frame-template-control button { min-width: 35px; min-height: 28px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: 11px; font-weight: 700; }
-.frame-template-control button:hover, .frame-template-control button.selected { border-color: var(--accent); color: var(--accent-contrast); background: var(--accent); }
 .drawing-size-sample { display: block; flex: 0 0 auto; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
 .eraser-cursor { opacity: .5; vector-effect: non-scaling-stroke; }
 .canvas-hint { pointer-events: none; position: absolute; bottom: 14px; left: 16px; right: 150px; color: var(--muted); background: var(--control-bg); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); font-size: 12px; line-height: 1.5; width: fit-content; padding: 6px 8px; border-radius: 7px; }
@@ -5430,3 +5426,21 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .project-card:has(.project-a4-badge) .project-preview { background-color:color-mix(in srgb,var(--surface) 83%,var(--accent-soft)); }
 .a4-writing .editor-frame,.a4-writing .canvas-svg,.a4-viewer .editor-frame,.a4-viewer .canvas-svg { touch-action:pan-x pan-y; }
 .a4-stage .canvas-svg { --canvas-text:#172033; }
+
+/* Compact project actions; the existing mobile project sheet is independent. */
+.canvas-project-actions { position:relative; }
+.canvas-project-action-list { position:absolute; z-index:36; inset-inline-end:0; top:calc(100% + 6px); min-width:220px; padding:5px; border:1px solid var(--line); border-radius:12px; background:var(--surface-raised); box-shadow:0 12px 30px var(--shadow-strong); }
+.canvas-project-action-list:not([hidden]) { display:grid; gap:2px; }
+.canvas-project-action-list button { min-height:40px; display:flex; align-items:center; gap:9px; padding:7px 9px; text-align:start; white-space:nowrap; background:transparent; color:var(--text); border-radius:7px; }
+.canvas-project-action-list button:hover,.canvas-project-action-list button:focus-visible { color:var(--accent); background:var(--accent-soft); }
+.canvas-project-action-list button svg { flex:none; }
+
+.a4-stage > .paper-canvas { --a4-inspector-width:min(310px,56%); }
+.a4-stage > .paper-canvas > .inspector { width:var(--a4-inspector-width); max-width:none; box-sizing:border-box; }
+/* The free-text editor sits on a themed surface, while its committed text sits on white paper. */
+.a4-stage .paper-canvas .canvas-svg .inline-editor { color:var(--text); caret-color:var(--text); }
+.a4-stage .paper-canvas .canvas-svg .inline-editor::placeholder { color:var(--muted); opacity:1; }
+.a4-stage > .paper-canvas[data-inspector-open=true] .zoom-control { right:calc(var(--a4-inspector-width) + 12px); }
+@media (max-width:620px) {
+  .a4-stage > .paper-canvas[data-inspector-open=true] .zoom-control { right:calc(var(--a4-inspector-width) + 6px); }
+}

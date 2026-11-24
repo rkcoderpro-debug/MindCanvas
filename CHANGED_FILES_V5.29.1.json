@@ -1,0 +1,102 @@
+{
+  "version": "5.29.1",
+  "baseVersion": "5.29.0",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.29.1.md",
+      "bytes": 1512,
+      "sha256": "a538092f42e836ff3831f3338402590a2d335869375140f9f25904079e84e88d"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "14b7cf364bf4c000076fcfc13a745861169509fdb665335dd9aca0e664bc9931"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "de8df569f73f49fdb666678c4b0988cce4ae7e96e4c4c03b897dd1b637a03bba"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "3b572d0ed6c03b1502d321d1f46a5e9315894bd0ccf0cae7c69974f76712d85a"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "af7100ded8875d80e01badfa204bb83758d2b6093889a3f1d34925c370353add"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 60921,
+      "sha256": "88e39bbfe8b0f1fc9d28e5f4d56ac4364b455cbe639baebac7eb08f2a080b8e8"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 491837,
+      "sha256": "0782577c1d38f2280d305780f1b0922a3053df50f15f43cb4d2495951809d7d9"
+    },
+    {
+      "path": "apps/web/src/components/CanvasProjectActions.tsx",
+      "bytes": 1852,
+      "sha256": "e8c00ebc1e70697e0c9d4414db13b7d7d142a23001a940140182bd0ea9fb363f"
+    },
+    {
+      "path": "apps/web/src/components/CanvasProjectActions.test.tsx",
+      "bytes": 1844,
+      "sha256": "06b8acffa978fa68d14704012cff5428a2af2c0c13f36f41f92607b41e893e44"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "bytes": 166186,
+      "sha256": "40a71dec74ba36072afc84abd7a8888688e89c5c7eaa329999e1da1a3fdee4d0"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.test.tsx",
+      "bytes": 61286,
+      "sha256": "031435a6d3766183001a9af0ed62a7c459b7e00ea746b5df6559e4d47aa01f6c"
+    },
+    {
+      "path": "apps/web/src/components/A4CanvasEditor.tsx",
+      "bytes": 20033,
+      "sha256": "c9dc292daade3e0d723e2e4bed76a9111f88c9b95511eb3d4991d4fcb2f73fb6"
+    },
+    {
+      "path": "apps/web/src/components/A4CanvasEditor.test.tsx",
+      "bytes": 7136,
+      "sha256": "505a5406d4fe288560c0649d33739e921fd06aac36c7cc3708fbef29b7aebd12"
+    },
+    {
+      "path": "apps/web/src/components/PageHelpPanel.tsx",
+      "bytes": 18450,
+      "sha256": "9529b03746122e08bc6ce042aaeae0d7f52f5b2a08079be1b41db02e20a0b37d"
+    },
+    {
+      "path": "apps/web/src/components/ToolbarCustomization.tsx",
+      "bytes": 1702,
+      "sha256": "23d2cdb3c80e5b610a1f84e61fcbb849f9bcfc6774133d49b2fa5e2e486fd5ff"
+    },
+    {
+      "path": "apps/web/src/lib/a4Canvas.ts",
+      "bytes": 13752,
+      "sha256": "c71636226ead71d5ee4be568c7463d10b00bd34fe983b7dbe357080273d5cbb2"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 64090,
+      "sha256": "954928ab265c247b13542bffceb723fd3a7b19bf587fb0cb8fa79655d2cc2e44"
+    },
+    {
+      "path": "apps/web/src/lib/toolbarPreferences.ts",
+      "bytes": 1813,
+      "sha256": "9cca91489e05b19235e0af8106b0e45f35badd30aa4282562cf345ff84d6223b"
+    },
+    {
+      "path": "apps/web/src/lib/toolbarPreferences.test.ts",
+      "bytes": 1284,
+      "sha256": "24c5838a733e6fd00b79a771f98c8ef0ddfe4246ae5bb2ed258076b1bd278d26"
+    }
+  ]
+}
