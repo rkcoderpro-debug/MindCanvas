@@ -5,19 +5,19 @@ import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
-import { CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, Link2, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, Upload, X } from "lucide-react";
+import { CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, Link2, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
 import CanvasProjectActions, { type CanvasProjectAction } from "./components/CanvasProjectActions";
 import Dialog from "./components/Dialog";
 import FloatingTimer from "./components/FloatingTimer";
 import PetCompanion from "./components/PetCompanion";
 import PlusTrialPopup from "./components/PlusTrialPopup";
-import ThemePicker from "./components/ThemePicker";
+import SettingsDialog from "./components/SettingsDialog";
 import CommandPalette from "./components/CommandPalette";
 import TopbarProfile from "./components/TopbarProfile";
 import CollaboratorPresence from "./components/CollaboratorPresence";
 import AppSidebar, { type SidebarView } from "./components/AppSidebar";
-import { LanguageProvider, useLanguage, useTheme, type MessageKey } from "./lib/i18n";
+import { LanguageProvider, useLanguage, useTheme } from "./lib/i18n";
 import { getCurrentSession, hasRememberedAuthUser, isSupabaseConfigured, signInWithGoogle, signOut, supabase } from "./lib/supabase";
 import { acceptProjectInvitation } from "./lib/collaboration";
 import { acceptLearning } from "./lib/learningShare";
@@ -29,19 +29,17 @@ import { usePersonalProfile } from "./hooks/usePersonalProfile";
 import { closeProfileRoute, isProfileRoute, openProfileRoute, PROFILE_ROUTE_EVENT } from "./lib/profileNavigation";
 import { canvasPermalink } from "./lib/canvasLinks";
 import { usePwaInstall } from "./lib/pwa";
-import { isToolbarPosition, TOOLBAR_POSITIONS, type ToolbarPosition } from "./lib/editorPreferences";
+import { isToolbarPosition, type ToolbarPosition } from "./lib/editorPreferences";
 import { readToolbarToolVisibility, saveToolbarToolVisibility } from "./lib/toolbarPreferences";
 import { SIDEBAR_DEFAULT_WIDTH, clampSidebarWidth } from "./lib/sidebarLayout";
 import { getAccountPlan, getAdminStatus } from "./lib/api";
-import { readFocusTimerVisibility, readMobileZoomControlsVisibility, saveFocusTimerVisibility, saveMobileZoomControlsVisibility } from "./lib/uiPreferences";
+import { readFocusTimerVisibility, readMobileZoomControlsVisibility, readStickyTopbar, saveFocusTimerVisibility, saveMobileZoomControlsVisibility, saveStickyTopbar } from "./lib/uiPreferences";
 import { FREE_ACCOUNT_PLAN, type AccountPlan } from "./lib/account";
 import { activatePlusTrial, getPlusTrial, type PlusTrialState } from "./lib/plusTrial";
 import { errorMessage } from "./lib/errors";
 import { isIOSDevice } from "./lib/canvasInput";
 import ShareInbox from "./components/ShareInbox";
 import AutoResolveCloudConflict from "./components/AutoResolveCloudConflict";
-import ToolbarCustomization from "./components/ToolbarCustomization";
-import WebBackgroundControls from "./components/WebBackgroundControls";
 import { readWebBackground, saveWebBackground, type WebBackground } from "./lib/webBackground";
 import { listDocuments, saveDocument, type UploadedDocument } from "./lib/documentStore";
 import FeatureGuideManager from "./components/FeatureGuideManager";
@@ -49,7 +47,6 @@ import PageHelpPanel from "./components/PageHelpPanel";
 import NotificationBell from "./components/NotificationBell";
 import type { ActivityNotification } from "./lib/activityNotifications";
 import { emitGuideAction, GUIDE_PROGRESS_EVENT, GUIDE_REQUEST_EVENT, pageHelpIsUnlocked, readGuideProgress, type PageHelpScope } from "./lib/featureGuides";
-const TOOLBAR_LABELS: Record<ToolbarPosition, MessageKey> = { top: "toolbarTop", bottom: "toolbarBottom", left: "toolbarLeft", right: "toolbarRight" };
 const CanvasBoard = lazy(() => import("./components/CanvasBoard"));
 const A4CanvasEditor = lazy(() => import("./components/A4CanvasEditor"));
 const FolderManager = lazy(() => import("./components/FolderManager"));
@@ -146,6 +143,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     try { return localStorage.getItem("mindcanvas:focus-mode") === "true"; } catch { return false; }
   });
   const [timerVisible, setTimerVisible] = useState(readFocusTimerVisibility);
+  const [stickyTopbar, setStickyTopbar] = useState(readStickyTopbar);
   const [mobileZoomControlsVisible, setMobileZoomControlsVisible] = useState(readMobileZoomControlsVisibility);
   const [visibleToolIds, setVisibleToolIds] = useState(readToolbarToolVisibility);
   const [aiPanelMode, setAiPanelMode] = useState<"unopened" | "closed" | "open" | "minimized">("unopened");
@@ -314,6 +312,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   useEffect(() => { try { localStorage.setItem("mindcanvas:toolbar-position", toolbarPosition); } catch {} }, [toolbarPosition]);
   useEffect(() => { try { localStorage.setItem("mindcanvas:focus-mode", String(focusMode)); } catch {} }, [focusMode]);
   useEffect(() => { saveFocusTimerVisibility(timerVisible); }, [timerVisible]);
+  useEffect(() => { saveStickyTopbar(stickyTopbar); }, [stickyTopbar]);
   useEffect(() => { saveMobileZoomControlsVisibility(mobileZoomControlsVisible); }, [mobileZoomControlsVisible]);
   useEffect(() => { saveToolbarToolVisibility(visibleToolIds); }, [visibleToolIds]);
   useEffect(() => { setAiPanelMode("unopened"); }, [ws.board?.id]);
@@ -502,7 +501,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   return <PageChromeProvider openQuickActions={showQuickActions}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
     {webBackground && <div className="web-background-layer" aria-hidden="true">{webBackground.kind === "video" ? <video src={webBackground.src} muted autoPlay loop playsInline style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/> : <img src={webBackground.src} alt="" style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/>}<span style={{ background: webBackground.overlay ?? "#000000" }}/></div>}
     <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { leaveLearningSpace(); void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
-    <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`}>
+    <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`} data-topbar-pinned={stickyTopbar}>
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="topbar-location"><ShellBack fallback={ws.board ? { label: canvasBackLabel, run: backFromCanvas } : filter || recent ? { label: workspaceBackLabel, run: home } : undefined}/>{ws.board && <span className="topbar-canvas-title" title={ws.board.title}>{ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={showQuickActions}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={ws.conflict?.error || t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.flush(ws.board?.id)}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
@@ -578,7 +577,15 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => { emitGuideAction("folder:renamed", { folderId: folderAction.folder.id, name: n }); setFolderAction(null); }); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
     {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { emitGuideAction("folder:deleted", { folderId: folderAction.folder.id }); if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
-    {modal === "settings" && <Dialog workspace title={t("settings")} onClose={() => setModal(null)}><div className="settings-layout"><section className="settings-section"><label>{t("language")}<select value={language} onChange={e => setLanguage(e.target.value as "vi" | "en")}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("theme")}</strong><small>{t("themeChoose")}</small></div><ThemePicker theme={selectedTheme} onChange={setTheme} canUsePremium={accountPlan.effectivePlanId !== "free"} onLocked={openPlans}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("webBackground")}</strong><small>{t("webBackgroundHint")}</small></div><WebBackgroundControls background={webBackground} canUseUpload={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onLocked={openPlans} onChange={setWebBackground}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("toolbarPosition")}</strong><small>{t("toolbarPositionHint")}</small></div><div className="toolbar-position-options" role="radiogroup" aria-label={t("toolbarPosition")}>{TOOLBAR_POSITIONS.map(position => <button type="button" key={position} className={toolbarPosition === position ? "selected" : ""} aria-pressed={toolbarPosition === position} onClick={() => setToolbarPosition(position)}><span className={`toolbar-position-preview ${position}`} aria-hidden="true"/><span>{t(TOOLBAR_LABELS[position])}</span></button>)}</div></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("toolbarCustomize")}</strong><small>{t("toolbarCustomizeHint")}</small></div><ToolbarCustomization visibleToolIds={visibleToolIds} onChange={setVisibleToolIds}/></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("mobileZoomControls")}</strong><small>{t("mobileZoomControlsHint")}</small></div><label className="settings-toggle"><input type="checkbox" checked={mobileZoomControlsVisible} onChange={event => setMobileZoomControlsVisible(event.target.checked)}/><span>{t("showMobileZoomControls")}</span></label></section><section className="settings-section"><strong>{language === "vi" ? "Thú cưng" : "Pet"}</strong><label className="settings-toggle"><input type="checkbox" checked={petVisible} onChange={event => setPetVisible(event.target.checked)}/><span>{language === "vi" ? "Hiển thị thú cưng" : "Show pet"}</span></label><button className="secondary-button" onClick={() => window.dispatchEvent(new Event("mindcanvas:reset-pet-position"))}>{language === "vi" ? "Đặt lại vị trí thú cưng" : "Reset pet position"}</button></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("focusTimerVisibility")}</strong><small>{t("focusTimerVisibilityHint")}</small></div><label className="settings-toggle"><input type="checkbox" checked={timerVisible} onChange={event => setTimerVisible(event.target.checked)}/><span>{t("showFocusTimer")}</span></label></section><section className="settings-section"><div className="settings-section-heading"><strong>{t("installApp")}</strong><small>{t("pwaOfflineHint")}</small></div><button className="secondary-button" onClick={() => setModal("install")}><Smartphone size={17}/>{t(pwa.installed ? "appInstalled" : "installApp")}</button></section><section className="settings-section settings-help"><p>{t("accountHint")}</p><h3>{t("help")}</h3><p>{t("helpText")}</p><button className="secondary-button" onClick={() => { setModal(null); fileInput.current?.click(); }}><Upload size={17}/>{t("import")}</button></section></div></Dialog>}
+    {modal === "settings" && <SettingsDialog onClose={() => setModal(null)}
+      profile={user ? { name: accountName, email: user.email, open: () => { setModal(null); openProfileRoute(); } } : null}
+      signIn={isSupabaseConfigured ? () => { setModal(null); void auth(); } : null}
+      plan={accountPlan} openPlans={openPlans}
+      theme={{ value: selectedTheme, change: setTheme }} background={{ value: webBackground, change: setWebBackground }}
+      stickyTopbar={{ value: stickyTopbar, change: setStickyTopbar }} toolbarPosition={{ value: toolbarPosition, change: setToolbarPosition }}
+      visibleTools={{ value: visibleToolIds, change: setVisibleToolIds }} mobileZoom={{ value: mobileZoomControlsVisible, change: setMobileZoomControlsVisible }}
+      focusMode={{ value: focusMode, change: setFocusMode }} focusTimer={{ value: timerVisible, change: setTimerVisible }} pet={{ value: petVisible, change: setPetVisible }}
+      installed={pwa.installed} openInstall={() => setModal("install")} importProject={file => { setModal(null); void importFile(file); }}/>}
     <Suspense fallback={null}>
     {modal === "plans" && <PlanUpgradeDialog currentPlan={accountPlan} onClose={() => setModal(null)}/>}
     {modal === "install" && <Dialog title={t("installAppTitle")} onClose={() => setModal(null)}><div className="install-app-dialog"><Smartphone size={38}/><p>{t(pwa.installed ? "appInstalledHint" : "installAppHint")}</p>{pwa.ios && <p className="install-instruction">{t("iosInstallHint")}</p>}{!pwa.installed && !pwa.canInstall && !pwa.ios && <p className="install-instruction">{t("browserInstallHint")}</p>}<small>{t("pwaOfflineHint")}</small></div><footer className="actions"><button className="secondary-button" onClick={() => setModal(null)}>{t("close")}</button>{pwa.canInstall && <button className="primary-button" disabled={working} onClick={() => { setWorking(true); void pwa.install().then(installed => { if (installed) setModal(null); }).finally(() => setWorking(false)); }}><Download size={17}/>{t("installNow")}</button>}</footer></Dialog>}

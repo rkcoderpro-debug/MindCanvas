@@ -20,3 +20,15 @@ export function saveMobileZoomControlsVisibility(visible: boolean) {
   try { localStorage.setItem(MOBILE_ZOOM_CONTROLS_KEY, String(visible)); }
   catch { /* Local UI persistence is optional. */ }
 }
+
+export const STICKY_TOPBAR_KEY = "mindcanvas:sticky-topbar:v1";
+
+export function readStickyTopbar() {
+  try { return localStorage.getItem(STICKY_TOPBAR_KEY) !== "false"; }
+  catch { return true; }
+}
+
+export function saveStickyTopbar(pinned: boolean) {
+  try { localStorage.setItem(STICKY_TOPBAR_KEY, String(pinned)); }
+  catch { /* A blocked local store must not prevent toggling the top bar. */ }
+}

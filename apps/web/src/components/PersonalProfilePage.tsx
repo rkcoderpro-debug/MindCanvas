@@ -1,5 +1,6 @@
+import FilePicker from "./FilePicker";
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, LockKeyhole, Save, UserRound } from "lucide-react";
+import { LockKeyhole, Save, UserRound } from "lucide-react";
 import { ActivityViewport, BackButton, PageNavigation, useActivityFocus } from "./PageNavigation";
 import { ProfileAvatar } from "./ProfileAvatar";
 import { normalizedUsername, prepareAvatar, PROFILE_AVATAR_ACCEPT, safeAvatarFallback, savePersonalProfile, toProfileDraft, validateProfile, type AvatarChange, type Gender, type PersonalProfile, type ProfileDraft } from "../lib/accountProfile";
@@ -122,16 +123,15 @@ function ProfileForm({ initial, accept, refresh }: {
         <ProfileAvatar url={photo} name={displayName} className="profile-large-avatar"/>
         <div><strong>{displayName}</strong>{username && displayName !== `@${username}` && <small>@{username}</small>}
           <div className="profile-photo-actions">
-            <label className="secondary-button profile-photo-pick"><ImagePlus size={16}/>{preparing ? t("loading") : c.photo}
-              <input type="file" className="sr-only" aria-label={c.photo} accept={PROFILE_AVATAR_ACCEPT} onChange={event => {
-                const file = event.target.files?.[0]; event.target.value = ""; if (file) void selectPhoto(file);
+            <FilePicker layout="inline" label={preparing ? t("loading") : c.photo} aria-label={c.photo} accept={PROFILE_AVATAR_ACCEPT}
+              disabled={preparing} description={c.photoHint} fileNames={avatar.kind === "replace" ? undefined : []} onChange={event => {
+                const file = event.target.files?.[0]; if (file) void selectPhoto(file);
               }}/>
-            </label>
             {(avatar.kind === "replace" || loaded.avatar_slot && avatar.kind !== "remove") && <button type="button" className="text-button" onClick={() => {
               photoSequence.current++; setPreparing(false); setAvatar({ kind: "remove" }); setNotice(false);
             }}>{c.resetPhoto}</button>}
           </div>
-          <small>{c.photoHint}</small><small>{c.namingHint}</small>
+          <small>{c.namingHint}</small>
         </div>
       </div>
       <div className="profile-fields">

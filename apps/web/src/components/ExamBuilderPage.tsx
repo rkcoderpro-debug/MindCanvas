@@ -1,10 +1,11 @@
+import FilePicker from "./FilePicker";
 import { PageBack } from "./PageNavigation";
 import ContentLanguageField from "./ContentLanguageField";
 import { readContentLanguage, rememberContentLanguage } from "../lib/contentLanguage";
 import { useLanguage } from "../lib/i18n";
 import { useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, FileUp, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import { examQuestionCount, validateExamSettings, validateExamSources, validateExamBlueprint, validateExamDraft, type ExamBlueprint, type ExamQuestion, type ExamSettings, type ExamSource, type SavedExam } from "@mindcanvas/shared";
 import type { AccountPlan } from "../lib/account";
 import type { UploadedDocument } from "../lib/documentStore";
@@ -171,8 +172,8 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       </div><details><summary>Tùy chọn nâng cao</summary><div className="exam-fields"><label>Môn học<input value={work.settings.subject} maxLength={160} onChange={event => setting({ subject: event.target.value })}/></label><label>Lớp / trình độ<input value={work.settings.level} maxLength={160} onChange={event => setting({ level: event.target.value })}/></label></div>
       <ContentLanguageField bilingual value={work.settings.language} onChange={value => { rememberContentLanguage("exam-auto", value); setting({ language: value }); }} />
       </details></fieldset><fieldset disabled={!!busy}><legend>File mẫu hoặc nội dung tạo đề</legend><div className="exam-source-grid"><div>
-      {work.settings.mode === "template" && <label className="exam-upload"><FileUp size={17}/>Chọn đề mẫu<input aria-label="Chọn đề mẫu" type="file" accept={EXAM_FILE_ACCEPT} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "template"); }}/></label>}
-      <label className="exam-upload"><FileUp size={17}/>{work.settings.mode === "template" ? "Tài liệu kiến thức bổ sung" : "Tải tài liệu"}<input aria-label="Tải tài liệu" type="file" multiple accept={EXAM_FILE_ACCEPT} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "material"); }}/></label>
+      {work.settings.mode === "template" && <FilePicker className="exam-upload" label="Chọn đề mẫu" accept={EXAM_FILE_ACCEPT} description="PDF, DOCX, PPTX, TXT, MD, CSV hoặc ảnh · tối đa 10 MB/tệp" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "template"); }}/>}
+      <FilePicker className="exam-upload" label={work.settings.mode === "template" ? "Tài liệu kiến thức bổ sung" : "Tải tài liệu"} aria-label="Tải tài liệu" multiple accept={EXAM_FILE_ACCEPT} description="PDF, DOCX, PPTX, TXT, MD, CSV hoặc ảnh · tối đa 10 MB/tệp" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "material"); }}/>
       <p className="exam-hint">Tối đa 6 nguồn, 10 MB/file. Kiểm tra lại nội dung đọc từ ảnh hoặc PDF scan.</p></div><div>
       <label>Nội dung cần tạo đề<textarea aria-label="Văn bản nguồn" rows={7} value={paste} maxLength={120000} onChange={event => setPaste(event.target.value)} placeholder="Nhập hoặc dán kiến thức, yêu cầu và nội dung câu hỏi cần tạo…"/></label><p className="exam-hint">Có thể dùng nội dung này thay cho file tải lên. Nếu đã chọn đề mẫu, nội dung được dùng làm tài liệu bổ sung.</p></div></div>
       {work.sources.length > 0 && <div className="exam-selected-sources" role="status">{work.sources.map(source => <span key={source.id}>{source.role === "template" ? "Mẫu" : "Tài liệu"}: {source.name}</span>)}</div>}

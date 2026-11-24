@@ -8,6 +8,7 @@ import { cacheProject, waitForProjectCache } from "./lib/projectStore";
 import { blankBoard } from "./lib/board";
 import { openProfileRoute } from "./lib/profileNavigation";
 import { APP_VERSION_LABEL } from "./lib/appVersion";
+import { STICKY_TOPBAR_KEY } from "./lib/uiPreferences";
 let root: Root, host: HTMLDivElement;
 async function waitForUI(check: () => void) {
   for (let attempt = 0; attempt < 75; attempt++) {
@@ -387,10 +388,42 @@ describe("Workspace UI", () => {
     expect(host.textContent).toContain("0385287824");
     expect(host.querySelector('a[href="https://zalo.me/0385287824"]')).not.toBeNull();
   });
+  it("finds the top bar setting without Vietnamese accents and persists the new choice across reloads", async () => {
+    const openSettings = async () => {
+      const trigger = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt"))!;
+      await act(async () => trigger.click());
+    };
+    await act(async () => root.render(<App/>));
+    await openSettings();
+    expect(host.querySelectorAll(".settings-categories button")).toHaveLength(6);
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "  thanh   tren ");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(host.querySelector(".settings-categories button")?.textContent).toContain("Ghim thanh trên khi cuộn");
+    expect(host.querySelector(".settings-content [data-setting]")?.getAttribute("data-setting")).toBe("sticky-topbar");
+    await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(search.value).toBe("");
+    const toggle = host.querySelector<HTMLInputElement>('[data-setting="sticky-topbar"] [role="switch"]')!;
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.checked).toBe(true);
+    await act(async () => toggle.click());
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
+    expect(localStorage.getItem(STICKY_TOPBAR_KEY)).toBe("false");
+    await act(async () => root.render(null));
+    await act(async () => root.render(<App/>));
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
+    await openSettings();
+    await act(async () => host.querySelector<HTMLInputElement>('[data-setting="sticky-topbar"] [role="switch"]')!.click());
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("true");
+  });
   it("shows toolbar position controls in settings and persists the choice", async () => {
     await act(async () => root.render(<App/>));
     const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
     await act(async () => settings.click());
+    const canvasSettings = [...host.querySelectorAll<HTMLButtonElement>(".settings-category")].find(button => button.querySelector("strong")?.textContent === "Canvas")!;
+    await act(async () => canvasSettings.click());
     expect(host.querySelectorAll(".toolbar-position-options button")).toHaveLength(4);
     const left = [...host.querySelectorAll<HTMLButtonElement>(".toolbar-position-options button")].find(button => button.textContent === "Trái")!;
     await act(async () => left.click());
@@ -400,6 +433,8 @@ describe("Workspace UI", () => {
     await act(async () => root.render(<App/>));
     const settings = [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Cài đặt")) as HTMLButtonElement;
     await act(async () => settings.click());
+    const canvasSettings = [...host.querySelectorAll<HTMLButtonElement>(".settings-category")].find(button => button.querySelector("strong")?.textContent === "Canvas")!;
+    await act(async () => canvasSettings.click());
     expect(host.querySelector('input[type="checkbox"][aria-label="Tự focus canvas khi rê chuột"]')).toBeNull();
     expect(localStorage.getItem("mindcanvas:canvas-hover-focus")).toBeNull();
   });

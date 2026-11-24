@@ -1,9 +1,10 @@
+import FilePicker from "./FilePicker";
 import { ActivityViewport, BackButton, PageBack, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import ContentLanguageField, { useContentLanguage } from "./ContentLanguageField";
 import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type AnimationEvent as ReactAnimationEvent } from "react";
-import { ArrowLeft, BookOpen, CalendarClock, CheckCircle2, ClipboardPaste, Cloud, FileText, Flame, HardDrive, Layers3, ListOrdered, Pencil, Play, Plus, RotateCcw, Search, Shuffle, Sparkles, Target, Trash2, Upload, Zap, X } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarClock, CheckCircle2, ClipboardPaste, Cloud, FileText, Flame, HardDrive, Layers3, ListOrdered, Pencil, Play, Plus, RotateCcw, Search, Shuffle, Sparkles, Target, Trash2, Zap, X } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
@@ -503,7 +504,10 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
         {aiSource === "text" && <div className="ai-text-source"><label>{t("sourceText")}<textarea autoFocus required rows={9} maxLength={120_000} value={aiText} onChange={event => { setAiText(event.target.value); }} placeholder={t("sourceTextPlaceholder")}/></label><button type="button" className="secondary-button clipboard-button" disabled={aiBusy} onClick={() => void (async () => { try { const pasted = await readClipboardSource(); if (pasted.kind === "image") { setAiSource("file"); setAiFile(pasted.file); } else setAiText(pasted.text); setAiError(""); } catch (err) { setAiError(err instanceof Error && err.message === "CLIPBOARD_EMPTY" ? t("clipboardEmpty") : t("clipboardReadError")); } })()}><ClipboardPaste size={16}/>{t("pasteFromClipboard")}</button><small className="field-hint">{t("clipboardSourceHint")}</small></div>}
         {aiSource === "project" && <label>{t("sourceProject")}<select required value={aiProjectId} disabled={aiBusy || !availableProjects.length} onChange={event => { setAiProjectId(event.target.value); }}><option value="">{t("chooseProject")}</option>{availableProjects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select><small>{t("sourceProjectHint")}</small></label>}
         {aiSource === "deck" && <div className="ai-deck-source"><Layers3 size={17}/><span>{t("aiExpandDeckHint", { count: flashcards.cards.length })}</span></div>}
-        {aiSource === "file" && <label className="upload-drop ai-file-drop" onDragOver={event => { event.preventDefault(); event.currentTarget.classList.add("dragging"); }} onDragLeave={event => event.currentTarget.classList.remove("dragging")} onDrop={event => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); const file = event.dataTransfer.files?.[0] ?? null; setAiFile(file); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}><span><Upload size={20}/>{t("chooseAiFile")}</span><input type="file" accept={AI_FILE_ACCEPT} disabled={aiBusy} onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/><small>{t("aiFileHint")}</small>{aiFile && <small>{aiFile.name}</small>}</label>}
+        {aiSource === "file" && <FilePicker label={t("chooseAiFile")} accept={AI_FILE_ACCEPT} disabled={aiBusy}
+          fileNames={aiFile ? [aiFile.name] : []} description={t("aiFileHint")}
+          onDropFiles={files => { const file = files[0]; setAiFile(file); setAiError(file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}
+          onChange={event => { const file = event.target.files?.[0] ?? null; setAiFile(file); setAiError(file && file.size > MAX_FILE_BYTES ? t("fileTooLarge") : ""); }}/>}
         <AiQualityControls options={aiOptions} onChange={setAiOptions} />
         <label>{t("maxGeneratedCards")}<input type="number" min="3" max={maxCardsLimit} step="1" value={aiMaxCards} disabled={aiBusy} onChange={event => { setAiMaxCards(event.target.value); }}/></label>
       </form> : <div className="quiz-studio-panes">
@@ -526,7 +530,8 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
           {aiPreview ? renderPreview() : <div className="quiz-studio-json">
             <label className="quiz-json-check"><input type="checkbox" checked={existingJson} onChange={event => { setExistingJson(event.target.checked); setAiError(""); }}/>{t("quizReadyJson")}</label>
             <label>{t(existingJson ? "quizJsonContent" : "aiManualJsonLabel")}<textarea ref={manualJsonInput} rows={10} spellCheck={false} className="quiz-json-input" value={manualJson} onChange={event => { pendingFile.current++; setReadingJson(false); setJsonText(event.target.value); }} placeholder={t("quizJsonPlaceholder")}/></label>
-            {existingJson && <label className="upload-drop quiz-json-file"><span><Upload size={17}/>{t("quizChooseJson")}</span><input type="file" accept=".json,application/json" disabled={readingJson} onChange={event => void importManualJsonFile(event)}/></label>}
+            {existingJson && <FilePicker layout="inline" label={t("quizChooseJson")} accept=".json,application/json" disabled={readingJson}
+              description={`${t("filePickerJson")} · ${t("filePickerMaxFile", { size: "10 MB" })}`} onChange={event => void importManualJsonFile(event)}/>}
             {readingJson && <small role="status">{t("loading")}</small>}
           </div>}
         </section>

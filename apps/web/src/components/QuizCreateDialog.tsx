@@ -1,5 +1,6 @@
+import FilePicker from "./FilePicker";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, ClipboardList, ClipboardPaste, FileUp, Pencil, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, ClipboardList, ClipboardPaste, Pencil, Sparkles } from "lucide-react";
 import type { QuizStore } from "../hooks/useQuizzes";
 import type { AccountPlan } from "../lib/account";
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
@@ -248,11 +249,10 @@ export default function QuizCreateDialog({ owner, store, accountPlan, open = tru
         <ContentLanguageField value={outputLanguage} onChange={setOutputLanguage} disabled={busy}/>
         <p>{t("quizAutoHint")}</p>
         <details className="quiz-advanced-settings"><summary>{language === "vi" ? "Độ khó và độ chi tiết" : "Difficulty and detail"}</summary>{quality}</details>
-        <label className="upload-drop quiz-upload"><span><FileUp size={22}/>{t("quizChooseFile")}</span>
-          <input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} onChange={event => {
+        <FilePicker label={t("quizChooseFile")} accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} fileNames={autoDocument ? [autoDocument.name] : []}
+          description={`PDF, DOCX, PPTX, TXT, MD, CSV · ${t("filePickerImage")} · ${t("filePickerMaxFile", { size: "10 MB" })}`} onChange={event => {
             const next = event.target.files?.[0] ?? null; setAutoDocument(next); setInputError(next && next.size > MAX_FILE_BYTES ? t("fileTooLarge") : "");
-          }}/>{autoDocument && <small>{autoDocument.name}</small>}
-        </label>
+          }}/>
         {countField}
         {inputError && <p className="form-error" role="alert">{inputError}</p>}
       </form> : mode === "manual" ? <section className="quiz-studio-pane">
@@ -287,13 +287,9 @@ export default function QuizCreateDialog({ owner, store, accountPlan, open = tru
             </label>
             <label>{t(existingJson ? "quizJsonContent" : "aiManualJsonLabel")}<textarea ref={jsonInput} rows={10} spellCheck={false} className="quiz-json-input" value={json}
               onChange={event => { fileRead.current++; setReading(false); updateJson(event.target.value); }} placeholder={t("quizJsonPlaceholder")}/></label>
-            {existingJson && <label className="upload-drop quiz-json-file">
-              <span><FileUp size={17}/>{t("quizChooseJson")}</span>
-              <input type="file" accept=".json,application/json" onChange={event => {
-                const next = event.target.files?.[0]; event.target.value = ""; if (next) void readFile(next);
-              }}/>
-              {jsonFilename && <small>{jsonFilename}</small>}
-            </label>}
+            {existingJson && <FilePicker layout="inline" label={t("quizChooseJson")} accept=".json,application/json" disabled={reading}
+              fileNames={jsonFilename ? [jsonFilename] : []} description={`${t("filePickerJson")} · ${t("filePickerMaxFile", { size: "2 MB" })}`}
+              onChange={event => { const next = event.target.files?.[0]; if (next) void readFile(next); }}/>}
             {inputError && <p className="form-error" role="alert">{inputError}</p>}
           </div>}
         </section>

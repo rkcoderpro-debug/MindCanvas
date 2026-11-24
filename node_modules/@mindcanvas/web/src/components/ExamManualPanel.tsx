@@ -1,3 +1,4 @@
+import FilePicker from "./FilePicker";
 import type { ExamSource } from "@mindcanvas/shared";
 import type { ManualExamWorkspace } from "../lib/examManual";
 import { downloadManualFile, manualSourceBundle, readLocalBytes } from "../lib/examManualSource";
@@ -26,10 +27,10 @@ export default function ExamManualPanel({ value, sources, originals, busy, owner
       <div className="actions"><button type="button" className="secondary-button" onClick={() => copy(value.session!.prompt)}>Sao chép prompt</button><button type="button" className="secondary-button" onClick={() => download(value.session!.prompt, value.session!.sources)}>Tải gói gửi AI</button></div>
       <p>Gửi prompt và tài liệu cho ChatGPT, Gemini hoặc AI bạn chọn; yêu cầu trả về JSON. Sau đó dán hoặc chọn file kết quả bên dưới.</p>
       <label>Kết quả từ AI<textarea aria-label="Kết quả AI Manual" rows={10} maxLength={2000000} value={value.importText} onChange={event => onChange({ ...value, importText: event.target.value })}/></label>
-      <label className="exam-upload">Chọn file JSON kết quả<input aria-label="File JSON Manual" type="file" accept=".json,application/json" onChange={event => {
+      <FilePicker label="JSON kết quả" aria-label="File JSON Manual" layout="inline" accept=".json,application/json" description="Tệp JSON · tối đa 2 MB" onChange={event => {
         const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
         void run("Đang đọc JSON kết quả.", async signal => { if (file.size > 2000000) throw new Error("File kết quả vượt 2 MB."); const text = new TextDecoder("utf-8", { fatal: true }).decode(await readLocalBytes(file)); if (!signal.aborted) onChange({ ...value, importText: text }); });
-      }}/></label>
+      }}/>
       <button type="button" className="primary-button" disabled={!value.importText.trim() || !owner} onClick={onImport}>Nhập kết quả & xem đề</button>
     </>}
     <p className="exam-hint">Manual không gửi tài liệu tới AI của MindCanvas. Nhập kết quả hợp lệ cần đăng nhập và dùng hạn mức AI Manual hiện có; kiểm tra cấu trúc không thay thế việc rà soát kiến thức và lời giải.</p>

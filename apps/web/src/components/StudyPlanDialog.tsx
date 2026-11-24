@@ -1,8 +1,9 @@
+import FilePicker from "./FilePicker";
 import { useId } from "react";
 import ContentLanguageField, { useContentLanguage } from "./ContentLanguageField";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, ClipboardPaste, FileUp, Sparkles, Trash2 } from "lucide-react";
+import { Check, ClipboardPaste, Sparkles, Trash2 } from "lucide-react";
 import type { Flashcard, FlashcardDeck, StudyPlan, StudyPlanDay, StudyPlanMode, StudyPlanTask } from "../lib/flashcards";
 import { dueCards, recommendDailyTarget, vietnamStudyDate } from "../lib/flashcards";
 import { useLanguage } from "../lib/i18n";
@@ -275,9 +276,9 @@ export default function StudyPlanDialog({ owner, decks, quizzes = [], selectedDe
       <AiQualityControls options={aiOptions} onChange={setAiOptions}/>
       {aiMode === "manual" && <>
         <ManualSteps current={manualJson.trim() ? "result" : "prompt"}/>
-        <div className="ai-manual-plan-box"><p className="ai-manual-note">{t("aiManualPlanHint")}</p><label>{t("aiManualPrompt")}<textarea rows={9} readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void writeClipboardText(manualPrompt).catch(() => setError(t("clipboardWriteError")))}><ClipboardPaste size={15}/>{t("copyPrompt")}</button></div><ManualAiProviderLinks onBlocked={() => setError(t("popupBlocked"))}/><label>{t("aiManualJsonLabel")}<textarea rows={9} value={manualJson} onChange={event => setManualJson(event.target.value)} placeholder={t("aiManualStudyPlanPlaceholder")}/></label><label className="upload-drop"><span><FileUp size={18}/>{t("uploadJsonFile")}</span><input type="file" accept="application/json,.json" disabled={busy} onChange={event => { const selected = event.target.files?.[0]; event.target.value = ""; if (!selected) return; void selected.text().then(setManualJson).catch(() => setError(t("manualJsonFileError"))); }}/></label></div>
+        <div className="ai-manual-plan-box"><p className="ai-manual-note">{t("aiManualPlanHint")}</p><label>{t("aiManualPrompt")}<textarea rows={9} readOnly value={manualPrompt}/></label><div className="ai-manual-actions"><button type="button" className="secondary-button" onClick={() => void writeClipboardText(manualPrompt).catch(() => setError(t("clipboardWriteError")))}><ClipboardPaste size={15}/>{t("copyPrompt")}</button></div><ManualAiProviderLinks onBlocked={() => setError(t("popupBlocked"))}/><label>{t("aiManualJsonLabel")}<textarea rows={9} value={manualJson} onChange={event => setManualJson(event.target.value)} placeholder={t("aiManualStudyPlanPlaceholder")}/></label><FilePicker label={t("uploadJsonFile")} layout="inline" accept="application/json,.json" disabled={busy} description={t("filePickerJson")} onChange={event => { const selected = event.target.files?.[0]; event.target.value = ""; if (!selected) return; void selected.text().then(setManualJson).catch(() => setError(t("manualJsonFileError"))); }}/></div>
       </>}
-      <label className="upload-drop study-plan-upload"><span><FileUp size={20}/>{aiMode === "manual" ? t("manualFileSelected") : t("uploadMaterialForPlan")}</span><input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} onChange={event => setFileAndReset(event.target.files?.[0] ?? null)}/><small>{aiMode === "manual" ? t("aiManualUploadHint") : t("planFileHint")}</small>{file && <small>{file.name}</small>}</label>
+      <FilePicker label={aiMode === "manual" ? t("manualFileSelected") : t("uploadMaterialForPlan")} accept=".pdf,.docx,.pptx,.txt,.md,.csv,image/*" disabled={busy} fileNames={file ? [file.name] : []} description={aiMode === "manual" ? t("aiManualUploadHint") : t("planFileHint")} onChange={event => setFileAndReset(event.target.files?.[0] ?? null)}/>
       {file && <label>{t("studyPlanTargetDeck")}<select value={targetDeckId} onChange={event => { const next = event.target.value; setTargetDeckId(next); setDeckIds(current => current.includes(next) ? current : [...current, next]); }}>{decks.map(deck => <option key={deck.id} value={deck.id}>{deck.name}</option>)}</select><small className="field-hint">{t("planFileCreatesCards")}</small></label>}
       {chosenDeckNames && <div className="study-plan-selection"><Check size={15}/><span>{chosenDeckNames}</span></div>}
       {error && <p className="form-error" role="alert">{error}</p>}
