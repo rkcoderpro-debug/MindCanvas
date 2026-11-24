@@ -1,6 +1,6 @@
 import FilePicker from "./FilePicker";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Music2, Pause, Play, SkipBack, SkipForward, X, ChevronDown, Trash2, Link2, ExternalLink, Disc3, Radio } from 'lucide-react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Music2, Pause, Play, SkipBack, SkipForward, X, ChevronDown, Trash2, Link2, ExternalLink, Disc3, Radio, Plus, Upload, ListMusic, Volume2, Repeat2, Shuffle } from 'lucide-react';
 import { musicStore, nextMusicId, parseMusicLink, musicSourceLabel, type MusicTrack } from '../lib/musicStorage';
 
 type Music = {
@@ -10,7 +10,7 @@ type Music = {
   analyser: AnalyserNode | null; play: (id?: string) => void; pause: () => void; next: (direction: number) => void;
   seek: (time: number) => void; setVolume: (value: number) => void; setRepeat: (value: 'off' | 'all' | 'one') => void;
   setShuffle: (value: boolean) => void; setHidden: (value: boolean) => void;
-  add: (files: File[]) => Promise<void>; addOnline: (url: string, title?: string) => Promise<void>; remove: (track: MusicTrack) => Promise<void>; rename: (track: MusicTrack, title: string) => Promise<void>;
+  add: (files: File[]) => Promise<boolean>; addOnline: (url: string, title?: string) => Promise<boolean>; remove: (track: MusicTrack) => Promise<void>; rename: (track: MusicTrack, title: string) => Promise<void>;
 };
 const Context = createContext<Music | null>(null);
 function useMusic() { const value = useContext(Context); if (!value) throw new Error('MusicProvider missing'); return value; }
@@ -90,7 +90,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     return () => { audio.onended = null; };
   });
   const add = async (files: File[]) => {
-    if (lock.current) return; lock.current = true; setBusy(true); setError('');
+    if (lock.current || !files.length) return false; lock.current = true; setBusy(true); setError('');
     try {
       for (const file of files) {
         if ((!file.type.startsWith('audio/') && !/\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(file.name)) || file.size > 50 * 1024 * 1024 || !file.size) throw new Error('Chọn file âm thanh không rỗng, tối đa 50 MB mỗi bài.');
@@ -98,19 +98,21 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
         await musicStore(scope, 'put', track);
         if (alive.current) setTracks(old => [...old, track]);
       }
-    } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Không lưu được nhạc; dung lượng thiết bị có thể đã đầy.'); }
+      return true;
+    } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Không lưu được nhạc; dung lượng thiết bị có thể đã đầy.'); return false; }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   };
   const addOnline = async (rawUrl: string, title?: string) => {
-    if (lock.current) return;
+    if (lock.current) return false;
     const parsed = parseMusicLink(rawUrl);
-    if (!parsed) { setError('Liên kết không được hỗ trợ. Dùng URL YouTube, YouTube Music, Spotify hoặc SoundCloud hợp lệ.'); return; }
+    if (!parsed) { setError('Liên kết không được hỗ trợ. Dùng URL YouTube, YouTube Music, Spotify hoặc SoundCloud hợp lệ.'); return false; }
     lock.current = true; setBusy(true); setError('');
     try {
       const track: MusicTrack = { id: crypto.randomUUID(), owner: scope, title: title?.trim().slice(0, 160) || parsed.title, source: parsed.source, url: parsed.url, embedUrl: parsed.embedUrl, isPlaylist: parsed.isPlaylist };
       await musicStore(scope, 'put', track);
       if (alive.current) setTracks(old => [...old, track]);
-    } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Không lưu được liên kết nhạc.'); }
+      return true;
+    } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Không lưu được liên kết nhạc.'); return false; }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   };
   const remove = async (track: MusicTrack) => {
@@ -175,10 +177,15 @@ function Visualizer() {
 }
 function Controls() {
   const m = useMusic();
-  return <div className="music-controls"><button aria-label="Bài trước" onClick={() => m.next(-1)}><SkipBack size={19}/></button><button aria-label={m.playing ? 'Tạm dừng' : 'Phát'} disabled={!m.tracks.length} onClick={() => m.playing ? m.pause() : m.play()}>{m.playing ? <Pause size={22}/> : <Play size={22}/>}</button><button aria-label="Bài sau" onClick={() => m.next(1)}><SkipForward size={19}/></button></div>;
+  return <div className="music-controls"><button aria-label="Bài trước" disabled={!m.tracks.length} onClick={() => m.next(-1)}><SkipBack size={19}/></button><button aria-label={m.playing ? 'Tạm dừng' : 'Phát'} disabled={!m.tracks.length} onClick={() => m.playing ? m.pause() : m.play()}>{m.playing ? <Pause size={22}/> : <Play size={22}/>}</button><button aria-label="Bài sau" disabled={!m.tracks.length} onClick={() => m.next(1)}><SkipForward size={19}/></button></div>;
 }
 function PlaybackOptions() {
-  const m = useMusic(); return <div className="music-options"><label>Âm lượng<input aria-label="Âm lượng" type="range" min="0" max="1" step=".01" value={m.volume} onChange={e => m.setVolume(Number(e.target.value))}/></label><label>Lặp<select value={m.repeat} onChange={e => m.setRepeat(e.target.value as Music['repeat'])}><option value="off">Tắt</option><option value="all">Danh sách</option><option value="one">Một bài</option></select></label><label><input type="checkbox" checked={m.shuffle} onChange={e => m.setShuffle(e.target.checked)}/>Ngẫu nhiên</label></div>;
+  const m = useMusic();
+  return <div className="music-options">
+    <label><Volume2 size={16} aria-hidden="true"/>Âm lượng<input aria-label="Âm lượng" type="range" min="0" max="1" step=".01" value={m.volume} onChange={e => m.setVolume(Number(e.target.value))}/></label>
+    <label><Repeat2 size={16} aria-hidden="true"/>Lặp<select value={m.repeat} onChange={e => m.setRepeat(e.target.value as Music['repeat'])}><option value="off">Tắt</option><option value="all">Danh sách</option><option value="one">Một bài</option></select></label>
+    <label><input type="checkbox" checked={m.shuffle} onChange={e => m.setShuffle(e.target.checked)}/><Shuffle size={16} aria-hidden="true"/>Ngẫu nhiên</label>
+  </div>;
 }
 export function MusicIsland() {
   const m = useMusic(), [expanded, setExpanded] = useState(false), [hovered, setHovered] = useState(false), root = useRef<HTMLElement>(null);
@@ -200,16 +207,59 @@ export function MusicIsland() {
 }
 export function MusicPage() {
   const m = useMusic();
-  const [onlineUrl, setOnlineUrl] = useState('');
-  const [onlineTitle, setOnlineTitle] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [source, setSource] = useState<"device" | "link">("device");
+  const [onlineUrl, setOnlineUrl] = useState("");
+  const [onlineTitle, setOnlineTitle] = useState("");
+  const addPanel = useId();
+  const addButton = useRef<HTMLButtonElement>(null);
   const parsed = onlineUrl.trim() ? parseMusicLink(onlineUrl) : null;
-  const addLink = async (event: React.FormEvent) => { event.preventDefault(); await m.addOnline(onlineUrl, onlineTitle); if (parseMusicLink(onlineUrl)) { setOnlineUrl(''); setOnlineTitle(''); } };
-  return <section className="music-page"><header className="music-page-header"><div><span className="eyebrow">STUDY SOUNDTRACK</span><h2><Music2/>Nhạc học tập</h2><p>Âm nhạc của bạn, đồng hành trong mỗi phiên học.</p></div><span className="music-library-count">{m.tracks.length} mục</span></header>
-    <div className="music-add-grid"><FilePicker className="music-upload" label={m.busy ? 'Đang lưu…' : 'Thêm tệp nhạc từ thiết bị'} aria-label="Thêm file nhạc" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" multiple disabled={m.busy} description="MP3, WAV, M4A, OGG, AAC, FLAC · tối đa 50 MB/bài" onChange={event => { void m.add(Array.from(event.target.files ?? [])); }}/>
-      <form className="music-link-form" onSubmit={addLink}><div className="music-add-heading"><Link2 size={22}/><strong>Thêm link nhạc online</strong></div><input aria-label="Liên kết nhạc online" type="url" required value={onlineUrl} onChange={event => setOnlineUrl(event.target.value)} placeholder="YouTube, YouTube Music, Spotify hoặc SoundCloud"/><input aria-label="Tên bài nhạc online" value={onlineTitle} onChange={event => setOnlineTitle(event.target.value)} placeholder={parsed ? `Tên gợi ý: ${parsed.title}` : 'Tên hiển thị (không bắt buộc)'}/><button className="primary-button" disabled={m.busy || !onlineUrl.trim()}><Link2 size={16}/>{m.busy ? 'Đang lưu…' : 'Thêm vào playlist'}</button><small>Dùng trình phát nhúng chính thức của từng nền tảng; liên kết cần cho phép nhúng.</small></form></div>
-    {m.error && <p className="form-error" role="alert">{m.error}</p>}
-    <section className="music-player-card"><div className="music-player-card-heading"><div><span className="eyebrow">NOW PLAYING</span><strong>{m.activeTrack?.title ?? 'Chưa chọn bài'}</strong><small>{m.activeTrack ? `${musicSourceLabel(m.activeTrack.source)}${m.activeTrack.isPlaylist ? ' · Playlist' : ''}` : 'Chọn một mục bên dưới để bắt đầu'}</small></div><label className="music-island-toggle"><input type="checkbox" checked={!m.hidden} onChange={event => m.setHidden(!event.target.checked)}/>Hiện Dynamic Island</label></div><Controls/><PlaybackOptions/></section>
-    {!m.tracks.length ? <p className="music-empty">Thêm file hoặc link đầu tiên để bắt đầu. Nhạc local lưu trên trình duyệt; link online mở bằng trình phát của nguồn.</p> : <ol className="music-playlist">{m.tracks.map(track => <li key={track.id} className={m.current === track.id ? 'selected' : ''}><button className="music-play-button" aria-label={`Phát ${track.title}`} onClick={() => m.play(track.id)}><Play size={18}/></button><span className="music-source-icon" title={musicSourceLabel(track.source)}>{track.source && track.source !== 'local' ? <Radio size={16}/> : <Disc3 size={16}/>}</span><div className="music-track-fields"><input key={`${track.id}:${track.title}`} aria-label={`Tên bài: ${track.title}`} defaultValue={track.title} maxLength={160} onBlur={event => { if (event.target.value.trim() !== track.title) void m.rename(track, event.target.value); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/><small>{musicSourceLabel(track.source)}{track.isPlaylist ? ' · Playlist' : ''}</small></div>{track.url && <a className="music-track-link" aria-label={`Mở nguồn ${track.title}`} href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/></a>}<button className="music-delete-button" aria-label={`Xóa ${track.title}`} onClick={() => void m.remove(track)}><Trash2 size={17}/></button></li>)}</ol>}
+  const closeAdd = () => { setAdding(false); addButton.current?.focus(); };
+  const addLink = async (event: FormEvent) => {
+    event.preventDefault();
+    if (await m.addOnline(onlineUrl, onlineTitle)) {
+      setOnlineUrl(""); setOnlineTitle(""); closeAdd();
+    }
+  };
+  const track = m.activeTrack;
+  const localTrack = !!track && (!track.source || track.source === "local");
+  return <section className="music-page">
+    <header className="music-page-header"><div><span className="eyebrow">KHÔNG GIAN HỌC TẬP</span><h2><Music2 size={25}/>Nhạc tập trung</h2><p>Chọn nhạc cho phiên học của bạn.</p></div></header>
+    {m.error && !adding && <p className="form-error" role="alert">{m.error}</p>}
+    <div className="music-dashboard">
+      <section className="music-player-card" aria-label="Đang phát">
+        <div className="music-player-card-heading">
+          <div><span className="eyebrow">ĐANG PHÁT</span><strong>{track?.title ?? "Chưa chọn bài"}</strong><small>{track ? `${musicSourceLabel(track.source)}${track.isPlaylist ? " · Danh sách phát" : ""}` : "Chọn bài nhạc từ danh sách phát"}</small></div>
+          <label className="music-island-toggle"><input type="checkbox" checked={!m.hidden} onChange={event => m.setHidden(!event.target.checked)}/>Hiện trình phát thu nhỏ</label>
+        </div>
+        <div className="music-player-art" aria-hidden="true">{track && !localTrack ? <Radio size={36}/> : <Disc3 size={42}/>}</div>
+        {localTrack && <div className="music-progress"><input aria-label="Vị trí phát" type="range" min={0} max={m.duration || 1} step=".1" disabled={!m.duration} value={Math.min(m.time, m.duration || 1)} onChange={event => m.seek(Number(event.target.value))}/><div><span>{clock(m.time)}</span><span>{clock(m.duration)}</span></div></div>}
+        {track?.url && <a className="music-source-link" href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Mở nguồn nhạc</a>}
+        <Controls/><PlaybackOptions/>
+      </section>
+      <section className="music-queue">
+        <header className="music-queue-heading"><div><h3><ListMusic size={21}/>Danh sách phát</h3><span className="music-library-count">{m.tracks.length} mục</span></div><button type="button" className="primary-button" ref={addButton} aria-expanded={adding} aria-controls={adding ? addPanel : undefined} onClick={() => setAdding(value => !value)}><Plus size={17}/>Thêm nhạc</button></header>
+        {adding && <div className="music-add-panel" id={addPanel} onKeyDown={event => { if (event.key === "Escape" && !m.busy) { event.stopPropagation(); closeAdd(); } }}>
+          <div className="music-add-options" role="group" aria-label="Nguồn nhạc">
+            <button type="button" className="secondary-button" aria-pressed={source === "device"} disabled={m.busy} onClick={() => setSource("device")}><Upload size={16}/>Từ thiết bị</button>
+            <button type="button" className="secondary-button" aria-pressed={source === "link"} disabled={m.busy} onClick={() => setSource("link")}><Link2 size={17}/>Bằng liên kết</button>
+          </div>
+          {source === "device"
+            ? <FilePicker className="music-upload" label={m.busy ? "Đang lưu…" : "Chọn tệp nhạc"} aria-label="Thêm file nhạc" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" multiple disabled={m.busy} description="MP3, WAV, M4A, OGG, AAC, FLAC · tối đa 50 MB/bài" onChange={event => { void m.add(Array.from(event.target.files ?? [])).then(added => { if (added) closeAdd(); }); }}/>
+            : <form className="music-link-form" onSubmit={addLink}><label>Liên kết nhạc<input type="url" required value={onlineUrl} onChange={event => setOnlineUrl(event.target.value)} placeholder="YouTube, Spotify hoặc SoundCloud"/></label><label>Tên hiển thị (tùy chọn)<input value={onlineTitle} onChange={event => setOnlineTitle(event.target.value)} placeholder={parsed?.title ?? "Nhập tên bài nhạc"}/></label><button className="primary-button" disabled={m.busy || !onlineUrl.trim()}><Link2 size={16}/>{m.busy ? "Đang lưu…" : "Thêm vào danh sách"}</button></form>}
+          {m.error && <p className="form-error" role="alert">{m.error}</p>}
+        </div>}
+        {!m.tracks.length ? <div className="music-empty"><ListMusic size={26}/><strong>Danh sách phát đang trống</strong><span>Thêm nhạc từ thiết bị hoặc từ một liên kết để bắt đầu.</span></div> : <ol className="music-playlist">{m.tracks.map(track => {
+          const selected = m.current === track.id, playing = selected && m.playing;
+          return <li key={track.id} className={selected ? "selected" : ""} aria-current={selected ? "true" : undefined}>
+            <button type="button" className="music-play-button" aria-label={`${playing ? "Tạm dừng" : "Phát"} ${track.title}`} onClick={() => playing ? m.pause() : m.play(track.id)}>{playing ? <Pause size={18}/> : <Play size={18}/>}</button>
+            <div className="music-track-fields"><input key={`${track.id}:${track.title}`} aria-label={`Tên bài: ${track.title}`} defaultValue={track.title} maxLength={160} onBlur={event => { if (event.target.value.trim() !== track.title) void m.rename(track, event.target.value); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><small>{musicSourceLabel(track.source)}{track.isPlaylist ? " · Danh sách phát" : ""}</small></div>
+            {track.url && <a className="music-track-link" aria-label={`Mở nguồn ${track.title}`} href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/></a>}
+            <button type="button" className="music-delete-button" aria-label={`Xóa ${track.title}`} onClick={() => void m.remove(track)}><Trash2 size={17}/></button>
+          </li>;
+        })}</ol>}
+      </section>
+    </div>
   </section>;
 }
 

@@ -1,0 +1,77 @@
+{
+  "version": "5.30.2",
+  "baseVersion": "5.30.1",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.30.2.md",
+      "bytes": 2045,
+      "sha256": "7acd48dce1b7de6ed2ff3cc6eabba0514698c8059e080195a593cc5885f0ef51"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "3d96f765ab401f8223b4d6ebc0279e054a84bc7879eb7e8597800ccd234e70d2"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 4730,
+      "sha256": "3075c26165dc4279c425f1e14aaaa76820de691e0becbcc1d716a29f63c76348"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 22741,
+      "sha256": "2d2dd09499a6350471d26ce8eba03648faddd754083b5d8ae79568cd161bc2c8"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.review.test.tsx",
+      "bytes": 12728,
+      "sha256": "9572bc5865d7ca1e442c1f6e9be16847d759acb5ea4bdedfb0d175eeef8a4f26"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 62409,
+      "sha256": "92ca2d241ae735f561cfd407f9dcc8650d72c6aa0525b50236b1b9617e5e37e7"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.test.tsx",
+      "bytes": 3867,
+      "sha256": "ce5487d31d4160ed6fae355cab83374f893b56c587a84eb694c3d0b2607e2de1"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.tsx",
+      "bytes": 23072,
+      "sha256": "9214f7f97547cfe84feb08f5afb88737a071be22d803a0520a5018d7082e5459"
+    },
+    {
+      "path": "apps/web/src/lib/connections.ts",
+      "bytes": 6161,
+      "sha256": "2361501597097645a85e48b1b58fe137fad466b06baebc6117304cffd5707c97"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "bytes": 81508,
+      "sha256": "fb6a7066a7843390b15723aa0c79bee3c48b744eb93c49ba22b91c431ed6d70a"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 519388,
+      "sha256": "43c2321cd01ad94d4e2a5d95bbacf3c88b8d9115f5f40c1f931f3704d0c070be"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "6fbfd2fe1bd1e359d7a98c38f453584e50097cf0c12aa73fd45997b01a204973"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "19cfca7ca6c02d30793df18a103cb27758ce38f314352f00019875a4aa6a28a8"
+    },
+    {
+      "path": "supabase/migrations/0038_study_library_summaries.sql",
+      "bytes": 2123,
+      "sha256": "3ab857ec4fb0777944d5ea57aa77af28afa52ab8754f88272fe0e8ab63100fca"
+    }
+  ]
+}

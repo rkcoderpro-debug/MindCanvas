@@ -7,6 +7,9 @@ import { LanguageProvider } from "../lib/i18n";
 import type { FlashcardStore } from "../hooks/useFlashcards";
 import { FREE_ACCOUNT_PLAN } from "../lib/account";
 import type { Flashcard } from "../lib/flashcards";
+import { createDeck, createFlashcard } from "../lib/flashcards";
+import { upsertFlashcards } from "../lib/projectStore";
+import { LearningNavigationProvider, LearningToolScope } from "../lib/learningNavigation";
 
 const consume = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 vi.mock("../lib/api", async importOriginal => ({ ...await importOriginal<typeof import("../lib/api")>(), consumeAiManualUsage: consume }));
@@ -26,6 +29,36 @@ function TestReview({ onRate = vi.fn(), busy = false, card = target }: { onRate?
   const [answer, setAnswer] = useState(false);
   return <ReviewPanel target={card} finished={false} index={0} total={2} forgottenCount={0} dailyCurrent={0} dailyGoal={2} planMode={false} ratingBusy={busy} showAnswer={answer} onToggleAnswer={() => setAnswer(value => !value)} onRate={onRate} onBack={() => {}} t={key => key}/>;
 }
+
+it("lists totals for unopened decks from cached cards and combines saved and accent-insensitive search", async () => {
+  localStorage.setItem("mindcanvas:language", "en");
+  const algebra = { ...createDeck("Đại số"), source: "local" as const };
+  const geometry = { ...createDeck("Hình học"), source: "local" as const, savedFrom: { ownerName: "An", title: "Hình học" } };
+  await upsertFlashcards(null, [
+    { ...createFlashcard(algebra.id, "First", "Answer"), dueAt: "2020-01-01T00:00:00Z" },
+    { ...createFlashcard(algebra.id, "Second", "Answer"), dueAt: "2099-01-01T00:00:00Z" },
+  ]);
+  const store = { cards: [], due: [], decks: [algebra, geometry], selectedDeck: null, storageMode: "local", streak: { current: 0, best: 0, todayProgress: 0, todayTarget: 2 }, studyDays: [] } as unknown as FlashcardStore;
+  await act(async () => root.render(<LanguageProvider><LearningNavigationProvider owner={null} initialTab="flashcards"><LearningToolScope tab="flashcards" active><FlashcardsPage owner={null} projects={[]} store={store}/></LearningToolScope></LearningNavigationProvider></LanguageProvider>));
+  const matches = () => [...host.querySelectorAll(".deck-list .deck-item")].map(item => item.textContent);
+  expect(matches()[0]).toContain("2 cards");
+  expect(matches()[0]).toContain("1 due");
+  expect(matches()[1]).toContain("0 cards");
+  const query = host.querySelector<HTMLInputElement>('[aria-label="Search decks"]')!;
+  const searchFor = async (value: string) => act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(query, value);
+    query.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await searchFor("dai so");
+  expect(matches()).toHaveLength(1);
+  expect(matches()[0]).toContain("Đại số");
+  const saved = [...host.querySelectorAll<HTMLButtonElement>(".deck-library-tools button")].find(button => button.textContent?.startsWith("Saved"))!;
+  await act(async () => saved.click());
+  expect(matches()).toHaveLength(0);
+  await searchFor("");
+  expect(matches()).toHaveLength(1);
+  expect(matches()[0]).toContain("Hình học");
+});
 it("mounts only the selected face through repeated flips and orientation changes", async () => {
   await act(async () => root.render(<TestReview/>));
   const scene = host.querySelector(".review-card-scene") as HTMLElement;

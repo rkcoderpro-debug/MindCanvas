@@ -8,7 +8,7 @@ import { ArrowLeft, BookOpen, CalendarClock, CheckCircle2, ClipboardPaste, Cloud
 import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
-import { fetchBoard, readCache } from "../lib/projectStore";
+import { fetchBoard, fetchFlashcardDeckTotals, readCache, type FlashcardDeckTotals } from "../lib/projectStore";
 import { dueCards, recommendDailyTarget, studyContextKey, vietnamStudyDate, type Flashcard, type FlashcardDeck, type FlashcardRating, type StudyEvent } from "../lib/flashcards";
 import { aiErrorMessage } from "../lib/aiErrors";
 import { useFlashcards, type FlashcardStore } from "../hooks/useFlashcards";
@@ -33,6 +33,10 @@ type AiSource = "text" | "project" | "file" | "deck";
 type AiPreviewCard = Omit<GeneratedFlashcard, "sourcePage"> & { id: string; sourcePage: number | null };
 type AiPreview = { title: string; provider: string; model: string; cards: AiPreviewCard[]; sourceDocumentId?: string };
 const DEFAULT_FLASHCARD_LIMIT = 50;
+
+function deckSearchKey(value: string) {
+  return value.trim().toLocaleLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d");
+}
 
 function parseFlashcardLimit(value: string, maximum = MAX_FLASHCARDS): number | null {
   const parsed = Number(value);
@@ -86,6 +90,15 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
   const studyChoice = useRef<HTMLButtonElement>(null);
   const [showDeck, setShowDeck] = useState(false);
   const [deckFilter, setDeckFilter] = useState<"all" | "saved">("all");
+  const [deckQuery, setDeckQuery] = useState("");
+  const [deckTotals, setDeckTotals] = useState<{ owner: string | null; items: Map<string, FlashcardDeckTotals> } | null>(null);
+  const libraryVisible = !navigation || !showDeck;
+  useEffect(() => {
+    if (!learningActive || !libraryVisible || flashcards.loading || !flashcards.decks.length) return;
+    let active = true;
+    void fetchFlashcardDeckTotals(owner, flashcards.decks).then(items => { if (active) setDeckTotals({ owner, items }); });
+    return () => { active = false; };
+  }, [owner, learningActive, libraryVisible, flashcards.loading, flashcards.decks]);
   const [deckDialog, setDeckDialog] = useState<DeckDialog | null>(null);
   const [deckName, setDeckName] = useState("");
   const [deckProjectId, setDeckProjectId] = useState("");
@@ -416,6 +429,10 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
 
   const busyActions = flashcards.busy || aiBusy || flashcards.cardsLoading;
   const deckOpened = navigation ? showDeck || panel === "review" : !!flashcards.selectedDeck;
+  const savedDeckCount = flashcards.decks.filter(deck => !!deck.savedFrom).length;
+  const visibleDecks = flashcards.decks.filter(deck => (deckFilter === "all" || !!deck.savedFrom) && deckSearchKey(deck.name).includes(deckSearchKey(deckQuery)));
+  const vi = language === "vi";
+  const deckSearchLabel = vi ? "Tìm bộ thẻ" : "Search decks";
   return <section className={`flashcards-page ${navigation ? deckOpened ? "deck-opened" : "deck-list-view" : ""}`}>
     {navigation && <PageBack active={showDeck && panel !== "review"} onBack={backToDecks}>{t("flashcardDeckList")}</PageBack>}
     <div className="flashcards-heading">
@@ -425,11 +442,21 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     {(flashcards.error || formError) && <div className="flashcards-error" role="alert"><span>{flashcards.error || formError}</span><button className="icon-button" aria-label={t("close")} onClick={() => { flashcards.setError(""); setFormError(""); }}><X size={16}/></button></div>}
     <div className="flashcards-layout">
       <aside className="flashcards-decks">
-        <div className="flashcards-decks-heading"><strong>{t("decks")}</strong><button className="icon-button" aria-label={t("newDeck")} onClick={openCreateDeck}><Plus size={17}/></button></div>
-        {flashcards.loading ? <p>{t("loading")}</p> : !flashcards.decks.length ? <div className="flashcards-empty-small"><BookOpen size={25}/><span>{t("noDecks")}</span></div> : <><div className="learning-copy-filter compact" aria-label="Lọc bộ Flashcard"><button aria-pressed={deckFilter === "all"} onClick={() => setDeckFilter("all")}>Tất cả <small>{flashcards.decks.length}</small></button><button aria-pressed={deckFilter === "saved"} onClick={() => setDeckFilter("saved")}>Đã lưu <small>{flashcards.decks.filter(deck => !!deck.savedFrom).length}</small></button></div><div className="deck-list">{flashcards.decks.filter(deck => deckFilter === "all" || !!deck.savedFrom).length ? flashcards.decks.filter(deck => deckFilter === "all" || !!deck.savedFrom).map(deck => <div className={`deck-item ${deck.id === flashcards.selectedDeckId ? "active" : ""}`} key={deck.id}>
-          <button className="deck-select" onClick={() => openDeck(deck.id)}><BookOpen size={17}/><span>{deck.name}</span><small>{flashcards.selectedDeckId === deck.id ? flashcards.cards.length : ""}</small></button>
-          <button className="icon-button deck-action" aria-label={`${t("renameDeck")}: ${deck.name}`} onClick={() => openRenameDeck(deck)}><Pencil size={14}/></button>
-        </div>) : <p className="learning-copy-empty">Chưa có bộ thẻ nào được lưu từ mục chia sẻ.</p>}</div></>}
+        <div className="deck-library-tools">
+          <div className="learning-copy-filter compact" role="group" aria-label={vi ? "Lọc bộ thẻ" : "Filter decks"}><button type="button" aria-pressed={deckFilter === "all"} onClick={() => setDeckFilter("all")}>{vi ? "Tất cả" : "All"} <small>{flashcards.decks.length}</small></button><button type="button" aria-pressed={deckFilter === "saved"} onClick={() => setDeckFilter("saved")}>{vi ? "Đã lưu" : "Saved"} <small>{savedDeckCount}</small></button></div>
+          <label className="card-search"><Search size={16}/><input type="search" aria-label={deckSearchLabel} placeholder={`${deckSearchLabel}…`} value={deckQuery} onChange={event => setDeckQuery(event.target.value)}/></label>
+        </div>
+        {flashcards.loading ? <p role="status">{t("loading")}</p> : visibleDecks.length ? <div className="deck-list">{visibleDecks.map(deck => {
+          const totals = deckTotals?.owner === owner ? deckTotals.items.get(deck.id) : undefined;
+          return <article className={`deck-item ${deckOpened && deck.id === flashcards.selectedDeckId ? "active" : ""}`} key={deck.id}>
+            <button type="button" className="deck-select" onClick={() => openDeck(deck.id)}>
+              <span className="deck-library-icon" aria-hidden="true"><BookOpen size={19}/></span><strong>{deck.name}</strong>
+              {deck.savedFrom && <small className="deck-library-source">{vi ? "Đã lưu từ" : "Saved from"} {deck.savedFrom.ownerName}</small>}
+              {totals ? <span className="deck-library-stats"><small>{t("cardCount", { count: totals.total })}</small><small className={totals.due > 0 ? "has-due" : ""}>{t("dueCount", { count: totals.due })}</small></span> : <small className="deck-library-source">{vi ? "— thẻ · — đến hạn" : "— cards · — due"}</small>}
+            </button>
+            <button type="button" className="icon-button deck-action" title={t("renameDeck")} aria-label={`${t("renameDeck")}: ${deck.name}`} onClick={() => openRenameDeck(deck)}><Pencil size={15}/></button>
+          </article>;
+        })}</div> : <div className="flashcards-empty-small"><BookOpen size={26}/><span>{!flashcards.decks.length ? t("noDecks") : deckFilter === "saved" && !savedDeckCount ? (vi ? "Chưa có bộ thẻ nào được lưu từ mục chia sẻ." : "No decks saved from sharing yet.") : t("noResults")}</span></div>}
       </aside>
       <section className="flashcards-content" hidden={!deckOpened}>
         {!flashcards.selectedDeck ? <div className="flashcards-empty"><BookOpen size={48}/><h2>{t("chooseDeck")}</h2><p>{t("chooseDeckHint")}</p><button className="primary-button" onClick={openCreateDeck}><Plus size={17}/>{t("newDeck")}</button></div> : <>

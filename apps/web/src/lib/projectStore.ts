@@ -5,7 +5,7 @@ import { getCurrentSession, requestTimeoutSignal, supabase } from "./supabase";
 import { parseBoard } from "./board";
 import { verifyWorkspaceAccount, workspaceAuthError } from "./authSession";
 import { canvasMediaEnabled, reserveCanvasMediaDraft, canvasMediaTransport, hasCanvasMediaManifest, rememberCanvasMediaManifest, isCompactCanvas, packCloudCanvas, unpackCloudCanvas } from "./canvasCloudMedia";
-import { applyStudyEventToTasks, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
+import { applyStudyEventToTasks, dueCards, isStudyDayComplete, type Flashcard, type FlashcardDeck, type FlashcardStorage, type StudyDayProgress, type StudyEvent, type StudyPlan, type StudyPlanDay, type StudyPlanMode, type StudyPlanSourceType, type StudyPlanStatus, type StudyTaskKind } from "./flashcards";
 import { readOfflineProjectCache, readOfflineProjectVersions, updateOfflineProjectVersions, writeOfflineProjectCache } from "./offlineProjectCache";
 import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
 import { deleteFlashcardList, readFlashcardList, writeFlashcardList } from "./flashcardStorage";
@@ -825,6 +825,36 @@ export function readFlashcardDecks(owner: string | null) {
 
 export function readFlashcards(owner: string | null, deckId: string) {
   return localCards(owner, deckId);
+}
+
+export type FlashcardDeckTotals = { total: number; due: number };
+
+export async function fetchFlashcardDeckTotals(owner: string | null, decks: readonly FlashcardDeck[]) {
+  const totals = new Map<string, FlashcardDeckTotals>();
+  const cloudDecks = owner ? decks.filter(deck => deck.source === "cloud") : [];
+  if (owner && cloudDecks.length) {
+    try {
+      const client = await clientFor(owner);
+      for (let offset = 0; offset < cloudDecks.length; offset += 200) {
+        const { data, error } = await client.rpc("list_flashcard_deck_totals", {
+          p_deck_ids: cloudDecks.slice(offset, offset + 200).map(deck => deck.id),
+        }).abortSignal(requestTimeoutSignal(10000));
+        if (error) throw error;
+        for (const row of data ?? []) totals.set(row.deck_id, { total: Number(row.total), due: Number(row.due) });
+      }
+    } catch {
+      // Offline or an older schema: show cached deck totals where available.
+    }
+  }
+  await Promise.all(decks.filter(deck => !totals.has(deck.id)).map(async deck => {
+    const key = flashcardCacheKey(owner, deck.id);
+    await hydrateLocalList<Flashcard>(key);
+    const cards = localCards(owner, deck.id);
+    let cached = memoryLocalLists.has(key);
+    try { cached ||= localStorage.getItem(key) !== null; } catch { /* use in-memory cache */ }
+    if (!owner || deck.source === "local" || cached) totals.set(deck.id, { total: cards.length, due: dueCards(cards).length });
+  }));
+  return totals;
 }
 
 export async function fetchFlashcardDecks(owner: string | null): Promise<FlashcardRepositoryResult<FlashcardDeck>> {

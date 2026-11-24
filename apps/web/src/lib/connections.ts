@@ -3,7 +3,10 @@ import { hashInvitationToken, normalizeInviteEmail } from "./collaboration";
 import { signProfileAvatars } from "./accountProfile";
 import type { LearningKind } from "./learningShare";
 
-export type Connection = { peer_id: string; display_name: string; unread_count: number; connected_at: string; avatar?: string };
+export type Connection = {
+  peer_id: string; display_name: string; unread_count: number; connected_at: string; avatar?: string;
+  lastMessage?: { at: string; body: string; kind: LearningKind | null; title: string | null; outgoing: boolean };
+};
 export type ConnectionInvitation = { id: string; sender_id: string; sender_name: string; recipient_email: string | null; token_hash: string; status: string; expires_at: string; outgoing: boolean };
 export type BlockedConnection = { peer_id: string; display_name: string; blocked_at: string };
 export type DirectMessage = { id: string; sender_id: string; recipient_id: string; body: string; resource_kind: LearningKind | null; resource_id: string | null; resource_title: string | null; created_at: string };
@@ -33,12 +36,20 @@ export async function respondConnectionInvitation(tokenOrHash: string, action: "
   const hash = alreadyHashed ? tokenOrHash : await hashInvitationToken(tokenOrHash.trim());
   checked(await client().rpc("respond_connection_invitation", { p_hash: hash, p_action: action }));
 }
-export async function listConnections(): Promise<Connection[]> {
-  const result = await client().rpc("list_connections_with_profile");
-  if (result.error?.code === "PGRST202") return checked(await client().rpc("list_connections")) as Connection[];
-  const people = (checked(result) ?? []) as Array<Connection & { avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null }>;
+export async function listConnections(includePreview = false): Promise<Connection[]> {
+  let result = await client().rpc(includePreview ? "list_connection_inbox" : "list_connections_with_profile");
+  if (includePreview && (result.error?.code === "PGRST202" || result.error?.code === "42883")) result = await client().rpc("list_connections_with_profile");
+  if (result.error?.code === "PGRST202") return (checked(await client().rpc("list_connections")) ?? []) as Connection[];
+  const people = (checked(result) ?? []) as Array<Connection & {
+    avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null;
+    last_message_at?: string | null; last_message_body?: string | null; last_resource_kind?: LearningKind | null;
+    last_resource_title?: string | null; last_message_outgoing?: boolean | null;
+  }>;
   const urls = await signProfileAvatars(people.map(person => ({ ...person, id: person.peer_id })));
-  return people.map(({ peer_id, display_name, unread_count, connected_at }) => ({ peer_id, display_name, unread_count, connected_at, avatar: urls.get(peer_id) }));
+  return people.map(row => ({
+    peer_id: row.peer_id, display_name: row.display_name, unread_count: Number(row.unread_count), connected_at: row.connected_at, avatar: urls.get(row.peer_id),
+    lastMessage: row.last_message_at ? { at: row.last_message_at, body: row.last_message_body ?? "", kind: row.last_resource_kind ?? null, title: row.last_resource_title ?? null, outgoing: row.last_message_outgoing === true } : undefined,
+  }));
 }
 export async function listConnectionInvitations(): Promise<ConnectionInvitation[]> {
   return checked(await client().rpc("list_connection_invitations")) as ConnectionInvitation[];
@@ -46,15 +57,14 @@ export async function listConnectionInvitations(): Promise<ConnectionInvitation[
 export async function cancelConnectionInvitation(id: string) {
   checked(await client().rpc("cancel_connection_invitation", { p_id: id }));
 }
-export async function listDirectMessages(peerId: string, before?: string): Promise<DirectMessage[]> {
+export async function listDirectMessages(peerId: string, before?: Pick<DirectMessage, "created_at" | "id">): Promise<DirectMessage[]> {
   const session = await getCurrentSession();
   if (!session) throw new Error("Hãy đăng nhập để xem tin nhắn.");
   const ownId = session.user.id;
-  let query = client().from("direct_messages").select("id,sender_id,recipient_id,body,resource_kind,resource_id,resource_title,created_at")
-    .or(`and(sender_id.eq.${ownId},recipient_id.eq.${peerId}),and(sender_id.eq.${peerId},recipient_id.eq.${ownId})`)
-    .order("created_at", { ascending: false }).limit(50);
-  if (before) query = query.lt("created_at", before);
-  return checked(await query) as DirectMessage[];
+  const cursor = before ? `,or(created_at.lt.${before.created_at},and(created_at.eq.${before.created_at},id.lt.${before.id}))` : "";
+  return checked(await client().from("direct_messages").select("id,sender_id,recipient_id,body,resource_kind,resource_id,resource_title,created_at")
+    .or(`and(sender_id.eq.${ownId},recipient_id.eq.${peerId}${cursor}),and(sender_id.eq.${peerId},recipient_id.eq.${ownId}${cursor})`)
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50)) as DirectMessage[];
 }
 export async function sendDirectMessage(peerId: string, body: string, kind?: LearningKind, resourceId?: string) {
   if (!body.trim() && !resourceId) throw new Error("Nhập tin nhắn hoặc chọn học liệu để gửi.");
