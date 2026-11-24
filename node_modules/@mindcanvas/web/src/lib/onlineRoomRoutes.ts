@@ -2,19 +2,22 @@ const STORAGE = "mindcanvas:online-room-invite:v1";
 const AUTH_RETURN = "mindcanvas:online-room-sign-in:v1";
 const roomId = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const invitation = /^[a-f0-9]{64}$/;
-export type OnlineRoomLink = { id: string; invite?: string };
+export const roomCodePattern = /^[0-9]{6}$/;
+export type OnlineRoomLink = { id: string; invite?: string; code?: string };
 
 export function readOnlineRoomLink(url = new URL(window.location.href)): OnlineRoomLink | null {
   if (url.searchParams.get("learn") !== "rooms") return null;
   const id = url.searchParams.get("room")?.toLowerCase() ?? "";
   if (!roomId.test(id)) return null;
+  const code = url.searchParams.get("room_code") ?? "";
+  const link: OnlineRoomLink = roomCodePattern.test(code) ? { id, code } : { id };
   const supplied = url.searchParams.get("room_invite");
-  if (supplied && invitation.test(supplied)) return { id, invite: supplied };
+  if (supplied && invitation.test(supplied)) return { ...link, invite: supplied };
   try {
     const value = JSON.parse(sessionStorage.getItem(STORAGE) ?? "null");
-    if (value?.id === id && typeof value.invite === "string" && invitation.test(value.invite)) return { id, invite: value.invite };
+    if (value?.id === id && typeof value.invite === "string" && invitation.test(value.invite)) return { ...link, invite: value.invite };
   } catch { /* This device can still open a direct invitation. */ }
-  return { id };
+  return link;
 }
 
 export function rememberOnlineRoomInvite(link: OnlineRoomLink | null) {
@@ -29,12 +32,13 @@ export function forgetOnlineRoomInvite(id: string) {
   } catch { /* optional persistence */ }
 }
 
-export function onlineRoomUrl(id: string | null, invite?: string, here = new URL(window.location.href)): URL {
+export function onlineRoomUrl(id: string | null, invite?: string, here = new URL(window.location.href), code?: string): URL {
   const url = new URL(here.href);
   url.search = ""; url.hash = "";
   url.searchParams.set("learn", "rooms");
   if (id) url.searchParams.set("room", id);
   if (id && invite) url.searchParams.set("room_invite", invite);
+  if (id && code && roomCodePattern.test(code)) url.searchParams.set("room_code", code);
   return url;
 }
 
@@ -53,7 +57,7 @@ export function rememberOnlineRoomSignIn() {
   if (new URL(window.location.href).searchParams.get("learn") !== "rooms") return;
   const link = readOnlineRoomLink();
   rememberOnlineRoomInvite(link);
-  try { sessionStorage.setItem(AUTH_RETURN, JSON.stringify({ room: link?.id ?? null, until: Date.now() + 600_000 })); }
+  try { sessionStorage.setItem(AUTH_RETURN, JSON.stringify({ room: link?.id ?? null, code: link?.code, until: Date.now() + 600_000 })); }
   catch { /* sign-in can still complete without returning to the room */ }
 }
 
@@ -66,6 +70,7 @@ export function restoreOnlineRoomSignIn() {
     if (url.searchParams.has("learn") || url.searchParams.has("canvas")) return;
     url.searchParams.set("learn", "rooms");
     if (typeof saved.room === "string" && roomId.test(saved.room)) url.searchParams.set("room", saved.room);
+    if (url.searchParams.has("room") && typeof saved.code === "string" && roomCodePattern.test(saved.code)) url.searchParams.set("room_code", saved.code);
     window.history.replaceState(window.history.state, "", url);
   } catch { /* optional persistence */ }
 }

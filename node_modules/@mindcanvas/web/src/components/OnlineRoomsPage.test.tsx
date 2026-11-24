@@ -8,13 +8,13 @@ import OnlineRoomsPage from "./OnlineRoomsPage";
 import ClassOnlineRoomCard from "./ClassOnlineRoomCard";
 
 const mock = vi.hoisted(() => ({
-  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(), classRoom: vi.fn(),
+  list: vi.fn(), lookup: vi.fn(), deleteRoom: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(), classRoom: vi.fn(),
 }));
 vi.mock("../lib/onlineRooms", async actual => ({
   ...await actual<typeof import("../lib/onlineRooms")>(),
   classroomOnlineRoom: mock.classRoom, requestRoomCanvas: mock.canvas, sendMeetingFile: mock.upload, loadMeetingFile: mock.download,
   createOnlineRoom: mock.create, fetchMeetingToken: mock.token, controlOnlineMeeting: mock.manage,
-  listOnlineRooms: mock.list, joinOnlineRoom: mock.join, readOnlineRoom: mock.read, readOnlineRoomChat: mock.chat,
+  listOnlineRooms: mock.list, lookupOnlineRoomCode: mock.lookup, deleteOnlineRoom: mock.deleteRoom, joinOnlineRoom: mock.join, readOnlineRoom: mock.read, readOnlineRoomChat: mock.chat,
   pingOnlineRoom: mock.leave, actOnlineRoom: mock.act, watchOnlineRoom: mock.watch, loadRoomAvatars: vi.fn(async () => new Map()),
 }));
 vi.mock("./OnlineRoomYouTube", () => ({ default: () => <div data-test-player/> }));
@@ -201,4 +201,47 @@ it("lets teachers open the class room and offers students entry only after it ex
   await act(async () => button("Mở phòng cho lớp").click());
   expect(mock.classRoom).toHaveBeenCalledWith(classId,true);
   expect(onEnter).toHaveBeenCalledWith(room.id);
+});
+
+it("keeps leading zeros, asks for the password after lookup, and never adds the password to the link", async () => {
+  mock.lookup.mockResolvedValue({ state: "found", id: room.id });
+  mock.join.mockResolvedValueOnce({ state: "password_required" }).mockResolvedValueOnce({ state: "password_invalid" });
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  const enterText = (input: HTMLInputElement, value: string) => act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await enterText(host.querySelector(".online-room-code-lookup input")!, "001247");
+  await act(async () => button("Tìm theo mã").click());
+  await tick();
+  expect(mock.lookup).toHaveBeenCalledWith("001247");
+  expect(mock.join).toHaveBeenCalledWith(room.id, expect.any(String), undefined, { code: "001247" });
+  const password = host.querySelector<HTMLInputElement>(".online-room-password input")!;
+  expect(password.type).toBe("password");
+  await enterText(password, "notsame1");
+  await act(async () => button("Vào phòng").click());
+  expect(host.textContent).toContain("Sai mật khẩu phòng");
+  expect(mock.join).toHaveBeenLastCalledWith(room.id, expect.any(String), undefined, { code: "001247", password: "notsame1" });
+  expect(window.location.search).toContain("room_code=001247");
+  expect(window.location.search).not.toContain("notsame1");
+  expect(password.value).toBe("");
+});
+
+it("lets the host confirm deletion in the lobby, without a delete button for an official room", async () => {
+  const owned = { ...room, id: "60000000-0000-4000-8000-000000000099", name: "Phòng của mình", code: "003000", host_id: owner, official: false };
+  mock.list.mockResolvedValue({ rooms: [owned, room], can_create_public: false });
+  mock.deleteRoom.mockImplementation(async () => {
+    mock.list.mockResolvedValue({ rooms: [room], can_create_public: false });
+    return { deleted: true };
+  });
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  expect(button("Xóa phòng: Góc nhạc tập trung")).toBeUndefined();
+  expect(host.textContent).toContain("003000");
+  await act(async () => button("Xóa phòng: Phòng của mình").click());
+  expect(host.querySelector("dialog[open]")?.textContent).toContain("Mã phòng, liên kết mời");
+  expect(mock.deleteRoom).not.toHaveBeenCalled();
+  await act(async () => button("Xóa phòng").click());
+  expect(mock.deleteRoom).toHaveBeenCalledWith(owned.id);
+  expect(button("Vào Phòng của mình")).toBeUndefined();
+  expect(button("Tạo phòng")).toBeTruthy();
 });

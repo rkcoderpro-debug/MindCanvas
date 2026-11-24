@@ -64,3 +64,46 @@ test("meeting API issues a short room-only grant based on the server session and
   allowed = false;
   assert.equal((await getGrant("active-user-session")).status, 403);
 });
+
+test("deletion uses the authenticated actor and succeeds after the database approves it, without a seat or live media", async t => {
+  const owner = "7a000000-0000-4000-8000-000000000001";
+  const guest = "7a000000-0000-4000-8000-000000000004";
+  const room = "7a000000-0000-4000-8000-000000000002";
+  const original = { ...config }, localFetch = globalThis.fetch;
+  Object.assign(config, { SUPABASE_URL: "https://supabase.unit.test", SUPABASE_SERVICE_ROLE_KEY: "service-test" });
+  const requests: unknown[] = [];
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = String(input);
+    const authorization = new Headers(init?.headers).get("Authorization");
+    if (url.endsWith("/auth/v1/user")) {
+      if (authorization === "Bearer host") return Response.json({ id: owner });
+      if (authorization === "Bearer visitor") return Response.json({ id: guest });
+      return new Response(null, { status: 401 });
+    }
+    if (url.endsWith("/rest/v1/rpc/delete_online_room")) {
+      assert.equal(authorization,"Bearer service-test");
+      const data = JSON.parse(String(init?.body));
+      requests.push(data);
+      return data.p_actor === owner ? Response.json({ deleted: true, kind: "music" }) : Response.json({ message: "ONLINE_HOST_ONLY" }, { status: 400 });
+    }
+    throw new Error("Unexpected outbound request");
+  });
+  const app = express();
+  app.use(express.json(), onlineMeetings);
+  const server = await new Promise<ReturnType<typeof app.listen>>(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  t.after(() => { server.close(); Object.assign(config, original); });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const remove = (token: string) => localFetch(`http://127.0.0.1:${address.port}/${room}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ actor: owner }),
+  });
+  assert.equal((await remove("invalid")).status, 401);
+  assert.equal((await remove("visitor")).status, 403);
+  const response = await remove("host");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deleted: true });
+  assert.deepEqual(requests, [{ p_room: room, p_actor: guest }, { p_room: room, p_actor: owner }]);
+});

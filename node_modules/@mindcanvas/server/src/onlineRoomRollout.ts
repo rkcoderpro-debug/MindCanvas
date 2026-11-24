@@ -3,7 +3,7 @@ import { ServerError, WebhookReceiver, type WebhookEvent } from "livekit-server-
 import { z } from "zod";
 import { requireAdmin } from "./auth.js";
 import { config } from "./config.js";
-import { meetingProvider } from "./onlineMeetings.js";
+import { meetingProvider, tryPurgeDeletedMeeting } from "./onlineMeetings.js";
 
 const id = z.string().uuid();
 const onOff = <T extends "preset" | "public_host" | "moderator">(op: T) =>
@@ -20,7 +20,7 @@ const adminInput = z.discriminatedUnion("op", [
 const known = new Set(["ONLINE_INPUT","ONLINE_PILOT_OFF","ONLINE_PILOT_METRICS_REQUIRED","ONLINE_OPEN_LIMIT","ONLINE_PUBLIC_LIMIT","ONLINE_MEMBER_GONE","ONLINE_REPORT_GONE","ONLINE_MESSAGE_GONE"]);
 class RolloutError extends Error {}
 
-async function db<T>(name: "online_room_admin_summary" | "online_room_admin_change" | "online_room_rtc_event" | "online_room_rtc_invalid", args: Record<string, unknown> = {}) {
+async function db<T>(name: "online_room_admin_summary" | "online_room_admin_change" | "online_room_rtc_event" | "online_room_rtc_invalid" | "online_room_media_purges", args: Record<string, unknown> = {}) {
   const key = config.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!config.SUPABASE_URL || !key) throw new RolloutError("ONLINE_ROLLOUT_UNAVAILABLE");
   const response = await fetch(`${config.SUPABASE_URL.replace(/\/$/,"")}/rest/v1/rpc/${name}`, {
@@ -112,6 +112,8 @@ export function startClassroomMediaReconciliation() {
     if (running) return;
     running = true;
     try {
+      const purges = await db<string[]>("online_room_media_purges").catch(() => []);
+      for (let i=0;i<purges.length;i+=10) await Promise.allSettled(purges.slice(i,i+10).map(tryPurgeDeletedMeeting));
       const targets = await db<{ room:string;actor:string }[]>("online_room_rtc_invalid");
       for (let i=0;i<targets.length;i+=10) await Promise.allSettled(targets.slice(i,i+10).map(x => disconnectPeer(x.room,x.actor)));
     } catch { /* The next scan will retry; standard room authorization remains enforced. */ }

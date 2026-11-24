@@ -11,6 +11,7 @@ type Session = {
   canvas: (action: RoomCanvasAction) => ReturnType<typeof requestRoomCanvas>;
   upload: (file: File, key: string) => Promise<void>;
   download: (id: string) => Promise<Blob>;
+  enterPassword: (password: string) => Promise<void>;
   close: () => void;
 };
 export function useOnlineRoom(link: OnlineRoomLink) {
@@ -35,6 +36,7 @@ export function useOnlineRoom(link: OnlineRoomLink) {
   const canvas = useCallback((action: RoomCanvasAction) => session.current?.canvas(action) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
   const upload = useCallback((file: File, key: string) => session.current?.upload(file, key) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
   const download = useCallback((id: string) => session.current?.download(id) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
+  const enterPassword = useCallback(async (password: string) => { await session.current?.enterPassword(password); }, []);
   const leave = useCallback(() => session.current?.close(), []);
 
   useEffect(() => {
@@ -108,11 +110,11 @@ export function useOnlineRoom(link: OnlineRoomLink) {
       }
     }
 
-    async function join() {
+    async function join(password?: string) {
       if (!alive || joining) return;
       joining = true;
       try {
-        const result = await joinOnlineRoom(id, client, link.invite);
+        const result = await joinOnlineRoom(id, client, link.invite, link.code || password !== undefined ? { ...(link.code && { code: link.code }), ...(password !== undefined && { password }) } : undefined);
         if (!alive) {
           if (result.state === "active") release();
           return;
@@ -133,7 +135,7 @@ export function useOnlineRoom(link: OnlineRoomLink) {
           refresh("room"); refresh("chat");
         }
       } catch (err) {
-        if (alive) { setProblem(err); if (currentPhase !== "waiting") setState("failed"); }
+        if (alive) { setProblem(err); if (currentPhase !== "waiting" && password === undefined) setState("failed"); }
       } finally { joining = false; }
     }
 
@@ -155,7 +157,7 @@ export function useOnlineRoom(link: OnlineRoomLink) {
       disconnect?.();
       controller.abort();
     }
-    const openSession: Session = { close, canvas: async action => {
+    const openSession: Session = { close, enterPassword: join, canvas: async action => {
       if (!alive || !joined) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
       const result = await requestRoomCanvas(id, client, action, controller.signal);
       if (alive && result.state !== "active") end(result.state);
@@ -209,7 +211,7 @@ export function useOnlineRoom(link: OnlineRoomLink) {
       window.removeEventListener("online", resume); document.removeEventListener("visibilitychange", resume);
       if (session.current === openSession) session.current = null;
     };
-  }, [link.id, link.invite, attempt]);
+  }, [link.id, link.invite, link.code, attempt]);
 
-  return { phase, snapshot, messages, roomName, problem, isReconnecting, serverNow, act, meetingToken, meetingCommand, canvas, canvasSignal, upload, download, retry, leave };
+  return { phase, snapshot, messages, roomName, problem, isReconnecting, serverNow, act, meetingToken, meetingCommand, canvas, canvasSignal, upload, download, enterPassword, retry, leave };
 }

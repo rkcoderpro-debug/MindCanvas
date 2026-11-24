@@ -145,3 +145,4 @@ Có thể chạy `supabase/verification/online_music_rooms.sql` trên cơ sở d
 - `0041_online_meeting_collaboration.sql`: Canvas đồng bộ theo phiên bản và tệp chat riêng của phòng họp. Chạy sau `0040_online_meeting_rooms.sql`, sau đó cập nhật API và web cùng bản v6.2.0. Bucket tệp được tạo tự động ở chế độ private.
 
 - `0042_online_rooms_rollout.sql`: liên kết Phòng Online với Lớp học, kiểm duyệt chat, báo cáo, giới hạn phòng mở và đo mức dùng LiveKit. Chạy sau `0041_online_meeting_collaboration.sql`. Xem `RELEASE_V6.3.0.md` để cấu hình webhook trước khi bật thử nghiệm công khai.
+- `0043_online_room_codes_and_delete.sql`: cấp mã 6 chữ số cho phòng, thêm chế độ vào bằng mật khẩu hoặc duyệt và cho phép chủ phòng xóa phòng. Chạy sau `0042_online_rooms_rollout.sql`. Xem `RELEASE_V6.4.0.md`.

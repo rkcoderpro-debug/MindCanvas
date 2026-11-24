@@ -14,7 +14,7 @@ export function learningTabFromUrl(): HubTab | null {
 export function learningUrl(tab: HubTab | null) {
   const url = new URL(window.location.href);
   if (tab) { url.searchParams.set("learn", tab); url.searchParams.delete("canvas"); } else url.searchParams.delete("learn");
-  if (tab !== "rooms") { url.searchParams.delete("room"); url.searchParams.delete("room_invite"); }
+  if (tab !== "rooms") { url.searchParams.delete("room"); url.searchParams.delete("room_invite"); url.searchParams.delete("room_code"); }
   return `${url.pathname}${url.search}${url.hash}`;
 }
 export function enterLearningSpace(tab: HubTab = "overview") {

@@ -395,3 +395,17 @@
 .online-rollout-list li { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:7px; border-top:1px solid var(--line); padding-top:8px; overflow-wrap:anywhere; }
 .online-rollout-list li small { display:block; color:var(--muted); }
 .online-rollout-report blockquote { margin:6px 0; border-inline-start:3px solid var(--line); padding-inline-start:8px; }
+
+.online-room-code-lookup { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; padding: 14px; border: 1px solid var(--room-border); border-radius: 14px; background: var(--surface-raised); }
+.online-room-code-lookup label { display: grid; gap: 5px; color: var(--text); font-size: 13px; }
+.online-room-code-lookup input { max-width: 100%; width: 12ch; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); letter-spacing: .16em; font-variant-numeric: tabular-nums; font-size: 16px; }
+.online-room-code-lookup .form-error { flex: 1 0 100%; margin: 0; }
+.online-room-password { padding: 0; border: 0; }
+.online-room-password input { width: 18ch; letter-spacing: normal; }
+.online-room-code-tag { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.online-room-card-main .online-room-code-tag { margin-top: 8px; padding: 3px 7px; border-radius: 6px; background: var(--accent-soft); font-size: 12px; }
+.online-room-code-tag strong { letter-spacing: .08em; }
+.online-room-card-actions { grid-column: 1/-1; display: flex; align-items: stretch; column-gap: 6px; flex-wrap: wrap; row-gap: 6px; }
+.online-room-card-actions .secondary-button { flex: 1; width: auto; }
+.online-room-card-actions .online-room-delete { flex: 0 0 auto; }
+.online-room-delete { color: var(--danger, #b33149); }

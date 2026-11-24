@@ -22,7 +22,7 @@ export function meetingProvider() {
   return { url: url.href, key: key.trim(), secret: secret.trim(), rooms: new RoomServiceClient(url.href.replace(/^wss:/, "https:"), key.trim(), secret.trim(), { requestTimeout: 5 }) };
 }
 
-async function db<T>(name: "online_meeting_session" | "online_meeting_manage", args: Record<string, string | null>): Promise<T> {
+async function db<T>(name: "online_meeting_session" | "online_meeting_manage" | "delete_online_room" | "online_room_media_purges", args: Record<string, string | null>): Promise<T> {
   const key = config.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!config.SUPABASE_URL || !key) throw new MeetingError("ONLINE_MEDIA_DATABASE");
   let response: globalThis.Response;
@@ -47,6 +47,12 @@ const missing = (error: unknown) => error instanceof ServerError && (error.statu
 async function ifPresent<T>(operation: () => Promise<T>) {
   try { return await operation(); } catch (error) { if (!missing(error)) throw error; }
 }
+export async function tryPurgeDeletedMeeting(id: string) {
+  const live = meetingProvider();
+  if (!live) return;
+  await ifPresent(() => live.rooms.deleteRoom(`mindcanvas-${id}`));
+  await db("online_room_media_purges", { p_done:id });
+}
 const publishSources = (screen: boolean) => [TrackSource.CAMERA, TrackSource.MICROPHONE, ...(screen ? [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO] : [])];
 const permissions = (screen: boolean) => ({ canSubscribe: true, canPublish: true, canPublishData: false, canPublishSources: publishSources(screen) });
 type MeetingState = { state: "active" | "closed"; presenter?: string | null };
@@ -64,6 +70,18 @@ export const onlineMeetings = Router();
 onlineMeetings.use((_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
 onlineMeetings.use(requireUser);
 onlineMeetings.use("/:room/files", meetingFiles);
+
+onlineMeetings.delete("/:room", async (req,res) => {
+  const id = uuid.safeParse(req.params.room);
+  if (!id.success) return respond(res,new MeetingError("ONLINE_INPUT"));
+  try {
+    await inRoom(id.data, async () => {
+      const result = await db<{ kind:"music"|"meeting";deleted:boolean }>("delete_online_room",{ p_room:id.data,p_actor:req.userId! });
+      if (result.kind === "meeting") await tryPurgeDeletedMeeting(id.data).catch(() => { /* retained in the retry queue */ });
+    });
+    return res.json({ deleted:true });
+  } catch (error) { return respond(res,error); }
+});
 
 onlineMeetings.post("/:room/token", async (req, res) => {
   const id = uuid.safeParse(req.params.room), data = session.safeParse(req.body);

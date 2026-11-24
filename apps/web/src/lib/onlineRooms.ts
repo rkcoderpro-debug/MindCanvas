@@ -6,11 +6,12 @@ export type RoomLayout = "classroom" | "compact" | "table";
 export type RoomReaction = "clap" | "heart" | "like";
 export const OFFICIAL_PIANO_VIDEO = "3Lfr3BhvkQY";
 export type RoomVisibility = "public" | "private";
-export type RoomStatus = "active" | "waiting" | "waiting_full" | "full" | "closed" | "removed" | "expired" | "other_tab" | "invite_required" | "class_required" | "left";
+export type RoomStatus = "active" | "waiting" | "waiting_full" | "full" | "closed" | "removed" | "expired" | "other_tab" | "invite_required" | "class_required" | "password_required" | "password_invalid" | "password_rate" | "left";
 export type OnlineRoom = {
   id: string; kind: "music" | "meeting"; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout;
   official: boolean; music_enabled: boolean; requires_approval: boolean; host_id: string | null;
   host_name: string; occupancy: number; capacity: number; classroom_id?: string | null; chat_locked?: boolean;
+  code?: string | null; entry_mode?: "link" | "approval" | "password" | "classroom" | "open";
 };
 export type RoomPlaylistTrack = { id: string; video_id: string; title: string; status: "queued" | "pending"; requested_by: string | null; name: string };
 export type RoomAttendee = { id: string; name: string; seat: number; avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null; hand_raised_at?: string | null; reaction?: RoomReaction | null; reaction_at?: string | null };
@@ -31,7 +32,7 @@ export type RoomSnapshot = {
   playback: RoomPlayback; members: RoomAttendee[]; waiting: Pick<RoomAttendee, "id" | "name">[]; queue: RoomPlaylistTrack[];
 };
 export type RoomUnavailable = { state: Exclude<RoomStatus, "active"> };
-export type RoomCreate = { kind: OnlineRoom["kind"]; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; approve: boolean; suggestions: boolean };
+export type RoomCreate = { kind: OnlineRoom["kind"]; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; entryMode: "approval" | "password"; password?: string; suggestions: boolean };
 
 export type RoomReportReason = "spam" | "harassment" | "inappropriate" | "other";
 
@@ -83,18 +84,23 @@ const sessionArgs = (id: string, client: string) => ({ p_room: id, p_client: cli
 export const listOnlineRooms = (signal?: AbortSignal) => rpc<{ rooms: OnlineRoom[]; can_create_public: boolean }>("list_online_rooms", {}, signal);
 export const classroomOnlineRoom = (classId: string, open = false, signal?: AbortSignal) =>
   rpc<{ room: OnlineRoom | null }>("online_classroom_room",{ p_class:classId,p_open:open },signal);
-export const createOnlineRoom = (room: RoomCreate) => rpc<string>(room.kind === "meeting" ? "create_online_meeting_room" : "create_online_music_room", {
-  p_name: room.name, p_topic: room.topic, p_visibility: room.visibility, p_layout: room.layout, p_approval: room.approve,
-  ...(room.kind === "meeting" ? {} : { p_suggestions: room.suggestions }),
+export const createOnlineRoom = (room: RoomCreate) => rpc<string>("create_online_room_v640", {
+  p_kind: room.kind, p_name: room.name, p_topic: room.topic, p_visibility: room.visibility, p_layout: room.layout,
+  p_suggestions: room.suggestions, p_mode: room.visibility === "private" ? room.entryMode : "approval",
+  p_password: room.visibility === "private" && room.entryMode === "password" ? room.password ?? null : null,
 });
-export const joinOnlineRoom = (id: string, client: string, invite?: string) => rpc<{ state: RoomStatus; name?: string }>("join_online_room", { ...sessionArgs(id, client), p_invite: invite ?? null });
+export const lookupOnlineRoomCode = (code: string) =>
+  rpc<{ state: "found"; id: string } | { state: "not_found" | "rate" }>("lookup_online_room_code", { p_code: code });
+export const joinOnlineRoom = (id: string, client: string, invite?: string, access?: { code?: string; password?: string }) => rpc<{ state: RoomStatus; name?: string }>("join_online_room_v640", {
+  ...sessionArgs(id, client), p_invite: invite ?? null, p_code: access?.code ?? null, p_password: access?.password ?? null,
+});
 export const pingOnlineRoom = (id: string, client: string, leave = false) => rpc<RoomStatus>("ping_online_room", { ...sessionArgs(id, client), p_leave: leave });
 export const readOnlineRoom = (id: string, client: string, signal?: AbortSignal) => rpc<RoomSnapshot | RoomUnavailable>("read_online_room", sessionArgs(id, client), signal);
 export const readOnlineRoomChat = (id: string, client: string, signal?: AbortSignal) => rpc<{ state: "active"; messages: RoomMessage[] } | RoomUnavailable>("read_online_room_chat", sessionArgs(id, client), signal);
 export const actOnlineRoom = (id: string, client: string, { name, ...payload }: RoomAction) => rpc<{ state: RoomStatus; invite?: string }>("act_online_room", { ...sessionArgs(id, client), p_action: name, p_payload: payload });
 
 const meetingApiBase = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8787").replace(/\/$/, "");
-async function meetingRequest<T>(id: string, path: "token" | "manage", body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+async function meetingRequest<T>(id: string, path: "token" | "manage" | null, body?: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const access = (await getCurrentSession())?.access_token;
   if (!access) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
   const request = new AbortController();
@@ -102,15 +108,16 @@ async function meetingRequest<T>(id: string, path: "token" | "manage", body: Rec
   const timer = setTimeout(cancel, 18000);
   if (signal?.aborted) cancel(); else signal?.addEventListener("abort", cancel, { once: true });
   try {
-    const response = await fetch(`${meetingApiBase}/api/online-meetings/${encodeURIComponent(id)}/${path}`, {
-      method: "POST", headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
-      signal: request.signal, body: JSON.stringify(body),
+    const response = await fetch(`${meetingApiBase}/api/online-meetings/${encodeURIComponent(id)}${path ? `/${path}` : ""}`, {
+      method: path ? "POST" : "DELETE", headers: { Authorization: `Bearer ${access}`, ...(body && { "Content-Type": "application/json" }) },
+      signal: request.signal, body: body && JSON.stringify(body),
     });
     const result = await response.json();
     if (!response.ok) throw new OnlineRoomError(typeof result?.code === "string" ? result.code : "ONLINE_MEDIA_PROVIDER");
     return result as T;
   } finally { clearTimeout(timer); signal?.removeEventListener("abort", cancel); }
 }
+export const deleteOnlineRoom = (id: string) => meetingRequest<{ deleted: true }>(id, null);
 export type MeetingConnection = { url: string; token: string };
 export const fetchMeetingToken = (id: string, client: string, signal?: AbortSignal) =>
   meetingRequest<MeetingConnection>(id, "token", { client }, signal);
@@ -206,7 +213,9 @@ export function roomIssue(error: unknown, vi: boolean) {
     ONLINE_ROLLOUT_UNAVAILABLE: ["Chưa tải được phần quản trị Phòng Online.", "Online Rooms administration is unavailable."],
     ONLINE_UNAVAILABLE: ["Phòng Online chưa được bật trên máy chủ này.", "Online Rooms are not set up on this server yet."],
     ONLINE_PUBLIC_DENIED: ["Tài khoản này chưa được quyền mở phòng công khai.", "This account cannot open public rooms yet."],
-    ONLINE_ROOM_LIMIT: ["Bạn đã có một phòng đang mở. Vào sảnh để quay lại phòng đó.", "You already have an open room. Return to it from the lobby."],
+    ONLINE_PASSWORD_FORMAT: ["Mật khẩu cần từ 6 đến 64 ký tự và tối đa 72 byte. Hãy rút ngắn nếu dùng nhiều ký tự có dấu hoặc emoji.", "Use 6–64 characters and at most 72 bytes. Shorten the password if it contains many accented characters or emoji."],
+    ONLINE_ROOM_GONE: ["Phòng này không còn tồn tại.", "This room is no longer available."],
+    ONLINE_ROOM_LIMIT: ["Bạn đã có một phòng đang mở. Xóa phòng cũ trong sảnh để tạo phòng mới.", "You already have an open room. Delete it in the lobby to create another."],
     ONLINE_HOST_ONLY: ["Thao tác này dành cho chủ phòng.", "Only the room host can do this."],
     ONLINE_INPUT: ["Nội dung chưa hợp lệ. Hãy kiểm tra lại.", "Check the information and try again."],
     ONLINE_SEAT_TAKEN: ["Ghế này vừa có người ngồi. Chọn ghế trống khác nhé.", "Someone just took this seat. Choose another empty one."],

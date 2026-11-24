@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, X } from "lucide-react";
+import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, X } from "lucide-react";
 import { useOnlineRoom } from "../hooks/useOnlineRoom";
-import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
+import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, deleteOnlineRoom, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
 import { onlineRoomUrl, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import { copyTextWithFallback } from "../lib/share";
 import { PageBack } from "./PageNavigation";
@@ -12,7 +12,7 @@ import Dialog from "./Dialog";
 type Tab = "chat" | "queue" | "people";
 type Labels = (vi: string, en: string) => string;
 type Run = (action: RoomAction) => Promise<{ state: string; invite?: string } | undefined>;
-type Confirm = { action: RoomAction; title: string; text: string };
+type Confirm = { action: RoomAction | { name: "delete" }; title: string; text: string };
 const MeetingBoard = lazy(() => import("./OnlineMeetingBoard"));
 const MeetingFilePreview = lazy(() => import("./MeetingFilePreview"));
 const layoutKey = (meeting: boolean) => meeting ? "mindcanvas:online-meeting-layout:v1" : "mindcanvas:online-room-layout:v1";
@@ -25,6 +25,18 @@ export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = f
   const session = useOnlineRoom(link);
   const label: Labels = (vn, en) => vi ? vn : en;
   const exit = () => { session.leave(); onBack(); };
+  const [password, setPassword] = useState("");
+  const [submittingPassword, setSubmittingPassword] = useState(false);
+  const askingPassword = ["password_required", "password_invalid", "password_rate"].includes(session.phase);
+  const submitPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!password || submittingPassword) return;
+    setSubmittingPassword(true);
+    const entered = password;
+    setPassword("");
+    try { await session.enterPassword(entered); }
+    finally { setSubmittingPassword(false); }
+  };
   const snapshot = session.snapshot;
   return <section className="online-rooms">
     <PageBack onBack={exit}>{fromClass ? label("Về lớp học","Back to class") : label("Sảnh Phòng Online", "Online Rooms lobby")}</PageBack>
@@ -37,13 +49,20 @@ export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = f
         : session.phase === "waiting_full" ? label("Đã có nhiều yêu cầu đang chờ. Hãy thử lại sau.", "The waiting list is full. Try again later.")
         : session.phase === "removed" ? label("Chủ phòng chưa cấp quyền hoặc đã mời bạn rời phòng.", "The host declined your request or removed you from the room.")
         : session.phase === "closed" ? label("Phòng này đã đóng hoặc không còn mở.", "This room is closed or no longer available.")
+        : session.phase === "password_required" ? label("Nhập mật khẩu do chủ phòng cung cấp.", "Enter the password provided by the host.")
+        : session.phase === "password_invalid" ? label("Sai mật khẩu phòng. Hãy kiểm tra và nhập lại.", "Incorrect room password. Check it and try again.")
+        : session.phase === "password_rate" ? label("Bạn đã thử quá nhiều lần. Hãy chờ một phút trước khi thử lại.", "Too many attempts. Wait a minute before trying again.")
         : session.phase === "class_required" ? label("Phòng chỉ dành cho giáo viên và học sinh đang tham gia lớp.", "This room is only for the teacher and currently enrolled students.")
-        : session.phase === "invite_required" ? label("Bạn cần một liên kết mời còn hạn để vào phòng riêng này.", "You need a current invitation link to join this private room.")
+        : session.phase === "invite_required" ? label("Bạn cần mã phòng hoặc liên kết mời còn hạn để vào phòng riêng này.", "You need the room code or a current invitation link to join this private room.")
         : session.phase === "other_tab" ? label("Bạn đang ngồi ở phòng này trong tab khác. Có thể chuyển ghế sang tab này.", "You have this seat in another tab. You can move the session to this tab.")
         : session.phase === "expired" ? label("Phiên đã hết hạn. Bấm kết nối lại để tìm ghế.", "Your session expired. Reconnect to find a seat.")
         : session.phase === "failed" ? roomIssue(session.problem, vi) : label("Đang kết nối và tìm ghế cho bạn…", "Connecting and finding a seat…")
       }</p>
-      {session.phase === "waiting" && session.problem != null && <p role="status">{roomIssue(session.problem, vi)}</p>}
+      {askingPassword && <form className="online-room-code-lookup online-room-password" onSubmit={event => void submitPassword(event)}>
+        <label>{label("Mật khẩu phòng", "Room password")}<input autoFocus type="password" autoComplete="off" required maxLength={64} value={password} onChange={event => setPassword(event.target.value)} disabled={submittingPassword}/></label>
+        <button type="submit" className="primary-button" disabled={!password || submittingPassword}><Lock size={16}/>{submittingPassword ? label("Đang kiểm tra…", "Checking…") : label("Vào phòng", "Join room")}</button>
+      </form>}
+      {(session.phase === "waiting" || askingPassword) && session.problem != null && <p role="status">{roomIssue(session.problem, vi)}</p>}
       <div className="online-room-actions"><button type="button" className="secondary-button" onClick={exit}>{fromClass ? label("Về lớp học","Back to class") : label("Về sảnh", "Back to lobby")}</button>
         {["failed","full","waiting_full","expired","other_tab"].includes(session.phase) && <button type="button" className="primary-button" onClick={session.retry}>{session.phase === "other_tab" ? label("Dùng tab này", "Use this tab") : label("Thử lại", "Try again")}</button>}
       </div>
@@ -61,6 +80,8 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const { room, playback, members, can_manage, suggestions, waiting, queue } = snapshot;
   const isMeeting = room.kind === "meeting";
   const classRoom = !!room.classroom_id;
+  const canDelete = room.host_id === owner && !room.official;
+  const legacyInvite = room.visibility === "private" && !classRoom && (!room.entry_mode || room.entry_mode === "link");
   const primaryLayout = isMeeting ? "table" : "classroom";
   const [layout, setLayout] = useState<RoomLayout | null>(() => storedLayout(isMeeting));
   const [panel, setPanel] = useState<Tab>("chat");
@@ -130,13 +151,31 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const share = async (renew: boolean) => {
     setCopied(false);
     setShareShown(true);
-    let value = room.visibility === "public" || classRoom ? onlineRoomUrl(room.id).toString() : invite;
-    if (room.visibility === "private" && renew && !classRoom) {
+    let value = legacyInvite ? invite : onlineRoomUrl(room.id, undefined, undefined, room.code ?? undefined).toString();
+    if (legacyInvite && renew) {
       const result = await run({ name: "invite" });
       if (!result?.invite) return;
       value = onlineRoomUrl(room.id, result.invite).toString();
     }
     if (value) { setInvite(value); setCopied(await copyTextWithFallback(value)); }
+  };
+  const copyCode = async () => {
+    if (!room.code) return;
+    setProblem("");
+    const ok = await copyTextWithFallback(room.code);
+    setNote(ok ? label("Đã sao chép mã phòng.", "Room code copied.") : label("Không sao chép được. Bạn có thể đọc mã trên màn hình.", "Could not copy. You can read the code on screen."));
+  };
+  const deleteRoom = () => {
+    setProblem("");
+    setConfirm({ action: { name: "delete" }, title: label("Xóa phòng?", "Delete this room?"),
+      text: label("Mọi người sẽ rời phòng. Mã phòng, liên kết mời, tin nhắn, tệp và bảng Canvas trong phòng sẽ không còn dùng được.", "Everyone will be removed. The room code, invitation links, messages, files and in-room Canvas will no longer be available.") });
+  };
+  const removeRoom = async () => {
+    if (operation.current || !canDelete) return;
+    operation.current = true; setBusy(true); setProblem("");
+    try { await deleteOnlineRoom(room.id); setConfirm(null); exit(); }
+    catch (err) { setProblem(roomIssue(err, vi)); }
+    finally { operation.current = false; setBusy(false); }
   };
   const onEnded = async (revision: number) => {
     if (!mayControl || lastEnded.current === revision) return;
@@ -158,11 +197,13 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
       <div><span className="online-room-live-tag">{isMeeting ? <Video size={15}/> : <Radio size={15}/>} {isMeeting ? label("PHÒNG HỌC / HỌP", "STUDY / MEETING") : label("PHÒNG NGHE NHẠC", "MUSIC ROOM")}{room.visibility === "private" && <Lock size={13} aria-label={label("Phòng riêng", "Private room")}/>}</span>
         <h1 ref={heading} tabIndex={-1}>{room.name}</h1><p>{room.topic || `${label("Chủ phòng:", "Host:")} ${room.host_name}`}</p></div>
       <div className="online-room-actions">
+        {room.code && <button type="button" className="secondary-button online-room-code-tag" aria-label={`${label("Sao chép mã phòng", "Copy room code")}: ${room.code}`} onClick={() => void copyCode()}><Copy size={15}/>{label("Mã phòng", "Room code")}: <strong>{room.code}</strong></button>}
         <div className="online-room-segment" role="group" aria-label={label("Kiểu hiển thị", "Room layout")}>
           <button type="button" aria-pressed={roomLayout === primaryLayout} onClick={() => changeLayout(primaryLayout)}><Armchair size={15}/>{isMeeting ? label("Bàn họp", "Meeting table") : label("Lớp học", "Classroom")}</button>
           <button type="button" aria-pressed={roomLayout === "compact"} onClick={() => changeLayout("compact")}><Users size={15}/>{label("Gọn", "Compact")}</button>
         </div>
         {(can_manage || room.visibility === "public") && <button type="button" className="secondary-button" disabled={busy} onClick={() => void share(false)}><Link2 size={16}/>{label("Chia sẻ phòng", "Share room")}</button>}
+        {canDelete && <button type="button" className="secondary-button online-room-delete" disabled={busy} onClick={deleteRoom}><Trash2 size={16}/>{label("Xóa phòng", "Delete room")}</button>}
         <button type="button" className="secondary-button" onClick={exit}><DoorOpen size={16}/>{label("Rời phòng", "Leave room")}</button>
       </div>
     </header>
@@ -236,13 +277,16 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
       </aside>
     </div>
     {shareShown && <Dialog title={label("Chia sẻ phòng", "Share room")} onClose={() => setShareShown(false)} className="online-room-dialog" workspace>
-      <div className="online-room-share-form"><p>{classRoom ? label("Chỉ thành viên đang tham gia lớp có thể mở liên kết này.", "Only currently enrolled members can open this link.") : room.visibility === "private"
-        ? label("Liên kết mời có hạn 24 giờ. Người được mời cần đăng nhập.", "This link lasts for 24 hours. Guests need to sign in.")
-        : label("Ai đã đăng nhập đều có thể vào phòng công khai.", "Anyone signed in can join a public room.")}</p>
+      <div className="online-room-share-form"><p>{classRoom ? label("Chỉ thành viên đang tham gia lớp có thể mở liên kết này.", "Only currently enrolled members can open this link.") : room.visibility === "public"
+        ? label("Ai đã đăng nhập đều có thể vào phòng công khai.", "Anyone signed in can join a public room.")
+        : room.entry_mode === "password" ? label("Người nhận cần nhập mật khẩu. Hãy gửi mật khẩu riêng.", "Guests must enter the room password. Send the password separately.")
+        : legacyInvite ? label("Khách dùng mã cần chờ bạn duyệt. Link mời có hạn 24 giờ.", "Guests who use the code need your approval. Invitation links last 24 hours.")
+        : label("Người nhận sẽ phải chờ bạn duyệt trước khi vào.", "Guests must wait for your approval before joining.")}</p>
+        {room.code && <label>{label("Mã phòng", "Room code")}<input readOnly value={room.code} onFocus={event => event.currentTarget.select()}/></label>}
         {invite && <label>{label("Liên kết", "Link")}<input ref={inputRef} readOnly value={invite} onFocus={event => event.currentTarget.select()}/></label>}
         <div className="online-room-actions">{invite && <button type="button" className="primary-button" onClick={() => void copyTextWithFallback(invite, inputRef.current).then(setCopied)}><Link2 size={16}/>{copied ? label("Đã sao chép", "Copied") : label("Sao chép", "Copy")}</button>}
-          {room.visibility === "private" && !classRoom && can_manage && <button type="button" className={invite ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => void share(true)}>{label("Tạo link mời mới", "Create an invitation link")}</button>}</div>
-        {room.visibility === "private" && !classRoom && <small>{label("Tạo link mới sẽ vô hiệu link cũ; thành viên đã được duyệt vẫn có thể quay lại.", "A new link invalidates the old link. Admitted members can still return.")}</small>}
+          {legacyInvite && can_manage && <button type="button" className={invite ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => void share(true)}>{label("Tạo link mời mới", "Create an invitation link")}</button>}</div>
+        {legacyInvite && <small>{label("Tạo link mới sẽ vô hiệu link cũ; thành viên đã được duyệt vẫn có thể quay lại.", "A new link invalidates the old link. Admitted members can still return.")}</small>}
         {problem && <p role="alert" className="form-error">{problem}</p>}
       </div>
     </Dialog>}
@@ -253,15 +297,16 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
     {confirm && <Dialog title={confirm.title} onClose={() => setConfirm(null)} className="online-room-dialog" dismissible={!busy} workspace>
       <div className="online-room-share-form"><p>{confirm.text}</p><div className="online-room-actions">
         <button type="button" className="secondary-button" onClick={() => setConfirm(null)} disabled={busy}>{label("Hủy", "Cancel")}</button>
-        <button type="button" className="primary-button" disabled={busy} onClick={() => {
+        <button type="button" className={confirm.action.name === "delete" ? "secondary-button online-room-delete" : "primary-button"} disabled={busy} onClick={() => {
           const target = confirm.action;
+          if (target.name === "delete") { void removeRoom(); return; }
           void run(target).then(result => {
             if (!result) return;
             setConfirm(null);
             if (target.name === "close") exit();
             else setNote(label("Đã cập nhật thành viên trong phòng.", "Room membership updated."));
           });
-        }}>{label("Xác nhận", "Confirm")}</button>
+        }}>{confirm.action.name === "delete" ? label("Xóa phòng", "Delete room") : label("Xác nhận", "Confirm")}</button>
       </div>{problem && <p role="alert" className="form-error">{problem}</p>}</div>
     </Dialog>}
   </div>;
