@@ -1,0 +1,127 @@
+{
+  "version": "6.3.0",
+  "baseVersion": "6.2.0",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.3.0.md",
+      "bytes": 3932,
+      "sha256": "4f7468b5e270ba43c8033fcda742e4ada0132e7959e21821e8d05c61bb2fc78e"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "ca54be8998dafb0a784e48a6fdec6ec6d8da6c76fe807cd5c937ace838d38f66"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "bytes": 19068,
+      "sha256": "985cd9266399134c4a29f0d32fdc0f5a3ba470d96b19db5e47033df1e17c1d26"
+    },
+    {
+      "path": "apps/server/src/meetingFiles.ts",
+      "bytes": 9967,
+      "sha256": "95d019307b0ea3441b529bbcc5e482f0198394d7b62a8e090bff1b1749ae8dbf"
+    },
+    {
+      "path": "apps/server/src/onlineMeetings.ts",
+      "bytes": 7178,
+      "sha256": "e15501a7ae2776ead0a1dd03a94b5d660b794dfa3e54f6029436f2563b0f7aee"
+    },
+    {
+      "path": "apps/server/src/onlineRoomRollout.ts",
+      "bytes": 6826,
+      "sha256": "424f6d4cc5c91b3859aa0a2ffadf97222a3e32745bdb7babf80f456cce7a3cb5"
+    },
+    {
+      "path": "apps/server/tests/onlineRoomRollout.test.ts",
+      "bytes": 3548,
+      "sha256": "bb29030c2ff7cbd9c8959243127fc672d1fa0692af185d4ec309cc85fb2ca08d"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "476db87466cef868cf5281267723fce26e810cdee1b1f6920e7000d2094dca71"
+    },
+    {
+      "path": "apps/web/src/components/AdminDashboard.tsx",
+      "bytes": 12041,
+      "sha256": "8830bc6113608199703d57af169a6e8a17589f7629500997c028abef81b172ac"
+    },
+    {
+      "path": "apps/web/src/components/AdminOnlineRooms.tsx",
+      "bytes": 12659,
+      "sha256": "f48a85b327d139cedabc688346e5517f739db0a9f509f858965a1ba91051c11a"
+    },
+    {
+      "path": "apps/web/src/components/ClassOnlineRoomCard.tsx",
+      "bytes": 3414,
+      "sha256": "f755d551e347510fdbdad4ec50ea6b330c16f33ef7905c0daecb54f865883006"
+    },
+    {
+      "path": "apps/web/src/components/ClassroomsPage.tsx",
+      "bytes": 20860,
+      "sha256": "1ca07df479b88eaafc1132f64084e0084be1415c93d0aa97e155c26128d33096"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 31920,
+      "sha256": "610652d2e3791f3c23c62cc794dde45dc577abb2f2742fceef01a70e9fee554b"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 43487,
+      "sha256": "ae880c4750a56361dee734c97948260d652833094a3b2bbf613d7db5b5af73c5"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.test.tsx",
+      "bytes": 14098,
+      "sha256": "847e42af252fe345a1b55ac41e8d5d74db60360ec9e6f9362cba2335642427c0"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.tsx",
+      "bytes": 12680,
+      "sha256": "a89096f5bef785938b6197f187b82ef375146c31c76374ee1f55292dd8f17489"
+    },
+    {
+      "path": "apps/web/src/components/onlineRooms.css",
+      "bytes": 28269,
+      "sha256": "ad9ed2e03185d5bf4bb265c08d70ac4320aea1c0264b94f6e24d619f9bcdb7df"
+    },
+    {
+      "path": "apps/web/src/lib/api.ts",
+      "bytes": 15448,
+      "sha256": "f0f991e1b1f1f423d7cd4c9cacb327636916bec80944591b00427eaecc7d07f7"
+    },
+    {
+      "path": "apps/web/src/lib/onlineRooms.ts",
+      "bytes": 18325,
+      "sha256": "5cae43ed052d877feec8c24602eb07345591c80d46f272ae429e2ce8710f8448"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "1b82046896c2e1f80fe3fc665fac3931ab9630a4a9d21e1b1260f8e24af8752f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "f78db7550d7ed7116cfa2f0d3d086bd9595d273c79089f4638d3d0e43eb430ef"
+    },
+    {
+      "path": "supabase/migrations/0042_online_rooms_rollout.sql",
+      "bytes": 38338,
+      "sha256": "74f9893d032fdbd007e4538df0c30dc3ebe527c7919d4fd130d3b250cc1f450d"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 21862,
+      "sha256": "b2609950ebe9657095c3b3d4ee02d5af1d567a9db3c7f18400b9f3dafc122305"
+    },
+    {
+      "path": "supabase/tests/online-music-rooms.pglite.mjs",
+      "bytes": 20274,
+      "sha256": "5d8902a37df630022bd139e31ecc83992c58e96c7a42065233bd1ab38b03070c"
+    }
+  ]
+}

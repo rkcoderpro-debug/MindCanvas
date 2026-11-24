@@ -72,7 +72,7 @@ async function supabaseRequest(path: string, method: string, body?: RequestInit[
   } catch { throw new FileProblem("ONLINE_FILE_SERVICE"); }
 }
 const statuses: Record<string,number> = {
-  ONLINE_MEDIA_DENIED: 403, ONLINE_FILE_GONE: 404, ONLINE_FILE_PENDING: 409, ONLINE_FILE_TYPE: 415,
+  ONLINE_MEDIA_DENIED: 403, ONLINE_CHAT_LOCKED: 403, ONLINE_FILE_GONE: 404, ONLINE_FILE_PENDING: 409, ONLINE_FILE_TYPE: 415,
   ONLINE_FILE_SIZE: 413, ONLINE_FILE_QUOTA: 413, ONLINE_RATE: 429, ONLINE_INPUT: 400, ONLINE_FILE_SERVICE: 503,
 };
 async function rpc<T>(name: "online_meeting_file" | "online_meeting_file_cleanup", args: Record<string, unknown>): Promise<T> {

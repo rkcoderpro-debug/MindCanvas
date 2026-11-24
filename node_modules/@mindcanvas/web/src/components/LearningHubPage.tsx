@@ -18,6 +18,7 @@ const DocumentCreatorPage = lazy(() => import("./DocumentCreatorPage"));
 const OnlineRoomsPage = lazy(() => import("./OnlineRoomsPage"));
 import ConnectionsPage from "./ConnectionsPage";
 import ClassroomsPage from "./ClassroomsPage";
+import { onlineRoomUrl } from "../lib/onlineRoomRoutes";
 import StudyPlanDialog from "./StudyPlanDialog";
 import { generateFlashcardsFromFile, recommendStudyPlan, type GeneratedFlashcardsFromFile, type StudyPlanRecommendation } from "../lib/api";
 import { MAX_FILE_BYTES } from "../lib/board";
@@ -107,7 +108,10 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
       case "music": return <MusicPage/>;
       case "rooms": return <Suspense fallback={<p role="status">{t("loading")}</p>}><OnlineRoomsPage key={owner ?? "guest"} owner={owner} onSignIn={onSignIn}/></Suspense>;
       case "connections": return <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => pickTab("shared")}/>;
-      case "classrooms": return <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes}/>;
+      case "classrooms": return <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes} onOpenOnlineRoom={roomId => {
+        pickTab("rooms");
+        window.history.replaceState({ ...window.history.state,mindcanvasFromClass:roomId },"",onlineRoomUrl(roomId));
+      }}/>;
       case "shared": return <SharedLearningTab owner={owner} onSaved={kind => {
         if (kind === "quiz") void quizzes.refresh();
         if (kind === "flashcard") void flashcards.refreshDecks();

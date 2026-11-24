@@ -6,11 +6,11 @@ export type RoomLayout = "classroom" | "compact" | "table";
 export type RoomReaction = "clap" | "heart" | "like";
 export const OFFICIAL_PIANO_VIDEO = "3Lfr3BhvkQY";
 export type RoomVisibility = "public" | "private";
-export type RoomStatus = "active" | "waiting" | "waiting_full" | "full" | "closed" | "removed" | "expired" | "other_tab" | "invite_required" | "left";
+export type RoomStatus = "active" | "waiting" | "waiting_full" | "full" | "closed" | "removed" | "expired" | "other_tab" | "invite_required" | "class_required" | "left";
 export type OnlineRoom = {
   id: string; kind: "music" | "meeting"; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout;
   official: boolean; music_enabled: boolean; requires_approval: boolean; host_id: string | null;
-  host_name: string; occupancy: number; capacity: number;
+  host_name: string; occupancy: number; capacity: number; classroom_id?: string | null; chat_locked?: boolean;
 };
 export type RoomPlaylistTrack = { id: string; video_id: string; title: string; status: "queued" | "pending"; requested_by: string | null; name: string };
 export type RoomAttendee = { id: string; name: string; seat: number; avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null; hand_raised_at?: string | null; reaction?: RoomReaction | null; reaction_at?: string | null };
@@ -33,10 +33,14 @@ export type RoomSnapshot = {
 export type RoomUnavailable = { state: Exclude<RoomStatus, "active"> };
 export type RoomCreate = { kind: OnlineRoom["kind"]; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; approve: boolean; suggestions: boolean };
 
+export type RoomReportReason = "spam" | "harassment" | "inappropriate" | "other";
+
 type RoomAction =
   | { name: "seat"; seat: number }
   | { name: "chat"; body: string; key: string }
   | { name: "chat_delete"; id: string }
+  | { name: "chat_lock"; locked: boolean }
+  | { name: "report"; id?: string; reason: RoomReportReason; detail: string }
   | { name: "track"; video_id: string; title: string }
   | { name: "track_decision"; id: string; decision: "approve" | "remove" }
   | { name: "queue_move"; id: string; direction: "up" | "down" }
@@ -77,6 +81,8 @@ async function rpc<T>(name: string, args: Record<string, unknown> = {}, signal?:
 
 const sessionArgs = (id: string, client: string) => ({ p_room: id, p_client: client });
 export const listOnlineRooms = (signal?: AbortSignal) => rpc<{ rooms: OnlineRoom[]; can_create_public: boolean }>("list_online_rooms", {}, signal);
+export const classroomOnlineRoom = (classId: string, open = false, signal?: AbortSignal) =>
+  rpc<{ room: OnlineRoom | null }>("online_classroom_room",{ p_class:classId,p_open:open },signal);
 export const createOnlineRoom = (room: RoomCreate) => rpc<string>(room.kind === "meeting" ? "create_online_meeting_room" : "create_online_music_room", {
   p_name: room.name, p_topic: room.topic, p_visibility: room.visibility, p_layout: room.layout, p_approval: room.approve,
   ...(room.kind === "meeting" ? {} : { p_suggestions: room.suggestions }),
@@ -187,6 +193,17 @@ export function onlinePlaybackTime(playback: RoomPlayback, serverNow: number, du
 export function roomIssue(error: unknown, vi: boolean) {
   const key = error instanceof OnlineRoomError ? error.issue : "";
   const messages: Record<string, [string,string]> = {
+    ONLINE_CLASS_DENIED: ["Chỉ giáo viên và thành viên đang học trong lớp mới có quyền vào.", "Only the teacher and enrolled members can access this room."],
+    ONLINE_CLASS_HOST: ["Giáo viên là chủ phòng học của lớp.", "The teacher stays the host of this classroom room."],
+    ONLINE_CHAT_LOCKED: ["Chủ phòng đã khóa gửi tin nhắn và tệp.", "Posting and attachments are locked by the host."],
+    ONLINE_MESSAGE_GONE: ["Tin nhắn không còn trong phòng.", "This message is no longer available."],
+    ONLINE_REPORT_LIMIT: ["Bạn đã gửi đủ 5 báo cáo trong 24 giờ.", "You have reached the five-report limit for 24 hours."],
+    ONLINE_REPORT_GONE: ["Báo cáo này đã được xử lý.", "This report has already been reviewed."],
+    ONLINE_OPEN_LIMIT: ["Đã đạt giới hạn số phòng đang mở. Hãy thử lại khi có phòng đóng.", "The concurrent room limit is reached. Try again when a room closes."],
+    ONLINE_PUBLIC_LIMIT: ["Đã đạt giới hạn phòng công khai đang mở.", "The concurrent public room limit is reached."],
+    ONLINE_PILOT_OFF: ["Chưa mở thử nghiệm phòng công khai mới.", "The public room pilot is not accepting new rooms."],
+    ONLINE_PILOT_METRICS_REQUIRED: ["Cần một phiên LiveKit hoàn tất trong 7 ngày qua và số liệu Usage/Billing đã đối chiếu trong tháng này.", "A completed LiveKit session within 7 days and this month’s reviewed Usage/Billing figures are required."],
+    ONLINE_ROLLOUT_UNAVAILABLE: ["Chưa tải được phần quản trị Phòng Online.", "Online Rooms administration is unavailable."],
     ONLINE_UNAVAILABLE: ["Phòng Online chưa được bật trên máy chủ này.", "Online Rooms are not set up on this server yet."],
     ONLINE_PUBLIC_DENIED: ["Tài khoản này chưa được quyền mở phòng công khai.", "This account cannot open public rooms yet."],
     ONLINE_ROOM_LIMIT: ["Bạn đã có một phòng đang mở. Vào sảnh để quay lại phòng đó.", "You already have an open room. Return to it from the lobby."],

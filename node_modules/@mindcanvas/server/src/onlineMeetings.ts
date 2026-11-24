@@ -14,7 +14,7 @@ const unavailable = ["ONLINE_MEDIA_DISABLED", "ONLINE_MEDIA_PROVIDER", "ONLINE_M
 const denied = ["ONLINE_MEDIA_DENIED", "ONLINE_HOST_ONLY"];
 class MeetingError extends Error {}
 
-function provider() {
+export function meetingProvider() {
   const { LIVEKIT_URL: endpoint, LIVEKIT_API_KEY: key, LIVEKIT_API_SECRET: secret } = config;
   if (!endpoint || !key?.trim() || !secret?.trim()) return null;
   const url = new URL(endpoint);
@@ -34,7 +34,7 @@ async function db<T>(name: "online_meeting_session" | "online_meeting_manage", a
     });
   } catch { throw new MeetingError("ONLINE_MEDIA_DATABASE"); }
   const result = await response.json().catch(() => null);
-  if (!response.ok) throw new MeetingError([...denied, "ONLINE_MEMBER_GONE", "ONLINE_INPUT"].includes(result?.message) ? result.message : "ONLINE_MEDIA_DATABASE");
+  if (!response.ok) throw new MeetingError([...denied, "ONLINE_MEMBER_GONE", "ONLINE_INPUT", "ONLINE_CLASS_HOST"].includes(result?.message) ? result.message : "ONLINE_MEDIA_DATABASE");
   if (!result) throw new MeetingError("ONLINE_MEDIA_DATABASE");
   return result as T;
 }
@@ -73,7 +73,7 @@ onlineMeetings.post("/:room/token", async (req, res) => {
       const { name, screen } = await db<{ name: string; screen: boolean }>("online_meeting_session", {
         p_room: id.data, p_actor: req.userId!, p_client: data.data.client,
       });
-      const live = provider();
+      const live = meetingProvider();
       if (!live) throw new MeetingError("ONLINE_MEDIA_DISABLED");
       const token = new AccessToken(live.key, live.secret, { identity: req.userId!, name, ttl: "60s" });
       token.addGrant({ room: `mindcanvas-${id.data}`, roomJoin: true, ...permissions(screen) });
@@ -92,7 +92,7 @@ onlineMeetings.post("/:room/manage", async (req, res) => {
       const result = await db<MeetingState>("online_meeting_manage", {
         p_room: id.data, p_actor: req.userId!, p_client: client, p_operation: name, p_target: target ?? null,
       });
-      const live = provider();
+      const live = meetingProvider();
       if (!live) {
         if (name === "mute") throw new MeetingError("ONLINE_MEDIA_DISABLED");
         return result;

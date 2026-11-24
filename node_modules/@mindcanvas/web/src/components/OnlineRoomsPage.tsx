@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowRight, BookOpen, DoorOpen, Headphones, Lock, Plus, Radio, Search, Users, Video } from "lucide-react";
+import { ArrowRight, BookOpen, DoorOpen, GraduationCap, Headphones, Lock, Plus, Radio, Search, Users, Video } from "lucide-react";
 import Dialog from "./Dialog";
 import OnlineMusicRoom from "./OnlineMusicRoom";
 import { useLanguage } from "../lib/i18n";
@@ -10,7 +10,7 @@ import { captureOnlineRoomInvite, forgetOnlineRoomInvite, onlineRoomUrl, readOnl
 import "./onlineRooms.css";
 
 type Props = { owner: string | null; onSignIn?: () => void };
-type Filter = "all" | "official" | "mine" | "meeting";
+type Filter = "all" | "official" | "mine" | "meeting" | "public" | "classroom";
 const DEFAULT_ROOM: RoomCreate = { kind: "music", name: "", topic: "", visibility: "private", layout: "classroom", approve: true, suggestions: true };
 
 export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
@@ -74,7 +74,8 @@ export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
     if (link) forgetOnlineRoomInvite(link.id);
     const current = new URL(window.location.href);
     if (current.searchParams.get("learn") === "rooms") {
-      if (window.history.state?.mindcanvasFromRoomLobby === link?.id) window.history.back();
+      if (window.history.state?.mindcanvasFromClass === link?.id) window.history.back();
+      else if (window.history.state?.mindcanvasFromRoomLobby === link?.id) window.history.back();
       else window.history.replaceState(window.history.state, "", onlineRoomUrl(null));
     }
     setLink(null);
@@ -90,11 +91,11 @@ export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
     finally { createBusy.current = false; setCreating(false); }
   };
   const term = normalizeQuickSearch(query);
-  const matches = rooms.filter(room => (filter !== "official" || room.official) && (filter !== "mine" || room.host_id === owner) && (filter !== "meeting" || room.kind === "meeting")
+  const matches = rooms.filter(room => (filter !== "official" || room.official) && (filter !== "mine" || room.host_id === owner) && (filter !== "meeting" || room.kind === "meeting") && (filter !== "public" || room.visibility === "public") && (filter !== "classroom" || !!room.classroom_id)
     && (!term || normalizeQuickSearch(`${room.name} ${room.topic} ${room.host_name}`).includes(term)));
 
   if (!active) return null;
-  if (owner && link) return <OnlineMusicRoom key={link.id} link={link} owner={owner} onBack={back} vi={vi}/>;
+  if (owner && link) return <OnlineMusicRoom key={link.id} link={link} owner={owner} onBack={back} vi={vi} fromClass={window.history.state?.mindcanvasFromClass === link.id}/>;
   return <section className="online-rooms">
     <header className="online-rooms-hero">
       <div><span className="online-room-live-tag"><Radio size={15}/>{label("HỌC CÙNG NHAU", "STUDY TOGETHER")}</span>
@@ -113,13 +114,15 @@ export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
         <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>{label("Tất cả", "All rooms")}</button>
         <button type="button" aria-pressed={filter === "official"} onClick={() => setFilter("official")}>{label("Phòng mở sẵn", "Official rooms")}</button>
         <button type="button" aria-pressed={filter === "meeting"} onClick={() => setFilter("meeting")}>{label("Phòng học / họp", "Study / Meeting")}</button>
+        <button type="button" aria-pressed={filter === "public"} onClick={() => setFilter("public")}>{label("Công khai", "Public")}</button>
+        <button type="button" aria-pressed={filter === "classroom"} onClick={() => setFilter("classroom")}>{label("Lớp học", "Classrooms")}</button>
         <button type="button" aria-pressed={filter === "mine"} onClick={() => setFilter("mine")}>{label("Phòng của bạn", "Your rooms")}</button>
       </div>
       {problem != null && <div className="online-room-feedback" role="status">{roomIssue(problem, vi)} <button type="button" className="secondary-button" onClick={() => setRefresh(value => value + 1)}>{t("retry")}</button></div>}
       {loading ? <p role="status" className="online-room-muted">{t("loading")}</p> : matches.length > 0 ? (
         <div className="online-room-card-grid">{matches.map(room => <article key={room.id} className="online-room-card" data-quiet={room.kind === "music" && !room.music_enabled} data-meeting={room.kind === "meeting"}>
           <div className="online-room-card-symbol">{room.kind === "meeting" ? <Video size={24}/> : room.music_enabled ? <Headphones size={24}/> : <BookOpen size={24}/>}</div>
-          <div className="online-room-card-main"><span className="online-room-card-kind">{room.official ? label("Mở sẵn", "Official") : room.visibility === "private" ? <><Lock size={12}/>{label("Phòng riêng", "Private")}</> : label("Công khai", "Public")}</span>
+          <div className="online-room-card-main"><span className="online-room-card-kind">{room.classroom_id ? <><GraduationCap size={13}/>{label("Chỉ thành viên lớp", "Class members only")}</> : room.official ? label("Mở sẵn", "Official") : room.visibility === "private" ? <><Lock size={12}/>{label("Phòng riêng", "Private")}</> : label("Công khai", "Public")}</span>
             {room.kind === "meeting" && <span className="online-room-card-kind">{label("Học / họp", "Study / Meeting")}</span>}<h3>{room.name}</h3><p>{room.topic || room.host_name}</p></div>
           <div className="online-room-card-count"><Users size={15}/><span>{room.occupancy}/{room.capacity}</span></div>
           <meter className="online-room-capacity" min={0} max={room.capacity} value={room.occupancy} aria-label={label("Số ghế đã có người", "Occupied seats")}/>

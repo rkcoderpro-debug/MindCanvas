@@ -42,6 +42,22 @@ export type AdminUserDetail = {
   history: SubscriptionHistoryRecord[];
 };
 
+export type OnlineRoomAdminAction =
+  | { op:"pilot"; enabled:boolean; verified:boolean }
+  | { op:"limits"; openLimit:number; publicLimit:number }
+  | { op:"billing"; downstreamGb:number; costUsd:number }
+  | { op:"preset" | "public_host" | "moderator"; target:string; enabled:boolean }
+  | { op:"dismiss_report" | "resolve_report" | "remove_reported_message"; target:string };
+export type OnlineRoomAdminData = {
+  pilot_enabled:boolean; pilot_ready:boolean; open_count:number; public_count:number; open_limit:number; public_limit:number;
+  latest_webhook:string|null; measured_minutes:number; closed_sessions:number; open_sessions:number; period_start:string;
+  billing:{ downstream_gb:number;cost_usd:number;recorded_at:string }|null;
+  presets:{ id:string;name:string;open:boolean }[]; public_hosts:string[]; moderators:string[];
+  reports:{ id:string;reason:string;detail:string;message_excerpt:string|null;filed_at:string;room_name:string;has_message:boolean;can_remove:boolean }[];
+};
+export const getOnlineRoomAdmin = (signal?:AbortSignal) => accountRequest<OnlineRoomAdminData>("/api/admin/online-rooms",{ signal });
+export const updateOnlineRoomAdmin = (action:OnlineRoomAdminAction) => accountRequest<OnlineRoomAdminData>("/api/admin/online-rooms",{ method:"POST",body:JSON.stringify(action) });
+
 async function responseError(response: Response, fallback: string) {
   const detail = await response.json().catch(() => null) as { error?: unknown; code?: unknown; retryable?: unknown; retryAfterSeconds?: unknown } | null;
   const headerRetry = Number.parseInt(response.headers.get("retry-after") ?? "", 10);

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, MicOff, ScreenShare, Video, X } from "lucide-react";
+import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, X } from "lucide-react";
 import { useOnlineRoom } from "../hooks/useOnlineRoom";
-import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
+import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
 import { onlineRoomUrl, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import { copyTextWithFallback } from "../lib/share";
 import { PageBack } from "./PageNavigation";
@@ -21,13 +21,13 @@ function storedLayout(meeting: boolean): RoomLayout | null {
   catch { return null; }
 }
 
-export default function OnlineMusicRoom({ link, owner, onBack, vi }: { link: OnlineRoomLink; owner: string; onBack: () => void; vi: boolean }) {
+export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = false }: { link: OnlineRoomLink; owner: string; onBack: () => void; vi: boolean; fromClass?: boolean }) {
   const session = useOnlineRoom(link);
   const label: Labels = (vn, en) => vi ? vn : en;
   const exit = () => { session.leave(); onBack(); };
   const snapshot = session.snapshot;
   return <section className="online-rooms">
-    <PageBack onBack={exit}>{label("Sảnh Phòng Online", "Online Rooms lobby")}</PageBack>
+    <PageBack onBack={exit}>{fromClass ? label("Về lớp học","Back to class") : label("Sảnh Phòng Online", "Online Rooms lobby")}</PageBack>
     {!snapshot ? <div className="online-room-state">
       <span className="online-room-card-symbol">{session.phase === "waiting" ? <Users size={26}/> : <DoorOpen size={26}/>}</span>
       <h1>{session.roomName || label("Phòng Online", "Online Rooms")}</h1>
@@ -37,13 +37,14 @@ export default function OnlineMusicRoom({ link, owner, onBack, vi }: { link: Onl
         : session.phase === "waiting_full" ? label("Đã có nhiều yêu cầu đang chờ. Hãy thử lại sau.", "The waiting list is full. Try again later.")
         : session.phase === "removed" ? label("Chủ phòng chưa cấp quyền hoặc đã mời bạn rời phòng.", "The host declined your request or removed you from the room.")
         : session.phase === "closed" ? label("Phòng này đã đóng hoặc không còn mở.", "This room is closed or no longer available.")
+        : session.phase === "class_required" ? label("Phòng chỉ dành cho giáo viên và học sinh đang tham gia lớp.", "This room is only for the teacher and currently enrolled students.")
         : session.phase === "invite_required" ? label("Bạn cần một liên kết mời còn hạn để vào phòng riêng này.", "You need a current invitation link to join this private room.")
         : session.phase === "other_tab" ? label("Bạn đang ngồi ở phòng này trong tab khác. Có thể chuyển ghế sang tab này.", "You have this seat in another tab. You can move the session to this tab.")
         : session.phase === "expired" ? label("Phiên đã hết hạn. Bấm kết nối lại để tìm ghế.", "Your session expired. Reconnect to find a seat.")
         : session.phase === "failed" ? roomIssue(session.problem, vi) : label("Đang kết nối và tìm ghế cho bạn…", "Connecting and finding a seat…")
       }</p>
       {session.phase === "waiting" && session.problem != null && <p role="status">{roomIssue(session.problem, vi)}</p>}
-      <div className="online-room-actions"><button type="button" className="secondary-button" onClick={exit}>{label("Về sảnh", "Back to lobby")}</button>
+      <div className="online-room-actions"><button type="button" className="secondary-button" onClick={exit}>{fromClass ? label("Về lớp học","Back to class") : label("Về sảnh", "Back to lobby")}</button>
         {["failed","full","waiting_full","expired","other_tab"].includes(session.phase) && <button type="button" className="primary-button" onClick={session.retry}>{session.phase === "other_tab" ? label("Dùng tab này", "Use this tab") : label("Thử lại", "Try again")}</button>}
       </div>
     </div> : <RoomInterior snapshot={snapshot} messages={session.messages} owner={owner} vi={vi} serverNow={session.serverNow} reconnecting={session.isReconnecting} action={session.act} meetingToken={session.meetingToken} meetingCommand={session.meetingCommand} canvas={session.canvas} canvasSignal={session.canvasSignal} upload={session.upload} download={session.download} exit={exit}/>}
@@ -59,6 +60,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const label: Labels = (vn, en) => vi ? vn : en;
   const { room, playback, members, can_manage, suggestions, waiting, queue } = snapshot;
   const isMeeting = room.kind === "meeting";
+  const classRoom = !!room.classroom_id;
   const primaryLayout = isMeeting ? "table" : "classroom";
   const [layout, setLayout] = useState<RoomLayout | null>(() => storedLayout(isMeeting));
   const [panel, setPanel] = useState<Tab>("chat");
@@ -72,6 +74,8 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const [copied, setCopied] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [note, setNote] = useState("");
+  const [report,setReport] = useState<{ message?: RoomMessage } | null>(null);
+  const openReport = (message?: RoomMessage) => { setProblem(""); setNote(""); setReport({ message }); };
   const inputRef = useRef<HTMLInputElement>(null);
   const operation = useRef(false);
   const lastEnded = useRef<number | null>(null);
@@ -126,8 +130,8 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const share = async (renew: boolean) => {
     setCopied(false);
     setShareShown(true);
-    let value = room.visibility === "public" ? onlineRoomUrl(room.id).toString() : invite;
-    if (room.visibility === "private" && renew) {
+    let value = room.visibility === "public" || classRoom ? onlineRoomUrl(room.id).toString() : invite;
+    if (room.visibility === "private" && renew && !classRoom) {
       const result = await run({ name: "invite" });
       if (!result?.invite) return;
       value = onlineRoomUrl(room.id, result.invite).toString();
@@ -206,7 +210,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
           {showQueue && <button type="button" aria-pressed={panel === "queue"} onClick={() => setPanel("queue")}><Music2 size={15}/>{label("Hàng đợi", "Queue")}</button>}
           <button type="button" aria-pressed={panel === "people"} onClick={() => setPanel("people")}><Users size={15}/>{label("Mọi người", "People")}{waiting.length > 0 && <small>{waiting.length}</small>}</button>
         </div>
-        {panel === "chat" && <RoomChat messages={messages} label={label} owner={owner} busy={busy} canManage={can_manage} run={run} vi={vi} upload={isMeeting ? upload : undefined} download={isMeeting ? download : undefined}/>}
+        {panel === "chat" && <RoomChat messages={messages} label={label} owner={owner} busy={busy} canManage={can_manage} chatLocked={!!room.chat_locked} onReport={openReport} run={run} vi={vi} upload={isMeeting ? upload : undefined} download={isMeeting ? download : undefined}/>}
         {panel === "queue" && showQueue && <RoomQueue label={label} run={run} mayControl={mayControl} suggestions={suggestions} busy={busy} queued={readyTracks} pending={pendingTracks}/>}
         {panel === "people" && <div className="online-room-people">
           {waiting.length > 0 && <section><h2>{label("Đang chờ vào", "Waiting to join")}</h2><ul>{waiting.map(person => <li key={person.id}><strong>{person.name}</strong>
@@ -223,7 +227,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
                 <button type="button" className="icon-button" disabled={busy} title={label("Cho trình chiếu", "Allow presenting")} aria-label={`${label("Cho trình chiếu:", "Allow presenting:")} ${person.name}`} onClick={() => void manageMeeting({ name: "presenter", target: person.id })}><ScreenShare size={16}/></button>
                 <button type="button" className="icon-button" disabled={busy} title={label("Tắt mic", "Mute microphone")} aria-label={`${label("Tắt mic:", "Mute microphone:")} ${person.name}`} onClick={() => void manageMeeting({ name: "mute", target: person.id })}><MicOff size={16}/></button>
               </>}
-              {!room.official && <button type="button" className="icon-button" disabled={busy} title={label("Chuyển quyền chủ phòng", "Transfer host role")} aria-label={`${label("Chuyển quyền cho:", "Transfer to:")} ${person.name}`} onClick={() => setConfirm({ action: { name: "transfer", id: person.id }, title: label("Chuyển quyền chủ phòng?", "Transfer the host role?"), text: `${person.name} ${(isMeeting ? label("sẽ quản lý cuộc họp từ bây giờ.", "will manage the meeting from now on.") : label("sẽ quản lý phòng và nhạc từ bây giờ.", "will manage the room and its music from now on."))}` })}><Crown size={16}/></button>}
+              {!room.official && !classRoom && <button type="button" className="icon-button" disabled={busy} title={label("Chuyển quyền chủ phòng", "Transfer host role")} aria-label={`${label("Chuyển quyền cho:", "Transfer to:")} ${person.name}`} onClick={() => setConfirm({ action: { name: "transfer", id: person.id }, title: label("Chuyển quyền chủ phòng?", "Transfer the host role?"), text: `${person.name} ${(isMeeting ? label("sẽ quản lý cuộc họp từ bây giờ.", "will manage the meeting from now on.") : label("sẽ quản lý phòng và nhạc từ bây giờ.", "will manage the room and its music from now on."))}` })}><Crown size={16}/></button>}
               <button type="button" className="icon-button" disabled={busy} title={label("Mời rời phòng", "Remove from room")} aria-label={`${label("Mời rời:", "Remove:")} ${person.name}`} onClick={() => setConfirm({ action: { name: "remove_member", id: person.id }, title: label("Mời người này rời phòng?", "Remove this person?"), text: `${person.name} ${label("sẽ không thể vào lại phòng này.", "will not be able to rejoin this room.")}` })}><X size={16}/></button>
             </>}
           </li>)}</ul></section>
@@ -232,16 +236,20 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
       </aside>
     </div>
     {shareShown && <Dialog title={label("Chia sẻ phòng", "Share room")} onClose={() => setShareShown(false)} className="online-room-dialog" workspace>
-      <div className="online-room-share-form"><p>{room.visibility === "private"
+      <div className="online-room-share-form"><p>{classRoom ? label("Chỉ thành viên đang tham gia lớp có thể mở liên kết này.", "Only currently enrolled members can open this link.") : room.visibility === "private"
         ? label("Liên kết mời có hạn 24 giờ. Người được mời cần đăng nhập.", "This link lasts for 24 hours. Guests need to sign in.")
         : label("Ai đã đăng nhập đều có thể vào phòng công khai.", "Anyone signed in can join a public room.")}</p>
         {invite && <label>{label("Liên kết", "Link")}<input ref={inputRef} readOnly value={invite} onFocus={event => event.currentTarget.select()}/></label>}
         <div className="online-room-actions">{invite && <button type="button" className="primary-button" onClick={() => void copyTextWithFallback(invite, inputRef.current).then(setCopied)}><Link2 size={16}/>{copied ? label("Đã sao chép", "Copied") : label("Sao chép", "Copy")}</button>}
-          {room.visibility === "private" && can_manage && <button type="button" className={invite ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => void share(true)}>{label("Tạo link mời mới", "Create an invitation link")}</button>}</div>
-        {room.visibility === "private" && <small>{label("Tạo link mới sẽ vô hiệu link cũ; thành viên đã được duyệt vẫn có thể quay lại.", "A new link invalidates the old link. Admitted members can still return.")}</small>}
+          {room.visibility === "private" && !classRoom && can_manage && <button type="button" className={invite ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => void share(true)}>{label("Tạo link mời mới", "Create an invitation link")}</button>}</div>
+        {room.visibility === "private" && !classRoom && <small>{label("Tạo link mới sẽ vô hiệu link cũ; thành viên đã được duyệt vẫn có thể quay lại.", "A new link invalidates the old link. Admitted members can still return.")}</small>}
         {problem && <p role="alert" className="form-error">{problem}</p>}
       </div>
     </Dialog>}
+    {report && <RoomReportDialog key={report.message?.id ?? "room"} message={report.message} label={label} busy={busy} error={problem} onClose={() => setReport(null)} onSubmit={async (reason,detail) => {
+      const result = await run({ name:"report",...(report.message ? { id:report.message.id } : {}),reason,detail });
+      if (result?.state === "active") { setReport(null); setNote(label("Đã gửi báo cáo cho quản trị viên.","Report sent to the administrator.")); }
+    }}/>}
     {confirm && <Dialog title={confirm.title} onClose={() => setConfirm(null)} className="online-room-dialog" dismissible={!busy} workspace>
       <div className="online-room-share-form"><p>{confirm.text}</p><div className="online-room-actions">
         <button type="button" className="secondary-button" onClick={() => setConfirm(null)} disabled={busy}>{label("Hủy", "Cancel")}</button>
@@ -297,14 +305,31 @@ function CompactSeats({ members, avatars, owner, label, onSeat, busy }: {
   </div>;
 }
 
-function RoomChat({ messages, label, owner, busy, canManage, run, vi, upload, download }: { messages: RoomMessage[]; label: Labels; owner: string; busy: boolean; canManage: boolean; run: Run; vi: boolean; upload?: (file:File,key:string) => Promise<void>; download?: (id:string) => Promise<Blob> }) {
+function RoomReportDialog({ message,label,busy,error,onClose,onSubmit }: { message?:RoomMessage; label:Labels; busy:boolean; error:string; onClose:()=>void; onSubmit:(reason:RoomReportReason,detail:string)=>Promise<void> }) {
+  const [reason,setReason] = useState<RoomReportReason>("spam"), [detail,setDetail] = useState("");
+  return <Dialog title={message ? label("Báo cáo tin nhắn","Report message") : label("Báo cáo phòng","Report room")} onClose={onClose} dismissible={!busy} workspace className="online-room-dialog">
+    <form className="online-room-create-form" onSubmit={event => { event.preventDefault(); if (!busy) void onSubmit(reason,detail); }}>
+      <p>{message ? label("Quản trị viên sẽ nhận nội dung tin nhắn này (hoặc tên tệp) cùng lý do báo cáo.", "The administrator receives this message (or its filename) and your report reason.") : label("Quản trị viên sẽ nhận tên phòng, lý do và mô tả bạn cung cấp.", "The administrator receives the room name, reason and your description.")}</p>
+      {message && <blockquote>{message.file?.name ?? message.body}</blockquote>}
+      <label>{label("Lý do","Reason")}<select value={reason} onChange={event => setReason(event.target.value as RoomReportReason)}>
+        <option value="spam">{label("Spam","Spam")}</option><option value="harassment">{label("Quấy rối","Harassment")}</option><option value="inappropriate">{label("Nội dung không phù hợp","Inappropriate content")}</option><option value="other">{label("Khác","Other")}</option>
+      </select></label>
+      <label>{label("Mô tả thêm (không bắt buộc)","Additional details (optional)")}<textarea maxLength={400} rows={3} value={detail} onChange={event => setDetail(event.target.value)}/></label>
+      {error && <p role="alert" className="form-error">{error}</p>}
+      <button type="submit" className="primary-button" disabled={busy}><Flag size={16}/>{label("Gửi báo cáo","Submit report")}</button>
+    </form>
+  </Dialog>;
+}
+
+function RoomChat({ messages, label, owner, busy, canManage, chatLocked,onReport, run, vi, upload, download }: { messages: RoomMessage[]; label: Labels; owner: string; busy: boolean; canManage: boolean; chatLocked:boolean; onReport:(message?:RoomMessage)=>void; run: Run; vi: boolean; upload?: (file:File,key:string) => Promise<void>; download?: (id:string) => Promise<Blob> }) {
+  const postingBlocked = chatLocked && !canManage;
   const input = useRef<HTMLInputElement>(null), fileWorking = useRef(false);
   const [file, setFile] = useState<{ value: File; key: string } | null>(null);
   const [fileError, setFileError] = useState<unknown>(null), [fileBusy, setFileBusy] = useState(false);
   const [preview, setPreview] = useState<MeetingRoomFile | null>(null);
   const [fetching, setFetching] = useState<string | null>(null);
   async function sendFile() {
-    if (!file || !upload || fileWorking.current) return;
+    if (!file || !upload || postingBlocked || fileWorking.current) return;
     fileWorking.current = true; setFileBusy(true); setFileError(null); nearBottom.current = true;
     try { await upload(file.value,file.key); setFile(null); }
     catch (error) { setFileError(error); }
@@ -332,18 +357,24 @@ function RoomChat({ messages, label, owner, busy, canManage, run, vi, upload, do
   const send = async (event: FormEvent) => {
     event.preventDefault();
     const value = body.trim();
-    if (!value || busy) return;
+    if (!value || busy || postingBlocked) return;
     if (lastKey.current?.body !== value) lastKey.current = { id: crypto.randomUUID(), body: value };
     const result = await run({ name: "chat", body: value, key: lastKey.current.id });
     if (result?.state === "active") { nearBottom.current = true; setBody(previous => previous.trim() === value ? "" : previous); lastKey.current = null; }
   };
   return <div className="online-room-chat">
+    <div className="online-chat-controls">
+      {canManage && <button type="button" className="secondary-button" aria-pressed={chatLocked} disabled={busy} onClick={() => void run({ name:"chat_lock",locked:!chatLocked })}><Lock size={14}/>{chatLocked ? label("Mở khóa chat","Unlock chat") : label("Khóa gửi chat","Lock chat")}</button>}
+      <button type="button" className="text-button" disabled={busy} onClick={() => onReport()}><Flag size={14}/>{label("Báo cáo phòng","Report room")}</button>
+    </div>
+    {postingBlocked && <p className="online-room-muted" role="status">{label("Chat đang khóa. Bạn vẫn đọc được tin nhắn và gửi báo cáo.","Chat is locked. You can still read messages and submit reports.")}</p>}
     <div className="online-room-chat-log" role="log" aria-live="polite" aria-label={label("Tin nhắn trong phòng", "Room messages")} ref={list}
       onScroll={event => { const el = event.currentTarget; nearBottom.current = el.scrollHeight - el.clientHeight - el.scrollTop < 42; }}>
       {!messages.length && <p className="online-room-muted">{label("Chưa có tin nhắn. Gửi lời chào nhé!", "No messages yet. Say hello!")}</p>}
       {messages.map(message => <article key={message.id} className="online-room-message" data-own={message.author_id === owner}>
         <div><strong>{message.author_id === owner ? label("Bạn", "You") : message.name}</strong>
           <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString(vi ? "vi-VN" : "en", { hour: "2-digit", minute: "2-digit" })}</time>
+          {message.author_id !== owner && <button type="button" className="icon-button" disabled={busy} title={label("Báo cáo tin nhắn","Report message")} aria-label={label("Báo cáo tin nhắn","Report message")} onClick={() => onReport(message)}><Flag size={13}/></button>}
           {canManage && <button type="button" className="icon-button" disabled={busy} title={label("Xóa tin nhắn", "Delete message")} aria-label={`${label("Xóa tin nhắn của", "Delete message from")} ${message.name}`} onClick={() => void run({ name: "chat_delete", id: message.id })}><Trash2 size={13}/></button>}
         </div>{message.file && download ? <div className="meeting-chat-file">
           <FileText size={19}/><span><strong>{message.file.name}</strong><small>{new Intl.NumberFormat(vi ? "vi-VN" : "en",{ maximumFractionDigits:1 }).format(message.file.size/1024)} KB</small></span>
@@ -354,7 +385,7 @@ function RoomChat({ messages, label, owner, busy, canManage, run, vi, upload, do
     </div>
     {fileError != null && <p className="online-room-feedback" role="alert">{roomIssue(fileError,vi)}</p>}
     {file && <div className="meeting-file-pending"><span>{file.value.name}</span>
-      <button type="button" className="primary-button" disabled={fileBusy} onClick={() => void sendFile()}>{fileBusy ? label("Đang gửi…","Sending…") : label("Gửi tệp","Send file")}</button>
+      <button type="button" className="primary-button" disabled={fileBusy || postingBlocked} onClick={() => void sendFile()}>{fileBusy ? label("Đang gửi…","Sending…") : label("Gửi tệp","Send file")}</button>
       <button type="button" className="icon-button" disabled={fileBusy} aria-label={label("Bỏ chọn tệp","Remove selected file")} onClick={() => { setFile(null); setFileError(null); }}><X size={16}/></button></div>}
     {preview && download && <Suspense fallback={<p role="status">{label("Đang mở tệp…","Opening file…")}</p>}><MeetingFilePreview key={preview.id} file={preview} vi={vi} load={download} onClose={() => setPreview(null)}/></Suspense>}
     <form className="online-room-chat-form" data-files={Boolean(upload)} onSubmit={event => void send(event)}>
@@ -363,9 +394,9 @@ function RoomChat({ messages, label, owner, busy, canManage, run, vi, upload, do
         if (!picked) return;
         if (!picked.size || picked.size > MEETING_FILE_LIMIT) { setFile(null); setFileError(new OnlineRoomError("ONLINE_FILE_SIZE")); return; }
         setFileError(null); setFile({ value:picked,key:crypto.randomUUID() });
-      }}/><button type="button" className="secondary-button" disabled={fileBusy} title={label("Đính kèm tệp (tối đa 8 MB)","Attach file (up to 8 MB)")} aria-label={label("Đính kèm tệp","Attach a file")} onClick={() => input.current?.click()}><Paperclip size={16}/></button></>}
-      <input value={body} onChange={event => setBody(event.target.value)} maxLength={600} placeholder={label("Gửi tin vào phòng…", "Message the room…")} aria-label={label("Nội dung tin nhắn", "Message text")}/>
-      <button type="submit" className="primary-button" disabled={busy || !body.trim()} aria-label={label("Gửi tin nhắn", "Send message")}><Send size={18}/></button>
+      }}/><button type="button" className="secondary-button" disabled={fileBusy || postingBlocked} title={label("Đính kèm tệp (tối đa 8 MB)","Attach file (up to 8 MB)")} aria-label={label("Đính kèm tệp","Attach a file")} onClick={() => input.current?.click()}><Paperclip size={16}/></button></>}
+      <input value={body} disabled={postingBlocked} onChange={event => setBody(event.target.value)} maxLength={600} placeholder={label("Gửi tin vào phòng…", "Message the room…")} aria-label={label("Nội dung tin nhắn", "Message text")}/>
+      <button type="submit" className="primary-button" disabled={busy || postingBlocked || !body.trim()} aria-label={label("Gửi tin nhắn", "Send message")}><Send size={18}/></button>
     </form>
   </div>;
 }

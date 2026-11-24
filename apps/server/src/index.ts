@@ -22,11 +22,13 @@ import { aiScheduler } from "./aiScheduler.js";
 import { systemAnnouncementsAdmin } from "./systemAnnouncements.js";
 
 import { onlineMeetings } from "./onlineMeetings.js";
+import { onlineRoomAdmin, onlineRoomWebhook, startClassroomMediaReconciliation } from "./onlineRoomRollout.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
 app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true }));
 app.use("/api/takenotes/generate", express.json({ limit: "6mb" }));
+app.post("/api/online-rooms/livekit-webhook", express.text({ type: ["application/webhook+json","application/json"], limit: "128kb" }), onlineRoomWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.get("/api/health", (_req, res) => res.json(getHealthStatus()));
 
@@ -63,6 +65,7 @@ app.get("/api/admin/me", requireUser, (req, res) => {
 
 app.use("/api/admin/system-announcements", systemAnnouncementsAdmin);
 app.use("/api/online-meetings", onlineMeetings);
+app.use("/api/admin/online-rooms", onlineRoomAdmin);
 
 app.get("/api/admin/summary", requireAdmin, async (_req, res) => {
   try { return res.json(await getAdminSummary()); }
@@ -281,4 +284,7 @@ app.post("/api/ai/selection", requireUser, async (req, res) => {
   catch (error) { return sendAiError(res, error, "Selection AI failed."); }
 });
 
-app.listen(config.PORT, () => console.log(`MindCanvas API listening on ${config.PORT}`));
+app.listen(config.PORT, () => {
+  startClassroomMediaReconciliation();
+  console.log(`MindCanvas API listening on ${config.PORT}`);
+});

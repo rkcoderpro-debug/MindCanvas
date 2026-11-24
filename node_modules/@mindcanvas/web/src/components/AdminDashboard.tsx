@@ -1,3 +1,4 @@
+import AdminOnlineRooms from "./AdminOnlineRooms";
 import { PageBack } from "./PageNavigation";
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, Check, Database, LoaderCircle, RefreshCw, Search, ShieldCheck, UserRound, Users } from "lucide-react";
@@ -20,7 +21,7 @@ function UsageBar({ used, limit, label, unit = "bytes" }: { used: number; limit:
 
 export default function AdminDashboard({ onBack, ownerId, onRunGuide }: { onBack: () => void; ownerId: string | null; onRunGuide?: (guideId: string) => void }) {
   const { t, language } = useLanguage();
-  const [section, setSection] = useState<"accounts" | "messages">("accounts");
+  const [section, setSection] = useState<"accounts" | "messages" | "rooms">("accounts");
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [query, setQuery] = useState("");
@@ -77,8 +78,9 @@ export default function AdminDashboard({ onBack, ownerId, onRunGuide }: { onBack
     <nav className="phase-one-tabs admin-section-tabs" aria-label={t("adminDashboard")}>
       <button type="button" aria-pressed={section === "accounts"} onClick={() => setSection("accounts")}>{language === "vi" ? "Tài khoản & gói" : "Accounts & plans"}</button>
       <button type="button" aria-pressed={section === "messages"} onClick={() => setSection("messages")}>{language === "vi" ? "Thông báo hệ thống" : "System messages"}</button>
+      <button type="button" aria-pressed={section === "rooms"} onClick={() => setSection("rooms")}>{language === "vi" ? "Phòng Online" : "Online Rooms"}</button>
     </nav>
-    {section === "messages" ? <AdminAnnouncements/> : <>
+    {section === "rooms" ? <AdminOnlineRooms/> : section === "messages" ? <AdminAnnouncements/> : <>
     {error && <p className="form-error" role="alert">{error}</p>}
     {summary && <section className="admin-stats" aria-label={t("adminService")}>
       <article><UserRound size={18}/><span>{t("adminUserCount")}</span><strong>{summary.totalUsers}</strong></article>

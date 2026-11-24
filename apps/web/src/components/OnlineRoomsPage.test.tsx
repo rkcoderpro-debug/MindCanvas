@@ -5,13 +5,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../lib/i18n";
 import type { OnlineRoom, RoomSnapshot } from "../lib/onlineRooms";
 import OnlineRoomsPage from "./OnlineRoomsPage";
+import ClassOnlineRoomCard from "./ClassOnlineRoomCard";
 
 const mock = vi.hoisted(() => ({
-  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(),
+  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(), classRoom: vi.fn(),
 }));
 vi.mock("../lib/onlineRooms", async actual => ({
   ...await actual<typeof import("../lib/onlineRooms")>(),
-  requestRoomCanvas: mock.canvas, sendMeetingFile: mock.upload, loadMeetingFile: mock.download,
+  classroomOnlineRoom: mock.classRoom, requestRoomCanvas: mock.canvas, sendMeetingFile: mock.upload, loadMeetingFile: mock.download,
   createOnlineRoom: mock.create, fetchMeetingToken: mock.token, controlOnlineMeeting: mock.manage,
   listOnlineRooms: mock.list, joinOnlineRoom: mock.join, readOnlineRoom: mock.read, readOnlineRoomChat: mock.chat,
   pingOnlineRoom: mock.leave, actOnlineRoom: mock.act, watchOnlineRoom: mock.watch, loadRoomAvatars: vi.fn(async () => new Map()),
@@ -170,4 +171,34 @@ it("lets the host attach an independent Canvas and send a chat file without ente
   expect(button("Xem")).toBeTruthy();
   expect(button("Tải")).toBeTruthy();
   expect(mock.token).not.toHaveBeenCalled();
+});
+
+
+it("keeps reports available when the host has locked chat", async () => {
+  mock.read.mockResolvedValue({ ...fixture(),room:{ ...room,chat_locked:true } });
+  mock.chat.mockResolvedValue({ state:"active",messages:[{ id:"123",author_id:"peer",name:"Bạn học",body:"Nội dung cần kiểm tra",created_at:new Date().toISOString() }] });
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  await act(async () => button("Vào Góc nhạc tập trung").click());
+  await tick();
+  expect(host.querySelector<HTMLInputElement>('input[aria-label="Nội dung tin nhắn"]')?.disabled).toBe(true);
+  expect(host.textContent).toContain("Chat đang khóa");
+  await act(async () => button("Báo cáo tin nhắn").click());
+  expect(host.querySelector("dialog")?.textContent).toContain("Nội dung cần kiểm tra");
+  await act(async () => button("Gửi báo cáo").click());
+  expect(mock.act).toHaveBeenCalledWith(room.id,expect.any(String),{ name:"report",id:"123",reason:"spam",detail:"" });
+  expect(host.querySelector("dialog")).toBeNull();
+  expect(host.textContent).toContain("Đã gửi báo cáo cho quản trị viên");
+});
+
+it("lets teachers open the class room and offers students entry only after it exists", async () => {
+  const classId="60000000-0000-4000-8000-000000000010", onEnter=vi.fn();
+  mock.classRoom.mockResolvedValue({ room:null });
+  await act(async () => root.render(<LanguageProvider><ClassOnlineRoomCard key="student" classId={classId} teacher={false} onEnter={onEnter}/></LanguageProvider>));
+  expect(button("Mở phòng cho lớp")).toBeUndefined();
+  expect(host.textContent).toContain("Giáo viên chưa mở phòng");
+  await act(async () => root.render(<LanguageProvider><ClassOnlineRoomCard key="teacher" classId={classId} teacher onEnter={onEnter}/></LanguageProvider>));
+  mock.classRoom.mockResolvedValue({ room:{ ...room,classroom_id:classId } });
+  await act(async () => button("Mở phòng cho lớp").click());
+  expect(mock.classRoom).toHaveBeenCalledWith(classId,true);
+  expect(onEnter).toHaveBeenCalledWith(room.id);
 });

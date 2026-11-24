@@ -368,3 +368,30 @@
 .meeting-pdf { text-align:center; padding:4px; background:var(--surface); }
 .meeting-pdf-pages { display:flex; align-items:center; justify-content:center; gap:12px; margin:4px 0 10px; }
 .meeting-pdf canvas { max-width:100%; height:auto; background:#fff; box-shadow:0 2px 7px #0003; }
+
+.online-chat-controls { display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:wrap; }
+.online-chat-controls button { min-height:34px; }
+.online-room-message .icon-button { flex-shrink:0; }
+.online-room-create-form blockquote { margin:0; padding:8px 12px; overflow-wrap:anywhere; border-inline-start:3px solid var(--line); color:var(--muted); }
+.online-room-create-form textarea { width:100%; resize:vertical; }
+.classrooms-online-room p svg { display:inline-block; vertical-align:middle; margin-inline-end:5px; }
+.classrooms-online-room .primary-button { display:inline-flex; align-items:center; gap:8px; }
+
+.online-rollout-admin, .online-rollout-grid { display:grid; gap:14px; }
+.online-rollout-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr)); }
+.online-rollout-head { display:flex; align-items:flex-start; gap:10px; justify-content:space-between; }
+.online-rollout-head h2 { margin:0; }
+.online-rollout-head p { color:var(--muted); margin:.35rem 0; }
+.online-rollout-admin .learning-card { min-width:0; padding:14px; }
+.online-rollout-admin .learning-card h3 { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:0; }
+.online-rollout-admin .learning-card label { display:grid; gap:4px; margin:7px 0; }
+.online-rollout-admin .learning-card label.online-room-check { display:flex; align-items:flex-start; gap:7px; }
+.online-rollout-admin .learning-card label :is(input:not([type=checkbox]),select) { width:100%; }
+.online-rollout-numbers { display:flex; flex-wrap:wrap; gap:10px; }
+.online-rollout-numbers div { flex:1 1 130px; padding:10px; border:1px solid var(--line); border-radius:10px; }
+.online-rollout-numbers dt { color:var(--muted); font-size:12px; }
+.online-rollout-numbers dd { margin:4px 0 0; font-weight:700; font-size:1.2rem; }
+.online-rollout-list { display:grid; gap:8px; list-style:none; padding:0; }
+.online-rollout-list li { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:7px; border-top:1px solid var(--line); padding-top:8px; overflow-wrap:anywhere; }
+.online-rollout-list li small { display:block; color:var(--muted); }
+.online-rollout-report blockquote { margin:6px 0; border-inline-start:3px solid var(--line); padding-inline-start:8px; }
