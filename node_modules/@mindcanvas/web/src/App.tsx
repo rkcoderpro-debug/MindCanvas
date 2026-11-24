@@ -1,3 +1,4 @@
+import { FOLDER_ROOT, folderRouteFromUrl, writeFolderRoute } from "./lib/folderLinks";
 import { newA4Layout } from "./lib/a4Canvas";
 import { BackButton, PageChromeProvider, ShellBack } from "./components/PageNavigation";
 import { enterLearningSpace, leaveLearningSpace, learningTabFromUrl, openLearningTool, type HubTab } from "./lib/learningNavigation";
@@ -49,6 +50,7 @@ import type { ActivityNotification } from "./lib/activityNotifications";
 import { emitGuideAction, GUIDE_PROGRESS_EVENT, GUIDE_REQUEST_EVENT, pageHelpIsUnlocked, readGuideProgress, type PageHelpScope } from "./lib/featureGuides";
 const CanvasBoard = lazy(() => import("./components/CanvasBoard"));
 const A4CanvasEditor = lazy(() => import("./components/A4CanvasEditor"));
+const WorkspaceFolderArea = lazy(() => import("./components/WorkspaceFolderArea"));
 const FolderManager = lazy(() => import("./components/FolderManager"));
 const AiPanel = lazy(() => import("./components/AiPanel"));
 const VersionHistory = lazy(() => import("./components/VersionHistory"));
@@ -117,6 +119,12 @@ function AuthenticatedApp() {
   // Keying by identity prevents account A's boards/history from appearing for account B.
   return <MusicProvider key={user?.id ?? "guest"} owner={user?.id ?? null}><Workspace user={user} authError={error} onClearAuthError={() => setError("")}/></MusicProvider>;
 }
+function filterFromLocation() {
+  if (learningTabFromUrl()) return "__learning";
+  const route = folderRouteFromUrl();
+  return route === FOLDER_ROOT ? "__manager" : route;
+}
+
 function Workspace({ user, authError, onClearAuthError }: { user: User | null; authError: string; onClearAuthError: () => void }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
   const iosDevice = isIOSDevice();
@@ -129,7 +137,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   }, []);
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{ tab: "connections" | "shared" | "classrooms"; peerId?: string; classId?: string; nonce: number } | null>(null);
-  const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(() => learningTabFromUrl() ? "__learning" : null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
+  const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(filterFromLocation), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem("mindcanvas:sidebar-collapsed") === "true"; } catch { return false; } });
   const [petVisible, setPetVisible] = useState(() => { try { return localStorage.getItem("mindcanvas:pet-visible") !== "false"; } catch { return true; } });
@@ -192,7 +200,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     resetView: canvas => {
       const learning = !canvas && learningTabFromUrl();
       if (learning && ["__learning", "__flashcards", "__lab"].includes(filter ?? "") && !ws.board) return;
-      setFilter(learning ? "__learning" : null); setRecent(false); setNotificationDestination(null);
+      setFilter(filterFromLocation()); setRecent(false); setNotificationDestination(null);
       setMobileProjectMenuOpen(false); setCanvasFullscreen(false); setModal(null);
     },
   });
@@ -221,13 +229,15 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const home = () => {
     canvasLinks.leaveUnopenedLink();
     leaveLearningSpace();
+    writeFolderRoute(null);
     setMobileProjectMenuOpen(false);
     setAiPanelMode("closed");
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     void ws.home(); setFilter(null); setRecent(false); setCanvasFullscreen(false); setNotificationDestination(null);
   };
   const [projectType, setProjectType] = useState<"infinite" | "a4">("infinite");
-  const askName = (kind: "project" | "folder") => { if (kind === "project") setProjectType("infinite"); setName(kind === "project" ? t("untitled") : ""); setModal(kind); };
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const askName = (kind: "project" | "folder", parentId: string | null = null) => { if (kind === "project") setProjectType("infinite"); else setNewFolderParent(parentId); setName(kind === "project" ? t("untitled") : ""); setModal(kind); };
   const create = async (e: React.FormEvent) => {
     e.preventDefault(); if (!name.trim()) return; setWorking(true);
     try {
@@ -236,12 +246,13 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
         emitGuideAction("canvas:practice-created", { projectId: created.id, title: created.title });
         emitGuideAction("workspace:project-created", { projectId: created.id, title: created.title });
       } else {
-        const created = await ws.newFolder(name.trim());
+        const created = await ws.newFolder(name.trim(),newFolderParent);
         emitGuideAction("folder:created", { folderId: created.id, name: created.name });
       }
       setModal(null);
-    }
-    finally { setWorking(false); }
+    } catch (err) {
+      if ((err as { message?: string })?.message === "WORKSPACE_FOLDER_PARENT") ws.setError(language === "vi" ? "Không tìm thấy thư mục cha hoặc đã đạt độ sâu tối đa." : "The parent folder is unavailable or the nesting limit was reached.");
+    } finally { setWorking(false); }
   };
   const decideCanvasPractice = async (decision: "keep" | "trash", projectId: string) => {
     const project = ws.projects.find(item => item.id === projectId);
@@ -272,11 +283,13 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   };
   const importFile = async (file?: File) => {
     if (!file) return;
-    try { const next = await importBoard(file); await ws.create(next.title, next); }
+    try { const next = await importBoard(file); await ws.create(next.title, next, filter && !filter.startsWith("__") ? filter : null); }
     catch { ws.setError(t("importError")); }
     if (fileInput.current) fileInput.current.value = "";
   };
   const accountName = personalProfile.profile?.display_name ?? user?.user_metadata.full_name ?? user?.user_metadata.name ?? user?.email ?? t("guest");
+  const selectedFolder = ws.folders.find(f => f.id === filter);
+  const folderUnavailable = !!filter && !filter.startsWith("__") && !selectedFolder;
   const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : filter === "__shared" ? p.shared : !filter || p.folderId === filter));
   const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter === "__shared" ? t("sharedWithMe") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
   const currentProject = ws.board ? ws.projects.find(project => project.id === ws.board!.id) : undefined;
@@ -405,16 +418,24 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
   };
-  const openView = (view: SidebarView) => { canvasLinks.leaveUnopenedLink(); if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview"); else leaveLearningSpace(); void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
+  const openView = (view: SidebarView) => { canvasLinks.leaveUnopenedLink(); writeFolderRoute(null,"replace"); if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview"); else leaveLearningSpace(); void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
   const openNotification = (item: ActivityNotification) => {
-    void ws.home(); setRecent(false);
+    writeFolderRoute(null,"replace"); void ws.home(); setRecent(false);
     if (item.target === "workspace") { setFilter(null); setNotificationDestination(null); return; }
     const tab = item.target;
     setFilter("__learning");
     setNotificationDestination(previous => ({ tab, peerId:tab === "connections" && item.kind === "message" ? item.actor_id : undefined,
       classId:tab === "classrooms" ? item.target_id ?? undefined : undefined, nonce:(previous?.nonce ?? 0) + 1 }));
   };
-  const openFolder = (folderId: string) => { leaveLearningSpace(); void ws.home(); setFilter(folderId); setRecent(false); };
+  const goToFolder = (route: string, mode: "push" | "replace" = "push") => {
+    canvasLinks.leaveUnopenedLink();
+    writeFolderRoute(route,mode);
+    void ws.home();
+    setFilter(route === FOLDER_ROOT ? "__manager" : route);
+    setRecent(false); setNotificationDestination(null);
+  };
+  const openFolder = (id: string) => goToFolder(id);
+  const manageFolders = () => goToFolder(FOLDER_ROOT);
   const openQuickLearning = (tab: HubTab) => {
     if (!ws.board && !!learningTabFromUrl() && ["__learning", "__flashcards", "__lab"].includes(filter ?? "")) {
       openLearningTool(tab);
@@ -422,17 +443,19 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       canvasLinks.leaveUnopenedLink();
       if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
       void ws.home();
+      writeFolderRoute(null,"replace");
       openLearningTool(tab);
       setFilter("__learning"); setRecent(false); setCanvasFullscreen(false); setNotificationDestination(null);
     }
     emitGuideAction(`learning:tab:${tab}`);
     if (tab === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } }));
   };
-  const openAdmin = () => { leaveLearningSpace(); void ws.home(); setFilter("__admin"); setRecent(false); };
+  const openAdmin = () => { writeFolderRoute(null,"replace"); leaveLearningSpace(); void ws.home(); setFilter("__admin"); setRecent(false); };
   const runGuide = (guideId: string) => {
     // A guide launched from the Wiki must prepare the page that owns its
     // target before the overlay starts asking the user to click it. This
     // prevents the "open the indicated area" dead-end seen on the Wiki page.
+    writeFolderRoute(null,"replace");
     setManualGuideId(guideId);
     setRecent(false);
     switch (guideId) {
@@ -441,7 +464,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
         break;
       case "document-library":
       case "pdf-annotation":
-        void ws.home(); setFilter("__manager");
+        manageFolders();
         break;
       case "document-tools":
         void ws.home(); setFilter("__learning");
@@ -498,9 +521,12 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const workspaceBackLabel = language === "vi" ? "Về Workspace" : "Back to Workspace";
   const canvasBackLabel = modal === "share" ? (language === "vi" ? "Về canvas" : "Back to canvas") : filter && !filter.startsWith("__") ? pageTitle : workspaceBackLabel;
   const backFromCanvas = () => { if (modal === "share") { setModal(null); return; } setMobileProjectMenuOpen(false); setAiPanelMode("closed"); setCanvasFullscreen(false); void ws.home(); };
+  const workspaceFolderArea = (current: ProjectFolder | null) => <WorkspaceFolderArea key={current?.id ?? FOLDER_ROOT}
+    owner={user?.id ?? null} current={current} folders={ws.folders}
+    onFolder={openFolder} onRoot={manageFolders} onNewFolder={() => askName("folder",current?.id ?? null)}/>;
   return <PageChromeProvider openQuickActions={showQuickActions}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
     {webBackground && <div className="web-background-layer" aria-hidden="true">{webBackground.kind === "video" ? <video src={webBackground.src} muted autoPlay loop playsInline style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/> : <img src={webBackground.src} alt="" style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/>}<span style={{ background: webBackground.overlay ?? "#000000" }}/></div>}
-    <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { leaveLearningSpace(); void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
+    <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={manageFolders} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
     <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`} data-topbar-pinned={stickyTopbar}>
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="topbar-location"><ShellBack fallback={ws.board ? { label: canvasBackLabel, run: backFromCanvas } : filter || recent ? { label: workspaceBackLabel, run: home } : undefined}/>{ws.board && <span className="topbar-canvas-title" title={ws.board.title}>{ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={showQuickActions}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={ws.conflict?.error || t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.flush(ws.board?.id)}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
@@ -556,7 +582,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
           </div>
         </aside></div>}
         <CanvasEditor key={ws.board.id} board={ws.board} documents={documents} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush(ws.board?.id)} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds} onDocumentSaved={saveCanvasDocument}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__manager" ? <FolderManager owner={user?.id ?? null} projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage key={notificationDestination?.nonce ?? "learning"} owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab={notificationDestination?.tab ?? (connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined)} initialPeerId={notificationDestination?.peerId} initialClassId={notificationDestination?.classId} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnails={ws.loadThumbnails} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__manager" ? <FolderManager owner={user?.id ?? null} projects={ws.projects} folders={ws.folders} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} onOpen={p=>void ws.open(p)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onRenameFolder={ws.renameFolder} onDeleteFolder={ws.removeFolder} onCreateFolder={()=>askName("folder")} onFolder={openFolder} folderArea={workspaceFolderArea(null)}/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage key={notificationDestination?.nonce ?? "learning"} owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab={notificationDestination?.tab ?? (connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined)} initialPeerId={notificationDestination?.peerId} initialClassId={notificationDestination?.classId} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/> : folderUnavailable && !ws.loading ? <div className="empty-state workspace-folder-unavailable"><h1>{language === "vi" ? "Không mở được thư mục" : "Folder unavailable"}</h1><p>{language === "vi" ? "Thư mục không còn tồn tại hoặc không thuộc tài khoản này." : "This folder is missing or does not belong to this account."}</p><div className="actions"><button className="secondary-button" onClick={manageFolders}>{t("manageFolders")}</button>{!user && isSupabaseConfigured && <button className="primary-button" onClick={() => void auth()}>{language === "vi" ? "Đăng nhập" : "Sign in"}</button>}</div></div> : <WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnails={ws.loadThumbnails} folderArea={selectedFolder && workspaceFolderArea(selectedFolder)} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/>}</Suspense>
       <PetCompanion inline={filter === "__learning" || filter === "__flashcards" || filter === "__lab"} visible={petVisible} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
@@ -575,7 +601,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       <label>{t("name")}<input className={modal === "project" ? "guide-project-name-input" : "guide-folder-name-input"} autoFocus required maxLength={120} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setModal(null)}>{t("cancel")}</button><button className={`primary-button ${modal === "project" ? "guide-project-create-submit" : "guide-folder-create-submit"}`} disabled={!name.trim() || working}>{working ? t("saving") : t("create")}</button></footer></form></Dialog>}
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={e => { e.preventDefault(); const n = name.trim(); if (n) void ws.renameFolder(folderAction.folder, n).then(() => { emitGuideAction("folder:renamed", { folderId: folderAction.folder.id, name: n }); setFolderAction(null); }); }}><label>{t("name")}<input autoFocus required maxLength={80} defaultValue={folderAction.folder.name} onChange={e => setName(e.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form><button className="text-danger-button" onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
-    {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { emitGuideAction("folder:deleted", { folderId: folderAction.folder.id }); if (filter === folderAction.folder.id) setFilter(null); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
+    {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button className="secondary-button" onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="danger-button" onClick={() => void ws.removeFolder(folderAction.folder).then(() => { emitGuideAction("folder:deleted", { folderId: folderAction.folder.id }); if (filter === folderAction.folder.id) goToFolder(folderAction.folder.parentId ?? FOLDER_ROOT,"replace"); setFolderAction(null); })}>{t("deleteFolder")}</button></footer></Dialog>}
     {modal === "move" && <Dialog title={t("move")} onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); ws.move(folder || null); setModal(null); }}><label>{t("folders")}<select value={folder} onChange={e => setFolder(e.target.value)}><option value="">{t("noFolder")}</option>{ws.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><footer className="actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form></Dialog>}
     {modal === "settings" && <SettingsDialog onClose={() => setModal(null)}
       profile={user ? { name: accountName, email: user.email, open: () => { setModal(null); openProfileRoute(); } } : null}

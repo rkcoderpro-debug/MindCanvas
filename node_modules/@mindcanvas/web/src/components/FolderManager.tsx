@@ -1,5 +1,5 @@
 import FilePicker from "./FilePicker";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Clipboard, Copy, Download, FileText, Folder, FolderPlus, MoreHorizontal, Move, FileSpreadsheet, Trash2, Eye, Upload, Search } from "lucide-react";
 import type { Project, ProjectFolder, ProjectPatch } from "../lib/projectStore";
 import type { UploadedDocument } from "../lib/documentStore";
@@ -9,9 +9,9 @@ import Dialog from "./Dialog";
 import DocumentViewer from "./DocumentViewer";
 import { emitGuideAction } from "../lib/featureGuides";
 
-export default function FolderManager({ owner, projects, folders, documents, onOpen, onManage, onDuplicate, onRenameFolder, onDeleteFolder, onCreateFolder, onDocumentsChanged }: { owner: string | null; projects: Project[]; folders: ProjectFolder[]; documents: UploadedDocument[]; onOpen:(p:Project)=>void; onManage:(p:Project,patch:ProjectPatch)=>Promise<void>; onDuplicate:(p:Project,title:string,target?:string|null)=>Promise<void>; onRenameFolder:(f:ProjectFolder,name:string)=>Promise<void>; onDeleteFolder:(f:ProjectFolder)=>Promise<void>; onCreateFolder:()=>void; onDocumentsChanged:()=>void }) {
+export default function FolderManager({ owner, projects, folders, documents, onOpen, onManage, onDuplicate, onRenameFolder, onDeleteFolder, onCreateFolder, onDocumentsChanged, onFolder, folderArea }: { owner: string | null; projects: Project[]; folders: ProjectFolder[]; documents: UploadedDocument[]; onOpen:(p:Project)=>void; onManage:(p:Project,patch:ProjectPatch)=>Promise<void>; onDuplicate:(p:Project,title:string,target?:string|null)=>Promise<void>; onRenameFolder:(f:ProjectFolder,name:string)=>Promise<void>; onDeleteFolder:(f:ProjectFolder)=>Promise<void>; onCreateFolder:()=>void; onDocumentsChanged:()=>void; onFolder:(id:string)=>void; folderArea: ReactNode }) {
   const { t, language } = useLanguage();
-  const [active,setActive]=useState<string|null>(null), [selected,setSelected]=useState<Project|null>(null), [selectedDocument,setSelectedDocument]=useState<UploadedDocument|null>(null), [clipboard,setClipboard]=useState<Project|null>(null), [dialog,setDialog]=useState<"rename"|"move"|"delete"|null>(null), [value,setValue]=useState(""), [busy,setBusy]=useState(false), [documentsView,setDocumentsView]=useState(false);
+  const [selected,setSelected]=useState<Project|null>(null), [selectedDocument,setSelectedDocument]=useState<UploadedDocument|null>(null), [clipboard,setClipboard]=useState<Project|null>(null), [dialog,setDialog]=useState<"rename"|"move"|"delete"|null>(null), [value,setValue]=useState(""), [busy,setBusy]=useState(false), [documentsView,setDocumentsView]=useState(false);
   const [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [folderValue, setFolderValue] = useState("");
   const [documentQuery, setDocumentQuery] = useState("");
@@ -19,9 +19,9 @@ export default function FolderManager({ owner, projects, folders, documents, onO
   const [uploading, setUploading] = useState(false);
   const [documentError, setDocumentError] = useState("");
   const canManageSelected = !!selected && (!selected.shared || selected.accessRole !== "viewer");
-  const list=projects.filter(p=>!p.deletedAt && (active===null || p.folderId===active));
-  const documentList = useMemo(() => documents.filter(file => (active === null || file.folderId === active) && (documentFilter === "all" || file.kind === documentFilter) && (!documentQuery.trim() || file.name.toLocaleLowerCase().includes(documentQuery.trim().toLocaleLowerCase()))), [documents, active, documentFilter, documentQuery]);
-  const folderName=active?folders.find(f=>f.id===active)?.name:t("workspace");
+  const list=projects.filter(p=>!p.deletedAt);
+  const documentList = useMemo(() => documents.filter(file => (documentFilter === "all" || file.kind === documentFilter) && (!documentQuery.trim() || file.name.toLocaleLowerCase().includes(documentQuery.trim().toLocaleLowerCase()))), [documents, documentFilter, documentQuery]);
+  const folderName=t("manageFolders");
   const run=async(fn:()=>Promise<void>)=>{setBusy(true);try{await fn();setDialog(null);setSelected(null);}finally{setBusy(false);}};
   const removeDocument = async (document: UploadedDocument) => { if (!window.confirm(language === "vi" ? `Xóa ${document.name} khỏi thư viện tài liệu?` : `Delete ${document.name} from the document library?`)) return; await deleteDocument(document.owner === "guest" ? null : document.owner, document.id); setSelectedDocument(null); onDocumentsChanged(); };
   const uploadDocuments = async (files: File[]) => {
@@ -34,7 +34,7 @@ export default function FolderManager({ owner, projects, folders, documents, onO
       if (file.size > MAX_DOCUMENT_BYTES) { errors.push(`${file.name}: ${language === "vi" ? "vượt quá 40 MB" : "over 40 MB"}`); continue; }
       try {
         const dataUrl = await fileToDataUrl(file);
-        await saveDocument(owner, { name: file.name, mimeType: file.type || "application/octet-stream", kind, size: file.size, dataUrl, folderId: active });
+        await saveDocument(owner, { name: file.name, mimeType: file.type || "application/octet-stream", kind, size: file.size, dataUrl, folderId: null });
         emitGuideAction("documents:uploaded", { name: file.name, kind });
       } catch (error) { errors.push(`${file.name}: ${error instanceof Error ? error.message : "upload failed"}`); }
     }
@@ -46,9 +46,9 @@ export default function FolderManager({ owner, projects, folders, documents, onO
   return <section className="folder-manager">
     <div className="folder-manager-side">
       <div className="manager-title"><strong>{t("folders")}</strong><button className="icon-button folder-manager-new-folder" aria-label={t("newFolder")} onClick={onCreateFolder}><FolderPlus size={17}/></button></div>
-      <button className={!documentsView && active===null?"manager-folder active":"manager-folder"} onClick={()=>{setDocumentsView(false);setActive(null);setSelected(null);setSelectedDocument(null);}}><Folder size={17}/>{t("workspace")}</button>
-      {folders.map(f=><div className={`manager-folder-row ${!documentsView && active===f.id ? "active" : ""}`} key={f.id}>
-        <button className={!documentsView && active===f.id?"manager-folder active":"manager-folder"} onClick={()=>{setDocumentsView(false);setActive(f.id);setSelected(null);setSelectedDocument(null);}}><Folder size={17}/><span>{f.name}</span><small>{projects.filter(p=>p.folderId===f.id&&!p.deletedAt).length}</small></button>
+      <button className={!documentsView?"manager-folder active":"manager-folder"} onClick={()=>{setDocumentsView(false);setSelected(null);setSelectedDocument(null);}}><Folder size={17}/>{t("workspace")}</button>
+      {folders.filter(f => !f.parentId).map(f=><div className="manager-folder-row" key={f.id}>
+        <button className="manager-folder" onClick={()=>onFolder(f.id)}><Folder size={17}/><span>{f.name}</span><small>{projects.filter(p=>p.folderId===f.id&&!p.deletedAt).length}</small></button>
         <button type="button" className="manager-folder-actions icon-button" aria-label={`${t("folderActions")}: ${f.name}`} title={t("folderActions")} onClick={event=>{event.stopPropagation();setFolderValue(f.name);setFolderAction({folder:f,kind:"rename"});}}><MoreHorizontal size={17}/></button>
       </div>)}
       <button className={documentsView?"manager-folder manager-documents active":"manager-folder manager-documents"} onClick={()=>{setDocumentsView(true);setSelected(null);setSelectedDocument(null);emitGuideAction("documents:library");}}><FileSpreadsheet size={17}/><span>{language === "vi" ? "Tài liệu đã tải lên" : "Uploaded documents"}</span><small>{documents.length}</small></button>
@@ -65,15 +65,17 @@ export default function FolderManager({ owner, projects, folders, documents, onO
         <div className="manager-toolbar"><div><span className="eyebrow">{t("folders")}</span><h1>{folderName}</h1></div><div className="actions manager-selection-actions">
           {!selected && !clipboard && <span className="manager-selection-hint">{language === "vi" ? "Chọn một project để quản lý" : "Select a project to manage"}</span>}
           {selected && <button className="secondary-button" onClick={()=>setClipboard(selected)}><Copy size={16}/>{t("copy")}</button>}
-          {clipboard && <button className="secondary-button" onClick={()=>void run(()=>onDuplicate(clipboard,`${clipboard.title} — ${t("copySuffix")}`,active))}><Clipboard size={16}/>{t("paste")}</button>}
+          {clipboard && <button className="secondary-button" onClick={()=>void run(()=>onDuplicate(clipboard,`${clipboard.title} — ${t("copySuffix")}`,null))}><Clipboard size={16}/>{t("paste")}</button>}
           {selected && <button className="secondary-button" disabled={!canManageSelected} title={!canManageSelected ? (language === "vi" ? "Chỉ chủ sở hữu hoặc người có quyền sửa mới được di chuyển" : "Only owners or editors can move this project") : undefined} onClick={()=>{if(canManageSelected){setValue(selected.folderId??"");setDialog("move")}}}><Move size={16}/>{t("move")}</button>}
-          {selected && <button className="primary-button" onClick={()=>void run(()=>onDuplicate(selected,`${selected.title} — ${t("copySuffix")}`,active))}>{t("duplicate")}</button>}
+          {selected && <button className="primary-button" onClick={()=>void run(()=>onDuplicate(selected,`${selected.title} — ${t("copySuffix")}`,null))}>{t("duplicate")}</button>}
         </div></div>
+        {folderArea}
+        <h2>{t("projects")}</h2>
         {!list.length?<div className="empty-state"><Folder size={42}/><h2>{t("emptyFolder")}</h2></div>:<div className="file-table">{list.map(p=><div className={selected?.id===p.id?"file-row selected":"file-row"} key={p.id} onClick={()=>setSelected(p)} onDoubleClick={()=>onOpen(p)}><FileText size={19}/><span>{p.title}</span><small>{new Date(p.updatedAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US")}</small><button className="icon-button" disabled={p.shared&&p.accessRole==="viewer"} aria-label={`${t("fileActions")}: ${p.title}`} onClick={e=>{e.stopPropagation();if(p.shared&&p.accessRole==="viewer")return;setSelected(p);setValue(p.title);setDialog("rename")}}><MoreHorizontal size={18}/></button></div>)}</div>}
       </>}
     </div>
     {dialog&&selected&&<Dialog title={t(dialog)} onClose={()=>setDialog(null)}>{dialog==="rename"&&<form onSubmit={e=>{e.preventDefault();void run(()=>onManage(selected,{title:value.trim()}))}}><input autoFocus required value={value} onChange={e=>setValue(e.target.value)}/><footer className="actions"><button type="button" onClick={()=>setDialog(null)}>{t("cancel")}</button><button className="primary-button" disabled={busy}>{t("save")}</button></footer></form>}{dialog==="move"&&<form onSubmit={e=>{e.preventDefault();void run(()=>onManage(selected,{folderId:value||null}))}}><select value={value} onChange={e=>setValue(e.target.value)}><option value="">{t("noFolder")}</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select><footer className="actions"><button type="button" onClick={()=>setDialog(null)}>{t("cancel")}</button><button className="primary-button">{t("save")}</button></footer></form>}{dialog==="delete"&&<><p>{t("deleteFileHint")}</p><button className="danger-button" onClick={()=>void run(()=>onManage(selected,{deletedAt:new Date().toISOString()}))}>{t("delete")}</button></>}</Dialog>}
     {folderAction?.kind === "rename" && <Dialog title={t("renameFolder")} onClose={() => setFolderAction(null)}><form onSubmit={event => { event.preventDefault(); const nextName = folderValue.trim(); if (!nextName || busy) return; setBusy(true); void onRenameFolder(folderAction.folder, nextName).then(() => { emitGuideAction("folder:renamed", { folderId: folderAction.folder.id, name: nextName }); setFolderAction(null); }).catch(() => undefined).finally(() => setBusy(false)); }}><label>{t("name")}<input autoFocus required maxLength={80} value={folderValue} onChange={event => setFolderValue(event.target.value)}/></label><footer className="actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setFolderAction(null)}>{t("cancel")}</button><button className="primary-button" disabled={busy || !folderValue.trim()}>{busy ? t("saving") : t("save")}</button></footer></form><button type="button" className="text-danger-button" disabled={busy} onClick={() => setFolderAction({ ...folderAction, kind: "delete" })}>{t("deleteFolder")}</button></Dialog>}
-    {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setFolderAction(null)}>{t("cancel")}</button><button type="button" className="danger-button" disabled={busy} onClick={() => { setBusy(true); void onDeleteFolder(folderAction.folder).then(() => { emitGuideAction("folder:deleted", { folderId: folderAction.folder.id }); if (active === folderAction.folder.id) { setActive(null); setSelected(null); } setFolderAction(null); }).catch(() => undefined).finally(() => setBusy(false)); }}>{busy ? t("saving") : t("deleteFolder")}</button></footer></Dialog>}
+    {folderAction?.kind === "delete" && <Dialog title={t("deleteFolder")} onClose={() => setFolderAction(null)}><p>{t("deleteFolderHint")}</p><footer className="actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setFolderAction(null)}>{t("cancel")}</button><button type="button" className="danger-button" disabled={busy} onClick={() => { setBusy(true); void onDeleteFolder(folderAction.folder).then(() => { emitGuideAction("folder:deleted", { folderId: folderAction.folder.id }); setFolderAction(null); }).catch(() => undefined).finally(() => setBusy(false)); }}>{busy ? t("saving") : t("deleteFolder")}</button></footer></Dialog>}
   </section>;
 }

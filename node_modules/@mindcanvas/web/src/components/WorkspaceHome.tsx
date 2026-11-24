@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FilePlus2, FileText, FolderOpen, Search, Upload, Star, MoreHorizontal } from "lucide-react";
 import type { CanvasThumbnail, CanvasThumbnailItem } from "@mindcanvas/shared";
 import type { Project, ProjectFolder, ProjectPatch } from "../lib/projectStore";
@@ -31,9 +31,9 @@ function CardPreview({ project }: { project: Project }) {
 function projectSearchText(project: Project) {
   return [project.title, ...(project.board?.texts.map(item => item.text) ?? []), ...(project.board?.nodes.map(item => item.label) ?? []), ...(project.board?.media.map(item => item.name) ?? []), ...(project.board?.embeds.map(item => `${item.title ?? ""} ${item.url}`) ?? []), ...(project.board?.edges.map(item => item.label ?? "") ?? [])].join(" ").toLocaleLowerCase();
 }
-export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, onDragProject, onLoadThumbnails, trash = false }: {
+export default function WorkspaceHome({ projects, title, loading, onOpen, onCreate, onImport, folders = [], onManage, onDuplicate, onDragProject, onLoadThumbnails, folderArea, trash = false }: {
   projects: Project[]; title: string; loading: boolean; onOpen: (p: Project) => void; onCreate: () => void; onImport: () => void;
-  folders?: ProjectFolder[]; onManage?: (p: Project, patch: ProjectPatch) => Promise<void>; onDuplicate?: (p: Project, title: string) => Promise<void>; onDragProject?: (p: Project) => void; onLoadThumbnails?: (projects: Project[]) => Promise<void>; trash?: boolean;
+  folderArea?: ReactNode; folders?: ProjectFolder[]; onManage?: (p: Project, patch: ProjectPatch) => Promise<void>; onDuplicate?: (p: Project, title: string) => Promise<void>; onDragProject?: (p: Project) => void; onLoadThumbnails?: (projects: Project[]) => Promise<void>; trash?: boolean;
 }) {
   const { t, language } = useLanguage();
   const [query, setQuery] = useState(""), [sort, setSort] = useState("newest"), [busy, setBusy] = useState(false);
@@ -69,6 +69,7 @@ export default function WorkspaceHome({ projects, title, loading, onOpen, onCrea
   return <section className="workspace-home">
     <div className="home-heading"><div><span className="eyebrow">MINDCANVAS</span><h1>{title}</h1></div><div className="actions">
       <button className="secondary-button" onClick={onImport}><Upload size={18}/>{t("import")}</button><button className="primary-button workspace-create-button" onClick={onCreate}><FilePlus2 size={18}/>{t("newProject")}</button></div></div>
+    {folderArea}
     {trash && <p>{t("trashHint")}</p>}{error && <p role="alert">{error}</p>}
     <div className="home-controls"><label className="search-field"><Search size={18}/><input aria-label={t("search")} placeholder={t("search")} value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label={t("newest")} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">{t("newest")}</option><option value="name">{t("alphabetical")}</option></select></div>
     {loading ? <p role="status">{t("loading")}</p> : !visible.length ? <div className="empty-state"><FolderOpen size={42}/><h2>{query ? t("noResults") : trash ? t("trashEmpty") : t("empty")}</h2>{!trash && <><p>{t("emptyHint")}</p><button className="primary-button workspace-create-button" onClick={onCreate}>{t("newProject")}</button></>}</div> : <div className="project-grid" ref={grid}>{visible.map(p => { const canManageMetadata = !p.shared || p.accessRole !== "viewer"; return <article className="project-card" key={p.id} data-preview-id={p.id} draggable={!trash && canManageMetadata} onDragStart={e => { if (!canManageMetadata) return; e.dataTransfer.setData("text/mindcanvas-project", p.id); e.dataTransfer.effectAllowed = "move"; onDragProject?.(p); }}>

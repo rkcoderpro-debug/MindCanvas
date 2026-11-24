@@ -1,0 +1,30 @@
+.workspace-folder-area { display: grid; gap: 14px; margin-block: 0 24px; min-width: 0; }
+.workspace-folder-crumbs, .workspace-folder-crumbs > span { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; color: var(--muted); font-size: 13px; }
+.workspace-folder-crumbs button { color: var(--accent); background: transparent; padding: 5px 4px; text-align: start; }
+.workspace-folder-crumbs button:hover { text-decoration: underline; }
+.workspace-folder-crumbs strong { color: var(--text); overflow-wrap: anywhere; }
+.workspace-folder-tools { display: flex; align-items: flex-start; gap: 10px 16px; flex-wrap: wrap; justify-content: space-between; }
+.workspace-folder-tools .actions { margin: 0; flex-wrap: wrap; justify-content: flex-start; }
+.workspace-folder-picker .file-picker-selection, .workspace-folder-picker .file-picker-names { display: none; }
+.workspace-folder-picker[data-dragging] { outline: 2px dashed var(--accent); border-radius: 9px; }
+.workspace-folder-picker .file-picker-trigger { color: var(--accent); background: var(--accent-soft); }
+.workspace-folder-area h2 { font-size: 16px; margin: 0 0 3px; }
+.workspace-child-folders ul, .workspace-file-list { list-style: none; margin: 0; padding: 0; }
+.workspace-child-folders ul { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,192px),1fr)); gap: 8px; margin-top: 8px; }
+.workspace-child-folders button { width: 100%; justify-content: flex-start; min-width: 0; }
+.workspace-child-folders button svg { flex: none; }
+.workspace-child-folders button > span { flex: 1; overflow: hidden; text-align: start; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-file-box { padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.workspace-file-box header, .workspace-file-search { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.workspace-file-search .search-field { min-width: 0; width: min(205px,100%); }
+.workspace-file-box p, .workspace-file-box small { color: var(--muted); }
+.workspace-file-list { margin-top: 10px; }
+.workspace-file-list li { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid var(--line); }
+.workspace-file-list li > svg { color: var(--accent); flex: none; }
+.workspace-file-name { flex: 1; min-width: 0; display: grid; }
+.workspace-file-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workspace-file-actions { display: flex; gap: 2px; flex: none; }
+.workspace-file-danger:hover { color: var(--danger); }
+.workspace-file-status { margin-block: 0; overflow-wrap: anywhere; }
+.workspace-file-box .form-error { color: var(--danger); }
+.workspace-folder-unavailable { margin-block: 28px; }

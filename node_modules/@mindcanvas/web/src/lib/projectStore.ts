@@ -11,7 +11,7 @@ import { createCanvasThumbnail, isCanvasThumbnail } from "./canvasThumbnail";
 import { deleteFlashcardList, readFlashcardList, writeFlashcardList } from "./flashcardStorage";
 
 export type Project = { id: string; title: string; folderId: string | null; updatedAt: string; baseUpdatedAt?: string; board?: BoardState; thumbnail?: CanvasThumbnail; pending?: boolean; favorite?: boolean; deletedAt?: string | null; revision?: number; ownerId?: string; accessRole?: "owner" | "editor" | "viewer"; shared?: boolean; cloudOffline?: boolean; assetFormat?: 2 };
-export type ProjectFolder = { id: string; name: string };
+export type ProjectFolder = { id: string; name: string; parentId?: string | null };
 export type CachedProject = Project & { board: BoardState; pending: boolean };
 export class OwnedProjectUnavailableError extends Error {
   constructor() { super("Canvas này không còn khả dụng trên đám mây."); }
@@ -616,9 +616,14 @@ export async function persistProject(owner: string, project: CachedProject): Pro
 export async function fetchFolders(owner: string | null): Promise<ProjectFolder[]> {
   if (!owner) return JSON.parse(localStorage.getItem(cacheKey(null) + ":folders") ?? "[]");
   const client = await clientFor(owner);
-  const { data, error } = await client.from("folders").select("id,name").eq("user_id", owner).order("created_at").abortSignal(requestTimeoutSignal(20000));
+  const { data, error } = await client.from("folders").select("id,name,parent_id").eq("user_id", owner).order("created_at").abortSignal(requestTimeoutSignal(20000));
+  if (error?.code === "42703") {
+    const older = await client.from("folders").select("id,name").eq("user_id",owner).order("created_at").abortSignal(requestTimeoutSignal(20000));
+    if (older.error) throw older.error;
+    return older.data ?? [];
+  }
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(({ id, name, parent_id }) => ({ id, name, parentId: parent_id }));
 }
 export type ProjectPatch = { favorite?: boolean; deletedAt?: string | null; title?: string; folderId?: string | null };
 export async function updateProject(owner: string | null, project: Project, patch: ProjectPatch) {
@@ -643,11 +648,21 @@ export async function updateProject(owner: string | null, project: Project, patc
   if (cached) cacheProject(owner, { ...cached, ...patch, updatedAt: timestamp,
     board: patch.title !== undefined ? { ...cached.board, title: patch.title, updatedAt: timestamp } : cached.board });
 }
-export async function addFolder(owner: string | null, name: string): Promise<ProjectFolder> {
-  const folder = { id: crypto.randomUUID(), name };
-  if (!owner) { localStorage.setItem(cacheKey(null) + ":folders", JSON.stringify([...(await fetchFolders(null)), folder])); return folder; }
+export async function addFolder(owner: string | null, name: string, parentId: string | null = null): Promise<ProjectFolder> {
+  const folder = { id: crypto.randomUUID(), name, parentId };
+  if (!owner) {
+    const folders = await fetchFolders(null);
+    const branch = new Map(folders.map(row => [row.id, row.parentId ?? null]));
+    let ancestor = parentId;
+    for (let depth = 1; ancestor; depth++) {
+      if (!branch.has(ancestor) || depth >= 16) throw new Error("WORKSPACE_FOLDER_PARENT");
+      ancestor = branch.get(ancestor) ?? null;
+    }
+    localStorage.setItem(cacheKey(null) + ":folders", JSON.stringify([...folders, folder]));
+    return folder;
+  }
   const client = await clientFor(owner);
-  const { error } = await client.from("folders").insert({ ...folder, user_id: owner }).abortSignal(requestTimeoutSignal(20000));
+  const { error } = await client.from("folders").insert({ id: folder.id, name, user_id: owner, ...(parentId && { parent_id: parentId }) }).abortSignal(requestTimeoutSignal(20000));
   if (error) throw error;
   return folder;
 }
@@ -663,11 +678,13 @@ export async function updateFolder(owner: string | null, folder: ProjectFolder, 
 export async function deleteFolder(owner: string | null, folder: ProjectFolder) {
   if (owner) {
     const client = await clientFor(owner);
-    const { error } = await client.from("folders").delete().eq("user_id", owner).eq("id", folder.id);
+    const { error } = await client.from("folders").delete().eq("user_id", owner).eq("id", folder.id).select("id").single();
     if (error) throw error;
   }
-  const folders = (await fetchFolders(owner)).filter(f => f.id !== folder.id);
-  localStorage.setItem(cacheKey(owner) + ":folders", JSON.stringify(folders));
+  if (!owner) {
+    const folders = (await fetchFolders(null)).filter(f => f.id !== folder.id).map(f => f.parentId === folder.id ? { ...f, parentId: null } : f);
+    localStorage.setItem(cacheKey(null) + ":folders", JSON.stringify(folders));
+  }
   const entries = readCache(owner).map(p => p.folderId === folder.id ? { ...p, folderId: null } : p);
   writeProjectCache(owner, entries);
 }

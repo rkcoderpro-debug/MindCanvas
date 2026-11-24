@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Clock3, FileText, Folder, FolderCog, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
@@ -43,7 +43,7 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const [showSwipeHint, setShowSwipeHint] = useState(() => { try { return localStorage.getItem("mindcanvas:mobile-nav-swiped:v1") !== "true"; } catch { return true; } });
-  const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState(() => new Set<string>());
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 620px)").matches);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 1280 : window.innerWidth);
   const closeMobile = () => setMobileOpen(false);
@@ -51,6 +51,28 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   const goView = (view: SidebarView) => { closeMobile(); onOpenView(view); if (view === "recent") emitGuideAction("workspace:recent"); else if (view === "__favorites") emitGuideAction("workspace:favorites"); else if (view === "__trash") emitGuideAction("workspace:trash"); };
   const openFolder = (folderId: string) => { closeMobile(); onOpenFolder(folderId); emitGuideAction("workspace:folder", folderId); };
   const handleDrop = (event: DragEvent, folderId: string | null) => { closeMobile(); onDropProject(event, folderId); };
+  const renderFolders = (parent: string | null, depth: number): ReactNode => depth >= 16 ? null : folders
+    .filter(folder => (folder.parentId ?? null) === parent).map(folder => {
+    const children = projects.filter(project => project.folderId === folder.id && !project.deletedAt);
+    const expanded = expandedFolders.has(folder.id);
+    const nested = folders.some(child => child.parentId === folder.id);
+    return <div key={folder.id}>
+      <div className={`folder-row ${filter === folder.id && !boardOpen ? "active" : ""}`}
+        style={depth ? { marginInlineStart: Math.min(depth*10,36) } : undefined}
+        onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event,folder.id)}>
+        <button className="folder-open" title={folder.name} aria-current={filter === folder.id && !boardOpen ? "page" : undefined} onClick={() => openFolder(folder.id)}><Folder size={17}/><span className="nav-label">{folder.name}</span></button>
+        <button className="folder-expand-toggle" aria-label={`${expanded ? t("collapseFolder") : t("expandFolder")}: ${folder.name}`} aria-expanded={expanded} title={expanded ? t("collapseFolder") : t("expandFolder")}
+          onClick={() => setExpandedFolders(previous => { const next = new Set(previous); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next; })}>{expanded ? <ChevronDown size={15}/> : <ChevronRight size={15}/>}</button>
+        <button className="folder-more" aria-label={`${t("folderActions")}: ${folder.name}`} title={t("folderActions")} onClick={() => { closeMobile(); onFolderAction(folder); }}><MoreHorizontal size={16}/></button>
+        {expanded && (!nested || children.length > 0) && <div className="folder-dropdown">
+          {children.slice(0,8).map(project => <button key={project.id} title={project.title} onClick={() => { closeMobile(); onOpenProject(project); }}><FileText size={14}/><span>{project.title}</span></button>)}
+          {!children.length && <small>{t("projects")}: 0</small>}
+          {children.length > 8 && <small>+{children.length-8} {t("projects").toLocaleLowerCase()}</small>}
+        </div>}
+      </div>
+      {expanded && nested && renderFolders(folder.id,depth+1)}
+    </div>;
+  });
   // A saved desktop width must not consume the content area on a smaller window.
   const effectiveWidth = Math.min(sidebarWidth, Math.max(SIDEBAR_MIN_WIDTH, Math.floor(viewportWidth * .28)));
   const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : effectiveWidth}px` } as CSSProperties;
@@ -83,8 +105,13 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
   }, [isMobile, mobileOpen]);
 
   useEffect(() => {
-    if (expandedFolderId && !folders.some(folder => folder.id === expandedFolderId)) setExpandedFolderId(null);
-  }, [expandedFolderId, folders]);
+    const parents = new Map(folders.map(folder => [folder.id,folder.parentId ?? null]));
+    setExpandedFolders(previous => {
+      const next = new Set([...previous].filter(id => parents.has(id)));
+      for (let ancestor = filter ? parents.get(filter) : null, depth = 0; ancestor && depth < 16; ancestor = parents.get(ancestor), depth++) next.add(ancestor);
+      return next.size === previous.size && [...next].every(id => previous.has(id)) ? previous : next;
+    });
+  }, [filter, folders]);
 
 
   useEffect(() => {
@@ -123,22 +150,9 @@ export default function AppSidebar({ projects, folders, boardOpen, recent, filte
         <button className={!boardOpen && filter === "__guides" ? "active" : ""} aria-current={!boardOpen && filter === "__guides" ? "page" : undefined} title={t("guides")} onClick={() => goView("__guides")}><CircleHelp size={18}/><span className="nav-label">{t("guides")}</span></button>
       </nav>
       {isMobile && showSwipeHint && <div className="mobile-nav-swipe-hint" role="status">{t("swipeForMore")}</div>}
-      <div className="section-label"><span>{t("folders")}</span><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>
+      <div className="section-label"><button type="button" className="sidebar-folder-root" title={t("manageFolders")} onClick={() => { closeMobile(); onManageFolders(); emitGuideAction("workspace:folder-manager"); }}>{t("folders")}</button><button className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={onNewFolder}><Plus size={17}/></button></div>
       <div className="folder-list">
-        {folders.map(folder => {
-          const children = projects.filter(project => project.folderId === folder.id && !project.deletedAt);
-          const expanded = expandedFolderId === folder.id;
-          return <div className={`folder-row ${filter === folder.id && !boardOpen ? "active" : ""}`} key={folder.id} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, folder.id)}>
-            <button className="folder-open" title={folder.name} onClick={() => openFolder(folder.id)}><Folder size={17}/><span className="nav-label">{folder.name}</span></button>
-            <button className="folder-expand-toggle" aria-label={`${expanded ? t("collapseFolder") : t("expandFolder")}: ${folder.name}`} aria-expanded={expanded} title={expanded ? t("collapseFolder") : t("expandFolder")} onClick={event => { event.stopPropagation(); setExpandedFolderId(current => current === folder.id ? null : folder.id); }}>{expanded ? <ChevronDown size={15}/> : <ChevronRight size={15}/>}</button>
-            <button className="folder-more" aria-label={`${t("folderActions")}: ${folder.name}`} title={t("folderActions")} onClick={event => { event.stopPropagation(); closeMobile(); onFolderAction(folder); }}><MoreHorizontal size={16}/></button>
-            {expanded && <div className="folder-dropdown">
-              {children.slice(0, 8).map(project => <button key={project.id} title={project.title} onClick={() => { closeMobile(); onOpenProject(project); }}><FileText size={14}/><span>{project.title}</span></button>)}
-              {!children.length && <small>{t("emptyFolder")}</small>}
-              {children.length > 8 && <small>+{children.length - 8} {t("projects").toLocaleLowerCase()}</small>}
-            </div>}
-          </div>;
-        })}
+        {renderFolders(null,0)}
         {!folders.length && <small>{t("noFolders")}</small>}
       </div>
       <button className="manage-folders-button" title={t("manageFolders")} onClick={() => { closeMobile(); onManageFolders(); emitGuideAction("workspace:folder-manager"); }}><FolderCog size={17}/><span className="nav-label">{t("manageFolders")}</span></button>

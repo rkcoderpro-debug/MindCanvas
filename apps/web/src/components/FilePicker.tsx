@@ -4,8 +4,9 @@ import { useLanguage } from "../lib/i18n";
 
 type Props = {
   label?: string;
+  buttonLabel?: string;
   "aria-label"?: string;
-  accept: string;
+  accept?: string;
   multiple?: boolean;
   disabled?: boolean;
   /** When supplied, the owning feature decides which selected files are still current. */
@@ -21,7 +22,7 @@ type Props = {
 
 /** A themed label for the platform file input, including keyboard and touch activation. */
 export default function FilePicker({
-  label, "aria-label": ariaLabel, accept, multiple, disabled, fileNames, description,
+  label, buttonLabel, "aria-label": ariaLabel, accept, multiple, disabled, fileNames, description,
   className = "", layout = "field", inputRef, onChange, onDropFiles, onBeforeChoose,
 }: Props) {
   const { t } = useLanguage();
@@ -29,7 +30,7 @@ export default function FilePicker({
   const [recent, setRecent] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const names = fileNames ?? recent;
-  const choose = t(multiple ? "filePickerChooseMany" : "filePickerChooseOne");
+  const choose = buttonLabel ?? t(multiple ? "filePickerChooseMany" : "filePickerChooseOne");
   const hasFiles = (types: DOMStringList | readonly string[]) => Array.from(types).includes("Files");
   return <div className={`file-picker file-picker-${layout}${onDropFiles ? " file-picker-droppable" : ""} ${className}`}
     data-dragging={dragging || undefined} data-disabled={disabled || undefined}

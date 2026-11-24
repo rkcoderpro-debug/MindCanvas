@@ -5834,3 +5834,6 @@ button.connections-resource:hover { border-color: var(--accent); background: var
 .online-room-entry small { color: var(--muted); }
 .online-room-entry > svg { color: var(--accent); flex: none; }
 .online-room-entry:hover { border-color: var(--accent); }
+
+.sidebar-folder-root { color: inherit; font: inherit; padding: 4px 0; letter-spacing: inherit; text-transform: inherit; background: transparent; }
+.sidebar-folder-root:hover { color: var(--accent); text-decoration: underline; }

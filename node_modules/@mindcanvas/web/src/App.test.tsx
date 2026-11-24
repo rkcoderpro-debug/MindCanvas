@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { cacheProject, waitForProjectCache } from "./lib/projectStore";
+import { addFolder, cacheProject, fetchFolders, waitForProjectCache } from "./lib/projectStore";
 import { blankBoard } from "./lib/board";
 import { openProfileRoute } from "./lib/profileNavigation";
 import { APP_VERSION_LABEL } from "./lib/appVersion";
@@ -26,6 +26,52 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); await waitForProjectCache(null); host.remove(); vi.restoreAllMocks(); });
 describe("Workspace UI", () => {
+  it("opens folder bookmarks, creates nested folders and restores the folder on browser Back", async () => {
+    const parent = await addFolder(null,"Kiến trúc máy tính");
+    window.history.replaceState({}, "", `/?folders=${parent.id}`);
+    const btn = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label);
+    const copy = vi.fn(async () => {});
+    const clipboard = Object.getOwnPropertyDescriptor(navigator,"clipboard");
+    Object.defineProperty(navigator,"clipboard",{ configurable:true,value:{ writeText:copy } });
+    try {
+      await act(async () => root.render(<App/>));
+      await waitForUI(() => expect(host.querySelector('input[type=file][aria-label="Thêm tài liệu"]')).toBeTruthy());
+      expect(host.querySelector(".home-heading h1")?.textContent).toBe(parent.name);
+      expect(host.querySelector('input[aria-label="Thêm tài liệu"]')?.hasAttribute("accept")).toBe(false);
+      await act(async () => btn("Sao chép link thư mục")!.click());
+      expect(copy).toHaveBeenCalledWith(new URL(`/?folders=${parent.id}`,window.location.origin).href);
+      await act(async () => btn("Tạo thư mục con")!.click());
+      const name = host.querySelector<HTMLInputElement>(".guide-folder-name-input")!;
+      const change = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!;
+      await act(async () => { change.call(name,"MIPS bài tập"); name.dispatchEvent(new Event("input",{bubbles:true})); });
+      await act(async () => host.querySelector<HTMLButtonElement>(".guide-folder-create-submit")!.click());
+      const child = (await fetchFolders(null)).find(folder => folder.name === "MIPS bài tập")!;
+      expect(child.parentId).toBe(parent.id);
+      const childCard = host.querySelector<HTMLButtonElement>(".workspace-child-folders button")!;
+      expect(childCard.textContent).toBe(child.name);
+      await act(async () => childCard.click());
+      await waitForUI(() => expect(host.querySelector(".workspace-folder-crumbs [aria-current=page]")?.textContent).toBe(child.name));
+      expect(window.location.search).toBe(`?folders=${child.id}`);
+      await act(async () => btn("Tất cả thư mục")!.click());
+      await waitForUI(() => expect(host.querySelector(".folder-manager .workspace-folder-area")).toBeTruthy());
+      expect(window.location.search).toBe("?folders=all");
+      await act(async () => btn("Sao chép link thư mục")!.click());
+      expect(copy).toHaveBeenLastCalledWith(new URL("/?folders=all",window.location.origin).href);
+      await act(async () => window.history.back());
+      await waitForUI(() => expect(host.querySelector(".workspace-folder-crumbs [aria-current=page]")?.textContent).toBe(child.name));
+    } finally {
+      if (clipboard) Object.defineProperty(navigator,"clipboard",clipboard);
+      else Reflect.deleteProperty(navigator,"clipboard");
+    }
+  });
+
+  it("shows an unavailable direct folder instead of displaying Workspace as if it were that folder", async () => {
+    window.history.replaceState({},"","/?folders=eeeeeeee-0000-4000-8000-000000000123");
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.querySelector(".workspace-folder-unavailable h1")?.textContent).toBe("Không mở được thư mục"));
+    expect(host.querySelector('input[aria-label="Thêm tài liệu"]')).toBeNull();
+  });
+
   it("opens a bookmarked canvas, copies its URL, and restores it on browser Back", async () => {
     const board = blankBoard("Bookmarked canvas");
     cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });

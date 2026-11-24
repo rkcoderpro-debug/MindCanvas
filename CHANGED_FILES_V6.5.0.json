@@ -1,0 +1,132 @@
+{
+  "version": "6.5.0",
+  "baseVersion": "6.4.0",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.5.0.md",
+      "bytes": 2418,
+      "sha256": "8f87b5deaf6d838a9bb53b099b8ee823cc8be7926df0ba4e7516780056a89fd0"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "5511de2db9afa5df6de80fb6864c1cba7fbcb7243f7083cbcc796348dff6e68b"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "8acbfab1246e2ed26250fe4c9a9ce831c0a89b31d7e464f4caa855ffa1fcdfde"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 41024,
+      "sha256": "af9f7bf2325b58cac2a833db4882dd0db368fd16bcf0b92f7fd049f8718530ac"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 63415,
+      "sha256": "3bf6cf3dc5f6bfb8147c4f833bef8644f9711d788b0ec3073b3b97cbac3330d1"
+    },
+    {
+      "path": "apps/web/src/components/AppSidebar.tsx",
+      "bytes": 14173,
+      "sha256": "5aa16e80bfff2ca17b1254735dc0c1ed5e714a4bc069b109fd576087bcbb5930"
+    },
+    {
+      "path": "apps/web/src/components/FilePicker.tsx",
+      "bytes": 4251,
+      "sha256": "293022839fb702110683bec7853c69ee7b3510e62abfadef00741b3ddb65426a"
+    },
+    {
+      "path": "apps/web/src/components/FolderManager.tsx",
+      "bytes": 15676,
+      "sha256": "a88a3b571e224c29713a378766ada8864a77598905e99500d52102b9e21175cf"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 12248,
+      "sha256": "bb3a58a4e7de245e54da49ac198059e32e9d7289a78c6963b7aa350d804d2102"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceHome.tsx",
+      "bytes": 12111,
+      "sha256": "4aede6a7a656acf5da9cb31794c6b585a0fca0de4cf3e4ee8658da108a954ef7"
+    },
+    {
+      "path": "apps/web/src/components/workspaceFolders.css",
+      "bytes": 2793,
+      "sha256": "02b2a6669b98cdd51658443dec49cc841249731de1c08919e33c069b7b3e0c7b"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspace.ts",
+      "bytes": 56478,
+      "sha256": "b210818201bbe23fb3c2c482f3380cee846ec8c9bbc146df22ff4b887803171a"
+    },
+    {
+      "path": "apps/web/src/lib/folderLinks.ts",
+      "bytes": 2355,
+      "sha256": "8bbb4cc25d202de656254adc14facbc6c2e593dfbf77d8f9b05389bfcde3a6b9"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "bytes": 129769,
+      "sha256": "d1f2cd862e5674a927311f613a8e356476cba620c1ea829041b3d1cccd72e1f7"
+    },
+    {
+      "path": "apps/web/src/lib/projectStore.ts",
+      "bytes": 82409,
+      "sha256": "7cb2ad730951f45cbe1bf51eddb21687e72edd26944f5cb74be828618b9b5a50"
+    },
+    {
+      "path": "apps/web/src/lib/supabase.ts",
+      "bytes": 12169,
+      "sha256": "df329d03d7514d2afdc6abe462b82525f8c41fef1535ad51c04aa6176704ec37"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceFiles.test.ts",
+      "bytes": 1988,
+      "sha256": "acb296cbb2e7943ac51d997248bff1006c6920b6b2a629b176f401c2cb62bf64"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceFiles.ts",
+      "bytes": 7001,
+      "sha256": "c3597dce10e18f0a8a300b52de2db1f07b56ac57e6fb4cb0be2ea3a90992192f"
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "bytes": 494,
+      "sha256": "be757ec21d13365c926f7a5379959580ae3a3a8746d648beb21e670d9aec1a57"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 521972,
+      "sha256": "74f74537cb46e96373ef190e89257e648d074a57a08b129d0eee428386c59c86"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "0737fc87eee859432ae093f87d3c7b8870a07cd5b1d3f72393522d566b801e24"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "e3ef59bd7b55f80f326ad43a3d9873398a4b4040d43e668282c0240d407863b2"
+    },
+    {
+      "path": "supabase/migrations/0044_workspace_folder_files.sql",
+      "bytes": 5514,
+      "sha256": "146c1557c72e588c9ea4d9a638d639cd6ec928a9d64e11a586f8960c8c4e2c35"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 22301,
+      "sha256": "d2fd140caec447569cffde3f391d0838d4eb4ce8395ad833a2295d769b387763"
+    },
+    {
+      "path": "supabase/tests/workspace-folder-files.pglite.mjs",
+      "bytes": 6626,
+      "sha256": "d7610e78aaa5563744020fc33c047cd23ccea88e0534cf19f76c81ca9a61241f"
+    }
+  ]
+}
