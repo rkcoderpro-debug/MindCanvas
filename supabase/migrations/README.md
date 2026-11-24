@@ -147,3 +147,5 @@ Có thể chạy `supabase/verification/online_music_rooms.sql` trên cơ sở d
 - `0042_online_rooms_rollout.sql`: liên kết Phòng Online với Lớp học, kiểm duyệt chat, báo cáo, giới hạn phòng mở và đo mức dùng LiveKit. Chạy sau `0041_online_meeting_collaboration.sql`. Xem `RELEASE_V6.3.0.md` để cấu hình webhook trước khi bật thử nghiệm công khai.
 - `0043_online_room_codes_and_delete.sql`: cấp mã 6 chữ số cho phòng, thêm chế độ vào bằng mật khẩu hoặc duyệt và cho phép chủ phòng xóa phòng. Chạy sau `0042_online_rooms_rollout.sql`. Xem `RELEASE_V6.4.0.md`.
 - `0044_workspace_folder_files.sql`: thư mục con và kho tệp Workspace riêng tư, tối đa 40 MB mỗi tệp. Chạy sau `0043_online_room_codes_and_delete.sql`. Xem `RELEASE_V6.5.0.md`.
+
+- `0045_workspace_sharing.sql`: chạy sau `0044`; thêm chia sẻ theo link và email có phân quyền, tệp Canvas và quyền kế thừa thư mục. Xem `RELEASE_V6.6.0.md`.

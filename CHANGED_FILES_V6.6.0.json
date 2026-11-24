@@ -1,0 +1,213 @@
+{
+  "version": "6.6.0",
+  "baseVersion": "6.5.0",
+  "alsoAppliesOver": "6.6.0-beta.1",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 1565,
+      "sha256": "658b81d658a4cda37cbf638d3abfcae360796106b54b66ae935cf931feaaaac4"
+    },
+    {
+      "path": "RELEASE_V6.6.0.md",
+      "bytes": 3671,
+      "sha256": "a0e321738f05fcb19b16fcb19b814264b29927e0d5dbccd08069e22a73bb3bad"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "47b876e67549c66b75e735caf9af8f7957649eb36a312352fbb49d2bd6f66179"
+    },
+    {
+      "path": "apps/server/src/config.ts",
+      "bytes": 2405,
+      "sha256": "fae42a084b29172d902f73082acaf07074cef7ca6ec93c5540791dca90249cb2"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "bytes": 19205,
+      "sha256": "3d6ef02bff085005839b96d75e802ac7196ed73b69267145094f337bebe1cc25"
+    },
+    {
+      "path": "apps/server/src/workspaceSharing.ts",
+      "bytes": 16235,
+      "sha256": "7413f67dc370cb14f3d8626827cb3dd7d604205993ec96f6ce7dac02d8f6cc1c"
+    },
+    {
+      "path": "apps/server/tests/workspaceSharing.test.ts",
+      "bytes": 4439,
+      "sha256": "69543a1cb4bb9b0d319336d598bbfc01825f975ca53c8ff2360b5a06d0c1a318"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "d9bc07ea16dda44c3b06e59573869434a560db11029b76ce9947e27cb055dff9"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 45321,
+      "sha256": "4212303568f68be1fcc0e71232dc5e3ac0edc9da73c39d751a3edf39a379f2cf"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 67434,
+      "sha256": "3c45d0244d6f3315f1e5571214c12328ef22b2cbe1b50a939407e9725a71b376"
+    },
+    {
+      "path": "apps/web/src/components/AppSidebar.tsx",
+      "bytes": 15406,
+      "sha256": "ca2f305b031e4663bc20bb71c6bae0e46ffa8dd7a327c209bec22694b2a10691"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 62740,
+      "sha256": "db6fe2fa1e33b49ebd4e3ecff9b627f1abcfdfdbd6d3e9edba6949be7b873585"
+    },
+    {
+      "path": "apps/web/src/components/FolderManager.tsx",
+      "bytes": 7678,
+      "sha256": "0aa143f6e1f9d3660a6bf892dad25dfe70494b995798ffbd86a6de6aa451f097"
+    },
+    {
+      "path": "apps/web/src/components/FolderProjectList.tsx",
+      "bytes": 4301,
+      "sha256": "1f0dd3e1c585a8fcf26c2b8d54476c5234b8a2fa09478cb5725962dbbe165c65"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 17281,
+      "sha256": "56473b19db5fc94e63025744f05786fc271db0b223bb750a32091c11a1048b75"
+    },
+    {
+      "path": "apps/web/src/components/ShareDialog.tsx",
+      "bytes": 11833,
+      "sha256": "14b0e73051956f37819cd982e92f8df34bbb8e65d4b504a4d3eac6c63b47cf5e"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 15815,
+      "sha256": "5a7aad2cee2ea63e22089ddbef04fc1846ebafac219208ccff05b7e875a3aa80"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceHome.tsx",
+      "bytes": 12042,
+      "sha256": "0431357ae923993fe0492d9c65dc775513219a87b22106d13ee5989bd93919dc"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceShareDialog.tsx",
+      "bytes": 8249,
+      "sha256": "8e57aa437e2e43a5d7ee4cb5d67bdacf405032dbc784e21141c4fadfb06d5df6"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedInbox.tsx",
+      "bytes": 1071,
+      "sha256": "dd206b8ee60d93b7479f279b4053024e2a19d6c8574b91ae1690bcc87bc47389"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.test.tsx",
+      "bytes": 3592,
+      "sha256": "95cc8a5206be1c8aef829d98f785457aa03dd3a7190aebea1eb6c07ff270cd83"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 20161,
+      "sha256": "5fd25e9ac8a286d2aa12d8f18941c618d3c985cb58671ee5cada66b753ab0137"
+    },
+    {
+      "path": "apps/web/src/components/workspaceFolders.css",
+      "bytes": 6139,
+      "sha256": "0d9c7cf1d71797bdb20d34be5bd4e42250057e83729f0325146011a021b17799"
+    },
+    {
+      "path": "apps/web/src/components/workspaceSharing.css",
+      "bytes": 3334,
+      "sha256": "fee438969176de0560a045203e9ac80e9413b2c2abaf9b164edcb44fff8d8dbe"
+    },
+    {
+      "path": "apps/web/src/hooks/useWorkspaceFiles.ts",
+      "bytes": 912,
+      "sha256": "12f2e9a293872416aa0550940bf58b15ca5f5cdd0dee0067683554968b54254f"
+    },
+    {
+      "path": "apps/web/src/lib/canvasLinks.ts",
+      "bytes": 2286,
+      "sha256": "c544e20eb3b0fb867cedd73b878ca18c6c13af717cf496d06649966065f2e63b"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 64159,
+      "sha256": "8dce9f20a83ff04b2bb189f5b95368afd563f9fe1420b04fc44847fd9b8128c0"
+    },
+    {
+      "path": "apps/web/src/lib/folderLinks.ts",
+      "bytes": 3729,
+      "sha256": "06aaad500c6be2debff6eb3b14be63d5c98e3c02e96303b09dfa351f88d818e9"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 9621,
+      "sha256": "41ee922b94cdffd6a4c44e81c6ad912834ded4ae55666b548864e33c5fa57c37"
+    },
+    {
+      "path": "apps/web/src/lib/shareAttachments.ts",
+      "bytes": 2262,
+      "sha256": "92ee008a600d12093d9730d4e473a48988e9c2fb15497bc8447cbdb775eee1a5"
+    },
+    {
+      "path": "apps/web/src/lib/supabase.ts",
+      "bytes": 12273,
+      "sha256": "6d4ba17045d00b980bee2e89132fe7d154639cb4f9d1fa0e2e0e21adf26d5f8b"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceFiles.ts",
+      "bytes": 7367,
+      "sha256": "894ab3c52c66521174e61ce29205681fbc22d68543694c6f50b2d5e58571dd07"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceShareLinks.ts",
+      "bytes": 2377,
+      "sha256": "c03280e2bd58fe8c8bb4e0782360d769adae78eac98dfde6594fd4049c6d0966"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceSharing.ts",
+      "bytes": 7566,
+      "sha256": "cec850b738434d93f6e875c0af77e6213c1e09bf06bfdaecdec10cb694c6d38d"
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "bytes": 598,
+      "sha256": "8a5f75cc98e56dde9530023db4a292ac9a0acb131b6134705889db9b6e85a42c"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "55685011871bd86f2a420a1e810ea132da4a20a00885847f80eb9cd69ba61fa4"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "3dea879f7facabf63dde550af5c6d12683fc976b7e223333d9e78c09e9131e05"
+    },
+    {
+      "path": "render.yaml",
+      "bytes": 1874,
+      "sha256": "51f1ae2e888c3eb3e4223f7ac7f2a9ad12f2be444e3ee968d5e75bc6fac99fdb"
+    },
+    {
+      "path": "supabase/migrations/0045_workspace_sharing.sql",
+      "bytes": 26963,
+      "sha256": "dbd7902cfab179e108ec70c528136f2a277e0a92464ae8e29af78231f2e420d7"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 22482,
+      "sha256": "8a02136ee48e521ab884d826ad752d8aba5af6234f53a7e5fc4e9ee378585e3d"
+    },
+    {
+      "path": "supabase/tests/workspace-sharing.pglite.mjs",
+      "bytes": 10454,
+      "sha256": "6d24c447265d0fad4598afdcb7bc30f1d872d892d3d6a3ebd397e9c7be7000df"
+    }
+  ]
+}

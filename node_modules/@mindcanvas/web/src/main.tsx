@@ -1,3 +1,4 @@
+import { restoreWorkspaceShareSignIn } from "./lib/workspaceShareLinks";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
@@ -8,6 +9,7 @@ import "./styles.css";
 
 restoreOnlineRoomSignIn();
 restoreFolderSignIn();
+restoreWorkspaceShareSignIn();
 registerMindCanvasServiceWorker();
 
 createRoot(document.getElementById("root")!).render(

@@ -1,3 +1,6 @@
+import type { CanvasEmbed } from "@mindcanvas/shared";
+import { WorkspaceShareButton,WorkspaceShareSettings } from "./WorkspaceShareDialog";
+import { shareErrorText } from "../lib/workspaceSharing";
 import { BackButton } from "./PageNavigation";
 import { useEffect, useRef, useState } from "react";
 import { Check, Clipboard, Mail, Share2, Shield, Trash2, UserPlus, Users } from "lucide-react";
@@ -15,9 +18,13 @@ import {
   type ProjectMember,
 } from "../lib/collaboration";
 
-type Props = { shellBack?: boolean; projectId: string; title: string; onClose: () => void; isAuthenticated?: boolean; onSignIn?: () => void };
+type Props = {
+  attachmentEmbeds?:CanvasEmbed[];
+  prepareSharing?:()=>Promise<void>;
+  prepareAttachment?:(embed:CanvasEmbed)=>Promise<string>;
+  shellBack?: boolean; projectId: string; title: string; onClose: () => void; isAuthenticated?: boolean; onSignIn?: () => void };
 
-export default function ShareDialog({ projectId, title, onClose, isAuthenticated = true, onSignIn, shellBack }: Props) {
+export default function ShareDialog({ projectId, title, onClose, isAuthenticated = true, onSignIn, attachmentEmbeds,prepareSharing,prepareAttachment,shellBack }: Props) {
   const { t, language } = useLanguage();
   const linkInput = useRef<HTMLInputElement>(null);
   const iosDevice = isIOSDevice();
@@ -136,7 +143,10 @@ export default function ShareDialog({ projectId, title, onClose, isAuthenticated
       setWorking(false);
     }
   };
-
+  const [attachment,setAttachment]=useState<{id:string;title:string}|null>(null);
+  const [attachmentError,setAttachmentError]=useState("");
+  const [attachmentBusy,setAttachmentBusy]=useState(false);
+  const [attachmentNotice,setAttachmentNotice]=useState("");
   return <section className="share-page" aria-labelledby="share-page-title">
     <header className="share-page-header">
       <div className="share-page-title-group">
@@ -149,6 +159,26 @@ export default function ShareDialog({ projectId, title, onClose, isAuthenticated
       </div>
       {!shellBack && <button type="button" className="secondary-button share-page-close" onClick={onClose}>{t("close")}</button>}
     </header>
+    {isAuthenticated&&<div className="share-dialog">
+      <WorkspaceShareSettings item={{kind:"canvas",id:projectId,title}} prepare={prepareSharing}/>
+      {!!attachmentEmbeds?.length&&prepareAttachment&&<section className="workspace-share-block">
+        <h2>{language==="vi"?"Chia sẻ riêng tài liệu đính kèm":"Share an attachment separately"}</h2>
+        {prepareSharing&&<button type="button" className="secondary-button" disabled={attachmentBusy} onClick={()=>{
+          setAttachmentBusy(true);setAttachmentError("");setAttachmentNotice("");
+          void prepareSharing().then(()=>setAttachmentNotice(language==="vi"?"Đã đồng bộ tài liệu đính kèm.":"Attachments synced."))
+            .catch(error=>setAttachmentError(shareErrorText(error,language==="vi"))).finally(()=>setAttachmentBusy(false));
+        }}>{language==="vi"?"Đồng bộ tất cả tài liệu":"Sync all attachments"}</button>}
+        {attachmentEmbeds.map(embed=><button key={embed.id} type="button" className="secondary-button" disabled={attachmentBusy} onClick={()=>{
+          setAttachmentBusy(true);setAttachmentError("");setAttachment(null);
+          void prepareAttachment(embed).then(id=>setAttachment({id,title:embed.fileName||embed.title||"document"}))
+            .catch(error=>setAttachmentError(shareErrorText(error,language==="vi"))).finally(()=>setAttachmentBusy(false));
+        }}>{embed.fileName||embed.title||"document"}</button>)}
+        {attachmentBusy&&<p role="status">{t("loading")}</p>}
+        {attachmentError&&<p role="alert">{attachmentError}</p>}
+        {attachmentNotice&&<p role="status">{attachmentNotice}</p>}
+        {attachment&&<WorkspaceShareButton key={attachment.id} item={{kind:"file",...attachment}}/>}
+      </section>}
+    </div>}
     <div className="share-dialog">
       <div className="share-project-heading"><Users size={22}/><div><strong>{title}</strong><small>{t("shareProjectHint")}</small></div></div>
       {!isAuthenticated ? <div className="share-auth-box"><strong>{t("shareLoginRequired")}</strong><p>{t("accountHint")}</p><button type="button" className="primary-button" disabled={!onSignIn} onClick={onSignIn}><UserPlus size={17}/>{t("login")}</button></div> : <>

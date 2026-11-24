@@ -1,3 +1,5 @@
+import { WorkspaceShareButton } from "./WorkspaceShareDialog";
+import { ensureFolderAttachments } from "../lib/shareAttachments";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, Download, File, FilePlus2, Folder, FolderPlus, LibraryBig, Link2, Move, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import Dialog from "./Dialog";
@@ -144,6 +146,8 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
         <button type="button" className="secondary-button" onClick={onNewProject}><FilePlus2 size={17}/>{t("newProject")}</button>
         <button type="button" className="secondary-button" onClick={onImportProject}><Upload size={17}/>{t("import")}</button>
         <button type="button" className="secondary-button" onClick={() => void copy()}><Link2 size={17}/>{label("Sao chép link thư mục", "Copy folder link")}</button>
+        {current && <WorkspaceShareButton item={{kind:"folder",id:current.id,title:current.name}} available={!!owner}
+          prepare={owner ? ()=>ensureFolderAttachments(owner,current.id) : undefined}/>}
         {!current && <button type="button" className="secondary-button manager-documents" onClick={onLibrary}><LibraryBig size={17}/>{label("Tài liệu đã tải lên", "Uploaded documents")}</button>}
       </div>
     </div>
@@ -163,6 +167,7 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
           <File size={18} aria-hidden="true"/><button type="button" className="workspace-file-open workspace-file-name" onClick={() => onOpenFile(file.id)}><strong title={file.name}>{file.name}</strong>
             <small>{!file.ready ? label("Tải lên chưa hoàn tất", "Upload incomplete") : `${file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1048576).toFixed(1)} MB`} · ${new Date(file.createdAt).toLocaleDateString(vn ? "vi-VN" : "en-US")}`}</small></button>
           <div className="workspace-file-actions">
+            {file.ready&&<WorkspaceShareButton item={{kind:"file",id:file.id,title:file.name}} available={!!owner} compact/>}
             <button type="button" className="icon-button" disabled={!enabled || !file.ready} aria-label={`${label("Tải xuống", "Download")}: ${file.name}`} title={label("Tải xuống", "Download")} onClick={() => void download(file)}><Download size={17}/></button>
             <button type="button" className="icon-button" disabled={!enabled || !file.ready} aria-label={`${t("move")}: ${file.name}`} title={t("move")} onClick={() => { setError(""); setDestination(currentId ?? ""); setAction({ file,kind:"move" }); }}><Move size={17}/></button>
             <button type="button" className="icon-button workspace-file-danger" disabled={!enabled} aria-label={`${t("delete")}: ${file.name}`} title={t("delete")} onClick={() => { setError(""); setAction({ file,kind:"delete" }); }}><Trash2 size={17}/></button>
@@ -179,6 +184,7 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
           <label>{label("Link cá nhân", "Private link")}<input ref={fileLinkInput} readOnly value={workspaceFilePermalink(activeFile.id)} onFocus={event => event.currentTarget.select()}/></label>
           {error && <p role="alert">{error}</p>}
           <footer className="actions">
+            {activeFile.ready&&<WorkspaceShareButton item={{kind:"file",id:activeFile.id,title:activeFile.name}} available={!!owner}/>}
             <button type="button" className="secondary-button" onClick={async () => setFileLinkCopied(await copyTextWithFallback(workspaceFilePermalink(activeFile.id),fileLinkInput.current))}>
               <Link2 size={16}/>{fileLinkCopied ? t("shareCopied") : t("copyLink")}
             </button>

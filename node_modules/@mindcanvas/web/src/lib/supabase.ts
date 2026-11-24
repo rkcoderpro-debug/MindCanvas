@@ -1,3 +1,4 @@
+import { rememberWorkspaceShareSignIn } from "./workspaceShareLinks";
 import { rememberFolderSignIn } from "./folderLinks";
 import { rememberCanvasForSignIn } from "./canvasLinks";
 import { rememberOnlineRoomSignIn } from "./onlineRoomRoutes";
@@ -69,6 +70,7 @@ export async function signInWithGoogle() {
   }
   rememberCanvasForSignIn();
   rememberFolderSignIn();
+  rememberWorkspaceShareSignIn();
   rememberOnlineRoomSignIn();
   const redirectTo = window.location.origin;
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } });

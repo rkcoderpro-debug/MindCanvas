@@ -55,7 +55,7 @@ export async function listWorkspaceFiles(owner: string | null): Promise<Workspac
   const result: WorkspaceFile[] = [];
   const limit = 200;
   for (let start = 0;; start += limit) {
-    const { data, error } = await client.from(table).select(columns).eq("user_id", owner)
+    const { data, error } = await client.from(table).select(columns).eq("user_id", owner).is("canvas_id",null)
       .order("created_at", { ascending: false }).order("id").range(start, start+limit-1).abortSignal(requestTimeoutSignal(20000));
     if (error) throw error;
     result.push(...(data ?? []).map(fromRow));
@@ -106,7 +106,9 @@ export async function readWorkspaceFile(owner: string | null, id: string): Promi
     return blob;
   }
   const client = await cloud(owner);
-  const { data, error } = await client.storage.from(bucket).download(objectKey(owner,id));
+  const row = await client.from(table).select("object_id").eq("id",id).eq("user_id",owner).single();
+  if (row.error) throw row.error;
+  const { data, error } = await client.storage.from(bucket).download(objectKey(owner,row.data?.object_id ?? id));
   if (error) throw error;
   return safeBlob(data);
 }
@@ -130,7 +132,10 @@ export async function deleteWorkspaceFile(owner: string | null, id: string) {
     await Promise.all([storeRequest(bytes.delete(id)), storeRequest(rows.delete(id))]);
   });
   const client = await cloud(owner);
-  const { error: storageError } = await client.storage.from(bucket).remove([objectKey(owner,id)]);
+  const row = await client.from(table).select("object_id").eq("id",id).eq("user_id",owner).maybeSingle();
+  if (row.error) throw row.error;
+  if (!row.data) return;
+  const { error: storageError } = await client.storage.from(bucket).remove([objectKey(owner,row.data.object_id ?? id)]);
   if (storageError) throw storageError;
   const { error } = await client.from(table).delete().eq("user_id", owner).eq("id", id).abortSignal(requestTimeoutSignal(20000));
   if (error) throw error;

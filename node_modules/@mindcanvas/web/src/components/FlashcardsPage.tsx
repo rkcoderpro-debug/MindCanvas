@@ -1,3 +1,4 @@
+import { WorkspaceShareButton } from "./WorkspaceShareDialog";
 import FilePicker from "./FilePicker";
 import { ActivityViewport, BackButton, PageBack, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
@@ -466,6 +467,8 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
               <button type="button" className="primary-button" disabled={busyActions} aria-expanded={studyPicker} aria-controls={studyPickerId} onClick={() => setStudyPicker(value => !value)}><Play size={16}/>{t("flashcardStartStudy")}</button>
               <button type="button" className="secondary-button flashcards-ai-trigger" disabled={busyActions} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button>
               <button type="button" className="secondary-button" disabled={busyActions} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button>
+              <WorkspaceShareButton item={{kind:"flashcard",id:flashcards.selectedDeck.id,title:flashcards.selectedDeck.name}}
+                available={!!owner&&flashcards.selectedDeck.source==="cloud"&&flashcards.cards.every(card=>card.source==="cloud")} compact/>
               <details className="flashcards-more-actions"><summary>{t("flashcardOtherTools")}</summary><div onClick={event => { if ((event.target as HTMLElement).closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) menu.open = false; } }}>
                 <button type="button" disabled={busyActions} onClick={() => setStudyPlanDialog(true)}><CalendarClock size={16}/>{flashcards.activeStudyPlan ? t("manageStudyPlan") : t("createStudyPlan")}</button>
                 <LearningShareButton kind="flashcard" id={flashcards.selectedDeck.id} title={flashcards.selectedDeck.name} plan={accountPlan} available={!!owner && flashcards.selectedDeck.source === "cloud" && flashcards.cards.every(card => card.source === "cloud")}/>

@@ -19,6 +19,7 @@ import { analyzeExam, generateExam, parseExamInput, readExamSource } from "./exa
 import { generateNote, parseNoteInput } from "./takenotes.js";
 import { NoteValidationError } from "../../../packages/shared/src/takenotes.js";
 import { aiScheduler } from "./aiScheduler.js";
+import { workspaceSharing } from "./workspaceSharing.js";
 import { systemAnnouncementsAdmin } from "./systemAnnouncements.js";
 
 import { onlineMeetings } from "./onlineMeetings.js";
@@ -29,6 +30,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: con
 app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true }));
 app.use("/api/takenotes/generate", express.json({ limit: "6mb" }));
 app.post("/api/online-rooms/livekit-webhook", express.text({ type: ["application/webhook+json","application/json"], limit: "128kb" }), onlineRoomWebhook);
+app.use("/api/workspace-shares",express.json({limit:"3mb"}),workspaceSharing);
 app.use(express.json({ limit: "1mb" }));
 app.get("/api/health", (_req, res) => res.json(getHealthStatus()));
 
