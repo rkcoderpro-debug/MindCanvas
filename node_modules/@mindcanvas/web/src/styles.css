@@ -5559,14 +5559,41 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
   .profile-screen .page-back-button { padding-inline:7px; }
 }
 
-/* Keep the primary navigation in the workspace scroll container. Dedicated
-   study screens and fullscreen canvas retain their own layout. */
-.main-area[data-topbar-pinned] > .topbar { position: relative; z-index: 73; }
+/* In pinned mode, only the controls have a surface. The gap between them can
+   show and receive input on the page underneath. */
+.main-area[data-topbar-pinned] > .topbar { position: relative; z-index: 73; background: transparent; }
 .main-area[data-topbar-pinned="true"] > :is(.topbar, .mobile-canvas-header) {
   position: sticky;
   top: 0;
   z-index: 73;
-  background: var(--surface);
+  --pinned-bar-surface: color-mix(in srgb, var(--surface-raised) 90%, var(--accent-soft));
+  --pinned-bar-border: color-mix(in srgb, var(--line) 82%, var(--accent-border));
+}
+.main-area[data-topbar-pinned="true"] > .topbar { border-bottom-color: transparent; pointer-events: none; }
+.main-area[data-topbar-pinned="true"] > .topbar > :is(.topbar-location:not(:empty), .actions),
+.main-area[data-topbar-pinned="true"] > .mobile-canvas-header {
+  border: 1px solid var(--pinned-bar-border);
+  border-radius: 14px;
+  background: var(--pinned-bar-surface);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+.main-area[data-topbar-pinned="true"] > .topbar > :is(.topbar-location, .actions) { pointer-events: auto; }
+.main-area[data-topbar-pinned="true"] > .topbar > .topbar-location {
+  flex: 0 1 auto;
+  margin-inline-end: auto;
+  padding: 3px 9px;
+  gap: 7px;
+}
+.main-area[data-topbar-pinned="true"] > .topbar > .topbar-location:empty { display: none; }
+.main-area[data-topbar-pinned="true"] > .topbar > .actions { margin-inline-start: auto; padding: 3px 5px; gap: 4px; }
+.main-area[data-topbar-pinned="true"] > .mobile-canvas-header { top: 4px; padding-inline: 5px; }
+@media (max-width: 620px) {
+  .main-area[data-topbar-pinned="true"] > .topbar > .topbar-location,
+  .main-area[data-topbar-pinned="true"] > .topbar > .actions { padding: 2px 3px; gap: 1px; }
+}
+@media (forced-colors: active) {
+  .main-area[data-topbar-pinned="true"] > .topbar > :is(.topbar-location:not(:empty), .actions),
+  .main-area[data-topbar-pinned="true"] > .mobile-canvas-header { background: Canvas; border-color: ButtonBorder; }
 }
 
 .dialog.preferences-dialog {

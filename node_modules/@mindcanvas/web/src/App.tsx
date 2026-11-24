@@ -144,6 +144,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   });
   const [timerVisible, setTimerVisible] = useState(readFocusTimerVisibility);
   const [stickyTopbar, setStickyTopbar] = useState(readStickyTopbar);
+  const changeStickyTopbar = (pinned: boolean) => { setStickyTopbar(pinned); saveStickyTopbar(pinned); };
   const [mobileZoomControlsVisible, setMobileZoomControlsVisible] = useState(readMobileZoomControlsVisibility);
   const [visibleToolIds, setVisibleToolIds] = useState(readToolbarToolVisibility);
   const [aiPanelMode, setAiPanelMode] = useState<"unopened" | "closed" | "open" | "minimized">("unopened");
@@ -312,7 +313,6 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   useEffect(() => { try { localStorage.setItem("mindcanvas:toolbar-position", toolbarPosition); } catch {} }, [toolbarPosition]);
   useEffect(() => { try { localStorage.setItem("mindcanvas:focus-mode", String(focusMode)); } catch {} }, [focusMode]);
   useEffect(() => { saveFocusTimerVisibility(timerVisible); }, [timerVisible]);
-  useEffect(() => { saveStickyTopbar(stickyTopbar); }, [stickyTopbar]);
   useEffect(() => { saveMobileZoomControlsVisibility(mobileZoomControlsVisible); }, [mobileZoomControlsVisible]);
   useEffect(() => { saveToolbarToolVisibility(visibleToolIds); }, [visibleToolIds]);
   useEffect(() => { setAiPanelMode("unopened"); }, [ws.board?.id]);
@@ -582,7 +582,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       signIn={isSupabaseConfigured ? () => { setModal(null); void auth(); } : null}
       plan={accountPlan} openPlans={openPlans}
       theme={{ value: selectedTheme, change: setTheme }} background={{ value: webBackground, change: setWebBackground }}
-      stickyTopbar={{ value: stickyTopbar, change: setStickyTopbar }} toolbarPosition={{ value: toolbarPosition, change: setToolbarPosition }}
+      stickyTopbar={{ value: stickyTopbar, change: changeStickyTopbar }} toolbarPosition={{ value: toolbarPosition, change: setToolbarPosition }}
       visibleTools={{ value: visibleToolIds, change: setVisibleToolIds }} mobileZoom={{ value: mobileZoomControlsVisible, change: setMobileZoomControlsVisible }}
       focusMode={{ value: focusMode, change: setFocusMode }} focusTimer={{ value: timerVisible, change: setTimerVisible }} pet={{ value: petVisible, change: setPetVisible }}
       installed={pwa.installed} openInstall={() => setModal("install")} importProject={file => { setModal(null); void importFile(file); }}/>}

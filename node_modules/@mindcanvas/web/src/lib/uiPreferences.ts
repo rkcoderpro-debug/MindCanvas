@@ -21,11 +21,12 @@ export function saveMobileZoomControlsVisibility(visible: boolean) {
   catch { /* Local UI persistence is optional. */ }
 }
 
-export const STICKY_TOPBAR_KEY = "mindcanvas:sticky-topbar:v1";
+// The old key also stored the automatic "true" default, so it cannot represent an opt-in.
+export const STICKY_TOPBAR_KEY = "mindcanvas:sticky-topbar:v2";
 
 export function readStickyTopbar() {
-  try { return localStorage.getItem(STICKY_TOPBAR_KEY) !== "false"; }
-  catch { return true; }
+  try { return localStorage.getItem(STICKY_TOPBAR_KEY) === "true"; }
+  catch { return false; }
 }
 
 export function saveStickyTopbar(pinned: boolean) {

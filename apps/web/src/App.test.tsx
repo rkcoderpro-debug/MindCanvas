@@ -394,6 +394,13 @@ describe("Workspace UI", () => {
       await act(async () => trigger.click());
     };
     await act(async () => root.render(<App/>));
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
+    expect(localStorage.getItem(STICKY_TOPBAR_KEY)).toBeNull();
+    // v5.30.2 wrote "true" automatically even when the setting had never been touched.
+    localStorage.setItem("mindcanvas:sticky-topbar:v1", "true");
+    await act(async () => root.render(null));
+    await act(async () => root.render(<App/>));
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
     await openSettings();
     expect(host.querySelectorAll(".settings-categories button")).toHaveLength(6);
     const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
@@ -407,16 +414,17 @@ describe("Workspace UI", () => {
     expect(search.value).toBe("");
     const toggle = host.querySelector<HTMLInputElement>('[data-setting="sticky-topbar"] [role="switch"]')!;
     expect(document.activeElement).toBe(toggle);
-    expect(toggle.checked).toBe(true);
+    expect(toggle.checked).toBe(false);
     await act(async () => toggle.click());
-    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
-    expect(localStorage.getItem(STICKY_TOPBAR_KEY)).toBe("false");
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("true");
+    expect(localStorage.getItem(STICKY_TOPBAR_KEY)).toBe("true");
     await act(async () => root.render(null));
     await act(async () => root.render(<App/>));
-    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("true");
     await openSettings();
     await act(async () => host.querySelector<HTMLInputElement>('[data-setting="sticky-topbar"] [role="switch"]')!.click());
-    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("true");
+    expect(host.querySelector(".main-area")?.getAttribute("data-topbar-pinned")).toBe("false");
+    expect(localStorage.getItem(STICKY_TOPBAR_KEY)).toBe("false");
   });
   it("shows toolbar position controls in settings and persists the choice", async () => {
     await act(async () => root.render(<App/>));

@@ -1,0 +1,52 @@
+{
+  "version": "5.30.3",
+  "baseVersion": "5.30.2",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.30.3.md",
+      "bytes": 961,
+      "sha256": "f8b95338467993698c244bef610202c21c559af4375e177f26f5687d1d6f068b"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "c78bf6bdba634757ae94b3926995a5458f488c84951f8b600a0e084b1669bf79"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 37572,
+      "sha256": "2734b4e11fe5ea1817ca647107d6542b74650fee41c5274ded65a37542012a62"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 60912,
+      "sha256": "ce7f25967a6f43dd05f4b41e865ccd24d1e37a4e1dfd90e9045491c15b7b7a7c"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "bytes": 129722,
+      "sha256": "00a3f301ce0d5644a29a767ca8fe5d10b8923e19723f80f532566ce0a7f6c13e"
+    },
+    {
+      "path": "apps/web/src/lib/uiPreferences.ts",
+      "bytes": 1379,
+      "sha256": "dbb0225384ee65f7dd77bf4fdd873df772cd34ef57465cafad48fd61833ea64c"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 520967,
+      "sha256": "d0cb89b32204b552e72b1b742a9a379183c7067727cce676e1b5b9779fc0a8fc"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "141086866a39788f386b2147ef019c5663da84f942da5960c277fedec62d6d08"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "04052fdb1e05661937b32f93a88b2da1707d37bc59cd758a27d59b7f174fef68"
+    }
+  ]
+}
