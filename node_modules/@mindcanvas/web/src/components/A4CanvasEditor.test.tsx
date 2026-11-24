@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { BoardState } from "@mindcanvas/shared";
 import { blankBoard } from "../lib/board";
-import { A4_LINES, newA4Layout } from "../lib/a4Canvas";
+import { A4_FONT, A4_HEIGHT, A4_LINE, A4_LINES, A4_MARGIN, newA4Layout, pageStride } from "../lib/a4Canvas";
 import A4CanvasEditor from "./A4CanvasEditor";
 import { LanguageProvider } from "../lib/i18n";
 
@@ -28,8 +28,7 @@ async function click(label: string) {
   const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label || b.getAttribute("aria-label") === label)!;
   await act(async () => button.click());
 }
-async function enter(text: string) {
-  const input = host.querySelector<HTMLTextAreaElement>(".a4-page-text")!;
+async function enter(text: string, input = host.querySelector<HTMLTextAreaElement>(".a4-page-text")!) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, text);
     input.setSelectionRange(text.length, text.length);
@@ -123,4 +122,74 @@ it("switches from line typing to free text and commits that text with Enter", as
   await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
   expect(host.querySelector(".inline-editor")).toBeNull();
   expect(latest.texts[0]).toMatchObject({ text: "Ghi chú", color: "#18213b" });
+});
+
+
+it("aligns the writing area of each page with both ends of its ruled lines", async () => {
+  await act(async () => root.render(<Harness/>));
+  await click("Thêm trang");
+  const pages = [...host.querySelectorAll<HTMLTextAreaElement>(".a4-page-text")];
+  expect(pages).toHaveLength(2);
+  const scale = parseFloat(pages[0].style.fontSize) / A4_FONT;
+  pages.forEach((field, index) => {
+    const rule = host.querySelector(`[data-a4-sheet="${index + 1}"] line`)!;
+    const ruleWidth = Number(rule.getAttribute("x2")) - Number(rule.getAttribute("x1"));
+    expect(parseFloat(field.style.width)).toBeCloseTo(ruleWidth * scale);
+    expect(parseFloat(field.style.height)).toBeCloseTo(A4_LINES * A4_LINE * scale);
+    expect(field.dataset.pageId).toBe(latest.a4!.pages[index].id);
+  });
+  expect(parseFloat(pages[1].style.top) - parseFloat(pages[0].style.top)).toBeCloseTo(pageStride(latest.a4!) * scale);
+});
+
+it("uses the arrows and page selector for viewing only and edits text on its own page", async () => {
+  await act(async () => root.render(<Harness/>));
+  await enter("Ghi chú trang một");
+  await click("Thêm trang");
+  await click("Thêm trang");
+  const [first, second, third] = latest.a4!.pages.map(page => page.id);
+  const scroller = host.querySelector<HTMLElement>(".a4-scroll")!;
+  // The last page can hit the bottom of the scroll area before reaching the top.
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get() { return Number(scroller.dataset.scrollTop ?? 0); },
+    set(value: number) { scroller.dataset.scrollTop = String(Math.min(value, A4_HEIGHT * 1.3)); },
+  });
+  const select = host.querySelector<HTMLSelectElement>(".a4-page-actions select")!;
+  const go = async (value: string) => act(async () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  const field = (id: string) => host.querySelector<HTMLTextAreaElement>(`textarea[data-page-id="${id}"]`)!;
+  await go("0");
+  await act(async () => field(first).focus());
+  save.mockClear();
+  await click("Trang sau");
+  expect(select.value).toBe("1");
+  expect(document.activeElement).not.toBe(field(first));
+  await click("Trang sau");
+  expect(select.value).toBe("2");
+  await act(async () => scroller.dispatchEvent(new Event("scroll")));
+  expect(select.value).toBe("2");
+  await click("Trang trước");
+  expect(select.value).toBe("1");
+  expect(save).not.toHaveBeenCalled();
+  expect(latest.a4!.pages.map(page => page.id)).toEqual([first, second, third]);
+  await enter("Ghi chú trang hai", field(second));
+  expect(latest.a4!.pages.map(page => page.text)).toEqual(["Ghi chú trang một", "Ghi chú trang hai", ""]);
+  expect(host.querySelector(`[data-a4-sheet="1"] line`)?.getAttribute("x1")).toBe(String(A4_MARGIN));
+
+  await click("Đổi thứ tự trang");
+  await click("Đưa trang xuống");
+  expect(latest.a4!.pages.map(page => page.id)).toEqual([first, third, second]);
+  expect(latest.a4!.pages[2].text).toBe("Ghi chú trang hai");
+});
+
+it("keeps the caret in the same writing area when a temporary page becomes a saved page", async () => {
+  await act(async () => root.render(<Harness/>));
+  const layout = host.querySelector<HTMLSelectElement>(".a4-command select")!;
+  await act(async () => { layout.value = "continuous"; layout.dispatchEvent(new Event("change", { bubbles: true })); });
+  const draft = host.querySelector<HTMLTextAreaElement>(".a4-page-text:not([data-page-id])")!;
+  await act(async () => draft.focus());
+  await enter("Nội dung mới", draft);
+  expect(latest.a4!.pages).toHaveLength(2);
+  const saved = host.querySelector<HTMLTextAreaElement>(`textarea[data-page-id="${latest.a4!.pages[1].id}"]`);
+  expect(document.activeElement).toBe(saved);
+  expect(saved?.selectionStart).toBe("Nội dung mới".length);
 });

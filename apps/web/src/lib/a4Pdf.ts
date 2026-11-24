@@ -1,5 +1,5 @@
 import type { BoardState } from "@mindcanvas/shared";
-import { A4_FONT, A4_HEIGHT, A4_LINE, A4_LINES, A4_MARGIN, A4_WIDTH, ruledLines } from "./a4Canvas";
+import { A4_FONT, A4_HEIGHT, A4_LINE, A4_LINES, A4_MARGIN, A4_TEXT_ADVANCE, A4_WIDTH, a4TextColumns, ruledLines } from "./a4Canvas";
 import { exportCanvasSvg, type CanvasExportPalette } from "./board";
 
 export const A4_PDF_WIDTH = 210 * 72 / 25.4;
@@ -23,8 +23,9 @@ export function a4PrintSvg(board: BoardState, index: number) {
   ).join(" ") : "");
   const underlay = (rules ? `<path d="${rules}" stroke="#d9e5ef" fill="none"/>` : "") +
     `<g fill="#172033" font-family="monospace" font-size="${A4_FONT}" xml:space="preserve">` +
-    ruledLines(page.text).map((line, row) =>
-      `<text x="${A4_MARGIN}" y="${y + A4_MARGIN + A4_LINE * row + 19}">${xml(line.display)}</text>`
+    ruledLines(page.text).slice(0, A4_LINES).map((line, row) => line.display
+      ? `<text x="${A4_MARGIN}" y="${y + A4_MARGIN + A4_LINE * row + 19}" textLength="${Math.max(1, a4TextColumns(line.display)) * A4_TEXT_ADVANCE}" lengthAdjust="spacingAndGlyphs">${xml(line.display)}</text>`
+      : ""
     ).join("") + "</g>";
   return exportCanvasSvg({ ...board, background: typeof board.background === "object" ? board.background : "plain" }, printColors, {
     bounds: { x: 0, y, width: A4_WIDTH, height: A4_HEIGHT }, underlay,

@@ -1,18 +1,19 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import { ArrowDown, ArrowUp, Download, FileText, Plus, Trash2, Type } from "lucide-react";
-import type { BoardState, CanvasPaper } from "@mindcanvas/shared";
+import { ArrowDown, ArrowUp, Download, FileText, ListOrdered, Plus, Trash2, Type } from "lucide-react";
+import type { BoardState, CanvasPage, CanvasPaper } from "@mindcanvas/shared";
 import CanvasBoard from "./CanvasBoard";
 import Dialog from "./Dialog";
 import { useLanguage } from "../lib/i18n";
 import { readWheelDelta } from "../lib/canvasViewport";
 import { sameBoardContent } from "../lib/boardEquality";
 import {
-  A4_COLS, A4_FONT, A4_HEIGHT, A4_LINE, A4_LINES, A4_MARGIN, A4_MAX_PAGES, A4_WIDTH,
-  newA4Page, pageStride, projectA4Board, rearrangeA4Pages, ruledLines, unprojectA4Board, updateA4Text,
+  A4_FONT, A4_HEIGHT, A4_LINE, A4_LINES, A4_MARGIN, A4_MAX_PAGES, A4_TEXT_ADVANCE, A4_WIDTH,
+  a4TextColumns, a4WritingArea, newA4Page, pageStride, projectA4Board, rearrangeA4Pages, ruledLines, unprojectA4Board, updateA4Text,
 } from "../lib/a4Canvas";
 import { a4PrintSvg, downloadA4Pdf, downloadA4PageImage } from "../lib/a4Pdf";
 
 const INSET = 22;
+const textKey = (page?: CanvasPage) => page ? `page:${page.id}` : "blank";
 type Props = Omit<ComponentProps<typeof CanvasBoard>, "paperSurface">;
 
 export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnly = false, visibleToolIds, ...canvasProps }: Props) {
@@ -20,15 +21,18 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
   const layout = board.a4!;
   const stride = pageStride(layout);
   const container = useRef<HTMLDivElement>(null);
-  const textInputs = useRef(new Map<number, HTMLTextAreaElement>());
-  const focus = useRef<{ page: number; caret: number } | null>(null);
+  const textInputs = useRef(new Map<string, HTMLTextAreaElement>());
+  const focus = useRef<{ page: string; caret: number } | null>(null);
+  const landing = useRef<{ pageId: string; top: number } | null>(null);
+  const [focusedPage, setFocusedPage] = useState<string | null>(null);
   const [size, setSize] = useState({ width: 760, height: 600 });
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [zoom, setZoom] = useState<number | null>(null);
   const [typing, setTyping] = useState(true);
-  const [composition, setComposition] = useState<{ index: number; text: string } | null>(null);
-  const [jump, setJump] = useState<number | null>(null);
+  const [composition, setComposition] = useState<{ page: string; text: string } | null>(null);
+  const [jump, setJump] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [arranging, setArranging] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [first, setFirst] = useState("1"), [last, setLast] = useState("1"), [preview, setPreview] = useState(1);
   const [previewSource, setPreviewSource] = useState("");
@@ -42,10 +46,15 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
   const phantom = layout.mode === "continuous" && layout.pages.length < A4_MAX_PAGES;
   const shownCount = layout.pages.length + Number(phantom);
   const totalHeight = ((shownCount - 1) * stride + A4_HEIGHT) * scale + 2 * INSET;
-  const current = Math.max(0, Math.min(layout.pages.length - 1, Math.floor((position.top - INSET + Math.min(260, size.height * .35)) / (stride * scale))));
+  const landed = landing.current?.top === position.top ? layout.pages.findIndex(page => page.id === landing.current?.pageId) : -1;
+  const current = landed >= 0 ? landed : Math.max(0, Math.min(layout.pages.length - 1,
+    Math.floor((position.top - INSET + Math.min(260, size.height * .35)) / (stride * scale))));
   const firstVisible = Math.max(0, Math.floor((position.top - INSET) / (stride * scale)) - 1);
   const lastVisible = Math.min(shownCount - 1, Math.ceil((position.top + size.height - INSET) / (stride * scale)) + 1);
   const visible = Array.from({ length: Math.max(0, lastVisible - firstVisible + 1) }, (_, i) => i + firstVisible);
+  const activeTextIndex = focusedPage === "blank" ? (phantom ? layout.pages.length : -1)
+    : focusedPage ? layout.pages.findIndex(page => textKey(page) === focusedPage) : -1;
+  const shownText = activeTextIndex >= 0 && !visible.includes(activeTextIndex) ? [...visible, activeTextIndex].sort((a, b) => a - b) : visible;
   const art = useMemo(() => projectA4Board(board, board.viewport), [board]);
   const viewport = { scale, x: paperLeft - position.left, y: INSET - position.top };
   const presented = { ...art, viewport };
@@ -75,7 +84,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
       event.preventDefault();
       el.scrollLeft += dx;
       el.scrollTop += dy;
-      setPosition({ left: el.scrollLeft, top: el.scrollTop });
+      onScroll(el);
     };
     el.addEventListener("wheel", scrollPaper, { passive: false });
     return () => el.removeEventListener("wheel", scrollPaper);
@@ -83,10 +92,13 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
 
   useLayoutEffect(() => {
     if (jump === null || !container.current) return;
-    container.current.scrollTop = jump * stride * scale;
+    const index = layout.pages.findIndex(page => page.id === jump);
+    if (index < 0) { setJump(null); return; }
+    container.current.scrollTop = index * stride * scale;
+    landing.current = { pageId: jump, top: container.current.scrollTop };
     setPosition({ left: container.current.scrollLeft, top: container.current.scrollTop });
     setJump(null);
-  }, [jump, stride, scale, layout.pages.length]);
+  }, [jump, stride, scale, layout.pages]);
 
   useLayoutEffect(() => {
     const next = focus.current;
@@ -98,6 +110,17 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     field.setSelectionRange(next.caret, next.caret);
   });
 
+  const viewPage = (index: number) => {
+    const page = layout.pages[index];
+    if (!page) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLTextAreaElement && container.current?.contains(active) && active.dataset.pageId !== page.id) active.blur();
+    setJump(page.id);
+  };
+  const onScroll = (el: HTMLDivElement) => {
+    if (landing.current && el.scrollTop !== landing.current.top) landing.current = null;
+    setPosition({ left: el.scrollLeft, top: el.scrollTop });
+  };
   const nav = (next: BoardState) => {
     const el = container.current; if (!el) return;
     const nextZoom = Math.max(.2, Math.min(2.5, next.viewport.scale));
@@ -106,7 +129,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     const left = Math.max(0, (nextWidth - A4_WIDTH * nextZoom) / 2 - next.viewport.x);
     if (Math.abs(nextZoom - scale) > .0001) setZoom(nextZoom);
     setPosition({ left, top });
-    requestAnimationFrame(() => { el.scrollLeft = left; el.scrollTop = top; setPosition({ left: el.scrollLeft, top: el.scrollTop }); });
+    requestAnimationFrame(() => { el.scrollLeft = left; el.scrollTop = top; onScroll(el); });
   };
   const applyCanvas = (next: BoardState) => {
     // CanvasBoard has other ways to zoom/navigate (trackpad, zoom controls,
@@ -130,30 +153,31 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     pages.splice(at, 0, page);
     // Explicit insert starts a separate text section on the following page.
     if (pages[at + 1]?.flows) pages[at + 1] = { ...pages[at + 1], flows: undefined };
-    onChange(rearrangeA4Pages(board, pages, false)); setJump(at);
+    onChange(rearrangeA4Pages(board, pages, false)); setJump(page.id);
   };
   const movePage = (direction: -1 | 1) => {
     const to = current + direction;
     if (readOnly || to < 0 || to >= layout.pages.length) return;
     const pages = [...layout.pages];
     pages.splice(to, 0, pages.splice(current, 1)[0]);
-    onChange(rearrangeA4Pages(board, pages)); setJump(to);
+    onChange(rearrangeA4Pages(board, pages)); setJump(pages[to].id);
   };
   const deletePage = () => {
     if (readOnly || layout.pages.length < 2) return;
-    onChange(rearrangeA4Pages(board, layout.pages.filter((_, index) => index !== current)));
-    setJump(Math.min(current, layout.pages.length - 2)); setDeleteOpen(false);
+    const pages = layout.pages.filter((_, index) => index !== current);
+    onChange(rearrangeA4Pages(board, pages));
+    setJump(pages[Math.min(current, pages.length - 1)].id); setDeleteOpen(false);
   };
   const write = (index: number, text: string, caret: number) => {
-    if (readOnly) return;
+    if (readOnly || (!layout.pages[index] && !text)) return;
     const next = updateA4Text(layout, index, text, caret);
     if (!next) { setError(t("a4Limit")); return; }
     setError("");
     const reflowed = next.inserted ? rearrangeA4Pages(board, next.pages, false) : { ...board, a4: { ...layout, pages: next.pages } };
     if (!sameBoardContent(board, reflowed)) onChange(reflowed);
-    if (next.caretPage !== index) {
-      focus.current = { page: next.caretPage, caret: next.caret };
-      setJump(next.caretPage);
+    if (next.caretPage !== index || !layout.pages[index]) {
+      focus.current = { page: textKey(next.pages[next.caretPage]), caret: next.caret };
+      if (next.caretPage !== index) setJump(next.pages[next.caretPage].id);
     }
   };
 
@@ -178,7 +202,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     return () => URL.revokeObjectURL(url);
   }, [pdfOpen, board, preview, layout.pages.length]);
 
-  const rows = useMemo(() => new Map(visible.map(index => [index, ruledLines(layout.pages[index]?.text ?? "")])), [layout.pages, firstVisible, lastVisible]);
+  const rows = useMemo(() => new Map(visible.map(index => [index, ruledLines(layout.pages[index]?.text ?? "").slice(0, A4_LINES)])), [layout.pages, firstVisible, lastVisible]);
   const paper = (index: number) => {
     const top = stride * index;
     const background = typeof board.background === "object" ? board.background : null;
@@ -193,7 +217,8 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
       {layout.paper === "grid" && Array.from({ length: Math.floor((A4_WIDTH - 2 * A4_MARGIN) / A4_LINE) + 1 }, (_, i) => <line key={i}
         x1={A4_MARGIN + A4_LINE * i} x2={A4_MARGIN + A4_LINE * i} y1={top + A4_MARGIN} y2={top + A4_MARGIN + A4_LINES * A4_LINE} stroke="#d9e5ef"/>)}
       {!allowWriting && <g fill="#172033" fontFamily="monospace" fontSize={A4_FONT} xmlSpace="preserve">{rows.get(index)?.map((line, i) =>
-        <text key={i} x={A4_MARGIN} y={top + A4_MARGIN + A4_LINE * i + 19}>{line.display}</text>
+        line.display && <text key={i} x={A4_MARGIN} y={top + A4_MARGIN + A4_LINE * i + 19}
+          textLength={Math.max(1, a4TextColumns(line.display)) * A4_TEXT_ADVANCE} lengthAdjust="spacingAndGlyphs">{line.display}</text>
       )}</g>}
     </g>;
   };
@@ -202,7 +227,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     <header className="a4-command">
       <span className="project-a4-badge">A4</span>
       <label>{t("a4Layout")} <select disabled={readOnly} value={layout.mode} onChange={event => {
-        setJump(current); setLayout({ mode: event.target.value as typeof layout.mode });
+        setJump(layout.pages[current].id); setLayout({ mode: event.target.value as typeof layout.mode });
       }}><option value="separate">{t("a4Separate")}</option><option value="continuous">{t("a4Continuous")}</option></select></label>
       <label>{t("a4Paper")} <select disabled={readOnly} value={layout.paper} onChange={event => setLayout({ paper: event.target.value as CanvasPaper })}>
         <option value="plain">{t("a4Plain")}</option><option value="ruled">{t("a4Ruled")}</option><option value="grid">{t("a4Grid")}</option></select></label>
@@ -213,19 +238,21 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
       }}><Download size={15}/>{t("a4DownloadPdf")}</button>
     </header>
     <div className="a4-page-actions">
-      <label>{t("page")} <select value={current} onChange={event => setJump(Number(event.target.value))}>
+      <label>{t("page")} <select value={current} onChange={event => viewPage(Number(event.target.value))}>
         {layout.pages.map((page, index) => <option key={page.id} value={index}>{index + 1} / {layout.pages.length}</option>)}
       </select></label>
+      <button type="button" className="icon-button" disabled={current === 0} aria-label={t("a4PreviousPage")} title={t("a4PreviousPage")} onClick={() => viewPage(current - 1)}><ArrowUp size={17}/></button>
+      <button type="button" className="icon-button" disabled={current >= layout.pages.length - 1} aria-label={t("a4NextPage")} title={t("a4NextPage")} onClick={() => viewPage(current + 1)}><ArrowDown size={17}/></button>
       {!readOnly && layout.mode === "separate" && <>
-        <button type="button" className="icon-button" disabled={current === 0} aria-label={t("a4MoveEarlier")} title={t("a4MoveEarlier")} onClick={() => movePage(-1)}><ArrowUp size={17}/></button>
-        <button type="button" className="icon-button" disabled={current >= layout.pages.length - 1} aria-label={t("a4MoveLater")} title={t("a4MoveLater")} onClick={() => movePage(1)}><ArrowDown size={17}/></button>
+        <button type="button" className="icon-button" disabled={layout.pages.length === 1} aria-label={t("a4ReorderPages")} title={t("a4ReorderPages")}
+          onClick={() => setArranging(true)}><ListOrdered size={17}/></button>
         <button type="button" className="icon-button" disabled={layout.pages.length === 1} aria-label={t("a4DeletePage")} title={t("a4DeletePage")} onClick={() => setDeleteOpen(true)}><Trash2 size={17}/></button>
       </>}
-      <button type="button" className="secondary-button" onClick={() => { setZoom(null); setJump(current); }}>{t("a4FitWidth")}</button>
+      <button type="button" className="secondary-button" onClick={() => { setZoom(null); setJump(layout.pages[current].id); }}>{t("a4FitWidth")}</button>
       {allowWriting && <span className="a4-writing-hint">{t("a4WriteHint")}</span>}
     </div>
     {error && !pdfOpen && <p className="form-error" role="alert">{error}</p>}
-    <div className={`a4-scroll ${allowWriting ? "a4-writing" : ""} ${readOnly ? "a4-viewer" : ""}`} ref={container} onScroll={event => setPosition({ left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop })} aria-label={t("a4Scroll")}>
+    <div className={`a4-scroll ${allowWriting ? "a4-writing" : ""} ${readOnly ? "a4-viewer" : ""}`} ref={container} onScroll={event => onScroll(event.currentTarget)} aria-label={t("a4Scroll")}>
       <div className="a4-scroll-track" style={{ width: stageWidth, height: Math.max(size.height, totalHeight) }}>
         <div className="a4-stage" style={{ width: size.width, height: size.height }}>
           <CanvasBoard {...canvasProps} board={presented} readOnly={readOnly} visibleToolIds={visibleToolIds}
@@ -236,39 +263,53 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
               artwork: <><defs><clipPath id={graphicId}>{visible.map(index => <rect key={index} x={0} y={index * stride} width={A4_WIDTH} height={A4_HEIGHT}/>)}</clipPath></defs>{visible.map(paper)}</>,
               liveClip: <defs><clipPath id={graphicId + "-live"}>{visible.map(index => <rect key={index} x={viewport.x} y={viewport.y + index * stride * scale} width={A4_WIDTH * scale} height={A4_HEIGHT * scale}/>)}</clipPath></defs>,
               contains: point => point.x >= 0 && point.x <= A4_WIDTH && point.y >= 0 && point.y < shownCount * stride && point.y % stride < A4_HEIGHT,
-              overlay: view => allowWriting ? <div className="a4-text-overlay">{visible.map(index => <textarea
-                key={layout.pages[index]?.id ?? "next"}
-                ref={field => { if (field) textInputs.current.set(index, field); else textInputs.current.delete(index); }}
-                className="a4-page-text"
-                aria-label={`${t("a4Write")} · ${t("page")} ${index + 1}`}
-                maxLength={40000}
-                value={composition?.index === index ? composition.text : layout.pages[index]?.text ?? ""}
-                style={{ left: view.x + A4_MARGIN * view.scale, top: view.y + (index * stride + A4_MARGIN) * view.scale,
-                  width: `${A4_COLS}ch`, height: A4_LINES * A4_LINE * view.scale, fontSize: A4_FONT * view.scale, lineHeight: `${A4_LINE * view.scale}px` }}
-                onPointerDown={event => event.stopPropagation()}
-                onCompositionStart={event => setComposition({ index, text: event.currentTarget.value })}
-                onCompositionEnd={event => { setComposition(null); write(index, event.currentTarget.value, event.currentTarget.selectionStart); }}
-                onChange={event => {
-                  if (composition?.index === index || (event.nativeEvent as InputEvent).isComposing) setComposition({ index, text: event.currentTarget.value });
-                  else write(index, event.currentTarget.value, event.currentTarget.selectionStart);
-                }}
-                onKeyDown={event => {
-                  if (event.nativeEvent.isComposing) return;
-                  if (event.key === "Backspace" && index > 0 && event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0) {
-                    event.preventDefault();
-                    const previous = layout.pages[index - 1];
-                    focus.current = { page: index - 1, caret: previous.text.length };
-                    setJump(index - 1);
-                  }
-                }}
-                placeholder={index === 0 && !layout.pages[0].text ? t("a4StartTyping") : undefined}
-              />)}</div> : null,
+              overlay: view => allowWriting ? <div className="a4-text-overlay">{shownText.map(index => {
+                const page = layout.pages[index];
+                const key = textKey(page);
+                return <textarea
+                  key={key}
+                  ref={field => { if (field) textInputs.current.set(key, field); else textInputs.current.delete(key); }}
+                  className="a4-page-text"
+                  data-page-id={page?.id}
+                  aria-label={`${t("a4Write")} · ${t("page")} ${index + 1}`}
+                  maxLength={40000}
+                  wrap="soft"
+                  value={composition?.page === key ? composition.text : page?.text ?? ""}
+                  style={a4WritingArea(index, stride, view)}
+                  onPointerDown={event => event.stopPropagation()}
+                  onFocus={() => setFocusedPage(key)}
+                  onBlur={() => setFocusedPage(value => value === key ? null : value)}
+                  onCompositionStart={event => setComposition({ page: key, text: event.currentTarget.value })}
+                  onCompositionEnd={event => { setComposition(null); write(index, event.currentTarget.value, event.currentTarget.selectionStart); }}
+                  onChange={event => {
+                    if (composition?.page === key || (event.nativeEvent as InputEvent).isComposing) setComposition({ page: key, text: event.currentTarget.value });
+                    else write(index, event.currentTarget.value, event.currentTarget.selectionStart);
+                  }}
+                  onKeyDown={event => {
+                    if (event.nativeEvent.isComposing) return;
+                    if (event.key === "Backspace" && index > 0 && event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0) {
+                      event.preventDefault();
+                      const previous = layout.pages[index - 1];
+                      focus.current = { page: textKey(previous), caret: previous.text.length };
+                      viewPage(index - 1);
+                    }
+                  }}
+                  placeholder={index === 0 && !page?.text ? t("a4StartTyping") : undefined}
+                />;
+              })}</div> : null,
             }}
             onChange={applyCanvas} onDraftChange={readOnly || !onDraftChange ? undefined : next => onDraftChange(unprojectA4Board(board, presented, next, phantom))}
             onViewportChange={nav}/>
         </div>
       </div>
     </div>
+    {arranging && <Dialog title={t("a4ReorderPages")} onClose={() => setArranging(false)}>
+      <p>{t("a4ReorderHint", { page: current + 1 })}</p>
+      <footer className="actions">
+        <button type="button" className="secondary-button" disabled={current === 0} onClick={() => { movePage(-1); setArranging(false); }}><ArrowUp size={17}/>{t("a4MoveEarlier")}</button>
+        <button type="button" className="secondary-button" disabled={current >= layout.pages.length - 1} onClick={() => { movePage(1); setArranging(false); }}><ArrowDown size={17}/>{t("a4MoveLater")}</button>
+      </footer>
+    </Dialog>}
     {deleteOpen && <Dialog title={t("a4DeletePage")} onClose={() => setDeleteOpen(false)}>
       <p>{t("a4DeleteConfirm", { page: current + 1 })}</p>
       <footer className="actions"><button type="button" className="secondary-button" onClick={() => setDeleteOpen(false)}>{t("cancel")}</button><button type="button" className="danger-button" onClick={deletePage}>{t("a4DeletePage")}</button></footer>

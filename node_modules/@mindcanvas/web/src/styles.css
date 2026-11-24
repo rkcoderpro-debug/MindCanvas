@@ -5400,15 +5400,15 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .a4-command button,.a4-page-actions button,.a4-command select,.a4-page-actions select { min-height:34px; padding:4px 8px; font-size:12px; }
 .a4-command button[aria-pressed=true] { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
 .a4-writing-hint { font-size:12px; color:var(--muted); }
-.a4-scroll { position:relative; flex:1 1 auto; min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain; background:var(--canvas); }
+.a4-scroll { position:relative; flex:1 1 auto; min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain; overflow-anchor:none; background:var(--canvas); }
 .a4-scroll-track { position:relative; }
 .a4-stage { position:sticky; top:0; left:0; min-height:0; }
 .a4-stage > .editor-layout { position:relative!important; inset:auto!important; display:flex; width:100%!important; height:100%!important; min-height:0!important; border:0; border-radius:0; box-shadow:none; }
 .a4-stage .editor-frame { height:100%!important; min-height:0!important; }
 .a4-stage .canvas-navigator { display:none; }
 .a4-text-overlay { position:absolute; inset:0; z-index:4; overflow:hidden; pointer-events:none; }
-.a4-text-overlay .a4-page-text { position:absolute; box-sizing:content-box; display:block; margin:0; padding:0; border:0; border-radius:0; outline:none; box-shadow:none; resize:none; overflow:hidden; background:transparent; color:#172033; caret-color:#172033; font-family:monospace; letter-spacing:0; white-space:pre-wrap; overflow-wrap:anywhere; pointer-events:auto; user-select:text; -webkit-user-select:text; }
-.a4-text-overlay .a4-page-text:focus { outline:1px dashed #a4b5c5; outline-offset:3px; }
+.a4-text-overlay .a4-page-text { position:absolute; box-sizing:content-box; display:block; margin:0; padding:0; border:0; border-radius:0; outline:none; box-shadow:none; resize:none; overflow:hidden; background:transparent; color:#172033; caret-color:#172033; font-family:monospace; font-variant-ligatures:none; tab-size:1; white-space:pre-wrap; overflow-wrap:anywhere; pointer-events:auto; user-select:text; -webkit-user-select:text; }
+.a4-text-overlay .a4-page-text:focus { outline:1px dashed #a4b5c5; outline-offset:0; }
 .a4-text-overlay .a4-page-text::placeholder { color:#6b7d90; }
 .a4-pdf-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
 .a4-pdf-fields label { min-width:0; }

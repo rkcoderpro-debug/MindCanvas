@@ -4,11 +4,28 @@ export const A4_WIDTH = 794;
 export const A4_HEIGHT = 1123;
 export const A4_GAP = 28;
 export const A4_MARGIN = 64;
+export const A4_TEXT_WIDTH = A4_WIDTH - A4_MARGIN * 2;
 export const A4_FONT = 17;
 export const A4_LINE = 27;
 export const A4_COLS = 64;
+// Use the same line capacity when editing or rendering the saved page.
+export const A4_TEXT_ADVANCE = (A4_TEXT_WIDTH - .5) / A4_COLS;
+export const a4TextColumns = (text: string) => [...text.replace(/\p{Mark}/gu, "")].length;
 export const A4_LINES = Math.floor((A4_HEIGHT - A4_MARGIN * 2) / A4_LINE);
 export const A4_MAX_PAGES = 200;
+
+export function a4WritingArea(index: number, stride: number, viewport: BoardState["viewport"]) {
+  const { x, y, scale } = viewport;
+  return {
+    left: x + A4_MARGIN * scale,
+    top: y + (index * stride + A4_MARGIN) * scale,
+    width: A4_TEXT_WIDTH * scale,
+    height: A4_LINES * A4_LINE * scale,
+    fontSize: A4_FONT * scale,
+    lineHeight: `${A4_LINE * scale}px`,
+    letterSpacing: `calc(${A4_TEXT_ADVANCE * scale}px - 1ch)`,
+  };
+}
 const MAX_TEXT = 40_000;
 const geometry = ["texts", "shapes", "media", "embeds"] as const;
 
@@ -39,12 +56,12 @@ export function isA4Layout(value: unknown): value is A4CanvasLayout {
 export function ruledLines(text: string): { start: number; end: number; display: string }[] {
   const result: { start: number; end: number; display: string }[] = [];
   let start = 0, offset = 0, columns = 0, space = -1;
-  const push = (end: number) => result.push({ start, end, display: text.slice(start, end).replace(/\n$/, "") });
+  const push = (end: number) => result.push({ start, end, display: text.slice(start, end).replace(/\n$/, "").replace(/\t/g, " ") });
   for (const char of text) {
     if (char === "\n") { offset++; push(offset); start = offset; columns = 0; space = -1; continue; }
     if (columns >= A4_COLS && !/\p{Mark}/u.test(char)) {
       const end = space > start ? space : offset;
-      push(end); start = end; columns = Array.from(text.slice(start, offset)).length; space = -1;
+      push(end); start = end; columns = a4TextColumns(text.slice(start, offset)); space = -1;
     }
     offset += char.length;
     if (!/\p{Mark}/u.test(char)) columns++;
@@ -59,7 +76,9 @@ export function updateA4Text(layout: A4CanvasLayout, index: number, input: strin
   if (index >= A4_MAX_PAGES || input.length > MAX_TEXT) return null;
   if (!pages[index]) pages.push(newA4Page());
   let end = index + 1;
-  while (pages[end]?.flows) end++;
+  // In the separate-pages layout, an edit must not pull text from an
+  // adjacent page. A longer edit can still insert its own overflow page.
+  if (layout.mode === "continuous") while (pages[end]?.flows) end++;
   const text = input + pages.slice(index + 1, end).map(page => page.text).join("");
   const lines = ruledLines(text);
   const chunks: string[] = [];
@@ -75,7 +94,7 @@ export function updateA4Text(layout: A4CanvasLayout, index: number, input: strin
   const count = Math.max(chunks.length, existing.length);
   if (pages.length - existing.length + count > A4_MAX_PAGES) return null;
   const replacement = Array.from({ length: count }, (_, i) => ({
-    ...(existing[i] ?? newA4Page("", true)), text: chunks[i] ?? "", ...(i ? { flows: true } : {}),
+    ...(existing[i] ?? newA4Page("", layout.mode === "continuous")), text: chunks[i] ?? "",
   }));
   let cursorPage = 0;
   while (cursorPage + 1 < from.length && from[cursorPage + 1] <= caret) cursorPage++;

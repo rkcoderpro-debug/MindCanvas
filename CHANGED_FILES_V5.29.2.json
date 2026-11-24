@@ -1,0 +1,67 @@
+{
+  "version": "5.29.2",
+  "baseVersion": "5.29.1",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.29.2.md",
+      "bytes": 1242,
+      "sha256": "1c87b1965f47c08a155b6066962ff9858cf9157abd22088916dd4dcc037ede4f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "3ce48a6be560f725142e8a6e56ce193c037a9e29b3a283d3cede7a95438f994a"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "46e6f37651236f171d0a22ac1bfb649690f8732fee2cca8e57b93c5bc1701367"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "95977b7cf268c721dd7fb019a5e71bcaa80bf6dc8e49e6fb5d3854376f11acb8"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "027b8df6afc9a795f1f8f27a833c344200e8a7ca2d19cc51b7c6b1dfd6e5f5ae"
+    },
+    {
+      "path": "apps/web/src/components/A4CanvasEditor.tsx",
+      "bytes": 22733,
+      "sha256": "03e7310ed19580d03111929cbb116986f4b4182947c48a29c90643fa71c0f729"
+    },
+    {
+      "path": "apps/web/src/components/A4CanvasEditor.test.tsx",
+      "bytes": 10989,
+      "sha256": "1a6145707ab51ea2418431f7ddf4307908145ca59a50ddcf08f9df21fdc93e4d"
+    },
+    {
+      "path": "apps/web/src/lib/a4Canvas.ts",
+      "bytes": 14664,
+      "sha256": "257eed0550c4b4e882f2c85c64f200148c4aa085da8e3b44eabbce562462bb1c"
+    },
+    {
+      "path": "apps/web/src/lib/a4Canvas.test.ts",
+      "bytes": 5149,
+      "sha256": "f61c48eaa4e4750a085f70736577ee230c134426c8814645f915e99a1c0c4872"
+    },
+    {
+      "path": "apps/web/src/lib/a4Pdf.ts",
+      "bytes": 5103,
+      "sha256": "92f64d3b4d41a7c03eab9bf6662a879609fbf0b6530dfabcab9f641257f66d75"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "bytes": 123960,
+      "sha256": "4b666b7b54e1d29f6248d51539e8f5479851ecdc26684d505987c4f033c2a01a"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 491880,
+      "sha256": "011f1dd648815a93dba02aa3f7408ce7eb450f00acb8087db8e50aabc5dab66a"
+    }
+  ]
+}

@@ -40,6 +40,17 @@ describe("A4 project data and paper boundaries", () => {
     expect(ruledLines("ấ".repeat(A4_COLS + 2)).map(line => line.display.length)).toEqual([A4_COLS, 2]);
   });
 
+  it("keeps following pages independent in separate mode without breaking continuous overflow", () => {
+    const secondFromOverflow = { ...second, flows: true };
+    const separately = { ...fixture().a4, pages: [first, secondFromOverflow] };
+    expect(updateA4Text(separately, 0, "Tách riêng", 8)?.pages).toEqual([{ ...first, text: "Tách riêng" }, secondFromOverflow]);
+    const continuously = { ...separately, mode: "continuous" as const };
+    const body = "Dòng\n".repeat(A4_LINES);
+    const edited = updateA4Text(continuously, 0, body, body.length)!;
+    expect(edited.pages.map(page => page.text).join("")).toBe(body + second.text);
+    expect(edited.pages[1].id).toBe(second.id);
+  });
+
   it("projects page gaps while keeping original coordinates on an unrelated edit", () => {
     const board = fixture(), shown = projectA4Board(board, board.viewport);
     expect(shown.shapes[1].y).toBe(board.shapes[1].y + A4_GAP);
