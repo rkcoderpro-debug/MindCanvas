@@ -847,21 +847,21 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Click Folder Manager in the sidebar to open the organization area.",
       },
       {
-        target: ".folder-manager",
+        target: ".workspace-folder-browser",
         completion: { type: "manual" },
         titleVi: "Quản lý thư mục",
         titleEn: "Folder Manager",
         bodyVi:
-          "Cột trái chứa Workspace, các thư mục và Tài liệu đã tải lên. Khu vực phải hiển thị nội dung đang chọn.",
+          "Cây thư mục ở thanh bên trái. Khung chính hiển thị thư mục con, tài liệu và project ở cấp đang mở.",
         bodyEn:
-          "The left column contains Workspace, folders and Uploaded documents. The right area shows the selected content.",
+          "The sidebar contains the folder tree. The main area shows the subfolders, files and projects in the current folder.",
       },
       {
         target: ".folder-manager-new-folder",
         titleVi: "Tạo thư mục mới",
         titleEn: "Create a folder",
-        bodyVi: "Bấm dấu cộng cạnh tiêu đề Thư mục.",
-        bodyEn: "Click the plus button beside the Folders heading.",
+        bodyVi: "Bấm Thư mục mới trên thanh thao tác.",
+        bodyEn: "Choose New folder in the toolbar.",
       },
       {
         target: ".guide-folder-name-input",

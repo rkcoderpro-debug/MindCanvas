@@ -28,3 +28,67 @@
 .workspace-file-status { margin-block: 0; overflow-wrap: anywhere; }
 .workspace-file-box .form-error { color: var(--danger); }
 .workspace-folder-unavailable { margin-block: 28px; }
+
+/* The tree is the folder navigation for both Workspace and the folder browser. */
+.sidebar .nav-list .manage-folders-button { width: 100%; }
+.sidebar .workspace-tree-branch > .folder-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0,1fr) 29px;
+  gap: 1px;
+  margin-inline-start: calc(var(--folder-depth) * 8px);
+}
+.sidebar .workspace-tree-branch > .folder-row .folder-expand-toggle { position: static; width: 26px; justify-self: start; }
+.sidebar .workspace-tree-branch > .folder-row .folder-open { grid-column: 2; padding-inline: 2px 0; }
+.sidebar .workspace-tree-branch > .folder-row .folder-more { grid-column: 3; width: 29px; }
+.sidebar .workspace-tree-branch .folder-dropdown { padding: 1px 3px 2px 6px; }
+.sidebar .workspace-tree-children > .folder-dropdown {
+  width: auto;
+  margin-inline-start: calc(21px + var(--folder-depth) * 8px);
+  border-inline-start: 1px solid var(--line);
+}
+.sidebar .workspace-tree-children > .folder-dropdown:empty { display: none; }
+.sidebar .workspace-tree-children button[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
+.sidebar-collapsed:not(.mobile-open) .workspace-tree-children { display: none; }
+@media (max-width:620px) {
+  .sidebar:not(.mobile-open) .nav-list .manage-folders-button { display: flex; }
+  .sidebar.mobile-open .workspace-tree-branch > .folder-row .folder-expand-toggle { display: grid; }
+}
+.workspace-folder-browser { min-width: 0; }
+.workspace-folder-area.workspace-home { display: grid; gap: 16px; }
+.workspace-folder-header {
+  display: grid;
+  gap: 13px;
+  padding: clamp(12px,2vw,22px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.workspace-folder-header .home-heading { margin: 0; }
+.workspace-folder-header .home-heading h1 { overflow-wrap: anywhere; }
+.workspace-folder-header .file-picker-hint { margin: 5px 0 0; }
+.workspace-folder-header .file-picker-trigger { min-height: 38px; }
+.workspace-folder-header .actions .secondary-button { min-height: 38px; }
+.workspace-folder-area .workspace-file-open {
+  align-items: start;
+  gap: 3px;
+  padding: 4px 3px;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  text-align: start;
+}
+.workspace-folder-area .workspace-file-open:hover strong { color: var(--accent); text-decoration: underline; }
+.workspace-folder-area .workspace-file-open strong { max-width: 100%; }
+.folder-section-count { color: var(--muted); background: var(--soft); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.folder-more-menu { position: relative; flex-shrink: 0; }
+.folder-more-menu summary { list-style: none; cursor: pointer; }
+.folder-more-menu summary::-webkit-details-marker { display: none; }
+.folder-more-menu div {
+  position: absolute; z-index: 3; inset-inline-end: 0; inset-block-start: calc(100% + 4px);
+  display: grid; min-width: 140px; padding: 4px;
+  background: var(--surface-raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 22px var(--shadow);
+}
+.folder-more-menu div button { text-align: start; background: transparent; color: var(--text); padding: 7px 9px; border-radius: 5px; }
+.folder-more-menu div button:hover { background: var(--soft); color: var(--accent); }
+.folder-library .folder-manager-main { padding: 0; overflow: visible; }
+.workspace-file-detail p { overflow-wrap: anywhere; }

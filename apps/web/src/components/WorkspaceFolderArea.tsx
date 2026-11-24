@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Download, File, Folder, FolderPlus, Link2, Move, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronRight, Download, File, FilePlus2, Folder, FolderPlus, LibraryBig, Link2, Move, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import Dialog from "./Dialog";
+import type { useWorkspaceFiles } from "../hooks/useWorkspaceFiles";
 import FilePicker from "./FilePicker";
 import { useLanguage } from "../lib/i18n";
-import { folderPermalink } from "../lib/folderLinks";
+import { folderPermalink, workspaceFilePermalink } from "../lib/folderLinks";
 import { copyTextWithFallback } from "../lib/share";
 import { type ProjectFolder } from "../lib/projectStore";
-import { addWorkspaceFile, deleteWorkspaceFile, downloadWorkspaceBlob, listWorkspaceFiles, moveWorkspaceFile, readWorkspaceFile, type WorkspaceFile } from "../lib/workspaceFiles";
-import "./workspaceFolders.css";
+import { addWorkspaceFile, deleteWorkspaceFile, downloadWorkspaceBlob, moveWorkspaceFile, readWorkspaceFile, type WorkspaceFile } from "../lib/workspaceFiles";
 
 export function folderTrail(folders: readonly ProjectFolder[], id: string | null) {
   const byId = new Map(folders.map(folder => [folder.id, folder]));
@@ -28,8 +28,16 @@ type Props = {
   onFolder: (id: string) => void;
   onRoot: () => void;
   onNewFolder: () => void;
+  onNewProject: () => void;
+  onImportProject: () => void;
+  onLibrary: () => void;
+  onOpenFile: (id: string | null) => void;
+  onSignIn?: () => void;
+  activeFileId: string | null;
+  repository: ReturnType<typeof useWorkspaceFiles>;
+  projectList: ReactNode;
 };
-export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onRoot,onNewFolder }: Props) {
+export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onRoot,onNewFolder,onNewProject,onImportProject,onLibrary,onOpenFile,onSignIn,activeFileId,repository,projectList }: Props) {
   const { language,t } = useLanguage();
   const vn = language === "vi";
   const label = (vi: string, en: string) => vn ? vi : en;
@@ -37,12 +45,13 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
   const folderIds = new Set(folders.map(folder => folder.id));
   const children = folders.filter(folder => (folder.parentId ?? null) === currentId);
   const trail = folderTrail(folders,currentId);
-  const [files,setFiles] = useState<WorkspaceFile[]>([]);
+  const { files,setFiles,loading,refresh,error: readError } = repository;
+  const activeFile = files.find(file => file.id === activeFileId);
+  const fileLinkInput = useRef<HTMLInputElement>(null);
+  const [fileLinkCopied,setFileLinkCopied] = useState(false);
   const [query,setQuery] = useState("");
   const [status,setStatus] = useState("");
   const [error,setError] = useState("");
-  const [loading,setLoading] = useState(true);
-  const [refresh,setRefresh] = useState(0);
   const [uploading,setUploading] = useState(false);
   const [working,setWorking] = useState(false);
   const [action,setAction] = useState<{ file: WorkspaceFile; kind: "move" | "delete" } | null>(null);
@@ -62,14 +71,7 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
   };
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    void listWorkspaceFiles(owner).then(rows => { if (active) setFiles(rows); })
-      .catch(cause => { if (active) setError(issue(cause)); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [owner,refresh]);
+  useEffect(() => { setFileLinkCopied(false); }, [activeFileId]);
 
   const copy = async () => {
     const href = folderPermalink(currentId);
@@ -84,14 +86,16 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
     try {
       for (const file of selected) {
         try {
-          await addWorkspaceFile(owner,currentId,file);
+          const added = await addWorkspaceFile(owner,currentId,file);
+          setFiles(rows => [added,...rows.filter(row => row.id !== added.id)]);
         } catch (cause) { failed.push(`${file.name}: ${issue(cause)}`); }
       }
+      refresh();
       if (!alive.current) return;
       if (failed.length) setError(failed.join(" · "));
       const saved = selected.length - failed.length;
       if (saved) setStatus(label(`Đã thêm ${saved} tệp.`, `Added ${saved} file(s).`));
-      setRefresh(n => n+1);
+
     } finally { locked.current = false; if (alive.current) setUploading(false); }
   };
 
@@ -123,20 +127,27 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
     finally { locked.current = false; setWorking(false); }
   };
   const enabled = !working && !uploading;
-  return <section className="workspace-folder-area">
+  return <section className="workspace-home workspace-folder-area" aria-label={current?.name ?? t("manageFolders")}>
     <nav className="workspace-folder-crumbs" aria-label={label("Đường dẫn thư mục", "Folder path")}>
       {current ? <button type="button" onClick={onRoot}>{label("Tất cả thư mục", "All folders")}</button> : <span aria-current="page">{label("Tất cả thư mục", "All folders")}</span>}
       {trail.map((folder,index) => <span key={folder.id}><ChevronRight size={14} aria-hidden="true"/>{index === trail.length-1 ? <strong aria-current="page">{folder.name}</strong> : <button onClick={() => onFolder(folder.id)}>{folder.name}</button>}</span>)}
     </nav>
+    <header className="workspace-folder-header"><div className="home-heading">
+      <div><span className="eyebrow">{current ? t("folders") : t("workspace")}</span><h1>{current?.name ?? t("manageFolders")}</h1></div>
+    </div>
     <div className="workspace-folder-tools">
       <FilePicker className="workspace-folder-picker" layout="inline" buttonLabel={uploading ? label("Đang tải lên…", "Uploading…") : label("Thêm tài liệu", "Add files")}
         aria-label={label("Thêm tài liệu", "Add files")} description={label("Mọi định dạng · tối đa 40 MB mỗi tệp", "Any format · up to 40 MB per file")}
         multiple disabled={!enabled} onChange={event => void upload(Array.from(event.currentTarget.files ?? []))} onDropFiles={selected => void upload(selected)}/>
       <div className="actions">
-        <button type="button" className="secondary-button" disabled={trail.length >= 16} onClick={onNewFolder}><FolderPlus size={17}/>{current ? label("Tạo thư mục con", "New subfolder") : t("newFolder")}</button>
+        <button type="button" className="secondary-button folder-manager-new-folder" disabled={trail.length >= 16} onClick={onNewFolder}><FolderPlus size={17}/>{current ? label("Tạo thư mục con", "New subfolder") : t("newFolder")}</button>
+        <button type="button" className="secondary-button" onClick={onNewProject}><FilePlus2 size={17}/>{t("newProject")}</button>
+        <button type="button" className="secondary-button" onClick={onImportProject}><Upload size={17}/>{t("import")}</button>
         <button type="button" className="secondary-button" onClick={() => void copy()}><Link2 size={17}/>{label("Sao chép link thư mục", "Copy folder link")}</button>
+        {!current && <button type="button" className="secondary-button manager-documents" onClick={onLibrary}><LibraryBig size={17}/>{label("Tài liệu đã tải lên", "Uploaded documents")}</button>}
       </div>
     </div>
+    </header>
     {status && <p role="status" className="workspace-file-status">{status}</p>}
     {children.length > 0 && <div className="workspace-child-folders"><h2>{current ? label("Thư mục con", "Subfolders") : t("folders")}</h2>
       <ul>{children.map(folder => <li key={folder.id}><button type="button" className="secondary-button" onClick={() => onFolder(folder.id)}><Folder size={18}/><span>{folder.name}</span><ChevronRight size={15}/></button></li>)}</ul>
@@ -144,13 +155,13 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
     <div className="workspace-file-box">
       <header><div><h2>{label("Tài liệu", "Files")}</h2><small>{owner ? label("Riêng tư · đồng bộ theo tài khoản", "Private · synced with your account") : label("Lưu trên thiết bị này. Link không mang theo tệp.", "Stored on this device. The link does not include your files.")}</small></div>
         <div className="workspace-file-search"><label className="search-field"><Search size={16} aria-hidden="true"/><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={label("Tìm tên tệp…", "Search files…")} aria-label={label("Tìm tên tệp", "Search file names")}/></label>
-          <button type="button" className="icon-button" disabled={!enabled || loading} aria-label={label("Làm mới tài liệu", "Refresh files")} title={label("Làm mới tài liệu", "Refresh files")} onClick={() => { setError(""); setRefresh(n => n+1); }}><RefreshCw size={17}/></button></div>
+          <button type="button" className="icon-button" disabled={!enabled || loading} aria-label={label("Làm mới tài liệu", "Refresh files")} title={label("Làm mới tài liệu", "Refresh files")} onClick={() => { setError(""); refresh(); }}><RefreshCw size={17}/></button></div>
       </header>
-      {error && !action && <p className="form-error" role="alert">{error}</p>}
+      {(error || readError != null) && !action && <p className="form-error" role="alert">{error || issue(readError)}</p>}
       {loading ? <p role="status">{t("loading")}</p> : shownFiles.length === 0 ? <p>{query.trim() ? label("Không tìm thấy tệp phù hợp.", "No matching files.") : label("Chưa có tệp. Bấm Thêm tài liệu để tải bài tập hoặc học liệu lên.", "No files yet. Click Add files to upload homework or study material.")}</p> :
         <ul className="workspace-file-list">{shownFiles.map(file => <li key={file.id}>
-          <File size={18} aria-hidden="true"/><div className="workspace-file-name"><strong title={file.name}>{file.name}</strong>
-            <small>{!file.ready ? label("Tải lên chưa hoàn tất", "Upload incomplete") : `${file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1048576).toFixed(1)} MB`} · ${new Date(file.createdAt).toLocaleDateString(vn ? "vi-VN" : "en-US")}`}</small></div>
+          <File size={18} aria-hidden="true"/><button type="button" className="workspace-file-open workspace-file-name" onClick={() => onOpenFile(file.id)}><strong title={file.name}>{file.name}</strong>
+            <small>{!file.ready ? label("Tải lên chưa hoàn tất", "Upload incomplete") : `${file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1048576).toFixed(1)} MB`} · ${new Date(file.createdAt).toLocaleDateString(vn ? "vi-VN" : "en-US")}`}</small></button>
           <div className="workspace-file-actions">
             <button type="button" className="icon-button" disabled={!enabled || !file.ready} aria-label={`${label("Tải xuống", "Download")}: ${file.name}`} title={label("Tải xuống", "Download")} onClick={() => void download(file)}><Download size={17}/></button>
             <button type="button" className="icon-button" disabled={!enabled || !file.ready} aria-label={`${t("move")}: ${file.name}`} title={t("move")} onClick={() => { setError(""); setDestination(currentId ?? ""); setAction({ file,kind:"move" }); }}><Move size={17}/></button>
@@ -158,6 +169,25 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
           </div>
         </li>)}</ul>}
     </div>
+    {projectList}
+    {activeFileId && <Dialog title={activeFile?.name ?? label("Tài liệu", "File")} onClose={() => onOpenFile(null)}>
+      {loading && !activeFile ? <p role="status">{t("loading")}</p> : !activeFile
+        ? <div><p role="status">{label("Tệp không còn tồn tại hoặc tài khoản hiện tại không có quyền mở.", "This file no longer exists or you do not have access.")}</p>
+          {onSignIn && <button type="button" className="primary-button" onClick={onSignIn}>{t("login")}</button>}</div>
+        : <div className="workspace-file-detail">
+          <p>{activeFile.ready ? label("Link cá nhân dùng để mở lại tệp này trong Workspace.", "Use this private link to reopen the file in Workspace.") : label("Tải lên chưa hoàn tất.", "Upload incomplete.")}</p>
+          <label>{label("Link cá nhân", "Private link")}<input ref={fileLinkInput} readOnly value={workspaceFilePermalink(activeFile.id)} onFocus={event => event.currentTarget.select()}/></label>
+          {error && <p role="alert">{error}</p>}
+          <footer className="actions">
+            <button type="button" className="secondary-button" onClick={async () => setFileLinkCopied(await copyTextWithFallback(workspaceFilePermalink(activeFile.id),fileLinkInput.current))}>
+              <Link2 size={16}/>{fileLinkCopied ? t("shareCopied") : t("copyLink")}
+            </button>
+            <button type="button" className="primary-button" disabled={!activeFile.ready || !enabled} onClick={() => void download(activeFile)}>
+              <Download size={16}/>{label("Tải xuống", "Download")}
+            </button>
+          </footer>
+        </div>}
+    </Dialog>}
     {action && <Dialog title={action.kind === "move" ? label("Chuyển tài liệu", "Move file") : label("Xóa tài liệu?", "Delete file?")} dismissible={!working} onClose={() => setAction(null)}>
       <p className="workspace-file-status">{action.file.name}</p>
       {action.kind === "move" && <label>{t("folders")}<select value={destination} onChange={event => setDestination(event.target.value)}><option value="">{label("Ngoài thư mục", "No folder")}</option>

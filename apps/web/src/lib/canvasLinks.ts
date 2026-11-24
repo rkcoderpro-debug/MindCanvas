@@ -20,7 +20,7 @@ export function writeCanvasUrl(id: string | null, mode: "push" | "replace" = "pu
   if (id && !CANVAS_ID.test(id)) return;
   const url = new URL(window.location.href);
   if (canvasIdFromUrl(url) === id && !(id && url.searchParams.has("learn"))) return;
-  if (id) { url.searchParams.set("canvas", id); url.searchParams.delete("learn"); }
+  if (id) { url.searchParams.set("canvas", id); url.searchParams.delete("learn"); url.searchParams.delete("file"); }
   else url.searchParams.delete("canvas");
   window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
 }

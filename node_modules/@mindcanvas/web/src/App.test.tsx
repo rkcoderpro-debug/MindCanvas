@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
+import { File as NodeFile } from "node:buffer";
 import { IDBFactory } from "fake-indexeddb";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { addFolder, cacheProject, fetchFolders, waitForProjectCache } from "./lib/projectStore";
+import { addWorkspaceFile, moveWorkspaceFile } from "./lib/workspaceFiles";
+import { workspaceFilePermalink } from "./lib/folderLinks";
 import { blankBoard } from "./lib/board";
 import { openProfileRoute } from "./lib/profileNavigation";
 import { APP_VERSION_LABEL } from "./lib/appVersion";
@@ -53,7 +56,7 @@ describe("Workspace UI", () => {
       await waitForUI(() => expect(host.querySelector(".workspace-folder-crumbs [aria-current=page]")?.textContent).toBe(child.name));
       expect(window.location.search).toBe(`?folders=${child.id}`);
       await act(async () => btn("Tất cả thư mục")!.click());
-      await waitForUI(() => expect(host.querySelector(".folder-manager .workspace-folder-area")).toBeTruthy());
+      await waitForUI(() => expect(host.querySelector(".workspace-folder-browser .workspace-folder-area")).toBeTruthy());
       expect(window.location.search).toBe("?folders=all");
       await act(async () => btn("Sao chép link thư mục")!.click());
       expect(copy).toHaveBeenLastCalledWith(new URL("/?folders=all",window.location.origin).href);
@@ -63,6 +66,66 @@ describe("Workspace UI", () => {
       if (clipboard) Object.defineProperty(navigator,"clipboard",clipboard);
       else Reflect.deleteProperty(navigator,"clipboard");
     }
+  });
+
+  it("keeps the tree and the current folder separate and lists immediate children only", async () => {
+    const rootFolder = await addFolder(null,"DSA");
+    const child = await addFolder(null,"Bài tập 4",rootFolder.id);
+    await addFolder(null,"Bài con",child.id);
+    const other = await addFolder(null,"Mạng");
+    const canvas = blankBoard("Canvas của bài 4");
+    const outside = blankBoard("Canvas của môn mạng");
+    cacheProject(null,{board:canvas,id:canvas.id,title:canvas.title,folderId:child.id,updatedAt:canvas.updatedAt,pending:false});
+    cacheProject(null,{board:outside,id:outside.id,title:outside.title,folderId:other.id,updatedAt:outside.updatedAt,pending:false});
+    await addWorkspaceFile(null,child.id,new NodeFile(["int main() {}"],"bai4.cpp") as unknown as File);
+    await addWorkspaceFile(null,other.id,new NodeFile(["capture"],"lab.pcapng") as unknown as File);
+    window.history.replaceState({}, "", `/?folders=${rootFolder.id}`);
+    await act(async () => root.render(<App/>));
+    const branch = (id: string) => host.querySelector<HTMLElement>(`[data-folder-id="${id}"]`)!;
+    const main = () => host.querySelector(".workspace-folder-area")!;
+    await waitForUI(() => expect(main().querySelector("h1")?.textContent).toBe(rootFolder.name));
+    expect(host.querySelector(".nav-list .manage-folders-button")).toBeTruthy();
+    expect(host.querySelector(".folder-manager-side")).toBeNull();
+    expect(main().textContent).toContain(child.name);
+    expect(main().textContent).not.toContain("Bài con");
+    expect(main().textContent).not.toContain("bai4.cpp");
+    await act(async () => branch(other.id).querySelector<HTMLButtonElement>(":scope > .folder-row .folder-expand-toggle")!.click());
+    expect(window.location.search).toBe(`?folders=${rootFolder.id}`);
+    await waitForUI(() => expect(branch(other.id).textContent).toContain("lab.pcapng"));
+    await act(async () => branch(child.id).querySelector<HTMLButtonElement>(":scope > .folder-row .folder-open")!.click());
+    await waitForUI(() => {
+      expect(main().querySelector("h1")?.textContent).toBe(child.name);
+      expect(main().textContent).toContain("bai4.cpp");
+      expect(main().textContent).toContain(canvas.title);
+    });
+    expect(main().textContent).toContain("Bài con");
+    expect(main().textContent).not.toContain(outside.title);
+    expect(main().textContent).not.toContain("lab.pcapng");
+    expect(branch(child.id).textContent).toContain("bai4.cpp");
+    expect(branch(other.id).querySelector(".folder-expand-toggle")?.getAttribute("aria-expanded")).toBe("true");
+    const toolbar = main().querySelector(".workspace-folder-header");
+    expect(toolbar?.querySelector("input[type=file]")).toBeTruthy();
+    const fileRow = main().querySelector<HTMLButtonElement>(".workspace-file-list .workspace-file-open")!;
+    await act(async () => fileRow.click());
+    await waitForUI(() => expect(host.querySelector("dialog[open]")?.textContent).toContain("Link cá nhân"));
+    await act(async () => window.history.back());
+    await waitForUI(() => expect(host.querySelector("dialog[open]")).toBeNull());
+    expect(main().querySelector("h1")?.textContent).toBe(child.name);
+  });
+
+  it("opens a stable private file link after the file is moved", async () => {
+    const parent = await addFolder(null,"Tệp cũ");
+    const destination = await addFolder(null,"Tệp mới");
+    const file = await addWorkspaceFile(null,parent.id,new NodeFile([".text"],"thuchanh.asm") as unknown as File);
+    const href = workspaceFilePermalink(file.id);
+    expect(new URL(href).search).toBe(`?file=${file.id}`);
+    await moveWorkspaceFile(null,file.id,destination.id);
+    window.history.replaceState({},"",href);
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.querySelector(".workspace-folder-area h1")?.textContent).toBe(destination.name));
+    const detail = host.querySelector("dialog[open]")!;
+    expect(detail.textContent).toContain(file.name);
+    expect(detail.querySelector<HTMLInputElement>("input[readonly]")?.value).toBe(href);
   });
 
   it("shows an unavailable direct folder instead of displaying Workspace as if it were that folder", async () => {
