@@ -181,6 +181,7 @@ export type CanvasThumbnailItem = {
 
 /** Small, media-free snapshot used by the workspace project cards. */
 export type CanvasThumbnail = {
+  format?: "a4";
   version: 1;
   background: CanvasBackgroundPattern;
   items: CanvasThumbnailItem[];
@@ -192,7 +193,12 @@ export type CanvasSourceDocument = {
   name: string;
 };
 
+export type CanvasPaper = "plain" | "ruled" | "grid";
+export type CanvasPage = { id: string; text: string; flows?: boolean };
+export type A4CanvasLayout = { mode: "separate" | "continuous"; paper: CanvasPaper; pages: CanvasPage[] };
+
 export type BoardState = {
+  a4?: A4CanvasLayout;
   layerOrder?: string[];
   groups?: Array<{ id: string; elementIds: string[] }>;
   id: string;

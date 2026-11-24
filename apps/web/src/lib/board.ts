@@ -1,3 +1,4 @@
+import { A4_HEIGHT, isA4Layout } from "./a4Canvas";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, MindMapAiOperation, MindMapEdge, MindMapLayoutBehavior, StructuredMindMap, Vec2 } from "@mindcanvas/shared";
 import { layoutMindMap, layoutMindMapMultiSided, layoutMindMapTwoSided, nodeHeight, type MindMapLayoutMode, type MindMapLayoutSummary, type MindMapMultiLayoutSummary } from "./mindMapLayout";
 import { collectMindMapSubtree, getMindMapHierarchy } from "./mindMapGraph";
@@ -193,8 +194,8 @@ const exportBounds = (board: BoardState): Bounds => {
   const x = Math.min(...bounds.map(bound => bound.x)), y = Math.min(...bounds.map(bound => bound.y));
   return { x, y, width: Math.max(1, Math.max(...bounds.map(bound => bound.x + bound.width)) - x), height: Math.max(1, Math.max(...bounds.map(bound => bound.y + bound.height)) - y) };
 };
-export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette = DEFAULT_EXPORT_PALETTE) {
-  const bounds = exportBounds(board), pad = 48, hidden = hiddenNodes(board), all = [...board.nodes, ...board.shapes, ...board.texts, ...board.drawings, ...board.media, ...board.embeds];
+export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette = DEFAULT_EXPORT_PALETTE, page?: { bounds: Bounds; underlay: string }) {
+  const bounds = page?.bounds ?? exportBounds(board), pad = page ? 0 : 48, hidden = hiddenNodes(board), all = [...board.nodes, ...board.shapes, ...board.texts, ...board.drawings, ...board.media, ...board.embeds];
   const cropId = (id: string) => `media-crop-${id.replace(/[^a-z0-9_-]/gi, "_")}`;
   const cropDefs = board.media.flatMap(media => {
     const crop = media.crop;
@@ -205,6 +206,13 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
   const isHidden = (id: string) => hidden.has(id) || !!all.find(item => item.id === id && item.hidden);
   const body = exportOrder(board).map(selection => {
     if (isHidden(selection.id)) return "";
+    if (page && selection.kind !== "edges") {
+      const size = elementBounds(board, selection), item = board[selection.kind].find(item => item.id === selection.id);
+      if (size && item) {
+        const padding = "rotation" in item && item.rotation ? Math.hypot(size.width, size.height) / 2 : selection.kind === "drawings" && "width" in item ? item.width / 2 : 2;
+        if (size.y + size.height + padding < bounds.y || size.y - padding > bounds.y + bounds.height) return "";
+      }
+    }
     if (selection.kind === "edges") {
       const edge = board.edges.find(item => item.id === selection.id), source = edge && endpoint(board, edge.source), target = edge && endpoint(board, edge.target), geometry = edge ? connectorGeometry(board, edge) : null;
       if (!edge || !source || !target || !geometry || isHidden(source.id) || isHidden(target.id)) return "";
@@ -275,7 +283,7 @@ export function exportCanvasSvg(board: BoardState, palette: CanvasExportPalette 
     ? `<image href="${xml(backgroundMedia.src)}" x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" preserveAspectRatio="${backgroundImageAspect(backgroundMedia.fit, backgroundMedia.position)}" opacity="${clamp(backgroundMedia.opacity ?? 1, 0, 1)}" style="filter:blur(${clamp(backgroundMedia.blur ?? 0, 0, 40)}px) brightness(${clamp(backgroundMedia.brightness ?? 1, 0, 2)})"/>`
     : backgroundMedia?.kind === "video" ? `<rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.surface}"/><text x="${bounds.x + bounds.width / 2}" y="${bounds.y + bounds.height / 2}" text-anchor="middle" font-family="Inter,Arial,Helvetica,sans-serif" font-size="18" fill="${palette.text}">${xml(backgroundMedia.name || "Video background")}</text>` : "";
   const backgroundOverlay = backgroundMedia?.overlay ? `<rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${color(backgroundMedia.overlay, palette.canvas)}" opacity=".18"/>` : "";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}" role="img" aria-label="${xml(board.title)}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="${palette.connector}"/></marker>${pattern}${cropDefs}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.canvas}"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${backgroundMediaSvg}${backgroundOverlay}${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" viewBox="${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}" role="img" aria-label="${xml(board.title)}"><defs><marker id="mindcanvas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="${palette.connector}"/></marker>${pattern}${cropDefs}</defs><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${palette.canvas}"/><rect x="${bounds.x - pad}" y="${bounds.y - pad}" width="${bounds.width + pad * 2}" height="${bounds.height + pad * 2}" fill="${backgroundFill}"/>${backgroundMediaSvg}${backgroundOverlay}${page?.underlay ?? ""}${body}</svg>`;
 }
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 export function exportCanvasSvgFile(board: BoardState, palette = readCanvasExportPalette()) { downloadBlob(new Blob([exportCanvasSvg(board, palette)], { type: "image/svg+xml;charset=utf-8" }), `${board.title.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) || "canvas"}.svg`); }
@@ -700,6 +708,8 @@ export function parseBoard(value: unknown): BoardState {
     }
   }
   if (b.nodes.some((n: any) => n.parentId !== undefined && (!string(n.parentId, 200) || !b.nodes.some((p: any) => p.id === n.parentId) || n.parentId === n.id))) throw new Error("Invalid parent");
+  if (b.a4 !== undefined && (!isA4Layout(b.a4) || b.nodes.length || b.edges.some((edge: { kind?: string }) => edge.kind !== "relation") ||
+      b.drawings.some((path: { points: Vec2[] }) => path.points.some(point => point.y < 0 || point.y >= b.a4.pages.length * A4_HEIGHT)))) throw new Error("Invalid A4 canvas");
   return structuredClone(b) as BoardState;
 }
 export function exportBoard(board: BoardState) {

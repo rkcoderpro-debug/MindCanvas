@@ -5386,3 +5386,47 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
   .quiz-studio-tabs button { font-size:12px; }
   .quiz-studio-tabs svg { width:13px; height:13px; }
 }
+
+/* A4 paper editor */
+.new-canvas-types { min-width:0; margin:0 0 14px; padding:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; border:0; }
+.new-canvas-types legend { margin-bottom:6px; color:var(--muted); font-size:13px; }
+.dialog .new-canvas-types label { display:flex; align-items:flex-start; min-width:0; gap:8px; padding:12px 9px; margin:0; border:1px solid var(--line); border-radius:10px; background:var(--soft); cursor:pointer; }
+.dialog .new-canvas-types label:has(input:checked) { border-color:var(--accent); background:var(--accent-soft); }
+.dialog .new-canvas-types input { width:15px; margin-top:3px; accent-color:var(--accent); }
+.new-canvas-types span { display:grid; gap:4px; }
+.new-canvas-types small { color:var(--muted); line-height:1.35; font-weight:400; }
+.project-a4-badge { display:inline-flex; align-items:center; width:max-content; border-radius:7px; padding:2px 5px; background:var(--accent-soft); color:var(--accent); font-size:11px; font-weight:760; white-space:nowrap; }
+.project-meta .project-a4-badge { margin-inline-start:6px; vertical-align:2px; }
+.a4-workspace { display:flex; flex-direction:column; height:min(78dvh,1040px); min-height:410px; min-width:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
+.a4-workspace.a4-fullscreen { position:fixed; inset:0; width:100%; height:100dvh; min-height:0; z-index:120; border:0; border-radius:0; }
+.a4-command,.a4-page-actions { display:flex; align-items:center; flex-wrap:wrap; gap:5px 9px; flex-shrink:0; padding:6px 10px; background:var(--surface-raised); border-bottom:1px solid var(--line); }
+.a4-command label,.a4-page-actions label { display:inline-flex; align-items:center; gap:5px; color:var(--muted); font-size:12px; }
+.a4-command button,.a4-page-actions button,.a4-command select,.a4-page-actions select { min-height:34px; padding:4px 8px; font-size:12px; }
+.a4-command button[aria-pressed=true] { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
+.a4-writing-hint { font-size:12px; color:var(--muted); }
+.a4-scroll { position:relative; flex:1 1 auto; min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain; background:var(--canvas); }
+.a4-scroll-track { position:relative; }
+.a4-stage { position:sticky; top:0; left:0; min-height:0; }
+.a4-stage > .editor-layout { position:relative!important; inset:auto!important; display:flex; width:100%!important; height:100%!important; min-height:0!important; border:0; border-radius:0; box-shadow:none; }
+.a4-stage .editor-frame { height:100%!important; min-height:0!important; }
+.a4-stage .canvas-navigator { display:none; }
+.a4-text-overlay { position:absolute; inset:0; z-index:4; overflow:hidden; pointer-events:none; }
+.a4-text-overlay .a4-page-text { position:absolute; box-sizing:content-box; display:block; margin:0; padding:0; border:0; border-radius:0; outline:none; box-shadow:none; resize:none; overflow:hidden; background:transparent; color:#172033; caret-color:#172033; font-family:monospace; letter-spacing:0; white-space:pre-wrap; overflow-wrap:anywhere; pointer-events:auto; user-select:text; -webkit-user-select:text; }
+.a4-text-overlay .a4-page-text:focus { outline:1px dashed #a4b5c5; outline-offset:3px; }
+.a4-text-overlay .a4-page-text::placeholder { color:#6b7d90; }
+.a4-pdf-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.a4-pdf-fields label { min-width:0; }
+.a4-pdf-preview { display:grid; place-items:center; gap:5px; padding:10px; margin-top:12px; color:var(--muted); background:var(--canvas); }
+.a4-pdf-preview img { display:block; width:min(100%,440px); border:1px solid var(--line); background:white; }
+@media (max-width:520px) {
+  .new-canvas-types { grid-template-columns:1fr; }
+  .a4-workspace { height:77dvh; min-height:350px; }
+  .a4-command,.a4-page-actions { padding:4px 6px; gap:4px 6px; }
+  .a4-writing-hint { display:none; }
+}
+.a4-stage .inspector { position:absolute; inset:0 0 0 auto; z-index:6; max-width:min(310px,85%); }
+.a4-stage .canvas-background-picker .background-options { display:none; }
+.a4-preview-exports { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.project-card:has(.project-a4-badge) .project-preview { background-color:color-mix(in srgb,var(--surface) 83%,var(--accent-soft)); }
+.a4-writing .editor-frame,.a4-writing .canvas-svg,.a4-viewer .editor-frame,.a4-viewer .canvas-svg { touch-action:pan-x pan-y; }
+.a4-stage .canvas-svg { --canvas-text:#172033; }

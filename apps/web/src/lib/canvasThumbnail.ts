@@ -44,7 +44,7 @@ export function createCanvasThumbnail(board: BoardState): CanvasThumbnail {
   const right = allBounds.length ? Math.max(...allBounds.map(item => item.x + item.width)) : 500;
   const bottom = allBounds.length ? Math.max(...allBounds.map(item => item.y + item.height)) : 240;
   const background: CanvasBackgroundPattern = typeof board.background === "string" ? board.background : "plain";
-  return { version: 1, background, items, bounds: { x: left - 40, y: top - 40, width: Math.max(200, right - left + 80), height: Math.max(120, bottom - top + 80) } };
+  return { version: 1, ...(board.a4 ? { format: "a4" as const } : {}), background, items, bounds: { x: left - 40, y: top - 40, width: Math.max(200, right - left + 80), height: Math.max(120, bottom - top + 80) } };
 }
 
 export function isCanvasThumbnail(value: unknown): value is CanvasThumbnail {

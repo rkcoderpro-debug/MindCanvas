@@ -175,6 +175,36 @@ describe("Canvas interactions", () => {
     await act(async () => host.querySelector("[data-element]")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
     expect(host.querySelector("textarea")).not.toBeNull();
   });
+  it("opens and focuses node editing even if pointer capture sends both releases directly to the SVG", async () => {
+    const b = { ...blankBoard(), nodes: [{ id: "node", label: "Nội dung cũ", x: 20, y: 40, width: 180, height: 76 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    const node = () => host.querySelector('[data-element="node"] .node-copy')!;
+    const tap = () => { pointer(node(), "pointerdown", 40, 60); pointer(svg, "pointerup", 40, 60); };
+    await act(async () => tap());
+    expect(host.querySelector(".inline-editor")).toBeNull();
+    await act(async () => tap());
+    const field = host.querySelector<HTMLTextAreaElement>(".inline-editor")!;
+    expect(field.value).toBe("Nội dung cũ");
+    expect(document.activeElement).toBe(field);
+    expect(commit).not.toHaveBeenCalled();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "Nội dung mới");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true })));
+    expect(current.nodes[0].label).toBe("Nội dung mới");
+  });
+  it("does not open the node editor after dragging and then clicking a node", async () => {
+    const b = { ...blankBoard(), nodes: [{ id: "node", label: "Drag", x: 20, y: 40, width: 180, height: 76 }] };
+    await act(async () => root.render(<Harness initial={b}/>));
+    const svg = host.querySelector("svg.canvas-svg")!;
+    const node = () => host.querySelector('[data-element="node"] .node-copy')!;
+    await act(async () => { pointer(node(), "pointerdown", 40, 60); pointer(svg, "pointermove", 60, 80); pointer(svg, "pointerup", 60, 80); });
+    await act(async () => { pointer(node(), "pointerdown", 60, 80); pointer(svg, "pointerup", 60, 80); });
+    expect(host.querySelector(".inline-editor")).toBeNull();
+    expect(current.nodes[0].x).toBe(40);
+  });
   it("opens the inline editor when a text block is double-clicked", async () => {
     const b = { ...blankBoard(), texts: [{ id: "txt", text: "Editable text", x: 20, y: 40, width: 200 }] };
     await act(async () => root.render(<Harness initial={b}/>));
