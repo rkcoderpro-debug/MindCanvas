@@ -1,9 +1,9 @@
-import { BackButton } from "./PageNavigation";
+import { PageBack } from "./PageNavigation";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowRight, ChevronDown, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -25,7 +25,7 @@ import type { AiGenerationOptions } from "../lib/aiOptions";
 import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 import DocumentToolsPage from "./DocumentToolsPage";
 import type { UploadedDocument } from "../lib/documentStore";
-import { LearningNavigationProvider, LearningToolScope, useLearningNavigation, type HubTab } from "../lib/learningNavigation";
+import { LEARNING_TABS, LearningNavigationProvider, LearningToolScope, useLearningNavigation, type HubTab } from "../lib/learningNavigation";
 
 function addDate(value: string, amount: number) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -56,7 +56,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
   const quizzes = useQuizzes(owner);
   const navigation = useLearningNavigation(), tab = navigation.route.tab;
   const [openAiPlan, setOpenAiPlan] = useState(false);
-  const pickerRef = useRef<HTMLDetailsElement>(null), rootRef = useRef<HTMLElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   const today = vietnamStudyDate();
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -69,17 +69,6 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
     });
     return () => window.cancelAnimationFrame(frame);
   }, [tab]);
-
-  useEffect(() => {
-    const close = (event: Event) => {
-      const picker = pickerRef.current;
-      if (!picker?.open) return;
-      if (event instanceof KeyboardEvent && event.key === "Escape") { picker.open = false; picker.querySelector<HTMLElement>("summary")?.focus(); }
-      else if (event.type === "pointerdown" && event.target instanceof Node && !picker.contains(event.target)) picker.open = false;
-    };
-    document.addEventListener("pointerdown", close); document.addEventListener("keydown", close);
-    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", close); };
-  }, []);
 
   useEffect(() => {
     const plan = flashcards.activeStudyPlan;
@@ -100,33 +89,11 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
     if (task && day && !day.completedTaskIds?.includes(task.id)) await flashcards.completeStudyTask(task.id);
   };
 
-  const tabs: Array<{ id: HubTab; label: string; icon: typeof BookOpen }> = [
-    { id: "overview", label: t("overview"), icon: Layers3 },
-    { id: "flashcards", label: t("flashcards"), icon: BookOpen },
-    { id: "quiz", label: t("quiz"), icon: ClipboardList },
-    { id: "exams", label: language === "vi" ? "Tạo tài liệu" : "Create documents", icon: FileText },
-    { id: "plan", label: t("studyPlan"), icon: CalendarDays },
-    { id: "progress", label: t("progress"), icon: BarChart3 },
-    { id: "lab", label: t("labNav"), icon: Beaker },
-    { id: "tools", label: language === "vi" ? "Tài liệu" : "Documents", icon: FileText },
-    { id: "shared", label: language === "vi" ? "Được chia sẻ với tôi" : "Shared with me", icon: BookOpen },
-    { id: "connections", label: language === "vi" ? "Bạn bè & tin nhắn" : "Friends & messages", icon: Users },
-    { id: "classrooms", label: language === "vi" ? "Lớp học" : "Classrooms", icon: GraduationCap },
-    { id: "music", label: language === "vi" ? "Nhạc tập trung" : "Focus music", icon: Music2 },
-  ];
   const pickTab = (id: HubTab) => {
     navigation.go(id);
-    if (pickerRef.current) pickerRef.current.open = false;
     emitGuideAction(`learning:tab:${id}`);
     if (id === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } }));
   };
-  const tabGroups: Array<{ title: string; ids: HubTab[] }> = [
-    { title: language === "vi" ? "Học" : "Study", ids: ["overview", "flashcards", "quiz", "exams", "lab"] },
-    { title: language === "vi" ? "Tài nguyên" : "Resources", ids: ["tools", "shared"] },
-    { title: language === "vi" ? "Lịch học" : "Schedule", ids: ["plan", "progress", "music"] },
-    { title: language === "vi" ? "Cộng tác" : "Collaborate", ids: ["connections", "classrooms"] },
-  ];
-
   const renderTool = (id: HubTab) => {
     switch (id) {
       case "flashcards": return <FlashcardsPage owner={owner} projects={projects} accountPlan={accountPlan} store={flashcards}/>;
@@ -151,11 +118,8 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
     {tab === "overview" ? <>
       <header className="learning-space-heading"><div><h1>{t("learningHub")}</h1><p>{language === "vi" ? "Hôm nay bạn muốn học gì?" : "What would you like to learn today?"}</p></div><div className="learning-space-streak"><Flame size={17}/><span>{flashcards.streak.current} {t("streakDays")}</span></div></header>
       <HubOverview flashcards={flashcards} quizzes={quizzes} onTab={pickTab} lastTool={navigation.lastTool} onOpenAiPlan={() => { setOpenAiPlan(true); pickTab("plan"); }} t={t} language={language}/>
-    </> : <div className="learning-space-toolbar">
-      <BackButton className="learning-space-back" onClick={() => pickTab("overview")}>{language === "vi" ? "Không gian học tập" : "Learning Space"}</BackButton>
-      <details ref={pickerRef} className="learning-tool-picker"><summary>{language === "vi" ? "Công cụ" : "Tools"}<ChevronDown size={15}/></summary><nav aria-label={language === "vi" ? "Chuyển công cụ học tập" : "Switch learning tools"}>{tabGroups.map(group => <section key={group.title}><strong>{group.title}</strong>{group.ids.filter(id => id !== "overview").map(id => { const item = tabs.find(candidate => candidate.id === id)!; return <button type="button" key={id} className={id === "tools" ? "learning-tools-tab" : ""} data-guide-tab={id} data-help-id={`learning-tab-${id}`} aria-current={tab === id ? "page" : undefined} onClick={() => pickTab(id)}><item.icon size={16}/>{item.label}</button>; })}</section>)}</nav></details>
-    </div>}
-    {tabs.filter(item => item.id !== "overview" && navigation.visited.has(item.id)).map(item => <LearningToolScope key={item.id} tab={item.id} active={tab === item.id}>{renderTool(item.id)}</LearningToolScope>)}
+    </> : <PageBack priority={1} onBack={navigation.backToOverview}>{t("learningHub")}</PageBack>}
+    {LEARNING_TABS.filter(id => id !== "overview" && navigation.visited.has(id)).map(id => <LearningToolScope key={id} tab={id} active={tab === id}>{renderTool(id)}</LearningToolScope>)}
   </section>;
 }
 

@@ -1,4 +1,4 @@
-import { BackButton } from "./PageNavigation";
+import { PageBack } from "./PageNavigation";
 import { useEffect, useRef, useState } from "react";
 import { gradeOnlineQuestion, onlineAttemptResult, type OnlineAttempt, type OnlineExam, type OnlineQuestion, type OnlineResponse } from "../lib/examOnline";
 import { loadOnlineAttempt, saveOnlineAttempt } from "../lib/examStudioStore";
@@ -44,7 +44,7 @@ export default function ExamOnlineRunner({ owner, exam, onBack, onReference }: {
   };
   const remaining = attempt?.endsAt ? Math.max(0, Math.ceil((attempt.endsAt - now) / 1000)) : null;
   return <section className="exam-online-runner">
-    <header className="exam-builder-heading"><div><span className="eyebrow">LÀM BÀI TRÊN MINDCANVAS</span><h1>{exam.title}</h1><p>{exam.description}</p></div><BackButton disabled={leaving} onClick={leave}>Quay lại thư viện đề</BackButton></header>
+    <header className="exam-builder-heading"><div><span className="eyebrow">LÀM BÀI TRÊN MINDCANVAS</span><h1>{exam.title}</h1><p>{exam.description}</p></div><PageBack priority={30} disabled={leaving} onBack={leave}>Quay lại thư viện đề</PageBack></header>
     {error && <div role="alert" className="form-error">{error}{attempt && <button className="secondary-button" disabled={leaving} onClick={() => persist(attempt)}>Thử lưu lại bài làm</button>}</div>}
     {loading ? <p role="status">Đang khôi phục bài làm…</p> : !attempt ? <><p>Đáp án và lời giải xuất hiện sau khi nộp bài. Câu trả lời được lưu trên thiết bị theo tài khoản.</p><button className="primary-button" disabled={leaving} onClick={start}>Bắt đầu làm bài</button><OnlineExamPreview exam={exam}/></> : <>
       {!submitted && <div className="exam-runner-toolbar"><p>{remaining === null ? "Không giới hạn thời gian" : `Còn ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`} · Đáp án hiện sau khi nộp</p><button className="primary-button" disabled={leaving} onClick={submit}>Nộp bài</button></div>}

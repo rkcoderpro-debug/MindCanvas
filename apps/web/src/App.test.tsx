@@ -208,30 +208,35 @@ describe("Workspace UI", () => {
     });
     expect(host.querySelector(".flashcard-row")).toBeNull();
   });
-  it("opens secondary tools from home and switches tools with the compact picker", async () => {
+  it("opens secondary tools from home and finds Quiz by a Vietnamese alias in quick actions", async () => {
     await import("./components/LearningHubPage"); await act(async () => root.render(<App/>));
     await act(async () => ([...host.querySelectorAll<HTMLButtonElement>(".nav-list button")].find(button => button.textContent === "Không gian học tập")!).click());
     await act(async () => host.querySelector<HTMLButtonElement>('.learning-secondary-groups [data-guide-tab="classrooms"]')!.click());
     expect(host.querySelector(".learning-space-heading")).toBeNull(); expect(host.querySelector(".learning-hub-nav")).toBeNull();
     expect(host.textContent).toContain("Đăng nhập để tham gia lớp học");
-    const picker = host.querySelector(".learning-tool-picker") as HTMLDetailsElement;
-    await act(async () => picker.querySelector("summary")!.click()); expect(picker.open).toBe(true);
-    await act(async () => picker.querySelector<HTMLButtonElement>('[data-guide-tab="lab"]')!.click()); expect(picker.open).toBe(false);
-    expect(host.querySelector('.learning-tool-page[data-learning-tool="lab"]')?.hasAttribute("hidden")).toBe(false);
-    await act(async () => host.querySelector<HTMLButtonElement>(".learning-space-back")!.click());
+    expect(host.querySelector(".learning-tool-picker")).toBeNull();
+    await act(async () => host.querySelector<HTMLButtonElement>(".topbar .command-trigger")!.click());
+    const search = host.querySelector<HTMLInputElement>(".command-search input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "trac nghiem");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(host.querySelector('.command-results [data-guide-tab="quiz"]')?.textContent).toContain("Quiz");
+    await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(host.querySelector('.learning-tool-page[data-learning-tool="quiz"]')?.hasAttribute("hidden")).toBe(false);
+    expect(host.querySelectorAll(".topbar .shell-back")).toHaveLength(1);
+    await act(async () => host.querySelector<HTMLButtonElement>(".shell-back")!.click());
     expect(host.querySelector(".learning-space-heading")?.textContent).toContain("Không gian học tập");
   });
-  it("opens a valid tool URL directly and restores tool/home with browser history", async () => {
+  it("goes to Learning Space from a direct tool URL and preserves the contextual parent", async () => {
     await import("./components/LearningHubPage"); window.history.replaceState({}, "", "/?learn=quiz");
     await act(async () => root.render(<App/>));
     await waitForUI(() => expect(host.querySelector('.learning-tool-page[data-learning-tool="quiz"]')?.hasAttribute("hidden")).toBe(false));
     expect(host.querySelector(".learning-space-heading")).toBeNull();
-    await act(async () => host.querySelector<HTMLButtonElement>(".learning-space-back")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".shell-back")!.click());
     expect(host.querySelector(".learning-space-heading")).not.toBeNull();
-    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); });
-    expect(host.querySelector('.learning-tool-page[data-learning-tool="quiz"]')?.hasAttribute("hidden")).toBe(false);
-    await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 30)); });
-    expect(host.querySelector(".learning-space-heading")).not.toBeNull();
+    expect(window.location.search).toBe("?learn=overview");
+    expect(host.querySelector(".topbar .shell-back")?.textContent).toBe("Về Workspace");
   });
   it("restores the workspace and learning home when traversing their entry history", async () => {
     await import("./components/LearningHubPage"); await act(async () => root.render(<App/>));

@@ -1,4 +1,4 @@
-import { BackButton } from "./PageNavigation";
+import { PageBack } from "./PageNavigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, FileType2, HardDrive, Search, Upload, Wrench } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
@@ -138,7 +138,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   return <section className={`document-tools-page document-tools-shell ${libraryCollapsed ? "library-collapsed" : ""} ${selected?.kind === "html" ? "html-reading" : ""}`} data-library-collapsed={libraryCollapsed ? "true" : "false"}>
     <header className="document-tools-header">
       <div className="document-tools-header-leading">
-        {(selected || onBack) && <BackButton className="document-tools-back" onClick={selected ? closeDocument : onBack}>{selected ? (language === "en" ? "Document library" : "Thư viện tài liệu") : (language === "en" ? "Learning Space" : "Học tập")}</BackButton>}
+        {selected ? <PageBack className="document-tools-back" onBack={closeDocument}>{language === "en" ? "Document library" : "Thư viện tài liệu"}</PageBack> : onBack && <PageBack className="document-tools-back" onBack={onBack}>{t("learningHub")}</PageBack>}
         <span className="document-tools-header-divider" aria-hidden="true"/>
         <div className="document-tools-heading-inline"><span className="document-tools-heading-icon"><Wrench size={17}/></span><div><strong>{language === "en" ? t("documentViewer") : "Thư viện tài liệu"}</strong><small><HardDrive size={12}/> Thiết bị{owner ? " và cloud" : ""}</small></div></div>
       </div>

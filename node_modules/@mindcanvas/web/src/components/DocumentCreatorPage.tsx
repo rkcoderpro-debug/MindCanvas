@@ -1,4 +1,4 @@
-import { BackButton, PageNavigation, useListScrollReturn } from "./PageNavigation";
+import { PageBack, PageNavigation, useListScrollReturn } from "./PageNavigation";
 import { useEffect, useState } from "react";
 import { X, BookOpen, ClipboardList, Code2, Download, FileText, Search, Trash2 } from "lucide-react";
 import type { SavedExam } from "@mindcanvas/shared";
@@ -10,7 +10,7 @@ import { listSavedExams } from "../lib/examStore";
 import { getStudioOriginal, listStudioItems, type StudioItem } from "../lib/examStudioStore";
 import { downloadManualFile } from "../lib/examManualSource";
 import { exportExamPdf } from "../lib/examPdf";
-import { useLearningTool } from "../lib/learningNavigation";
+import { LearningVisibility, useLearningTool } from "../lib/learningNavigation";
 import { useLanguage } from "../lib/i18n";
 import ExamBuilderPage from "./ExamBuilderPage";
 import TakenoteBuilderPage from "./TakenoteBuilderPage";
@@ -43,7 +43,12 @@ export default function DocumentCreatorPage({ owner, documents = [], onDocuments
     });
     return () => { alive = false; };
   }, [owner, version, choice]);
-  const choose = (next: "note" | "exam") => { listScroll.remember(); setVisited(current => new Set([...current, next])); setChoice(next); setPreviewVisible(false); };
+  const choose = (next: "note" | "exam") => {
+    listScroll.remember(); setVisited(current => new Set([...current, next]));
+    const show = () => { setChoice(next); setPreviewVisible(false); };
+    if (navigation) navigation.open(`creator:${next}`, show, () => { setChoice(null); listScroll.restore(); });
+    else show();
+  };
   const select = (entry: Entry) => {
     if (entry.type !== "note") listScroll.remember();
     if (entry.type === "note") { choose("note"); setOpenNote({ ...entry.note }); }
@@ -60,11 +65,11 @@ export default function DocumentCreatorPage({ owner, documents = [], onDocuments
       </section>
     </div>
     <div hidden={!choice || previewVisible}>
-      <div className="creator-chrome"><PageNavigation back={<BackButton onClick={closeCreator}>{vi ? "Thư viện tài liệu" : "Document library"}</BackButton>} title={choice === "note" ? "Takenote" : vi ? "Đề thi & bài tập" : "Exams & exercises"} actions={<button type="button" className="icon-button" onClick={closeCreator} aria-label={vi ? "Đóng trình tạo" : "Close creator"} title={vi ? "Đóng trình tạo" : "Close creator"}><X size={20}/></button>}/></div>
-      {visited.has("note") && <div hidden={choice !== "note"} inert={choice !== "note"}><TakenoteBuilderPage key={owner} owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} onSaved={refresh} openNote={openNote}/></div>}
-      {visited.has("exam") && <div hidden={choice !== "exam"} inert={choice !== "exam"}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={onOpenQuiz}/></div>}
+      <PageBack active={!!choice && !previewVisible} onBack={closeCreator}>{vi ? "Thư viện tài liệu" : "Document library"}</PageBack><div className="creator-chrome"><PageNavigation title={choice === "note" ? "Takenote" : vi ? "Đề thi & bài tập" : "Exams & exercises"}/></div>
+      {visited.has("note") && <LearningVisibility active={choice === "note" && !previewVisible}><TakenoteBuilderPage key={owner} owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} onSaved={refresh} openNote={openNote}/></LearningVisibility>}
+      {visited.has("exam") && <LearningVisibility active={choice === "exam" && !previewVisible}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={onOpenQuiz}/></LearningVisibility>}
     </div>
-    {preview && <div hidden={!previewVisible}><CreatedExamViewer owner={owner} entry={preview} onBack={backFromPreview}/></div>}
+    {preview && <LearningVisibility active={previewVisible}><CreatedExamViewer owner={owner} entry={preview} onBack={backFromPreview}/></LearningVisibility>}
   </section>;
 }
 function CreatedExamViewer({ owner, entry, onBack }: { owner: string | null; entry: Exclude<Entry, { type: "note" }>; onBack: () => void }) {
@@ -80,5 +85,5 @@ function CreatedExamViewer({ owner, entry, onBack }: { owner: string | null; ent
     return () => { alive = false; };
   }, [word?.id, answers, owner]);
   if (playing && entry.type === "manual" && entry.item.kind === "online") return <ExamOnlineRunner owner={owner} exam={entry.item.exam} onBack={() => setPlaying(false)} onReference={id => { void getStudioOriginal(owner, id).then(file => { if (file) downloadManualFile(file, file.name); else setError("Không tìm thấy nguồn gốc trên thiết bị."); }).catch(cause => setError(cause.message)); }}/>;
-  return <section className="created-exam-preview"><header className="note-result-toolbar"><BackButton onClick={onBack}>Tài liệu đã tạo</BackButton><div className="actions"><button className="secondary-button" disabled={!!word && !word.answerFileId} onClick={() => setAnswers(value => !value)}>{answers ? "Xem đề" : "Đáp án & lời giải"}</button>{entry.type === "auto" ? <button className="secondary-button" onClick={() => void exportExamPdf(entry.exam).catch(cause => setError(cause.message))}>Xuất PDF</button> : entry.item.kind === "online" ? <button className="primary-button" onClick={() => setPlaying(true)}>Làm bài</button> : <button className="secondary-button" onClick={() => { const fileId = answers ? word!.answerFileId : word!.examFileId; if (fileId) void getStudioOriginal(owner, fileId).then(file => { if (file) downloadManualFile(file, file.name); }).catch(cause => setError(cause.message)); }}><Download size={15}/>Tải Word</button>}</div></header>{error && <p role="alert" className="form-error">{error}</p>}{entry.type === "auto" ? <ExamPaper exam={entry.exam} answers={answers}/> : entry.item.kind === "online" ? <><OnlineExamPreview exam={entry.item.exam}/>{answers && <article className="takenote-content">{entry.item.exam.questions.map((question, index) => <section key={question.id}><h3>Câu {index + 1}</h3><p><FormulaText text={question.answer}/></p><p><FormulaText text={question.explanation}/></p></section>)}</article>}</> : wordUrl ? <DocxViewer dataUrl={wordUrl}/> : <p role="status">Đang mở Word…</p>}</section>;
+  return <section className="created-exam-preview"><header className="note-result-toolbar"><PageBack priority={20} onBack={onBack}>Tài liệu đã tạo</PageBack><div className="actions"><button className="secondary-button" disabled={!!word && !word.answerFileId} onClick={() => setAnswers(value => !value)}>{answers ? "Xem đề" : "Đáp án & lời giải"}</button>{entry.type === "auto" ? <button className="secondary-button" onClick={() => void exportExamPdf(entry.exam).catch(cause => setError(cause.message))}>Xuất PDF</button> : entry.item.kind === "online" ? <button className="primary-button" onClick={() => setPlaying(true)}>Làm bài</button> : <button className="secondary-button" onClick={() => { const fileId = answers ? word!.answerFileId : word!.examFileId; if (fileId) void getStudioOriginal(owner, fileId).then(file => { if (file) downloadManualFile(file, file.name); }).catch(cause => setError(cause.message)); }}><Download size={15}/>Tải Word</button>}</div></header>{error && <p role="alert" className="form-error">{error}</p>}{entry.type === "auto" ? <ExamPaper exam={entry.exam} answers={answers}/> : entry.item.kind === "online" ? <><OnlineExamPreview exam={entry.item.exam}/>{answers && <article className="takenote-content">{entry.item.exam.questions.map((question, index) => <section key={question.id}><h3>Câu {index + 1}</h3><p><FormulaText text={question.answer}/></p><p><FormulaText text={question.explanation}/></p></section>)}</article>}</> : wordUrl ? <DocxViewer dataUrl={wordUrl}/> : <p role="status">Đang mở Word…</p>}</section>;
 }

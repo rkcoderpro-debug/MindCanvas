@@ -1,4 +1,4 @@
-import { BackButton } from "./PageNavigation";
+import { PageBack } from "./PageNavigation";
 import ContentLanguageField from "./ContentLanguageField";
 import { readContentLanguage, rememberContentLanguage } from "../lib/contentLanguage";
 import { useLanguage } from "../lib/i18n";
@@ -188,7 +188,7 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
       {!owner && <p className="exam-warning">Đăng nhập để đọc file và dùng AI.</p>}
     </details></fieldset>
     {work.blueprint && <details className="exam-secondary-tools"><summary>Điều chỉnh cấu trúc đề</summary><ExamPlanEditor plan={work.blueprint} format={work.settings.format} maxQuestions={maxQuestions} busy={!!busy} confirmed={work.planConfirmed} canGenerate={work.sourceConfirmed && !!owner} onChange={updatePlan} onConfirm={value => setWork(current => ({ ...current, planConfirmed: value }))} onGenerate={() => void generate()}/></details>}
-    </div>{result && <main className="exam-result-view" hidden={!showResult}><BackButton className="exam-back-button" disabled={!!busy} onClick={backToSetup}>Thiết lập đề</BackButton>
+    </div>{result && <main className="exam-result-view" hidden={!showResult}><PageBack className="exam-back-button" priority={20} active={showResult} disabled={!!busy} onBack={backToSetup}>Thiết lập đề</PageBack>
       <div className="exam-result-toolbar"><button className="secondary-button" aria-expanded={answers} onClick={() => { setAnswers(value => !value); setReference(null); }}>{answers ? "Xem đề" : "Đáp án & lời giải"}</button><button className="secondary-button" disabled={!!busy} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? "Xong chỉnh sửa" : "Chỉnh sửa đề"}</button><button className="secondary-button" disabled={!!busy} onClick={() => void save(false)}><Save size={16}/>Lưu đề</button>
         {result.settings.format === "quiz" ? <><button className="primary-button" disabled={!!busy || quizzes.busy || quizzes.loading} onClick={() => void save(true)}>Lưu vào Quiz</button>{result.quizId && <button className="secondary-button" onClick={onOpenQuiz}>Đi tới Quiz</button>}</> : <button className="primary-button" disabled={!!busy} onClick={() => void run("Đang chuẩn bị PDF…", async () => { await exportExamPdf(result); if (alive.current) setNotice("Trong hộp thoại in, chọn Lưu thành PDF. Đề ở trước; đáp án và lời giải bắt đầu ở phần riêng phía sau."); })}>Xuất PDF</button>}
       </div>

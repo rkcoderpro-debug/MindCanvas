@@ -15,10 +15,10 @@ import {
   type ProjectMember,
 } from "../lib/collaboration";
 
-type Props = { projectId: string; title: string; onClose: () => void; isAuthenticated?: boolean; onSignIn?: () => void };
+type Props = { shellBack?: boolean; projectId: string; title: string; onClose: () => void; isAuthenticated?: boolean; onSignIn?: () => void };
 
-export default function ShareDialog({ projectId, title, onClose, isAuthenticated = true, onSignIn }: Props) {
-  const { t } = useLanguage();
+export default function ShareDialog({ projectId, title, onClose, isAuthenticated = true, onSignIn, shellBack }: Props) {
+  const { t, language } = useLanguage();
   const linkInput = useRef<HTMLInputElement>(null);
   const iosDevice = isIOSDevice();
   const [email, setEmail] = useState("");
@@ -140,14 +140,14 @@ export default function ShareDialog({ projectId, title, onClose, isAuthenticated
   return <section className="share-page" aria-labelledby="share-page-title">
     <header className="share-page-header">
       <div className="share-page-title-group">
-        <BackButton className="share-page-back" onClick={onClose}>{t("workspace")}</BackButton>
+        {!shellBack && <BackButton className="share-page-back" onClick={onClose}>{language === "vi" ? "Về canvas" : "Back to canvas"}</BackButton>}
         <div>
           <p className="eyebrow">{t("shareProject")}</p>
           <h1 id="share-page-title">{t("shareProject")}</h1>
           <p>{t("shareProjectHint")}</p>
         </div>
       </div>
-      <button type="button" className="secondary-button share-page-close" onClick={onClose}>{t("close")}</button>
+      {!shellBack && <button type="button" className="secondary-button share-page-close" onClick={onClose}>{t("close")}</button>}
     </header>
     <div className="share-dialog">
       <div className="share-project-heading"><Users size={22}/><div><strong>{title}</strong><small>{t("shareProjectHint")}</small></div></div>

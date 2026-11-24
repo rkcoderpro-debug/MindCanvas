@@ -1,0 +1,162 @@
+{
+  "version": "5.29.3",
+  "baseVersion": "5.29.2",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.29.3.md",
+      "bytes": 1424,
+      "sha256": "f59515e8a8d4c05990107077b69d530edf15a802041dd9f2811107e236e478d4"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "cd38e84f85ca455deeaf0476b6e91b747a46df340ac6a934901cb720b09294a6"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "99ce380d2a50b14bd69946edf5ee0ce7487220e17c1f5639864c379587fc68b1"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 33106,
+      "sha256": "f454d520103f8ca8d73b15bb5b181f75c074f91d55c80248695068b2aa61dc2f"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 62559,
+      "sha256": "23bc7c1796e131b34e9760a7acb788ec40380d919b063e0d0fc70ef569f31553"
+    },
+    {
+      "path": "apps/web/src/components/AdminDashboard.tsx",
+      "bytes": 11036,
+      "sha256": "40f436e8163b100e502d55ce2e4aed6c185833f2c302b63958b4b84f02015c92"
+    },
+    {
+      "path": "apps/web/src/components/AiModeSwitch.tsx",
+      "bytes": 2351,
+      "sha256": "bc749bff90e8e01fc6dc6e9a932277b4312195b3d20eb938d7135e512b7fcf6a"
+    },
+    {
+      "path": "apps/web/src/components/CommandPalette.tsx",
+      "bytes": 5016,
+      "sha256": "7ebd9ada0b9b211dcb3eb3363116376a07f2778a922f143c8df6abf0d89b6c8d"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.tsx",
+      "bytes": 12425,
+      "sha256": "c9d54a3936302de0758d7349578bd7a1e2eccec54af0700734dca292b32a971a"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 14067,
+      "sha256": "3febd8f4fda5d3668ba6d5432fe08163694c03b307bf8bc74d9f11e5a84874ea"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "bytes": 27279,
+      "sha256": "e4571328f45829a2aadd2da3909cdc6b806cc3973025d4080700db184d1159cd"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "bytes": 31370,
+      "sha256": "12c7bd93a1dd59d2cd76db947287ffde85e21748d64c9d3890246484f5a038bf"
+    },
+    {
+      "path": "apps/web/src/components/ExamOnlineRunner.tsx",
+      "bytes": 10891,
+      "sha256": "d0ece44d9aad30d9c779370a14635e9a9bb841c586abb19887eb1f7ee215fb1d"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.review.test.tsx",
+      "bytes": 10386,
+      "sha256": "4c32e00aad273a4b015f2f6d11f02b344bb3006b97233b3b069c2563cc779407"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 60699,
+      "sha256": "3cca972b2da4c3ab7d7aa5f15e8e518315d4d36a3fca5de41bb3d75e5985c52d"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.tsx",
+      "bytes": 21575,
+      "sha256": "bdce67d8e6450bad88175cabd957b1f59ec438626231d622796ddb7f0e73bad7"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 31010,
+      "sha256": "dfea9bb99984ab7d9d0ac5fc633746d44d9c41821c6e932132d9c91e078075c2"
+    },
+    {
+      "path": "apps/web/src/components/PageNavigation.tsx",
+      "bytes": 6419,
+      "sha256": "d8662928c9f8ef02d6d5cfe0e3082a474c1cef73b72da1240d77132c5a0fbf03"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 17005,
+      "sha256": "a4dc8d3e5e6bb72dac61dd4e8a0109a5860a943861ece6713449705a1232a160"
+    },
+    {
+      "path": "apps/web/src/components/ShareDialog.tsx",
+      "bytes": 9408,
+      "sha256": "5ff059bf020c51af7959950b1d101adec375e2d0bb53ac34344ff2ee69a34e5d"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 24435,
+      "sha256": "c9665df2b74f6d1e00aca3bbfde9a3514594235f8c8467979939acd1ef47149d"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.tsx",
+      "bytes": 29668,
+      "sha256": "7b0ce502a26b284699ec2f14cc169159f72a0b035587b92cc7261fc68891fb48"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 64172,
+      "sha256": "a6a26cb427ff15b994a06047546a6581512fa1bbd030d592b03b257a43d09846"
+    },
+    {
+      "path": "apps/web/src/lib/i18n.tsx",
+      "bytes": 126175,
+      "sha256": "db26518a85323cae89eb1ae80f0047ef556742c089ca54c7b290a62c5ee5bd02"
+    },
+    {
+      "path": "apps/web/src/lib/learningCommands.ts",
+      "bytes": 1892,
+      "sha256": "a6490e302277496177a69728b5f1aa8d090fde5f88eec79247c7f5de931a10d2"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.test.tsx",
+      "bytes": 9814,
+      "sha256": "44db90e70db5ecbf888a81fa228ab4c5a0380065648abbcd5c1d75d4af04b851"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 9405,
+      "sha256": "d92bbdb3e27187c2726bb9732c03898c329673a949b9d559be50f4bc157ad615"
+    },
+    {
+      "path": "apps/web/src/lib/manualAi.ts",
+      "bytes": 22489,
+      "sha256": "6932f8e4ef24a78a7d4050f7cf06acf53b775f2c82728716a13de20a2d7070c0"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 494071,
+      "sha256": "74b5dc4a554e25b1f084fc56126de21c26111a361a69db3f62fc7f7c74f85c09"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "9ea42efa8b9de36e37b175695ed8cab43dcaf2d0ad5134e1a5a5f6a990a3d043"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "daa1be140870abcba9e0ac62b9ae25711bbb59fcf6a7c14ac30de0924e247578"
+    }
+  ]
+}

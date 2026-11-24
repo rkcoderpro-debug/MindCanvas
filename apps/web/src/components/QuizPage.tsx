@@ -98,7 +98,7 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
     const freeNavigation = activeReveal === "submit" || allowsQuizNavigation(currentMode);
     const feedbackVisible = immediateFeedback && answerRevealed;
     return <ActivityViewport ref={activityFocus} className="activity-screen activity-quiz" aria-label={activeQuiz.title}>
-      <PageNavigation back={<BackButton onClick={leaveQuiz}>{language === "vi" ? "Danh sách Quiz" : "Quiz list"}</BackButton>} title={activeQuiz.title}
+      <PageNavigation quickActions back={<BackButton onClick={leaveQuiz}>{language === "vi" ? "Danh sách Quiz" : "Quiz list"}</BackButton>} title={activeQuiz.title}
         context={<><span>{modeLabel(t, currentMode)} · {t(activeReveal === "instant" ? "quizRevealInstant" : "quizRevealSubmit")}</span><b>{questionIndex + 1} / {activeQuiz.questions.length}</b>{currentMode === "exam" && !result && <strong className="quiz-exam-clock">{formatTimerTime(examSeconds, true)}</strong>}</>}
         actions={<LearningShareButton kind="quiz" id={activeQuiz.id} title={activeQuiz.title} plan={accountPlan} available={!!owner && activeQuiz.source === "cloud"}/>}/>
       {result ? <div className="activity-content"><QuizResult quiz={activeQuiz} score={result.score} answers={answers} onRetake={() => startQuiz(activeQuiz, currentMode, activeOrder)} t={t}/></div> : <div className="quiz-runner">

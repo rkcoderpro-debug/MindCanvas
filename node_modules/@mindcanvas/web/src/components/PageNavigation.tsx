@@ -1,6 +1,7 @@
-import { ArrowLeft } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { ArrowLeft, Search } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLanguage } from "../lib/i18n";
 import { useLearningActive } from "../lib/learningNavigation";
 import type { ButtonHTMLAttributes, ComponentPropsWithRef, ReactNode, Ref } from "react";
 
@@ -8,11 +9,50 @@ export function BackButton({ children, className = "", buttonRef, ...props }: Bu
   return <button {...props} ref={buttonRef} type="button" className={`page-back-button ${className}`}><ArrowLeft size={17} aria-hidden="true"/><span>{children}</span></button>;
 }
 
-export function PageNavigation({ back, title, context, actions }: { back: ReactNode; title: string; context?: ReactNode; actions?: ReactNode }) {
+type BackEntry = { id: symbol; label: string; priority: number; disabled: boolean; run: () => void };
+const ShellBackContext = createContext<{ entries: BackEntry[]; register: (entry: BackEntry) => () => void } | null>(null);
+const QuickActionsContext = createContext<(() => void) | null>(null);
+
+export function PageChromeProvider({ children, openQuickActions }: { children: ReactNode; openQuickActions: () => void }) {
+  const [entries, setEntries] = useState<BackEntry[]>([]);
+  const register = useCallback((entry: BackEntry) => {
+    setEntries(current => [...current, entry]);
+    return () => setEntries(current => current.filter(item => item.id !== entry.id));
+  }, []);
+  const value = useMemo(() => ({ entries, register }), [entries, register]);
+  return <QuickActionsContext.Provider value={openQuickActions}><ShellBackContext.Provider value={value}>{children}</ShellBackContext.Provider></QuickActionsContext.Provider>;
+}
+
+export function ShellBack({ fallback }: { fallback?: { label: string; run: () => void } }) {
+  const entries = useContext(ShellBackContext)?.entries ?? [];
+  const selected = entries.reduce<BackEntry | undefined>((best, entry) => !best || best.priority <= entry.priority ? entry : best, undefined);
+  const back = selected ?? fallback;
+  return back ? <BackButton className="shell-back" title={back.label} disabled={selected?.disabled} onClick={back.run}>{back.label}</BackButton> : null;
+}
+
+/** Register a contextual destination in the shell; standalone tools keep their own button. */
+export function PageBack({ children, onBack, active = true, priority = 10, disabled = false, className }: { children: string; onBack: () => void; active?: boolean; priority?: number; disabled?: boolean; className?: string }) {
+  const register = useContext(ShellBackContext)?.register;
+  const visible = useLearningActive() && active;
+  const handler = useRef(onBack);
+  useLayoutEffect(() => { handler.current = onBack; }, [onBack]);
+  useLayoutEffect(() => {
+    if (visible && register) return register({ id: Symbol(), label: children, priority, disabled, run: () => handler.current() });
+  }, [visible, register, children, priority, disabled]);
+  if (!visible || register) return null;
+  return <BackButton className={className} disabled={disabled} onClick={onBack}>{children}</BackButton>;
+}
+
+export function useQuickActions() { return useContext(QuickActionsContext); }
+
+export function PageNavigation({ back, title, context, actions, quickActions = false }: { back?: ReactNode; title: string; context?: ReactNode; actions?: ReactNode; quickActions?: boolean }) {
+  const openQuickActions = useQuickActions();
+  const { t } = useLanguage();
+  const search = quickActions && openQuickActions && <button type="button" className="icon-button command-trigger" aria-label={t("commandPalette")} title={t("commandPalette")} onClick={openQuickActions}><Search size={18}/></button>;
   return <header className="page-navigation">
-    <div className="page-navigation-start">{back}</div>
+    {back && <div className="page-navigation-start">{back}</div>}
     <div className="page-navigation-identity"><h2 title={title}>{title}</h2>{context && <div className="page-navigation-context">{context}</div>}</div>
-    {actions && <div className="page-navigation-actions">{actions}</div>}
+    {(actions || search) && <div className="page-navigation-actions">{search}{actions}</div>}
   </header>;
 }
 

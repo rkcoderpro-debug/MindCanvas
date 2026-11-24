@@ -5,13 +5,20 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FlashcardsPage, { ReviewPanel } from "./FlashcardsPage";
 import { LanguageProvider } from "../lib/i18n";
 import type { FlashcardStore } from "../hooks/useFlashcards";
+import { FREE_ACCOUNT_PLAN } from "../lib/account";
 import type { Flashcard } from "../lib/flashcards";
+
+const consume = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
+vi.mock("../lib/api", async importOriginal => ({ ...await importOriginal<typeof import("../lib/api")>(), consumeAiManualUsage: consume }));
 
 const target = { id: "card-1", front: "Front only", back: "Back only" } as Flashcard;
 vi.mock("../hooks/useFlashcards", () => ({ useFlashcards: () => ({}) }));
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  consume.mockClear();
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); });
@@ -36,7 +43,7 @@ it("rates one horizontal swipe once and ignores vertical scrolling", async () =>
   const rate = vi.fn(); await act(async () => root.render(<TestReview onRate={rate}/>));
   const scene = host.querySelector(".review-card-scene") as HTMLElement;
   await act(async () => scene.click());
-  await act(async () => { pointer(scene, "pointerdown", 0); pointer(scene, "pointerup", 100); pointer(scene, "pointerup", 100); scene.click(); });
+  await act(async () => { pointer(scene.querySelector("p")!, "pointerdown", 0); pointer(scene, "pointermove", 100); pointer(scene, "pointerup", 100); pointer(scene, "pointerup", 100); scene.click(); });
   expect(rate).toHaveBeenCalledExactlyOnceWith("good");
   expect(scene.textContent).toContain(target.back);
   rate.mockClear();
@@ -74,8 +81,12 @@ it.each(["again", "good"] as const)("records one %s study event under rapid taps
   const recordStudy = vi.fn().mockResolvedValue(undefined);
   const store = { cards: [first, second], due: [first, second], decks: [deck], selectedDeck: deck, selectedDeckId: "deck", storageMode: "local", streak: { current: 0, best: 0, todayProgress: 0, todayTarget: 2 }, studyDays: [], reviewCard, recordStudy } as unknown as FlashcardStore;
   await act(async () => root.render(<LanguageProvider><FlashcardsPage owner={null} projects={[]} store={store}/></LanguageProvider>));
-  const start = Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Start review");
-  expect(start).toBeTruthy(); await act(async () => start!.click());
+  const start = Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Start studying")!;
+  await act(async () => start.click());
+  expect(start.getAttribute("aria-expanded")).toBe("true");
+  expect(host.querySelector(".study-mode-toolbar")?.textContent).toContain("Choose a study mode to begin.");
+  const ordered = [...host.querySelectorAll<HTMLButtonElement>(".study-mode-options button")].find(button => button.textContent === "Ordered")!;
+  await act(async () => ordered.click());
   await act(async () => (document.querySelector("[data-learning-viewport] .review-card-scene") as HTMLElement).click());
   const good = document.querySelector(`[data-learning-viewport] .rating-${rating}`) as HTMLButtonElement;
   await act(async () => { good.click(); good.click(); });
@@ -85,4 +96,52 @@ it.each(["again", "good"] as const)("records one %s study event under rapid taps
   expect(recordStudy.mock.calls[0][0]).toMatchObject({ cardId: "card-1", rating, goalUnit: 1 });
   expect(document.querySelector("[data-learning-viewport] .review-card-scene")?.textContent).toContain("Second front");
   expect(document.querySelector("[data-learning-viewport] .review-card-scene")?.textContent).not.toContain("Second back");
+});
+
+async function edit(host: Element, selector: string, value: string) {
+  const node = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)!;
+  expect(node, selector).toBeTruthy();
+  const prototype = node instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(node, value);
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+async function click(host: Element, label: string) {
+  const button = [...host.querySelectorAll("button")].find(item => item.textContent?.trim() === label)!;
+  expect(button, label).toBeTruthy();
+  await act(async () => button.click());
+}
+
+it("keeps the original JSON, previews over-limit cards, and applies the plan limit when using existing JSON", async () => {
+  localStorage.setItem("mindcanvas:language", "en");
+  const deck = { id: "deck", name: "Test deck", source: "local", projectId: null };
+  const createCards = vi.fn().mockResolvedValue([]);
+  const store = { cards: [], due: [], decks: [deck], selectedDeck: deck, selectedDeckId: "deck",
+    storageMode: "local", streak: { current: 0, best: 0, todayProgress: 0, todayTarget: 2 }, studyDays: [], createCards } as unknown as FlashcardStore;
+  await act(async () => root.render(<LanguageProvider><FlashcardsPage owner="owner" projects={[]} store={store} accountPlan={{ ...FREE_ACCOUNT_PLAN, maxCards: 4 }}/></LanguageProvider>));
+  await act(async () => (host.querySelector<HTMLButtonElement>(".flashcards-ai-trigger")!).click());
+  const studio = host.querySelector("dialog[open]")!;
+  await click(studio, "AI Manual");
+  await edit(studio, ".quiz-studio-settings input[type=number]", "3");
+  const raw = JSON.stringify({ title: "Deck draft", cards: [1,2,3,4,5].map(i => ({ front: `Question ${i}`, back: `Answer ${i}` })) });
+  await edit(studio, ".quiz-json-input", raw);
+  await click(studio, "Validate result");
+  const save = () => Array.from(studio.querySelectorAll("button")).find(button => button.textContent === "Add to deck")!;
+  expect(studio.textContent).toContain("5 / 3 cards"); expect(save().disabled).toBe(true);
+  expect(consume).not.toHaveBeenCalled();
+  await click(studio, "Back to JSON");
+  expect(studio.querySelector<HTMLTextAreaElement>(".quiz-json-input")?.value).toBe(raw);
+  await act(async () => studio.querySelector<HTMLInputElement>(".quiz-json-check input")!.click());
+  expect(studio.querySelector<HTMLFieldSetElement>(".quiz-studio-settings")?.disabled).toBe(true);
+  await click(studio, "Validate result");
+  expect(studio.textContent).toContain("5 / 4 cards");
+  const remove = studio.querySelector<HTMLButtonElement>('.flashcard-draft-list .ai-preview-card:last-child button')!;
+  await act(async () => remove.click());
+  expect(save().disabled).toBe(false);
+  expect(consume).not.toHaveBeenCalled();
+  await click(studio, "Add to deck");
+  expect(consume).toHaveBeenCalledTimes(1);
+  expect(createCards).toHaveBeenCalledOnce();
+  expect(createCards.mock.calls[0][0]).toHaveLength(4);
 });

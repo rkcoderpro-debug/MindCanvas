@@ -643,7 +643,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Create decks from a file or manually, edit cards and start a review session here.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -667,7 +667,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Quiz supports question creation, study or exam modes and answer explanations.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -691,7 +691,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Choose decks, tasks, targets and rest days, or ask AI to suggest a plan.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -715,7 +715,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "This area summarizes streaks, reviewed cards, Quiz scores and recent history.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -739,7 +739,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Lab creates prompts, accepts HTML files, runs them in a sandbox, and saves or downloads simulations.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -765,7 +765,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Open and study shared content without changing the owner's original.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -799,7 +799,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Add a file or YouTube, YouTube Music, Spotify or SoundCloud link, then use play, pause, volume, repeat and Dynamic Island.",
       },
       {
-        target: ".learning-space-back",
+        target: ".topbar .shell-back",
         completion: { type: "action", actions: [{ id: "learning:tab:overview", labelVi: "Về trang học tập", labelEn: "Back to learning home" }] },
         titleVi: "Về trang học tập", titleEn: "Back to learning home",
         bodyVi: "Quay về trang chủ để chọn công cụ tiếp theo. Nội dung đang mở được giữ trong phiên này.",
@@ -1142,7 +1142,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
     gifSrc: "/guides/pdf-annotation.gif",
     demo: "pdf",
     steps: [
-      { target: ".learning-tools-tab", completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Không gian học tập, bấm Công cụ để mở trình xem tài liệu.", bodyEn: "In Learning Space, click Tools to open the document viewer." },
+      { target: '.learning-space button[data-guide-tab="tools"]', completion: { type: "action", actions: [{ id: "learning:tab:tools", labelVi: "Mở tab Công cụ", labelEn: "Open Tools" }] }, titleVi: "Mở tab Công cụ", titleEn: "Open Tools", bodyVi: "Trong Không gian học tập, bấm Tài liệu để mở thư viện. Bạn cũng có thể tìm Tài liệu qua Ctrl/⌘ + K.", bodyEn: "In Learning Space, open Documents. You can also find it with Ctrl/⌘ + K." },
       { target: ".document-tools-tabs [data-tool-tab=\"pdf\"]", completion: { type: "click" }, titleVi: "Lọc tài liệu PDF", titleEn: "Filter PDF documents", bodyVi: "Chọn bộ lọc PDF để chỉ hiển thị những tài liệu có thể chú thích.", bodyEn: "Choose the PDF filter to show documents that can be annotated." },
       { target: ".document-tool-list button[data-document-kind=\"pdf\"]", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu thư viện trống, hãy tải một file PDF lên trước.", bodyEn: "Choose a PDF from the list. If the library is empty, upload a PDF first." },
       { target: ".document-tools-page .document-tool-workspace", completion: { type: "action", actions: [{ id: "tools:viewer-ready", labelVi: "Mở viewer tài liệu", labelEn: "Open the document viewer" }] }, titleVi: "Mở viewer tài liệu", titleEn: "Open the document viewer", bodyVi: "Viewer đã sẵn sàng. DOCX, PPTX và XLSX chỉ được xem; PDF có thể chú thích.", bodyEn: "The viewer is ready. DOCX, PPTX and XLSX are view-only; PDFs support annotation." },

@@ -68,3 +68,30 @@ it("suspends dialogs and review shortcuts in hidden cached tools", async () => {
   await render(true); expect(host.querySelector("dialog")?.hasAttribute("open")).toBe(true); await render(false); expect(host.querySelector("dialog")?.hasAttribute("open")).toBe(false);
   await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))); expect(rate).not.toHaveBeenCalled(); await render(true); expect(host.querySelector("dialog")?.hasAttribute("open")).toBe(true);
 });
+
+it("keeps the deck open while entering a session and navigates back through both levels", async () => {
+  function Nested() {
+    const nav = useLearningNavigation();
+    return <><output>{nav.route.detail ?? "list"}</output><LearningToolScope tab="flashcards" active>
+      <NestedDeck/>
+    </LearningToolScope></>;
+  }
+  const showDeck = vi.fn(), hideDeck = vi.fn(), showReview = vi.fn(), hideReview = vi.fn();
+  function NestedDeck() {
+    const nav = useLearningTool()!;
+    return <><button onClick={() => nav.open("deck", showDeck, hideDeck)}>Deck</button>
+      <button onClick={() => nav.open("review", showReview, hideReview)}>Study</button>
+      <button onClick={nav.back}>Back</button></>;
+  }
+  await act(async () => root.render(<LearningNavigationProvider owner="a" initialTab="flashcards"><Nested/></LearningNavigationProvider>));
+  await click("Deck"); await click("Study");
+  expect(showDeck).toHaveBeenCalledTimes(1);
+  expect(hideDeck).not.toHaveBeenCalled();
+  expect(showReview).toHaveBeenCalledTimes(1);
+  await click("Back");
+  await vi.waitFor(() => expect(window.history.state?.mindcanvasLearning?.detail).toBe("deck"));
+  expect(hideReview).toHaveBeenCalledTimes(1);
+  await click("Back");
+  expect(host.querySelector("output")?.textContent).toBe("list");
+  expect(hideDeck).toHaveBeenCalledTimes(1);
+});

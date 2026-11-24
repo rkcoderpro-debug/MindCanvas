@@ -3,6 +3,20 @@ import { DEFAULT_THEME, isTheme, themeBrowserColor, themeGradient, type Theme } 
 export type { Theme } from "./theme";
 
 export const en = {
+  flashcardStartStudy: "Start studying",
+  flashcardChooseStudy: "Choose a study mode to begin.",
+  flashcardNewOnly: "New cards only",
+  flashcardOtherTools: "Other tools",
+  flashcardDeckList: "Deck list",
+  flashcardBackToDeck: "Back to deck",
+  flashcardReadyJsonHint: "Your JSON uses the card limit of your plan. It does not need to match the prompt settings.",
+  flashcardRequirementsHint: "Example: Practice SQL joins, with short answers and one example per card.",
+  flashcardPreviewHeading: "Review and edit cards",
+  flashcardDraftCount: "{count} / {max} cards",
+  flashcardTrimDraft: "Remove at least {count} cards to continue.",
+  flashcardCompleteDraft: "Keep at least one card and fill in both sides of each card. Source pages, if entered, must be positive integers.",
+  flashcardInvalidImport: "Use the flashcard JSON format with a title and a cards array. Each card needs a question and answer.",
+  flashcardDuplicateDraft: "Some questions are repeated. Edit or remove duplicate cards.",
   canvasProjectType: "Canvas type",
   canvasInfinite: "Infinite canvas",
   canvasInfiniteHint: "A free board for ideas, notes, and mind maps.",
@@ -134,6 +148,20 @@ export const en = {
 } as const;
 export type MessageKey = keyof typeof en;
 export const vi: Record<MessageKey, string> = {
+  flashcardStartStudy: "Bắt đầu học",
+  flashcardChooseStudy: "Bắt đầu học bằng cách chọn một trong các cách học sau.",
+  flashcardNewOnly: "Chỉ học thẻ mới",
+  flashcardOtherTools: "Công cụ khác",
+  flashcardDeckList: "Danh sách bộ thẻ",
+  flashcardBackToDeck: "Về bộ thẻ",
+  flashcardReadyJsonHint: "JSON có sẵn chỉ cần nằm trong hạn mức thẻ của gói. Bạn không cần dùng thiết lập prompt.",
+  flashcardRequirementsHint: "Ví dụ: Ôn các loại JOIN trong SQL, trả lời ngắn gọn và cho mỗi thẻ một ví dụ.",
+  flashcardPreviewHeading: "Kiểm tra và chỉnh sửa thẻ",
+  flashcardDraftCount: "{count} / {max} thẻ",
+  flashcardTrimDraft: "Xóa ít nhất {count} thẻ để tiếp tục.",
+  flashcardCompleteDraft: "Cần ít nhất một thẻ, có đủ câu hỏi và câu trả lời. Nếu nhập số trang nguồn, hãy dùng số nguyên dương.",
+  flashcardInvalidImport: "JSON cần có tiêu đề và danh sách cards theo mẫu Flashcard. Mỗi thẻ cần có câu hỏi và câu trả lời.",
+  flashcardDuplicateDraft: "Có câu hỏi trùng. Hãy chỉnh sửa hoặc xóa thẻ trùng.",
   canvasProjectType: "Loại canvas",
   canvasInfinite: "Canvas vô hạn",
   canvasInfiniteHint: "Không gian tự do cho ý tưởng, ghi chú và sơ đồ tư duy.",

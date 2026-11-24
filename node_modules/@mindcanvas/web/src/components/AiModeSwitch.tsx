@@ -7,10 +7,11 @@ export type AiMode = "auto" | "manual";
 type AiModeSwitchProps = {
   mode: AiMode;
   autoAvailable: boolean;
+  disabled?: boolean;
   onChange: (mode: AiMode) => void;
 };
 
-export function AiModeSwitch({ mode, autoAvailable, onChange }: AiModeSwitchProps) {
+export function AiModeSwitch({ mode, autoAvailable, disabled = false, onChange }: AiModeSwitchProps) {
   const { t } = useLanguage();
 
   return (
@@ -20,7 +21,7 @@ export function AiModeSwitch({ mode, autoAvailable, onChange }: AiModeSwitchProp
         type="button"
         role="tab"
         aria-selected={mode === "auto"}
-        disabled={!autoAvailable}
+        disabled={disabled || !autoAvailable}
         title={autoAvailable ? t("aiAuto") : t("aiAutoLoginHint")}
         onClick={() => onChange("auto")}
       >
@@ -32,6 +33,7 @@ export function AiModeSwitch({ mode, autoAvailable, onChange }: AiModeSwitchProp
         type="button"
         role="tab"
         aria-selected={mode === "manual"}
+        disabled={disabled}
         onClick={() => onChange("manual")}
       >
         <ClipboardPaste size={16} aria-hidden="true" />
