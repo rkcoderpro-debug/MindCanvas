@@ -7,10 +7,11 @@ import type { OnlineRoom, RoomSnapshot } from "../lib/onlineRooms";
 import OnlineRoomsPage from "./OnlineRoomsPage";
 
 const mock = vi.hoisted(() => ({
-  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(),
+  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(),
 }));
 vi.mock("../lib/onlineRooms", async actual => ({
   ...await actual<typeof import("../lib/onlineRooms")>(),
+  requestRoomCanvas: mock.canvas, sendMeetingFile: mock.upload, loadMeetingFile: mock.download,
   createOnlineRoom: mock.create, fetchMeetingToken: mock.token, controlOnlineMeeting: mock.manage,
   listOnlineRooms: mock.list, joinOnlineRoom: mock.join, readOnlineRoom: mock.read, readOnlineRoomChat: mock.chat,
   pingOnlineRoom: mock.leave, actOnlineRoom: mock.act, watchOnlineRoom: mock.watch, loadRoomAvatars: vi.fn(async () => new Map()),
@@ -131,4 +132,42 @@ it("creates a meeting with a table and lets people interact before connecting me
   await act(async () => button("Kết nối cuộc gọi").click());
   expect(mock.token).toHaveBeenCalledWith(meeting.id, expect.any(String), expect.any(AbortSignal));
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("Không kết nối được cuộc gọi");
+});
+
+it("lets the host attach an independent Canvas and send a chat file without entering a call", async () => {
+  const meeting: OnlineRoom = { ...room, id:"7a000000-0000-4000-8000-000000000011", name:"Họp nhóm", kind:"meeting", host_id:owner,
+    official:false,music_enabled:false,layout:"table",visibility:"private" };
+  let canvas: Record<string,unknown>|null = null;
+  mock.read.mockResolvedValue({ ...fixture(),room:meeting,can_manage:true });
+  mock.canvas.mockImplementation(async (_room,_client,action) => {
+    if (action.op === "start") canvas = { revision:1,title:action.board.title,on_stage:true,allow_edit:false,can_edit:true,board:action.board };
+    if (action.op === "permission") canvas = { ...canvas,revision:2,allow_edit:action.flag };
+    return { state:"active",canvas };
+  });
+  const file = new File(["Xin chào"],"ghichu.txt",{ type:"text/plain" });
+  mock.upload.mockImplementation(async (_room,_client,_file,id) => {
+    mock.chat.mockResolvedValue({ state:"active",messages:[{ id:"7",author_id:owner,name:"Tester",body:file.name,created_at:new Date().toISOString(),
+      file:{ id,name:file.name,mime:file.type,size:file.size } }] });
+  });
+  window.history.replaceState({}, "", `/?learn=rooms&room=${meeting.id}`);
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  for (let attempt=0;attempt<8 && !button("Canvas");attempt++) await tick();
+  await act(async () => { await import("./MeetingCanvasPanel"); button("Canvas").click(); });
+  for (let attempt=0;attempt<12 && !button("Canvas trống");attempt++) await tick();
+  expect(button("Canvas trống"),host.textContent ?? "").toBeTruthy();
+  await act(async () => button("Canvas trống").click());
+  expect(host.querySelector(".meeting-canvas-editor [aria-readonly=false]")).toBeTruthy();
+  await act(async () => button("Cho thành viên sửa").click());
+  expect(button("Khóa quyền sửa")).toBeTruthy();
+  expect(mock.canvas).toHaveBeenCalledWith(meeting.id,expect.any(String),{ op:"permission",flag:true },expect.any(AbortSignal));
+  const input = host.querySelector<HTMLInputElement>(".meeting-file-input")!;
+  Object.defineProperty(input,"files",{ configurable:true,value:[file] });
+  await act(async () => input.dispatchEvent(new Event("change",{ bubbles:true })));
+  await act(async () => button("Gửi tệp").click());
+  await tick();
+  expect(mock.upload).toHaveBeenCalledWith(meeting.id,expect.any(String),file,expect.any(String),expect.any(AbortSignal));
+  expect(host.querySelector(".meeting-chat-file")?.textContent).toContain("ghichu.txt");
+  expect(button("Xem")).toBeTruthy();
+  expect(button("Tải")).toBeTruthy();
+  expect(mock.token).not.toHaveBeenCalled();
 });

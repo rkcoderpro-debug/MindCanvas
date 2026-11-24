@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { actOnlineRoom, controlOnlineMeeting, fetchMeetingToken, type MeetingCommand, joinOnlineRoom, OnlineRoomError, pingOnlineRoom, readOnlineRoom, readOnlineRoomChat, watchOnlineRoom, type RoomAction, type RoomMessage, type RoomSnapshot, type RoomStatus } from "../lib/onlineRooms";
+import { actOnlineRoom, loadMeetingFile, requestRoomCanvas, sendMeetingFile, type RoomCanvasAction, controlOnlineMeeting, fetchMeetingToken, type MeetingCommand, joinOnlineRoom, OnlineRoomError, pingOnlineRoom, readOnlineRoom, readOnlineRoomChat, watchOnlineRoom, type RoomAction, type RoomMessage, type RoomSnapshot, type RoomStatus } from "../lib/onlineRooms";
 import { forgetOnlineRoomInvite, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 
 type Phase = RoomStatus | "connecting" | "failed";
@@ -8,6 +8,9 @@ type Session = {
   action: (action: RoomAction) => ReturnType<typeof actOnlineRoom>;
   token: () => ReturnType<typeof fetchMeetingToken>;
   command: (command: MeetingCommand) => ReturnType<typeof controlOnlineMeeting>;
+  canvas: (action: RoomCanvasAction) => ReturnType<typeof requestRoomCanvas>;
+  upload: (file: File, key: string) => Promise<void>;
+  download: (id: string) => Promise<Blob>;
   close: () => void;
 };
 export function useOnlineRoom(link: OnlineRoomLink) {
@@ -17,6 +20,7 @@ export function useOnlineRoom(link: OnlineRoomLink) {
   const [roomName, setRoomName] = useState("");
   const [problem, setProblem] = useState<unknown>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [canvasSignal, setCanvasSignal] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const session = useRef<Session | null>(null);
   const clockOffset = useRef(0);
@@ -28,6 +32,9 @@ export function useOnlineRoom(link: OnlineRoomLink) {
   }, []);
   const meetingToken = useCallback(() => session.current?.token() ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
   const meetingCommand = useCallback((command: MeetingCommand) => session.current?.command(command) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
+  const canvas = useCallback((action: RoomCanvasAction) => session.current?.canvas(action) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
+  const upload = useCallback((file: File, key: string) => session.current?.upload(file, key) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
+  const download = useCallback((id: string) => session.current?.download(id) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
   const leave = useCallback(() => session.current?.close(), []);
 
   useEffect(() => {
@@ -116,7 +123,10 @@ export function useOnlineRoom(link: OnlineRoomLink) {
         setProblem(null); setState(result.state);
         if (joined) {
           disconnect?.();
-          disconnect = watchOnlineRoom(id, refresh, connected => {
+          disconnect = watchOnlineRoom(id, area => {
+            if (area === "canvas") { if (alive && joined) setCanvasSignal(n => n+1); }
+            else refresh(area);
+          }, connected => {
             live = connected;
             if (connected) { refresh("room"); refresh("chat"); }
           });
@@ -145,7 +155,19 @@ export function useOnlineRoom(link: OnlineRoomLink) {
       disconnect?.();
       controller.abort();
     }
-    const openSession: Session = { close, token: () => {
+    const openSession: Session = { close, canvas: async action => {
+      if (!alive || !joined) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
+      const result = await requestRoomCanvas(id, client, action, controller.signal);
+      if (alive && result.state !== "active") end(result.state);
+      return result;
+    }, upload: async (file, key) => {
+      if (!alive || !joined) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
+      await sendMeetingFile(id, client, file, key, controller.signal);
+      refresh("chat");
+    }, download: async idFile => {
+      if (!alive || !joined) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
+      return loadMeetingFile(id, client, idFile, controller.signal);
+    }, token: () => {
       if (!alive || !joined) return Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED"));
       return fetchMeetingToken(id, client, controller.signal);
     }, command: async command => {
@@ -189,5 +211,5 @@ export function useOnlineRoom(link: OnlineRoomLink) {
     };
   }, [link.id, link.invite, attempt]);
 
-  return { phase, snapshot, messages, roomName, problem, isReconnecting, serverNow, act, meetingToken, meetingCommand, retry, leave };
+  return { phase, snapshot, messages, roomName, problem, isReconnecting, serverNow, act, meetingToken, meetingCommand, canvas, canvasSignal, upload, download, retry, leave };
 }

@@ -3,6 +3,7 @@ import { AccessToken, RoomServiceClient, ServerError, TrackSource } from "liveki
 import { z } from "zod";
 import { requireUser } from "./auth.js";
 import { config } from "./config.js";
+import { meetingFiles } from "./meetingFiles.js";
 
 const uuid = z.string().uuid();
 const session = z.object({ client: uuid }).strict();
@@ -62,6 +63,7 @@ function inRoom<T>(id: string, operation: () => Promise<T>) {
 export const onlineMeetings = Router();
 onlineMeetings.use((_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
 onlineMeetings.use(requireUser);
+onlineMeetings.use("/:room/files", meetingFiles);
 
 onlineMeetings.post("/:room/token", async (req, res) => {
   const id = uuid.safeParse(req.params.room), data = session.safeParse(req.body);

@@ -1,3 +1,4 @@
+import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { signProfileAvatars } from "./accountProfile";
 
@@ -14,7 +15,17 @@ export type OnlineRoom = {
 export type RoomPlaylistTrack = { id: string; video_id: string; title: string; status: "queued" | "pending"; requested_by: string | null; name: string };
 export type RoomAttendee = { id: string; name: string; seat: number; avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null; hand_raised_at?: string | null; reaction?: RoomReaction | null; reaction_at?: string | null };
 export type RoomPlayback = { video_id: string | null; title: string | null; attribution: string | null; playing: boolean; loop: boolean; offset: number; at: string; revision: number };
-export type RoomMessage = { id: string; author_id: string | null; name: string; body: string; created_at: string };
+export type RoomMessage = { id: string; author_id: string | null; name: string; body: string; created_at: string; file?: MeetingRoomFile };
+export type MeetingRoomFile = { id: string; name: string; mime: string; size: number };
+export const MEETING_FILE_LIMIT = 8 * 1024 * 1024;
+export const MEETING_FILE_ACCEPT = ".pdf,.docx,.png,.jpg,.jpeg,.webp,.txt";
+export type RoomCanvasSummary = { revision: number; title: string; on_stage: boolean; allow_edit: boolean; can_edit: boolean; board?: unknown };
+export type RoomCanvasResult = RoomUnavailable | { state: "active"; canvas?: RoomCanvasSummary | null; conflict?: boolean };
+export type RoomCanvasAction =
+  | { op: "read"; revision?: number }
+  | { op: "start"; board: BoardState }
+  | { op: "save"; revision: number; board: BoardState }
+  | { op: "permission" | "stage"; flag: boolean };
 export type RoomSnapshot = {
   state: "active"; room: OnlineRoom; server_time: string; can_manage: boolean; suggestions: boolean; presenter_id?: string | null;
   playback: RoomPlayback; members: RoomAttendee[]; waiting: Pick<RoomAttendee, "id" | "name">[]; queue: RoomPlaylistTrack[];
@@ -100,12 +111,45 @@ export const fetchMeetingToken = (id: string, client: string, signal?: AbortSign
 export const controlOnlineMeeting = (id: string, client: string, action: MeetingCommand, signal?: AbortSignal) =>
   meetingRequest<{ state: "active" | "closed" }>(id, "manage", { client, ...action }, signal);
 
-export function watchOnlineRoom(id: string, onChange: (area: "room" | "chat") => void, onStatus: (live: boolean) => void) {
+export const requestRoomCanvas = (id: string, client: string, action: RoomCanvasAction, signal?: AbortSignal) =>
+  rpc<RoomCanvasResult>("online_meeting_canvas", { ...sessionArgs(id, client), p_op: action.op,
+    ...("revision" in action ? { p_revision: action.revision } : {}),
+    ...("flag" in action ? { p_flag: action.flag } : {}), ...("board" in action ? { p_board: action.board } : {}) }, signal);
+
+async function meetingFileRequest(id: string, suffix: string, body: BodyInit, signal?: AbortSignal) {
+  const access = (await getCurrentSession())?.access_token;
+  if (!access) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
+  const request = new AbortController(), cancel = () => request.abort();
+  const timer = setTimeout(cancel, 65000);
+  if (signal?.aborted) cancel(); else signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    const response = await fetch(`${meetingApiBase}/api/online-meetings/${encodeURIComponent(id)}/files${suffix}`, {
+      method: "POST", headers: { Authorization: `Bearer ${access}`, ...(typeof body === "string" ? { "Content-Type": "application/json" } : {}) },
+      cache: "no-store", signal: request.signal, body,
+    });
+    if (!response.ok) {
+      const failure = await response.json().catch(() => null);
+      throw new OnlineRoomError(failure?.code ?? "ONLINE_FILE_SERVICE");
+    }
+    return await response.blob();
+  } finally { clearTimeout(timer); signal?.removeEventListener("abort", cancel); }
+}
+export async function sendMeetingFile(room: string, client: string, file: File, key: string, signal?: AbortSignal) {
+  if (!file.size || file.size > MEETING_FILE_LIMIT) throw new OnlineRoomError("ONLINE_FILE_SIZE");
+  const form = new FormData();
+  form.set("client", client); form.set("id", key); form.set("file", file);
+  await meetingFileRequest(room, "", form, signal);
+}
+export const loadMeetingFile = (room: string, client: string, id: string, signal?: AbortSignal) =>
+  meetingFileRequest(room, `/${encodeURIComponent(id)}/content`, JSON.stringify({ client }), signal);
+
+export function watchOnlineRoom(id: string, onChange: (area: "room" | "chat" | "canvas") => void, onStatus: (live: boolean) => void) {
   if (!supabase) return () => {};
   const client = supabase;
   const channel = client.channel(`mindcanvas-online-room:${id}`, { config: { private: true } });
   channel.on("broadcast", { event: "changed" }, event => {
-    onChange(event.payload?.area === "chat" ? "chat" : "room");
+    const area = event.payload?.area;
+    onChange(area === "chat" || area === "canvas" ? area : "room");
   }).subscribe(status => onStatus(status === "SUBSCRIBED"));
   return () => { void client.removeChannel(channel); };
 }
@@ -159,6 +203,15 @@ export function roomIssue(error: unknown, vi: boolean) {
     ONLINE_MEDIA_DATABASE: ["Dịch vụ cấp quyền cuộc gọi chưa sẵn sàng.", "The call authorization service is unavailable."],
     ONLINE_MEDIA_DENIED: ["Phiên này chưa có quyền kết nối cuộc gọi. Hãy vào lại phòng.", "This session cannot join the call. Re-enter the room."],
     ONLINE_MEDIA_PROVIDER: ["Dịch vụ cuộc gọi chưa phản hồi. Hãy thử lại.", "The call service did not respond. Try again."],
+    ONLINE_CANVAS_TOO_BIG: ["Canvas đã vượt giới hạn 1 MB. Hãy tải bản nháp về hoặc bớt nội dung.", "This Canvas exceeds the 1 MB limit. Download your draft or reduce its size."],
+    ONLINE_CANVAS_READ_ONLY: ["Canvas đã chuyển sang chế độ chỉ xem.", "The Canvas is now view-only."],
+    ONLINE_CANVAS_EXISTS: ["Phòng đã có Canvas. Dùng lại bản đã lưu.", "This room already has a Canvas. Resume the saved copy."],
+    ONLINE_FILE_GONE: ["Tệp này không còn trong chat của phòng.", "This file is no longer in the room chat."],
+    ONLINE_FILE_SIZE: ["Mỗi tệp phải có nội dung và tối đa 8 MB.", "Each file must have content and be at most 8 MB."],
+    ONLINE_FILE_TYPE: ["Chỉ hỗ trợ tệp PDF, Word (.docx), PNG, JPG, WebP hoặc TXT hợp lệ.", "Use a valid PDF, Word (.docx), PNG, JPG, WebP, or TXT file."],
+    ONLINE_FILE_QUOTA: ["Phòng đã đạt giới hạn 20 tệp hoặc 40 MB.", "The room has reached its 20-file or 40 MB limit."],
+    ONLINE_FILE_PENDING: ["Tệp đang được xử lý. Chờ một lúc rồi thử lại.", "The file is being processed. Wait a moment and try again."],
+    ONLINE_FILE_SERVICE: ["Không kết nối được kho tệp của phòng.", "Could not reach the room file storage."],
     ONLINE_MUSIC_LOCKED: ["Nhạc của phòng này đã được thiết lập sẵn.", "Music in this room is preset."],
   };
   return messages[key]?.[vi ? 0 : 1] ?? (vi ? "Không kết nối được với phòng. Hãy thử lại." : "Could not reach the room. Try again.");

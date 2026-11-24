@@ -1,0 +1,117 @@
+{
+  "version": "6.2.0",
+  "baseVersion": "6.1.0",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.2.0.md",
+      "bytes": 2669,
+      "sha256": "b3520d20f65eba0f7f58dc95da353c731b38767e5fceeb966f8d27ef2e21cf9c"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "e56eaacd5a063be023b11ce0cc615849260da9ab45c2b3efea165fad99d67077"
+    },
+    {
+      "path": "apps/server/src/meetingFiles.ts",
+      "bytes": 9942,
+      "sha256": "062905b2ef818e95f8e55dca9b2440cc266e35ad1cae8a3d1e7d45a1b74b8869"
+    },
+    {
+      "path": "apps/server/src/onlineMeetings.ts",
+      "bytes": 7129,
+      "sha256": "0b5313fa3f6cbeda0e13dbac13fda02a0364814767ad5cd0c994b35d674d8f24"
+    },
+    {
+      "path": "apps/server/tests/meetingFiles.test.ts",
+      "bytes": 3284,
+      "sha256": "7a96762efdd760e7c8fbd307e2a62b37d7c9cb861602de9d12ae064efc70abf4"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "ae821bb9cd052e8a5b7d454aa60c145de891600df0987c9fed08b51e113108ec"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "bytes": 165942,
+      "sha256": "ff3542e8877b9ac5f0756c5ef7f292b8b7e058aa67fadd04c248381c8ba6389b"
+    },
+    {
+      "path": "apps/web/src/components/MeetingCanvasPanel.tsx",
+      "bytes": 14781,
+      "sha256": "293ba4a2c7139155f9ba2a8dd316bc38c2e1b1ff69b4eb94c1314323b1aed1a3"
+    },
+    {
+      "path": "apps/web/src/components/MeetingFilePreview.tsx",
+      "bytes": 5717,
+      "sha256": "b7fa13ce4f527a775280e6dd17a283de162f5a71e4ac9502f49b7d99b444a9d2"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMeetingBoard.tsx",
+      "bytes": 16935,
+      "sha256": "af2f58f7fe48eed4303c504fb2dd4337acc9035f3b2ba32580acd3b851e26717"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 38823,
+      "sha256": "37687c23673283ce55d9049dd9246d94fbfa87d27b9d1b6537cbc84843ef833b"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.test.tsx",
+      "bytes": 11857,
+      "sha256": "31bcbf2bbb2bc7cb6919156a9a414f55721ffd4c66419ea91444a258590d3c9e"
+    },
+    {
+      "path": "apps/web/src/components/onlineRooms.css",
+      "bytes": 25992,
+      "sha256": "c4ce6f752543680b1327ef89a099bc5a1e8adc8b2df8f1192b32a7c8b9f55c71"
+    },
+    {
+      "path": "apps/web/src/hooks/useOnlineRoom.ts",
+      "bytes": 10142,
+      "sha256": "f2bc3a03386997eb6eed799dc89f21115a09c5917ce2aa0e885f5ee96c3f668a"
+    },
+    {
+      "path": "apps/web/src/lib/onlineRooms.ts",
+      "bytes": 16198,
+      "sha256": "f707c24e3a63fc58040264d25f7548ed59039fa785a2e1332507e6dc64774717"
+    },
+    {
+      "path": "apps/web/src/lib/roomCanvas.test.ts",
+      "bytes": 1518,
+      "sha256": "a9738e8399a522015b6801486abb0bf3e6eb6825286a0f7ad162a94a703ee07f"
+    },
+    {
+      "path": "apps/web/src/lib/roomCanvas.ts",
+      "bytes": 5682,
+      "sha256": "0f774c62e05439ed7e705897cefb1cb26b79f43a146ccf345324a58cbf6ae827"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "8978ed38f8ecffbac0d86b36b8c6f53aa51335a00c45789eceebb1e56cd1675c"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "66f220f8eb6cf5b8e64f7e36fe0ccb3c2e3ccc474ed0d4ee2391956924b4bc0c"
+    },
+    {
+      "path": "supabase/migrations/0041_online_meeting_collaboration.sql",
+      "bytes": 11602,
+      "sha256": "267ca416aa489e1539ce01e9bfe5c7187679c3dfda5bbf153d29ce3d1fe2993e"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 21547,
+      "sha256": "3c7a1009219844b84e6b7e3f19838975432a417a1a02b0eaa8d222270d6a2f06"
+    },
+    {
+      "path": "supabase/tests/online-music-rooms.pglite.mjs",
+      "bytes": 12605,
+      "sha256": "94a1b75997ebedc6d630f86793c2848937bbff07af55056a653928d8c35f3112"
+    }
+  ]
+}

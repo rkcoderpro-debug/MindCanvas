@@ -41,7 +41,7 @@ export type CanvasPaperSurface = {
   overlay: (viewport: BoardState["viewport"]) => ReactNode;
   contains: (point: Vec2) => boolean;
 };
-type Props = { paperSurface?: CanvasPaperSurface; board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean; documents?: UploadedDocument[]; onDocumentSaved?: (document: { name: string; mimeType: string; kind: DocumentKind; size: number; dataUrl: string }) => Promise<UploadedDocument | void> | UploadedDocument | void };
+type Props = { roomMode?: boolean; paperSurface?: CanvasPaperSurface; board: BoardState; onChange: (next: BoardState) => void; onDraftChange?: (next: BoardState) => void; onViewportChange?: (next: BoardState) => void; onUndo: () => void; onRedo: () => void; canUndo?: boolean; canRedo?: boolean; onSave: () => void; canUseAi?: boolean; canUseCanvasBackground?: boolean; onRequestCanvasBackgroundUpgrade?: () => void; isFullscreen?: boolean; onToggleFullscreen?: () => void; toolbarPosition?: ToolbarPosition; timerVisible?: boolean; onToggleTimer?: () => void; showMobileZoomControls?: boolean; visibleToolIds?: ToolMode[]; readOnly?: boolean; documents?: UploadedDocument[]; onDocumentSaved?: (document: { name: string; mimeType: string; kind: DocumentKind; size: number; dataUrl: string }) => Promise<UploadedDocument | void> | UploadedDocument | void };
 type Gesture = { mode: "move" | "resize" | "rotate" | "pan" | "zoom" | "draw" | "erase" | "line" | "shape" | "marquee"; start: Vec2; screen: Vec2; base: BoardState; selection?: Selection; selections?: Selection[]; pointer: number; next: BoardState; reparent?: boolean; target?: string; center?: Vec2; startAngle?: number; resizeHandle?: ResizeHandle; eraseRadius?: number; erasePoints?: Vec2[]; zoomAnchor?: Vec2; ink?: LiveInk; checkpointedCount?: number; editTap?: boolean; moved?: boolean };
 type PinchGesture = { pointerIds: [number, number]; base: BoardState; startDistance: number; worldCenter: Vec2; next: BoardState };
 type Editing = { selection: Selection; value: string; fresh?: BoardState };
@@ -233,7 +233,7 @@ function drawingPath(points: Vec2[]) {
 }
 const paperPalette = { ink: "#243d63", fill: "#bfdbfe", highlighter: "#e6ac00" };
 const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
-export default function CanvasBoard({ paperSurface, board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, documents = [], onDocumentSaved }: Props) {
+export default function CanvasBoard({ roomMode = false, paperSurface, board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, documents = [], onDocumentSaved }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme(), palette = paperSurface ? paperPalette : THEME_CANVAS_PALETTES[theme];
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
@@ -674,7 +674,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
   const addClipboardImage = async () => {
     const blob = await readClipboardImage();
     if (!blob) { setMediaError(t("clipboardImageUnavailable")); return; }
-    void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]);
+    if (!roomMode) void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]);
   };
   const insertEmbed = () => {
     const normalized = normalizeEmbedUrl(embedUrl);
@@ -1199,6 +1199,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
   const paste = async () => {
     const content = await readCanvasSelection();
     if (content) { const next = pasteSelection(board, content.board, content.selection, content.offset); setSelections(next.selection); onChange(next.board); return; }
+    if (roomMode) return;
     const image = await readClipboardImage();
     if (image) void addMediaBlobs([{ blob: image, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]);
   };
@@ -1444,12 +1445,13 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
     onClick: (event: ReactMouseEvent<HTMLButtonElement>) => { if (event.detail === 0) chooseTool(id); },
   });
   return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""} ${paperSurface ? "paper-canvas" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode} data-inspector-open={inspectorOpen && !readOnly}>
-    <div ref={frame} className="editor-frame" onDragOver={event => { if ([...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); addCanvasFiles([...event.dataTransfer.files]); }} onPaste={event => {
+    <div ref={frame} className="editor-frame" onDragOver={event => { if (!roomMode && [...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); if (!roomMode && !readOnly) addCanvasFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
+      if (readOnly) return;
       const item = [...event.clipboardData.items].find(entry => entry.type.startsWith("image/"));
       const blob = item?.getAsFile();
-      if (blob) { event.preventDefault(); void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]); }
+      if (blob) { event.preventDefault(); if (!roomMode) void addMediaBlobs([{ blob, name: `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`, kind: "image" }]); }
       else void paste();
     }}>
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
@@ -1464,12 +1466,12 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
         }}>{visibleToolbarTools.map(({ id, icon: Icon, key }) =>
           <button key={id} data-tool={id} className={`${tool === id ? "selected" : ""} ${["select", "hand", "text", "pen", "highlighter", "eraser"].includes(id) ? "mobile-primary-tool" : "mobile-secondary-tool"}`} aria-pressed={tool === id} aria-label={t(id)} title={t(id) + " (" + key + ")"} {...toolbarToolEvents(id)}><Icon size={19}/></button>)}
         <span className="toolbar-divider"/>{!paperSurface && <button className="mobile-extra-action" aria-label={t("node")} title={t("node")} onClick={addNode}><Plus size={20}/></button>}
-        <button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
+        {!roomMode && <><button className="mobile-extra-action" aria-label={t("insertMedia")} title={t("insertMediaHint")} onClick={openMediaPicker}><ImagePlus size={19}/></button>
         <button className={`mobile-extra-action ${documentPanelOpen ? "selected" : ""}`} aria-pressed={documentPanelOpen} aria-label="Tài liệu" title="Chọn tài liệu đã tải lên" onClick={() => setDocumentPanelOpen(true)}><FileSpreadsheet size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("embedWeb")} title={t("embedHint")} onClick={() => { finishEdit(); setMediaError(""); setEmbedOpen(true); }}><Globe2 size={19}/></button>
         <button className="mobile-extra-action" aria-label={t("pasteImage")} title={t("pasteImageHint")} onClick={() => void addClipboardImage()}><ClipboardPaste size={18}/></button>
         <button className={`${isRecording ? "selected recording-button" : ""} mobile-extra-action`} aria-pressed={isRecording} aria-label={t(isRecording ? "stopRecording" : "recordAudio")} title={t(isRecording ? "stopRecording" : "recordAudio")} onClick={() => isRecording ? stopRecording() : void startRecording()}>{isRecording ? <Square size={17}/> : <Mic size={19}/>}</button>
-        {isRecording && <span className="recording-time" role="status">{t("recording", { seconds: recordingSeconds })}</span>}
+        {isRecording && <span className="recording-time" role="status">{t("recording", { seconds: recordingSeconds })}</span>}</>}
         <button className={`${snap ? "selected" : ""} mobile-extra-action`} aria-pressed={snap} aria-label={t("snap")} title={t("snap")} onClick={() => setSnap(v => !v)}><Magnet size={18}/></button>
         {!paperSurface && <button className="mobile-extra-action" aria-label={t("arrangeMap")} title={t("arrangeMap")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); }}><Network size={20}/></button>}
         {!paperSurface && <button className="mobile-extra-action" aria-label={t("arrangeMapTwoSided")} title={t("arrangeMapTwoSided")} disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); }}><GitFork size={20}/></button>}
@@ -1480,7 +1482,7 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
       {!readOnly && drawingTool && drawingSizeRange && <div className={`drawing-size-control drawing-size-${drawingTool}`} role="group" aria-label={t(drawingSizeLabelKey[drawingTool])}>
         <ActiveToolIcon size={14}/><span className="drawing-size-label">{t(drawingSizeLabelKey[drawingTool])}</span><input type="range" min={drawingSizeRange.min} max={drawingSizeRange.max} step={drawingSizeRange.step} value={drawingSize} aria-label={t(drawingSizeLabelKey[drawingTool])} style={{ "--range-progress": drawingSizeProgress } as CSSProperties} onChange={event => setDrawingSizes(current => ({ ...current, [drawingTool]: clampDrawingSize(drawingTool, event.target.valueAsNumber) }))}/><output>{drawingSize}px</output><span className="drawing-size-sample" style={{ width: `${Math.min(18, Math.max(6, drawingSize / 3))}px`, height: `${Math.min(18, Math.max(6, drawingSize / 3))}px` }}/>
       </div>}
-      <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={`${iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"},${DOCUMENT_ACCEPT}`} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addCanvasFiles(files); }}/>
+      {!roomMode && <input ref={mediaInput} className="media-file-input" hidden={!iosTouchFallback} aria-label={t("insertMedia")} type="file" accept={`${iosTouchFallback ? "image/*,video/*,audio/*,.heic,.heif,.mov,.m4a" : "image/*,video/*,audio/*"},${DOCUMENT_ACCEPT}`} multiple onChange={event => { const files = [...(event.currentTarget.files ?? [])]; event.currentTarget.value = ""; addCanvasFiles(files); }}/>}
       <svg ref={svg} tabIndex={0} aria-label="Canvas" data-selection-tool={activeToolMode === "select" ? "pointer" : undefined} className={`canvas-svg tool-${activeToolMode} ${activeToolMode === "select" ? "selection-pointer" : ""}`}
         onPointerDownCapture={touchDownCapture} onPointerMoveCapture={touchMoveCapture} onPointerUpCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e); }} onPointerCancelCapture={e => { if (!shouldUseIOSNativeTouch(e)) touchEndCapture(e, true); }}
         onPointerDown={down} onPointerMove={move} onPointerUp={e => {
@@ -1627,11 +1629,11 @@ export default function CanvasBoard({ paperSurface, board, onChange: onChangePro
         <header><strong>{t("moreTools")}</strong><button className="icon-button" aria-label={t("close")} onClick={() => setMobileMoreOpen(false)}><X size={18}/></button></header>
         <div className="canvas-tools-sheet-grid">{[...hiddenToolbarTools, ...tools.filter(item => visibleToolIds.includes(item.id) && ["line", "rect", "ellipse", "triangle", "connector"].includes(item.id))].map(({ id, icon: Icon }) => <button key={id} className={tool === id ? "selected" : ""} {...toolbarToolEvents(id)}><Icon size={19}/><span>{t(id)}</span></button>)}
           {!paperSurface && <button onClick={() => { addNode(); setMobileMoreOpen(false); }}><Plus size={19}/><span>{t("node")}</span></button>}
-          <button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
+          {!roomMode && <><button onClick={() => { openMediaPicker(); setMobileMoreOpen(false); }}><ImagePlus size={19}/><span>{t("insertMedia")}</span></button>
           <button onClick={() => { setDocumentPanelOpen(true); setMobileMoreOpen(false); }}><FileSpreadsheet size={19}/><span>Tài liệu</span></button>
           <button onClick={() => { setEmbedOpen(true); setMobileMoreOpen(false); }}><Globe2 size={19}/><span>{t("embedWeb")}</span></button>
           {iosTouchFallback && <button onClick={() => { void paste(); setMobileMoreOpen(false); }}><ClipboardPaste size={19}/><span>{t("pasteImage")}</span></button>}
-          {iosTouchFallback && <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} onClick={() => { if (isRecording) stopRecording(); else void startRecording(); setMobileMoreOpen(false); }}>{isRecording ? <Square size={19}/> : <Mic size={19}/>}<span>{t(isRecording ? "stopRecording" : "recordAudio")}</span></button>}
+          {iosTouchFallback && <button className={isRecording ? "selected recording-button" : ""} aria-pressed={isRecording} onClick={() => { if (isRecording) stopRecording(); else void startRecording(); setMobileMoreOpen(false); }}>{isRecording ? <Square size={19}/> : <Mic size={19}/>}<span>{t(isRecording ? "stopRecording" : "recordAudio")}</span></button>}</>}
           {!paperSurface && iosTouchFallback && <button disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); setMindMapLayoutSummary(null); onChange(arrangeMindMap(board)); setMobileMoreOpen(false); }}><Network size={19}/><span>{t("arrangeMap")}</span></button>}
           {!paperSurface && iosTouchFallback && <button disabled={!board.nodes.length || !!editing} onClick={() => { setSelected(null); const result = arrangeMindMapTwoSided(board); setMindMapLayoutSummary(result.summary); onChange(result.board); setMobileMoreOpen(false); }}><GitFork size={19}/><span>{t("arrangeMapTwoSided")}</span></button>}
           {!paperSurface && <button disabled={!board.nodes.length || !!editing} onClick={openMindMapLayout}><Network size={19}/><span>{t("arrangeMapSmart")}</span></button>}

@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Armchair, Crown, Hand, Mic, MicOff, Monitor, Phone, PhoneOff, ScreenShare, ScreenShareOff, Video, VideoOff, Volume2 } from "lucide-react";
 import { ConnectionState, Room, RoomEvent, Track, type AudioTrack, type Participant, type VideoTrack } from "livekit-client";
-import { OnlineRoomError, roomIssue, type MeetingConnection, type OnlineRoom, type RoomAction, type RoomAttendee, type RoomLayout, type RoomReaction } from "../lib/onlineRooms";
+import { OnlineRoomError, roomIssue, type MeetingConnection, type OnlineRoom, type RoomAction, type RoomAttendee, type RoomLayout, type RoomReaction, type RoomCanvasAction, type RoomCanvasResult } from "../lib/onlineRooms";
 import { ProfileAvatar } from "./ProfileAvatar";
 
+const MeetingCanvas = lazy(() => import("./MeetingCanvasPanel"));
 type Props = {
   layout: RoomLayout; room: OnlineRoom; owner: string; members: RoomAttendee[]; avatars: Map<string, string>;
   presenter: string | null; vi: boolean; busy: boolean; token: () => Promise<MeetingConnection>;
   run: (action: RoomAction) => Promise<unknown>; serverNow: () => number;
+  canvas: (action: RoomCanvasAction) => Promise<RoomCanvasResult>; canvasSignal: number;
 };
 
 const REACTIONS = { clap: ["👏", "Vỗ tay", "Applaud"], heart: ["❤️", "Thả tim", "Send a heart"], like: ["👍", "Đồng ý", "Thumbs up"] } as const;
@@ -46,7 +48,7 @@ function MeetingAudio({ track }: { track: AudioTrack }) {
   return <audio ref={element} autoPlay/>;
 }
 
-export default function OnlineMeetingBoard({ layout, room, owner, members, avatars, presenter, vi, busy, token, run, serverNow }: Props) {
+export default function OnlineMeetingBoard({ layout, room, owner, members, avatars, presenter, vi, busy, token, run, serverNow, canvas, canvasSignal }: Props) {
   const label = (vn: string, en: string) => vi ? vn : en;
   const [call, setCall] = useState<Room | null>(null);
   const current = useRef<Room | null>(null);
@@ -55,6 +57,8 @@ export default function OnlineMeetingBoard({ layout, room, owner, members, avata
   const [error, setError] = useState("");
   const [, paint] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const [surface, setSurface] = useState<"video" | "canvas">("video");
+  const [canvasOpened, setCanvasOpened] = useState(false);
   const reactionsExist = members.some(person => person.reaction_at && Date.parse(person.reaction_at) + 8000 > serverNow());
   useEffect(() => {
     if (!reactionsExist) return;
@@ -166,15 +170,22 @@ export default function OnlineMeetingBoard({ layout, room, owner, members, avata
       <span className="online-room-live-tag"><Armchair size={15}/>{members.length}/{room.capacity} {label("chỗ ngồi", "seats")}</span>
       <span className="online-meeting-call-state" data-connected={connected} role="status">{connecting ? label("Đang kết nối cuộc gọi…", "Connecting call…") : connected ? label("Đã vào cuộc gọi", "In the call") : call ? label("Đang kết nối lại…", "Reconnecting…") : label("Chưa vào cuộc gọi", "Not in the call")}</span>
     </div>
-    <div className="online-meeting-table" data-expanded={expanded}>
+    <div className="online-room-segment" role="group" aria-label={label("Nội dung trên bàn","Meeting table content")}>
+      <button type="button" aria-pressed={surface === "video"} onClick={() => setSurface("video")}>{label("Trình chiếu","Presentation")}</button>
+      <button type="button" aria-pressed={surface === "canvas"} onClick={() => { setCanvasOpened(true); setSurface("canvas"); }}>Canvas</button>
+    </div>
+    <div className="online-meeting-table" data-expanded={expanded || surface === "canvas"}>
       <div className="online-meeting-display">
-        <header className="online-meeting-display-heading"><Monitor size={16}/><strong>{screen ? `${presenterName ?? label("Thành viên", "Participant")} · ${label("Đang trình chiếu", "Presenting")}` : label("Màn hình chung", "Shared screen")}</strong>
+        {canvasOpened && <Suspense fallback={surface === "canvas" ? <p role="status">{label("Đang mở Canvas…","Opening Canvas…")}</p> : null}>
+          <MeetingCanvas owner={owner} roomId={room.id} host={room.host_id === owner} vi={vi} visible={surface === "canvas"} updateSignal={canvasSignal} request={canvas}/>
+        </Suspense>}
+        {surface === "video" && <><header className="online-meeting-display-heading"><Monitor size={16}/><strong>{screen ? `${presenterName ?? label("Thành viên", "Participant")} · ${label("Đang trình chiếu", "Presenting")}` : label("Màn hình chung", "Shared screen")}</strong>
           {screen && <button type="button" className="online-meeting-focus" aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? label("Thu gọn", "Shrink") : label("Phóng to", "Expand")}</button>}
         </header>
         {screen ? <div className="online-meeting-screen"><MeetingVideo track={screen} name={label("Màn hình đang chia sẻ", "Shared screen")}/></div>
           : cameras.length ? <div className="online-meeting-cameras" data-single={cameras.length === 1}>
             {cameras.map(({ person, track }) => <figure key={person.id}><MeetingVideo track={track} name={person.name}/><figcaption>{person.name}</figcaption></figure>)}
-          </div> : <div className="online-meeting-placeholder"><Monitor size={32}/><p>{label("Phần trình chiếu sẽ hiện ở đây", "Shared content will appear here")}</p><small>{label("Mic và camera tắt khi bạn kết nối.", "Your mic and camera are off when you connect.")}</small></div>}
+          </div> : <div className="online-meeting-placeholder"><Monitor size={32}/><p>{label("Phần trình chiếu sẽ hiện ở đây", "Shared content will appear here")}</p><small>{label("Mic và camera tắt khi bạn kết nối.", "Your mic and camera are off when you connect.")}</small></div>}</>}
       </div>
       {Array.from({ length: room.capacity }, (_, index) => {
         const seat = index + 1, person = bySeat.get(seat), participant = person && peopleInStage.get(person.id);

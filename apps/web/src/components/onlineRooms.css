@@ -333,3 +333,38 @@
   .online-meeting-seat > svg:first-child { width: 14px; }
   .online-meeting-display { border-radius: 12px; }
 }
+
+.meeting-canvas {
+  color: var(--text); background: var(--surface-raised); border-radius: 12px; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px; padding: clamp(9px,1.2vw,14px);
+}
+.meeting-canvas[hidden] { display:none; }
+.meeting-canvas-head, .meeting-canvas-start > div {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+}
+.meeting-canvas-head > div { margin-right:auto; min-width: min(16rem,100%); overflow-wrap:anywhere; }
+.meeting-canvas-head small { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+.meeting-canvas-start p, .meeting-canvas > p { margin: 4px 0 8px; color:var(--muted); font-size:13px; }
+.meeting-canvas-start select { min-width: min(100%, 220px); max-width:100%; }
+.meeting-canvas-editor { min-width:0; overflow:hidden; border-radius:10px; border:1px solid var(--line); }
+.meeting-canvas-editor > .editor-layout > .editor-frame { height:clamp(330px,55vh,620px); min-height:0; }
+.meeting-canvas-editor .a4-scroll { max-height:clamp(330px,55vh,620px); }
+.meeting-canvas-editor .editor-frame .drawing-toolbar { max-width:calc(100% - 20px); }
+.meeting-file-input { display:none; }
+.online-room-chat-form[data-files=true] { grid-template-columns:auto minmax(0,1fr) auto; }
+.online-room-message > .meeting-chat-file { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 9px;
+  align-items:start; margin-top:6px; padding:9px; border:1px solid var(--line); border-radius:9px; background:var(--surface); }
+.meeting-chat-file > svg { color:var(--accent); margin-top:2px; }
+.meeting-chat-file > span { min-width:0; overflow-wrap:anywhere; }
+.meeting-chat-file small { display:block; color:var(--muted); }
+.meeting-chat-file > div { grid-column:2; display:flex; flex-wrap:wrap; gap:5px; }
+.meeting-chat-file button { min-height:30px; padding:2px 7px; }
+.meeting-file-pending { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:7px; border:1px dashed var(--line); border-radius:8px; background:var(--surface); }
+.meeting-file-pending span { min-width:0; flex:1 1 100px; overflow-wrap:anywhere; }
+.meeting-file-preview.dialog { width:min(920px,96vw); }
+.meeting-preview-actions { display:flex; justify-content:flex-end; margin:4px 0 12px; }
+.meeting-preview-text { max-height:58vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:10px; }
+.meeting-preview-image { display:block; max-width:100%; max-height:65vh; margin:auto; object-fit:contain; }
+.meeting-pdf { text-align:center; padding:4px; background:var(--surface); }
+.meeting-pdf-pages { display:flex; align-items:center; justify-content:center; gap:12px; margin:4px 0 10px; }
+.meeting-pdf canvas { max-width:100%; height:auto; background:#fff; box-shadow:0 2px 7px #0003; }
