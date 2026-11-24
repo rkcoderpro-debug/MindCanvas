@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-export const LEARNING_TABS = ["overview", "flashcards", "quiz", "exams", "plan", "progress", "lab", "tools", "shared", "connections", "classrooms", "music"] as const;
+export const LEARNING_TABS = ["overview", "flashcards", "quiz", "exams", "plan", "progress", "lab", "tools", "shared", "connections", "classrooms", "music", "rooms"] as const;
 export type HubTab = typeof LEARNING_TABS[number];
 type Route = { tab: HubTab; detail: string | null };
 type Entry = Route & { owner: string; parent?: Route };
@@ -14,6 +14,7 @@ export function learningTabFromUrl(): HubTab | null {
 export function learningUrl(tab: HubTab | null) {
   const url = new URL(window.location.href);
   if (tab) { url.searchParams.set("learn", tab); url.searchParams.delete("canvas"); } else url.searchParams.delete("learn");
+  if (tab !== "rooms") { url.searchParams.delete("room"); url.searchParams.delete("room_invite"); }
   return `${url.pathname}${url.search}${url.hash}`;
 }
 export function enterLearningSpace(tab: HubTab = "overview") {

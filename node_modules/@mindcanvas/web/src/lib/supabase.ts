@@ -1,4 +1,5 @@
 import { rememberCanvasForSignIn } from "./canvasLinks";
+import { rememberOnlineRoomSignIn } from "./onlineRoomRoutes";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -66,6 +67,7 @@ export async function signInWithGoogle() {
     try { localStorage.setItem("mindcanvas:pending-connection-invite", connectionInvite); } catch {}
   }
   rememberCanvasForSignIn();
+  rememberOnlineRoomSignIn();
   const redirectTo = window.location.origin;
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } });
 }

@@ -1,4 +1,4 @@
-import { BarChart3, Beaker, BookOpen, CalendarDays, ClipboardList, FileText, GraduationCap, Layers3, Music2, Users } from "lucide-react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, ClipboardList, FileText, GraduationCap, Headphones, Layers3, Music2, Users } from "lucide-react";
 import type { useLanguage } from "./i18n";
 import type { HubTab } from "./learningNavigation";
 
@@ -21,6 +21,7 @@ export function learningCommands(t: ReturnType<typeof useLanguage>["t"], languag
     connections: [vi ? "Bạn bè & tin nhắn" : "Friends & messages", Users, "kết nối bạn bè nhắn tin friends messages"],
     classrooms: [vi ? "Lớp học" : "Classrooms", GraduationCap, "lớp học bài tập classroom assignments"],
     music: [vi ? "Nhạc tập trung" : "Focus music", Music2, "nhạc tập trung music audio"],
+    rooms: [vi ? "Phòng Online" : "Online Rooms", Headphones, "phòng nghe nhạc học chung sảnh phòng music room study together"],
   } satisfies Record<HubTab, [string, typeof BookOpen, string]>;
   return commands;
 }

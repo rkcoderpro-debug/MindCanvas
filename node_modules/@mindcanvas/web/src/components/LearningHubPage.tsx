@@ -3,7 +3,7 @@ import type { ContentLanguage } from "../../../../packages/shared/src/contentLan
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
-import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
+import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Headphones, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
@@ -15,6 +15,7 @@ import QuizPage from "./QuizPage";
 import LabPage from "./LabPage";
 import SharedLearningTab, { InboxBoundary } from "./SharedLearningTab";
 const DocumentCreatorPage = lazy(() => import("./DocumentCreatorPage"));
+const OnlineRoomsPage = lazy(() => import("./OnlineRoomsPage"));
 import ConnectionsPage from "./ConnectionsPage";
 import ClassroomsPage from "./ClassroomsPage";
 import StudyPlanDialog from "./StudyPlanDialog";
@@ -46,11 +47,11 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string };
+type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void };
 export default function LearningHubPage(props: LearningHubProps) {
   return <LearningNavigationProvider key={props.owner ?? "guest"} owner={props.owner} initialTab={props.initialTab}><LearningSpace {...props}/></LearningNavigationProvider>;
 }
-function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId }: LearningHubProps) {
+function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn }: LearningHubProps) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
@@ -104,6 +105,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
       case "lab": return <LabPage owner={owner} embedded accountPlan={accountPlan}/>;
       case "tools": return <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan}/>;
       case "music": return <MusicPage/>;
+      case "rooms": return <Suspense fallback={<p role="status">{t("loading")}</p>}><OnlineRoomsPage key={owner ?? "guest"} owner={owner} onSignIn={onSignIn}/></Suspense>;
       case "connections": return <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => pickTab("shared")}/>;
       case "classrooms": return <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes}/>;
       case "shared": return <SharedLearningTab owner={owner} onSaved={kind => {
@@ -138,8 +140,9 @@ function HubOverview({ flashcards, quizzes, onTab, lastTool, onOpenAiPlan, t, la
     { title: vi ? "Kế hoạch & tiến độ" : "Plan & progress", items: [{ id: "plan" as const, title: t("studyPlan"), icon: CalendarDays }, { id: "progress" as const, title: t("progress"), icon: BarChart3 }, { id: "music" as const, title: vi ? "Nhạc tập trung" : "Focus music", icon: Music2 }] },
     { title: vi ? "Kết nối" : "Connect", items: [{ id: "classrooms" as const, title: vi ? "Lớp học" : "Classrooms", icon: GraduationCap }, { id: "connections" as const, title: vi ? "Bạn bè & tin nhắn" : "Friends & messages", icon: Users }] },
   ];
-  const names: Record<HubTab, string> = { overview: t("learningHub"), flashcards: t("flashcards"), quiz: t("quiz"), exams: vi ? "Tạo tài liệu" : "Create documents", lab: t("labNav"), tools: vi ? "Tài liệu" : "Documents", shared: vi ? "Được chia sẻ" : "Shared", plan: t("studyPlan"), progress: t("progress"), music: vi ? "Nhạc" : "Music", connections: vi ? "Bạn bè" : "Friends", classrooms: vi ? "Lớp học" : "Classrooms" };
+  const names: Record<HubTab, string> = { overview: t("learningHub"), flashcards: t("flashcards"), quiz: t("quiz"), exams: vi ? "Tạo tài liệu" : "Create documents", lab: t("labNav"), tools: vi ? "Tài liệu" : "Documents", shared: vi ? "Được chia sẻ" : "Shared", plan: t("studyPlan"), progress: t("progress"), music: vi ? "Nhạc" : "Music", rooms: vi ? "Phòng Online" : "Online Rooms", connections: vi ? "Bạn bè" : "Friends", classrooms: vi ? "Lớp học" : "Classrooms" };
   return <div className="learning-space-home-content">
+    <button type="button" className="online-room-entry" data-guide-tab="rooms" onClick={() => onTab("rooms")}><span><Headphones size={22}/></span><span><strong>{names.rooms}</strong><small>{vi ? "Vào phòng, chọn ghế và học cùng mọi người." : "Pick a seat and study with others."}</small></span><ArrowRight size={17}/></button>
     {lastTool && <section className="learning-resume"><div><span>{vi ? "MỞ GẦN ĐÂY" : "RECENTLY OPENED"}</span><h2>{names[lastTool]}</h2></div><button className="primary-button" onClick={() => onTab(lastTool)}>{vi ? "Tiếp tục" : "Continue"}<ArrowRight size={17}/></button></section>}
     {plan && tasks.length > 0 && <section className="learning-today"><div className="learning-today-heading"><div><span>{t("today")}</span><h2>{plan.name}</h2></div><button className="text-button" onClick={() => onTab("plan")}>{t("viewDetails")}</button></div><ul>{tasks.map(task => <li key={task.id}>{done.includes(task.id) ? <CheckCircle2 size={17}/> : taskIcon(task.kind)}<span>{task.title}</span>{done.includes(task.id) && <small>{t("completed")}</small>}</li>)}</ul></section>}
     <section className="learning-primary-tools" aria-label={vi ? "Công cụ học tập" : "Learning tools"}>{primary.map(item => <button type="button" key={item.id} data-guide-tab={item.id} data-help-id={`learning-tab-${item.id}`} onClick={() => onTab(item.id)}><span className={`learning-tool-icon ${item.id}`}><item.icon size={23}/></span><h2>{item.title}</h2><p>{item.description}</p><span className="learning-tool-footer">{item.count !== undefined && item.count > 0 ? `${item.count} ${item.id === "quiz" ? (vi ? "đề đã lưu" : "saved quizzes") : (vi ? "bộ thẻ" : "decks")}` : (vi ? "Mở công cụ" : "Open tool")}<ArrowRight size={17}/></span></button>)}</section>

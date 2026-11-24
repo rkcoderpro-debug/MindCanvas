@@ -123,3 +123,19 @@ Sau các migration hiện có đến `0035`, chạy lần lượt `0036_system_a
 - Tin hệ thống gửi cho các tài khoản đã có tại thời điểm phát. Mỗi tin lưu một bản; mỗi người có dấu đã đọc riêng. Lịch sử hỗ trợ tải tin cũ hơn. Chuông thông báo hoạt động cũ tiếp tục xử lý tin cá nhân.
 - Hồ sơ cũ được dùng làm thông tin ban đầu. Tuổi, giới tính, trường và tỉnh/thành chỉ có trong API hồ sơ của chính người dùng. Bucket ảnh mới là riêng tư; ảnh tùy chỉnh được tải bằng URL ngắn hạn cho chủ ảnh hoặc kết nối đang hoạt động.
 - Kiểm tra trên staging bằng admin và ít nhất hai tài khoản thường: gửi một tin thử, xác nhận cả hai nhận nhưng dấu đã đọc độc lập; tài khoản thường không thể gọi API gửi; lưu biệt danh, tên người dùng, ảnh và thông tin riêng tư, thử tên trùng, đổi hoặc dùng lại ảnh mặc định và kiểm tra sau khi tải lại. Xem `RELEASE_V5.30.0.md` ở thư mục gốc.
+
+## v6.0.0 — Phòng Online, đợt 1
+
+Áp dụng `0039_online_music_rooms.sql` sau `0038_study_library_summaries.sql`. Migration thêm phòng nghe nhạc, quyền tham gia, phiên ngồi, chat, hàng đợi và quyền tạo phòng công khai. Hai phòng do MindCanvas mở sẵn xuất hiện sau khi người dùng đăng nhập.
+
+Phòng dùng Supabase Realtime Broadcast riêng để báo có dữ liệu mới. Tin nhắn và trạng thái được đọc lại qua hàm kiểm tra thành viên; nếu Realtime mất kết nối, trang vẫn tự tải lại. Không cần sửa thiết lập kênh Realtime công khai hiện có của Canvas. Đợt này không cần LiveKit hoặc thêm khóa YouTube.
+
+Theo mặc định, tài khoản có thể tạo phòng riêng. Để cấp thêm quyền mở phòng công khai và điều phối phòng chính thức, thêm UUID tài khoản đã được duyệt vào bảng `public.online_room_public_hosts` bằng quyền quản trị Supabase:
+
+```sql
+insert into public.online_room_public_hosts(user_id)
+values ('00000000-0000-0000-0000-000000000000') -- đổi thành UUID thật
+on conflict do nothing;
+```
+
+Có thể chạy `supabase/verification/online_music_rooms.sql` trên cơ sở dữ liệu thử nghiệm sau khi áp dụng migration. Tệp tạo tài khoản thử và hoàn tác thay đổi trong giao dịch.

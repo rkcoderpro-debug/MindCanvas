@@ -5816,3 +5816,21 @@ button.connections-resource:hover { border-color: var(--accent); background: var
   .music-dashboard { grid-template-columns: minmax(0, 1fr); }
   .music-player-card-heading { flex-direction: row; }
 }
+
+.learning-space-home-content .online-room-entry {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-border);
+  border-radius: 16px;
+  color: var(--text);
+  background: linear-gradient(120deg,var(--accent-soft),var(--surface-raised) 72%);
+  text-align: start;
+}
+.online-room-entry > span:first-child { display: grid; place-items: center; flex: 0 0 41px; height: 41px; border-radius: 12px; color: var(--accent); background: var(--surface); }
+.online-room-entry > span:nth-child(2) { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.online-room-entry small { color: var(--muted); }
+.online-room-entry > svg { color: var(--accent); flex: none; }
+.online-room-entry:hover { border-color: var(--accent); }
