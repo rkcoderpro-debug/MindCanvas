@@ -21,6 +21,8 @@ import { NoteValidationError } from "../../../packages/shared/src/takenotes.js";
 import { aiScheduler } from "./aiScheduler.js";
 import { systemAnnouncementsAdmin } from "./systemAnnouncements.js";
 
+import { onlineMeetings } from "./onlineMeetings.js";
+
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
 app.use(cors({ origin: config.WEB_ORIGIN ?? true, credentials: true }));
@@ -60,6 +62,7 @@ app.get("/api/admin/me", requireUser, (req, res) => {
 });
 
 app.use("/api/admin/system-announcements", systemAnnouncementsAdmin);
+app.use("/api/online-meetings", onlineMeetings);
 
 app.get("/api/admin/summary", requireAdmin, async (_req, res) => {
   try { return res.json(await getAdminSummary()); }

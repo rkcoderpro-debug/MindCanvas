@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, X } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, MicOff, ScreenShare, Video, X } from "lucide-react";
 import { useOnlineRoom } from "../hooks/useOnlineRoom";
-import { loadRoomAvatars, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot } from "../lib/onlineRooms";
+import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot } from "../lib/onlineRooms";
 import { onlineRoomUrl, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import { copyTextWithFallback } from "../lib/share";
 import { PageBack } from "./PageNavigation";
@@ -13,9 +13,10 @@ type Tab = "chat" | "queue" | "people";
 type Labels = (vi: string, en: string) => string;
 type Run = (action: RoomAction) => Promise<{ state: string; invite?: string } | undefined>;
 type Confirm = { action: RoomAction; title: string; text: string };
-const LAYOUT_KEY = "mindcanvas:online-room-layout:v1";
-function storedLayout(): RoomLayout | null {
-  try { const value = localStorage.getItem(LAYOUT_KEY); return value === "compact" || value === "classroom" ? value : null; }
+const MeetingBoard = lazy(() => import("./OnlineMeetingBoard"));
+const layoutKey = (meeting: boolean) => meeting ? "mindcanvas:online-meeting-layout:v1" : "mindcanvas:online-room-layout:v1";
+function storedLayout(meeting: boolean): RoomLayout | null {
+  try { const value = localStorage.getItem(layoutKey(meeting)); return value === "compact" || value === (meeting ? "table" : "classroom") ? value : null; }
   catch { return null; }
 }
 
@@ -44,20 +45,23 @@ export default function OnlineMusicRoom({ link, owner, onBack, vi }: { link: Onl
       <div className="online-room-actions"><button type="button" className="secondary-button" onClick={exit}>{label("Về sảnh", "Back to lobby")}</button>
         {["failed","full","waiting_full","expired","other_tab"].includes(session.phase) && <button type="button" className="primary-button" onClick={session.retry}>{session.phase === "other_tab" ? label("Dùng tab này", "Use this tab") : label("Thử lại", "Try again")}</button>}
       </div>
-    </div> : <RoomInterior snapshot={snapshot} messages={session.messages} owner={owner} vi={vi} serverNow={session.serverNow} reconnecting={session.isReconnecting} action={session.act} exit={exit}/>}
+    </div> : <RoomInterior snapshot={snapshot} messages={session.messages} owner={owner} vi={vi} serverNow={session.serverNow} reconnecting={session.isReconnecting} action={session.act} meetingToken={session.meetingToken} meetingCommand={session.meetingCommand} exit={exit}/>}
   </section>;
 }
 
-function RoomInterior({ snapshot, messages, owner, vi, action, serverNow, exit, reconnecting }: {
+function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, meetingCommand, serverNow, exit, reconnecting }: {
   snapshot: RoomSnapshot; messages: RoomMessage[]; owner: string; vi: boolean;
-  action: ReturnType<typeof useOnlineRoom>["act"]; serverNow: () => number; exit: () => void; reconnecting: boolean;
+  action: ReturnType<typeof useOnlineRoom>["act"];
+  meetingToken: ReturnType<typeof useOnlineRoom>["meetingToken"]; meetingCommand: ReturnType<typeof useOnlineRoom>["meetingCommand"]; serverNow: () => number; exit: () => void; reconnecting: boolean;
 }) {
   const label: Labels = (vn, en) => vi ? vn : en;
   const { room, playback, members, can_manage, suggestions, waiting, queue } = snapshot;
-  const [layout, setLayout] = useState<RoomLayout | null>(storedLayout);
+  const isMeeting = room.kind === "meeting";
+  const primaryLayout = isMeeting ? "table" : "classroom";
+  const [layout, setLayout] = useState<RoomLayout | null>(() => storedLayout(isMeeting));
   const [panel, setPanel] = useState<Tab>("chat");
   const [av, setAv] = useState<Map<string,string>>(new Map());
-  const [listen, setListen] = useState(false);
+  const [listen, setListen] = useState(() => room.official && room.music_enabled && playback.video_id === OFFICIAL_PIANO_VIDEO);
   const [wide, setWide] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -94,13 +98,28 @@ function RoomInterior({ snapshot, messages, owner, vi, action, serverNow, exit, 
   const run: Run = async request => {
     if (operation.current) return;
     operation.current = true; setBusy(true); setProblem("");
-    try { return await action(request); }
+    try {
+      if (isMeeting && request.name === "close") return await meetingCommand({ name: "close" });
+      if (isMeeting && (request.name === "remove_member" || request.name === "transfer")) {
+        return await meetingCommand({ name: request.name === "remove_member" ? "remove" : "transfer", target: request.id });
+      }
+      return await action(request);
+    }
     catch (err) { setProblem(roomIssue(err, vi)); }
+    finally { operation.current = false; setBusy(false); }
+  };
+  const manageMeeting = async (command: MeetingCommand) => {
+    if (operation.current) return;
+    operation.current = true; setBusy(true); setProblem(""); setNote("");
+    try {
+      await meetingCommand(command);
+      if (command.name === "mute") setNote(label("Đã gửi yêu cầu tắt mic.", "The microphone mute request was sent."));
+    } catch (err) { setProblem(roomIssue(err, vi)); }
     finally { operation.current = false; setBusy(false); }
   };
   const changeLayout = (value: RoomLayout) => {
     setLayout(value);
-    try { localStorage.setItem(LAYOUT_KEY, value); } catch { /* device preference is optional */ }
+    try { localStorage.setItem(layoutKey(isMeeting), value); } catch { /* device preference is optional */ }
   };
   const share = async (renew: boolean) => {
     setCopied(false);
@@ -126,15 +145,15 @@ function RoomInterior({ snapshot, messages, owner, vi, action, serverNow, exit, 
     void run({ name: playback.playing ? "pause" : "play", revision: playback.revision });
   };
   const closeRoom = () => setConfirm({ action: { name: "close" }, title: label("Kết thúc phòng?", "End the room?"),
-    text: label("Nhạc và chat sẽ dừng cho mọi người. Liên kết mời của phòng này sẽ hết hiệu lực.", "Music and chat will stop for everyone. This room's invitation link will stop working.") });
+    text: isMeeting ? label("Cuộc gọi và chat sẽ dừng cho mọi người. Liên kết mời sẽ hết hiệu lực.", "The call and chat will end for everyone. The invitation link will expire.") : label("Nhạc và chat sẽ dừng cho mọi người. Liên kết mời của phòng này sẽ hết hiệu lực.", "Music and chat will stop for everyone. This room's invitation link will stop working.") });
 
   return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide}>
     <header className="online-room-header">
-      <div><span className="online-room-live-tag"><Radio size={15}/>{label("PHÒNG NGHE NHẠC", "MUSIC ROOM")}{room.visibility === "private" && <Lock size={13} aria-label={label("Phòng riêng", "Private room")}/>}</span>
+      <div><span className="online-room-live-tag">{isMeeting ? <Video size={15}/> : <Radio size={15}/>} {isMeeting ? label("PHÒNG HỌC / HỌP", "STUDY / MEETING") : label("PHÒNG NGHE NHẠC", "MUSIC ROOM")}{room.visibility === "private" && <Lock size={13} aria-label={label("Phòng riêng", "Private room")}/>}</span>
         <h1 ref={heading} tabIndex={-1}>{room.name}</h1><p>{room.topic || `${label("Chủ phòng:", "Host:")} ${room.host_name}`}</p></div>
       <div className="online-room-actions">
         <div className="online-room-segment" role="group" aria-label={label("Kiểu hiển thị", "Room layout")}>
-          <button type="button" aria-pressed={roomLayout === "classroom"} onClick={() => changeLayout("classroom")}><Armchair size={15}/>{label("Lớp học", "Classroom")}</button>
+          <button type="button" aria-pressed={roomLayout === primaryLayout} onClick={() => changeLayout(primaryLayout)}><Armchair size={15}/>{isMeeting ? label("Bàn họp", "Meeting table") : label("Lớp học", "Classroom")}</button>
           <button type="button" aria-pressed={roomLayout === "compact"} onClick={() => changeLayout("compact")}><Users size={15}/>{label("Gọn", "Compact")}</button>
         </div>
         {(can_manage || room.visibility === "public") && <button type="button" className="secondary-button" disabled={busy} onClick={() => void share(false)}><Link2 size={16}/>{label("Chia sẻ phòng", "Share room")}</button>}
@@ -145,7 +164,10 @@ function RoomInterior({ snapshot, messages, owner, vi, action, serverNow, exit, 
     {problem && <p className="online-room-feedback" role="alert">{problem}</p>}
     {note && <p className="online-room-feedback" role="status">{note}</p>}
     <div className="online-room-workspace">
-      <section className="online-room-stage-zone" aria-label={label("Không gian học chung", "Shared study space")}>
+      {isMeeting ? <Suspense fallback={<p className="online-room-feedback" role="status">{label("Đang tải bàn họp…", "Loading the meeting table…")}</p>}>
+        <MeetingBoard layout={roomLayout} room={room} owner={owner} members={members} avatars={av} presenter={snapshot.presenter_id ?? room.host_id}
+          vi={vi} busy={busy} token={meetingToken} run={run} serverNow={serverNow}/>
+      </Suspense> : <section className="online-room-stage-zone" aria-label={label("Không gian học chung", "Shared study space")}>
         {roomLayout === "classroom" && <div className="online-room-classroom-windows" aria-hidden="true"><span/><span/><span/></div>}
         <div className="online-room-stage-tools"><span>{label("Bảng chung", "Shared board")}</span>
           <button type="button" className="text-button" aria-pressed={wide} onClick={() => setWide(value => !value)}>{wide ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
@@ -175,7 +197,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, serverNow, exit, 
         {roomLayout === "classroom"
           ? <SeatMap members={members} avatars={av} owner={owner} host={room.host_id} label={label} busy={busy} onSeat={seat => void run({ name: "seat", seat })}/>
           : <CompactSeats members={members} avatars={av} owner={owner} label={label} busy={busy} onSeat={seat => void run({ name: "seat", seat })}/>}
-      </section>
+      </section>}
       <aside className="online-room-aside">
         <div className="online-room-segment online-room-side-tabs" role="group" aria-label={label("Các mục trong phòng", "Room panels")}>
           <button type="button" aria-pressed={panel === "chat"} onClick={() => setPanel("chat")}><MessageCircle size={15}/>Chat</button>
@@ -189,11 +211,17 @@ function RoomInterior({ snapshot, messages, owner, vi, action, serverNow, exit, 
             <button type="button" className="icon-button" disabled={busy} aria-label={`${label("Cho vào:", "Admit:")} ${person.name}`} onClick={() => void run({ name: "admit", id: person.id })}><Check size={17}/></button>
             <button type="button" className="icon-button" disabled={busy} aria-label={`${label("Từ chối:", "Decline:")} ${person.name}`} onClick={() => void run({ name: "deny", id: person.id })}><X size={17}/></button>
           </li>)}</ul></section>}
+          {isMeeting && can_manage && snapshot.presenter_id && snapshot.presenter_id !== owner &&
+            <button className="secondary-button" type="button" disabled={busy} onClick={() => void manageMeeting({ name: "presenter", target: null })}><ScreenShare size={16}/>{label("Lấy lại quyền trình chiếu", "Take back presenting rights")}</button>}
           <section><h2>{label("Trong phòng", "In the room")} <small>{members.length}</small></h2><ul>{members.map(person => <li key={person.id}>
             <ProfileAvatar url={av.get(person.id)} name={person.name} className="online-room-person-avatar"/>
-            <div><strong>{person.name}{person.id === owner ? label(" (bạn)", " (you)") : ""}</strong><small>{label("Ghế", "Seat")} {person.seat}{room.host_id === person.id && label(" · Chủ phòng", " · Host")}</small></div>
+            <div><strong>{person.name}{person.id === owner ? label(" (bạn)", " (you)") : ""}</strong><small>{label("Ghế", "Seat")} {person.seat}{room.host_id === person.id && label(" · Chủ phòng", " · Host")}{isMeeting && person.id === snapshot.presenter_id && label(" · Trình chiếu", " · Presenter")}{isMeeting && person.hand_raised_at && label(" · Đang giơ tay", " · Hand raised")}</small></div>
             {can_manage && person.id !== owner && person.id !== room.host_id && <>
-              {!room.official && <button type="button" className="icon-button" disabled={busy} title={label("Chuyển quyền chủ phòng", "Transfer host role")} aria-label={`${label("Chuyển quyền cho:", "Transfer to:")} ${person.name}`} onClick={() => setConfirm({ action: { name: "transfer", id: person.id }, title: label("Chuyển quyền chủ phòng?", "Transfer the host role?"), text: `${person.name} ${label("sẽ quản lý phòng và nhạc từ bây giờ.", "will manage the room and its music from now on.")}` })}><Crown size={16}/></button>}
+              {isMeeting && <>
+                <button type="button" className="icon-button" disabled={busy} title={label("Cho trình chiếu", "Allow presenting")} aria-label={`${label("Cho trình chiếu:", "Allow presenting:")} ${person.name}`} onClick={() => void manageMeeting({ name: "presenter", target: person.id })}><ScreenShare size={16}/></button>
+                <button type="button" className="icon-button" disabled={busy} title={label("Tắt mic", "Mute microphone")} aria-label={`${label("Tắt mic:", "Mute microphone:")} ${person.name}`} onClick={() => void manageMeeting({ name: "mute", target: person.id })}><MicOff size={16}/></button>
+              </>}
+              {!room.official && <button type="button" className="icon-button" disabled={busy} title={label("Chuyển quyền chủ phòng", "Transfer host role")} aria-label={`${label("Chuyển quyền cho:", "Transfer to:")} ${person.name}`} onClick={() => setConfirm({ action: { name: "transfer", id: person.id }, title: label("Chuyển quyền chủ phòng?", "Transfer the host role?"), text: `${person.name} ${(isMeeting ? label("sẽ quản lý cuộc họp từ bây giờ.", "will manage the meeting from now on.") : label("sẽ quản lý phòng và nhạc từ bây giờ.", "will manage the room and its music from now on."))}` })}><Crown size={16}/></button>}
               <button type="button" className="icon-button" disabled={busy} title={label("Mời rời phòng", "Remove from room")} aria-label={`${label("Mời rời:", "Remove:")} ${person.name}`} onClick={() => setConfirm({ action: { name: "remove_member", id: person.id }, title: label("Mời người này rời phòng?", "Remove this person?"), text: `${person.name} ${label("sẽ không thể vào lại phòng này.", "will not be able to rejoin this room.")}` })}><X size={16}/></button>
             </>}
           </li>)}</ul></section>

@@ -7,10 +7,11 @@ import type { OnlineRoom, RoomSnapshot } from "../lib/onlineRooms";
 import OnlineRoomsPage from "./OnlineRoomsPage";
 
 const mock = vi.hoisted(() => ({
-  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(),
+  list: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(),
 }));
 vi.mock("../lib/onlineRooms", async actual => ({
   ...await actual<typeof import("../lib/onlineRooms")>(),
+  createOnlineRoom: mock.create, fetchMeetingToken: mock.token, controlOnlineMeeting: mock.manage,
   listOnlineRooms: mock.list, joinOnlineRoom: mock.join, readOnlineRoom: mock.read, readOnlineRoomChat: mock.chat,
   pingOnlineRoom: mock.leave, actOnlineRoom: mock.act, watchOnlineRoom: mock.watch, loadRoomAvatars: vi.fn(async () => new Map()),
 }));
@@ -29,6 +30,8 @@ const fixture = (seat = 3): RoomSnapshot => ({
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  HTMLDialogElement.prototype.showModal ??= function () { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close ??= function () { this.removeAttribute("open"); };
   window.history.replaceState({}, "", "/?learn=rooms");
   vi.clearAllMocks();
   mock.list.mockResolvedValue({ rooms: [room], can_create_public: false });
@@ -80,4 +83,52 @@ it("does not open room media or join the live channel while approval is pending"
   expect(window.location.search).not.toContain("room_invite");
   await act(async () => button("Về sảnh").click());
   expect(mock.leave).toHaveBeenCalledWith(room.id, expect.any(String), true);
+});
+
+
+it("starts the new official piano player on entry and can stop listening locally", async () => {
+  mock.read.mockResolvedValue({ ...fixture(), playback: { ...fixture().playback, video_id: "3Lfr3BhvkQY" } });
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  await act(async () => button("Vào Góc nhạc tập trung").click());
+  await tick();
+  expect(host.querySelector("[data-test-player]")).toBeTruthy();
+  await act(async () => button("Dừng nghe trên máy này").click());
+  expect(host.querySelector("[data-test-player]")).toBeNull();
+  expect(button("Nghe cùng phòng")).toBeTruthy();
+});
+
+it("creates a meeting with a table and lets people interact before connecting media", async () => {
+  const meeting: OnlineRoom = { ...room, id: "7a000000-0000-4000-8000-000000000001", kind: "meeting", name: "Họp nhóm", layout: "table",
+    official: false, music_enabled: false, visibility: "private", host_id: owner, requires_approval: true };
+  const guest = "8a000000-0000-4000-8000-000000000001";
+  mock.create.mockResolvedValue(meeting.id);
+  mock.read.mockResolvedValue({ ...fixture(), room: meeting, can_manage: true, presenter_id: owner,
+    members: [...fixture().members, { id: guest, name: "Bạn học", seat: 11 }] });
+  mock.token.mockRejectedValue(new Error("Offline"));
+  mock.manage.mockResolvedValue({ state: "active" });
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  await act(async () => button("Tạo phòng").click());
+  const select = host.querySelector<HTMLSelectElement>(".online-room-create-form select")!;
+  expect(select).toBeTruthy();
+  await act(async () => { select.value = "meeting"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  const name = host.querySelector<HTMLInputElement>(".online-room-create-form input")!;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => { setValue.call(name, meeting.name); name.dispatchEvent(new Event("input", { bubbles: true })); });
+  await act(async () => button("Tạo và vào phòng").click());
+  for (let n = 0; n < 8 && !host.querySelector(".online-meeting-table"); n++) await tick();
+  expect(mock.create).toHaveBeenCalledWith(expect.objectContaining({ kind: "meeting", layout: "table", name: meeting.name }));
+  expect(host.querySelectorAll(".online-meeting-seat")).toHaveLength(20);
+  expect(host.querySelector(".online-meeting-seat[data-self=true]")?.getAttribute("title")).toContain("Ghế 3");
+  expect(host.querySelector("[data-test-player]")).toBeNull();
+  expect(mock.token).not.toHaveBeenCalled();
+  await act(async () => button("Giơ tay").click());
+  expect(mock.act).toHaveBeenCalledWith(meeting.id, expect.any(String), { name: "hand", raised: true });
+  await act(async () => button("Vỗ tay").click());
+  expect(mock.act).toHaveBeenCalledWith(meeting.id, expect.any(String), { name: "reaction", reaction: "clap" });
+  await act(async () => button("Mọi người").click());
+  await act(async () => button("Cho trình chiếu: Bạn học").click());
+  expect(mock.manage).toHaveBeenCalledWith(meeting.id, expect.any(String), { name: "presenter", target: guest }, expect.any(AbortSignal));
+  await act(async () => button("Kết nối cuộc gọi").click());
+  expect(mock.token).toHaveBeenCalledWith(meeting.id, expect.any(String), expect.any(AbortSignal));
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Không kết nối được cuộc gọi");
 });

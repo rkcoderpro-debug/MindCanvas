@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { actOnlineRoom, joinOnlineRoom, OnlineRoomError, pingOnlineRoom, readOnlineRoom, readOnlineRoomChat, watchOnlineRoom, type RoomAction, type RoomMessage, type RoomSnapshot, type RoomStatus } from "../lib/onlineRooms";
+import { actOnlineRoom, controlOnlineMeeting, fetchMeetingToken, type MeetingCommand, joinOnlineRoom, OnlineRoomError, pingOnlineRoom, readOnlineRoom, readOnlineRoomChat, watchOnlineRoom, type RoomAction, type RoomMessage, type RoomSnapshot, type RoomStatus } from "../lib/onlineRooms";
 import { forgetOnlineRoomInvite, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 
 type Phase = RoomStatus | "connecting" | "failed";
 type Activity = "room" | "chat";
 type Session = {
   action: (action: RoomAction) => ReturnType<typeof actOnlineRoom>;
+  token: () => ReturnType<typeof fetchMeetingToken>;
+  command: (command: MeetingCommand) => ReturnType<typeof controlOnlineMeeting>;
   close: () => void;
 };
 export function useOnlineRoom(link: OnlineRoomLink) {
@@ -24,6 +26,8 @@ export function useOnlineRoom(link: OnlineRoomLink) {
     if (!session.current) return Promise.reject(new OnlineRoomError("ONLINE_NETWORK"));
     return session.current.action(action);
   }, []);
+  const meetingToken = useCallback(() => session.current?.token() ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
+  const meetingCommand = useCallback((command: MeetingCommand) => session.current?.command(command) ?? Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED")), []);
   const leave = useCallback(() => session.current?.close(), []);
 
   useEffect(() => {
@@ -141,7 +145,17 @@ export function useOnlineRoom(link: OnlineRoomLink) {
       disconnect?.();
       controller.abort();
     }
-    const openSession: Session = { close, action: async action => {
+    const openSession: Session = { close, token: () => {
+      if (!alive || !joined) return Promise.reject(new OnlineRoomError("ONLINE_MEDIA_DENIED"));
+      return fetchMeetingToken(id, client, controller.signal);
+    }, command: async command => {
+      if (!alive || !joined) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
+      try {
+        const result = await controlOnlineMeeting(id, client, command, controller.signal);
+        if (alive && result.state === "closed") end(result.state);
+        return result;
+      } finally { refresh("room"); }
+    }, action: async action => {
       if (!alive || !joined) throw new OnlineRoomError("ONLINE_NETWORK");
       const result = await actOnlineRoom(id, client, action);
       if (alive) {
@@ -175,5 +189,5 @@ export function useOnlineRoom(link: OnlineRoomLink) {
     };
   }, [link.id, link.invite, attempt]);
 
-  return { phase, snapshot, messages, roomName, problem, isReconnecting, serverNow, act, retry, leave };
+  return { phase, snapshot, messages, roomName, problem, isReconnecting, serverNow, act, meetingToken, meetingCommand, retry, leave };
 }

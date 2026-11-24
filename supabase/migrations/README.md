@@ -139,3 +139,5 @@ on conflict do nothing;
 ```
 
 Có thể chạy `supabase/verification/online_music_rooms.sql` trên cơ sở dữ liệu thử nghiệm sau khi áp dụng migration. Tệp tạo tài khoản thử và hoàn tác thay đổi trong giao dịch.
+
+- `0040_online_meeting_rooms.sql`: thêm Phòng học / họp, quyền trình chiếu và tương tác; đổi nhạc phòng mở sẵn sang bản piano lặp 24/7. Chạy sau `0039_online_music_rooms.sql`.

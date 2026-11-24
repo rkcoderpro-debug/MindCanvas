@@ -65,6 +65,7 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, vi }: 
     iframe.allowFullscreen = true;
     let viewRatio = 0;
     const params = new URLSearchParams({ enablejsapi: "1", autoplay: "0", playsinline: "1", origin: window.location.origin });
+    if (playback.loop) { params.set("loop", "1"); params.set("playlist", playback.video_id); }
     iframe.src = `https://www.youtube.com/embed/${playback.video_id}?${params}`;
     container.replaceChildren(iframe);
     const syncPlayer = () => {
@@ -135,7 +136,7 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, vi }: 
       try { instance?.destroy(); } catch { /* iframe already detached */ }
       container.replaceChildren();
     };
-  }, [playback.video_id, retry, vi]);
+  }, [playback.video_id, playback.loop, retry, vi]);
   useEffect(() => { apply.current(); }, [playback.revision]);
 
   return <div className="online-room-youtube">

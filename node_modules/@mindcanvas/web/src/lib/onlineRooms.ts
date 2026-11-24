@@ -1,24 +1,26 @@
-import { supabase } from "./supabase";
+import { getCurrentSession, supabase } from "./supabase";
 import { signProfileAvatars } from "./accountProfile";
 
-export type RoomLayout = "classroom" | "compact";
+export type RoomLayout = "classroom" | "compact" | "table";
+export type RoomReaction = "clap" | "heart" | "like";
+export const OFFICIAL_PIANO_VIDEO = "3Lfr3BhvkQY";
 export type RoomVisibility = "public" | "private";
 export type RoomStatus = "active" | "waiting" | "waiting_full" | "full" | "closed" | "removed" | "expired" | "other_tab" | "invite_required" | "left";
 export type OnlineRoom = {
-  id: string; kind: "music"; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout;
+  id: string; kind: "music" | "meeting"; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout;
   official: boolean; music_enabled: boolean; requires_approval: boolean; host_id: string | null;
   host_name: string; occupancy: number; capacity: number;
 };
 export type RoomPlaylistTrack = { id: string; video_id: string; title: string; status: "queued" | "pending"; requested_by: string | null; name: string };
-export type RoomAttendee = { id: string; name: string; seat: number; avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null };
+export type RoomAttendee = { id: string; name: string; seat: number; avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null; hand_raised_at?: string | null; reaction?: RoomReaction | null; reaction_at?: string | null };
 export type RoomPlayback = { video_id: string | null; title: string | null; attribution: string | null; playing: boolean; loop: boolean; offset: number; at: string; revision: number };
 export type RoomMessage = { id: string; author_id: string | null; name: string; body: string; created_at: string };
 export type RoomSnapshot = {
-  state: "active"; room: OnlineRoom; server_time: string; can_manage: boolean; suggestions: boolean;
+  state: "active"; room: OnlineRoom; server_time: string; can_manage: boolean; suggestions: boolean; presenter_id?: string | null;
   playback: RoomPlayback; members: RoomAttendee[]; waiting: Pick<RoomAttendee, "id" | "name">[]; queue: RoomPlaylistTrack[];
 };
 export type RoomUnavailable = { state: Exclude<RoomStatus, "active"> };
-export type RoomCreate = { name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; approve: boolean; suggestions: boolean };
+export type RoomCreate = { kind: OnlineRoom["kind"]; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; approve: boolean; suggestions: boolean };
 
 type RoomAction =
   | { name: "seat"; seat: number }
@@ -30,7 +32,10 @@ type RoomAction =
   | { name: "play" | "pause" | "next"; revision: number }
   | { name: "suggestions"; enabled: boolean }
   | { name: "admit" | "deny" | "remove_member" | "transfer"; id: string }
+  | { name: "hand"; raised: boolean }
+  | { name: "reaction"; reaction: RoomReaction }
   | { name: "close" | "invite" };
+export type MeetingCommand = { name: "close" } | { name: "mute" | "remove" | "transfer"; target: string } | { name: "presenter"; target: string | null };
 export type { RoomAction };
 
 export class OnlineRoomError extends Error {
@@ -61,14 +66,39 @@ async function rpc<T>(name: string, args: Record<string, unknown> = {}, signal?:
 
 const sessionArgs = (id: string, client: string) => ({ p_room: id, p_client: client });
 export const listOnlineRooms = (signal?: AbortSignal) => rpc<{ rooms: OnlineRoom[]; can_create_public: boolean }>("list_online_rooms", {}, signal);
-export const createOnlineRoom = (room: RoomCreate) => rpc<string>("create_online_music_room", {
-  p_name: room.name, p_topic: room.topic, p_visibility: room.visibility, p_layout: room.layout, p_approval: room.approve, p_suggestions: room.suggestions,
+export const createOnlineRoom = (room: RoomCreate) => rpc<string>(room.kind === "meeting" ? "create_online_meeting_room" : "create_online_music_room", {
+  p_name: room.name, p_topic: room.topic, p_visibility: room.visibility, p_layout: room.layout, p_approval: room.approve,
+  ...(room.kind === "meeting" ? {} : { p_suggestions: room.suggestions }),
 });
 export const joinOnlineRoom = (id: string, client: string, invite?: string) => rpc<{ state: RoomStatus; name?: string }>("join_online_room", { ...sessionArgs(id, client), p_invite: invite ?? null });
 export const pingOnlineRoom = (id: string, client: string, leave = false) => rpc<RoomStatus>("ping_online_room", { ...sessionArgs(id, client), p_leave: leave });
 export const readOnlineRoom = (id: string, client: string, signal?: AbortSignal) => rpc<RoomSnapshot | RoomUnavailable>("read_online_room", sessionArgs(id, client), signal);
 export const readOnlineRoomChat = (id: string, client: string, signal?: AbortSignal) => rpc<{ state: "active"; messages: RoomMessage[] } | RoomUnavailable>("read_online_room_chat", sessionArgs(id, client), signal);
 export const actOnlineRoom = (id: string, client: string, { name, ...payload }: RoomAction) => rpc<{ state: RoomStatus; invite?: string }>("act_online_room", { ...sessionArgs(id, client), p_action: name, p_payload: payload });
+
+const meetingApiBase = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8787").replace(/\/$/, "");
+async function meetingRequest<T>(id: string, path: "token" | "manage", body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+  const access = (await getCurrentSession())?.access_token;
+  if (!access) throw new OnlineRoomError("ONLINE_MEDIA_DENIED");
+  const request = new AbortController();
+  const cancel = () => request.abort();
+  const timer = setTimeout(cancel, 18000);
+  if (signal?.aborted) cancel(); else signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    const response = await fetch(`${meetingApiBase}/api/online-meetings/${encodeURIComponent(id)}/${path}`, {
+      method: "POST", headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
+      signal: request.signal, body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new OnlineRoomError(typeof result?.code === "string" ? result.code : "ONLINE_MEDIA_PROVIDER");
+    return result as T;
+  } finally { clearTimeout(timer); signal?.removeEventListener("abort", cancel); }
+}
+export type MeetingConnection = { url: string; token: string };
+export const fetchMeetingToken = (id: string, client: string, signal?: AbortSignal) =>
+  meetingRequest<MeetingConnection>(id, "token", { client }, signal);
+export const controlOnlineMeeting = (id: string, client: string, action: MeetingCommand, signal?: AbortSignal) =>
+  meetingRequest<{ state: "active" | "closed" }>(id, "manage", { client, ...action }, signal);
 
 export function watchOnlineRoom(id: string, onChange: (area: "room" | "chat") => void, onStatus: (live: boolean) => void) {
   if (!supabase) return () => {};
@@ -125,6 +155,10 @@ export function roomIssue(error: unknown, vi: boolean) {
     ONLINE_QUEUE_FULL: ["Hàng đợi hoặc lượt đề xuất của bạn đã đầy.", "The queue or your suggestion allowance is full."],
     ONLINE_PLAYBACK_CHANGED: ["Bài đang phát đã thay đổi. Hãy thử lại sau khi cập nhật.", "Playback has changed. Try again after the room updates."],
     ONLINE_MEMBER_GONE: ["Người này vừa rời phòng.", "This participant has left the room."],
+    ONLINE_MEDIA_DISABLED: ["Máy chủ chưa cấu hình cuộc gọi. Bạn vẫn có thể dùng chat.", "Calls are not configured on this server. You can still use chat."],
+    ONLINE_MEDIA_DATABASE: ["Dịch vụ cấp quyền cuộc gọi chưa sẵn sàng.", "The call authorization service is unavailable."],
+    ONLINE_MEDIA_DENIED: ["Phiên này chưa có quyền kết nối cuộc gọi. Hãy vào lại phòng.", "This session cannot join the call. Re-enter the room."],
+    ONLINE_MEDIA_PROVIDER: ["Dịch vụ cuộc gọi chưa phản hồi. Hãy thử lại.", "The call service did not respond. Try again."],
     ONLINE_MUSIC_LOCKED: ["Nhạc của phòng này đã được thiết lập sẵn.", "Music in this room is preset."],
   };
   return messages[key]?.[vi ? 0 : 1] ?? (vi ? "Không kết nối được với phòng. Hãy thử lại." : "Could not reach the room. Try again.");
