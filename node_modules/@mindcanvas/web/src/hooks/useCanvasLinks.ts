@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { canvasIdFromUrl, takeCanvasAfterSignIn, writeCanvasUrl } from "../lib/canvasLinks";
+import { isProfileOnlyTransition, PROFILE_ROUTE_EVENT } from "../lib/profileNavigation";
 import type { Project } from "../lib/projectStore";
 
 type Options = {
@@ -35,9 +36,20 @@ export function useCanvasLinks(options: Options) {
       const id = canvasIdFromUrl() ?? resumed;
       if (id) { writeCanvasUrl(id, "replace"); schedule(id); }
     }
-    const onPop = () => schedule(canvasIdFromUrl());
+    let previousUrl = window.location.href;
+    const onProfileRoute = () => { previousUrl = window.location.href; };
+    const onPop = () => {
+      const next = window.location.href, profileOnly = isProfileOnlyTransition(previousUrl, next);
+      previousUrl = next;
+      if (!profileOnly) schedule(canvasIdFromUrl());
+    };
+    window.addEventListener(PROFILE_ROUTE_EVENT, onProfileRoute);
     window.addEventListener("popstate", onPop);
-    return () => { restoring.current = null; window.removeEventListener("popstate", onPop); };
+    return () => {
+      restoring.current = null;
+      window.removeEventListener(PROFILE_ROUTE_EVENT, onProfileRoute);
+      window.removeEventListener("popstate", onPop);
+    };
   }, []);
 
   useEffect(() => {

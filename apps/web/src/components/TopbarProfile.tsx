@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { ChevronDown, LogIn, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { ProfileAvatar } from "./ProfileAvatar";
+import { safeAvatarFallback } from "../lib/accountProfile";
 import { useLanguage } from "../lib/i18n";
 
 type Props = {
   user: User | null;
   accountName: string;
+  customAvatarUrl?: string;
+  onProfile?: () => void;
   working: boolean;
   canSignIn: boolean;
   onAuth: () => void;
@@ -13,12 +17,11 @@ type Props = {
   onAdmin?: () => void;
 };
 
-export default function TopbarProfile({ user, accountName, working, canSignIn, onAuth, isAdmin = false, onAdmin }: Props) {
-  const { t } = useLanguage();
+export default function TopbarProfile({ user, accountName, customAvatarUrl, onProfile, working, canSignIn, onAuth, isAdmin = false, onAdmin }: Props) {
+  const { language, t } = useLanguage();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const avatarUrl = typeof user?.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : "";
-  const initial = accountName.trim().charAt(0).toLocaleUpperCase() || "M";
+  const avatarUrl = customAvatarUrl || safeAvatarFallback(typeof user?.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null);
 
   useEffect(() => {
     if (!open) return;
@@ -43,12 +46,13 @@ export default function TopbarProfile({ user, accountName, working, canSignIn, o
 
   return <div ref={root} className="topbar-profile">
     <button type="button" className="topbar-profile-button" aria-label={t("account")} aria-expanded={open} title={t("account")} onClick={() => setOpen(value => !value)}>
-      <span className="topbar-avatar">{avatarUrl ? <img src={avatarUrl} alt=""/> : initial}</span>
+      <ProfileAvatar url={avatarUrl} name={accountName} className="topbar-avatar"/>
       <span className="topbar-profile-copy"><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></span>
       <ChevronDown size={15} aria-hidden="true"/>
     </button>
     {open && <div className="topbar-profile-menu" role="menu">
       <div className="topbar-profile-details"><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div>
+      {user && onProfile && <button type="button" role="menuitem" onClick={() => { setOpen(false); onProfile(); }}><UserRound size={16}/><span>{language === "vi" ? "Hồ sơ cá nhân" : "Personal profile"}</span></button>}
       {isAdmin && onAdmin && <button type="button" role="menuitem" onClick={() => { setOpen(false); onAdmin(); }}><ShieldCheck size={16}/><span>{t("adminDashboard")}</span></button>}
       <button type="button" role="menuitem" disabled={working || (!user && !canSignIn)} onClick={authenticate}>{user ? <LogOut size={16}/> : <LogIn size={16}/>}<span>{user ? t("logout") : t("login")}</span></button>
     </div>}

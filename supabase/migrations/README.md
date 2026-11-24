@@ -115,3 +115,11 @@ Chạy `0032_v5_20_0_lab_library.sql` **sau** `0031_v5_19_0_activity_notificatio
 Migration thêm chế độ Lab, ảnh bìa, cấu hình khung xem và thông tin tạo Lab; cập nhật RPC chia sẻ/lưu bản sao, trigger phiên bản và quota. Kiểm tra lưu, mở lại, chia sẻ và lưu bản sao bằng hai tài khoản trên staging trước khi chạy production và deploy web v5.20.0. Kiểm thử cloud/RLS thực tế chưa được thực hiện trong phiên mã nguồn.
 
 Nếu đã dùng gói v5.20.0 cũ, xóa **chỉ** `0031_v5_20_0_lab_library.sql` khỏi repository và thay bằng `0032_v5_20_0_lab_library.sql`; giữ nguyên `0031_v5_19_0_activity_notifications.sql`. Nếu đã chạy SQL Lab cũ trong SQL Editor, việc sửa số file không yêu cầu xóa dữ liệu; nội dung SQL chỉ đổi chú thích thứ tự. Xem `RELEASE_V5.20.0.md` và `QA_V5.20.0.md` ở thư mục gốc.
+
+## v5.30.0 — tin hệ thống và hồ sơ cá nhân
+
+Sau các migration hiện có đến `0035`, chạy lần lượt `0036_system_announcements.sql` và `0037_personal_profiles.sql`, rồi deploy Render API và Static Site. Dùng cấu hình admin hiện có: `ADMIN_EMAIL` và `SUPABASE_SERVICE_ROLE_KEY` chỉ đặt trên API. Không thay cấu hình đăng nhập Google.
+
+- Tin hệ thống gửi cho các tài khoản đã có tại thời điểm phát. Mỗi tin lưu một bản; mỗi người có dấu đã đọc riêng. Lịch sử hỗ trợ tải tin cũ hơn. Chuông thông báo hoạt động cũ tiếp tục xử lý tin cá nhân.
+- Hồ sơ cũ được dùng làm thông tin ban đầu. Tuổi, giới tính, trường và tỉnh/thành chỉ có trong API hồ sơ của chính người dùng. Bucket ảnh mới là riêng tư; ảnh tùy chỉnh được tải bằng URL ngắn hạn cho chủ ảnh hoặc kết nối đang hoạt động.
+- Kiểm tra trên staging bằng admin và ít nhất hai tài khoản thường: gửi một tin thử, xác nhận cả hai nhận nhưng dấu đã đọc độc lập; tài khoản thường không thể gọi API gửi; lưu biệt danh, tên người dùng, ảnh và thông tin riêng tư, thử tên trùng, đổi hoặc dùng lại ảnh mặc định và kiểm tra sau khi tải lại. Xem `RELEASE_V5.30.0.md` ở thư mục gốc.

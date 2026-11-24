@@ -25,6 +25,8 @@ import { respondConnectionInvitation } from "./lib/connections";
 import { applyGraph, blankBoard, exportBoard, exportCanvasPngFile, exportCanvasSvgFile, importBoard } from "./lib/board";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { useCanvasLinks } from "./hooks/useCanvasLinks";
+import { usePersonalProfile } from "./hooks/usePersonalProfile";
+import { closeProfileRoute, isProfileRoute, openProfileRoute, PROFILE_ROUTE_EVENT } from "./lib/profileNavigation";
 import { canvasPermalink } from "./lib/canvasLinks";
 import { usePwaInstall } from "./lib/pwa";
 import { isToolbarPosition, TOOLBAR_POSITIONS, type ToolbarPosition } from "./lib/editorPreferences";
@@ -57,6 +59,7 @@ const LearningHubPage = lazy(() => import("./components/LearningHubPage"));
 const SyncCenter = lazy(() => import("./components/SyncCenter"));
 const PlanUpgradeDialog = lazy(() => import("./components/PlanUpgradeDialog"));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
+const PersonalProfilePage = lazy(() => import("./components/PersonalProfilePage"));
 const ShareDialog = lazy(() => import("./components/ShareDialog"));
 const FeatureGuidePage = lazy(() => import("./components/FeatureGuidePage"));
 
@@ -120,6 +123,13 @@ function AuthenticatedApp() {
 function Workspace({ user, authError, onClearAuthError }: { user: User | null; authError: string; onClearAuthError: () => void }) {
   const { t, language, setLanguage } = useLanguage(), { selectedTheme, setTheme } = useTheme(), ws = useWorkspace(user?.id ?? null), pwa = usePwaInstall();
   const iosDevice = isIOSDevice();
+  const personalProfile = usePersonalProfile(user?.id ?? null);
+  const [profileOpen, setProfileOpen] = useState(() => isProfileRoute());
+  useEffect(() => {
+    const sync = () => setProfileOpen(isProfileRoute());
+    window.addEventListener(PROFILE_ROUTE_EVENT, sync); window.addEventListener("popstate", sync);
+    return () => { window.removeEventListener(PROFILE_ROUTE_EVENT, sync); window.removeEventListener("popstate", sync); };
+  }, []);
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{ tab: "connections" | "shared" | "classrooms"; peerId?: string; classId?: string; nonce: number } | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(() => learningTabFromUrl() ? "__learning" : null), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
@@ -267,7 +277,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     catch { ws.setError(t("importError")); }
     if (fileInput.current) fileInput.current.value = "";
   };
-  const accountName = user?.user_metadata.full_name ?? user?.user_metadata.name ?? user?.email ?? t("guest");
+  const accountName = personalProfile.profile?.display_name ?? user?.user_metadata.full_name ?? user?.user_metadata.name ?? user?.email ?? t("guest");
   const visible = ws.projects.filter(p => filter === "__trash" ? !!p.deletedAt : !p.deletedAt && (filter === "__favorites" ? p.favorite : filter === "__shared" ? p.shared : !filter || p.folderId === filter));
   const pageTitle = filter === "__trash" ? t("trash") : filter === "__favorites" ? t("favorites") : filter === "__shared" ? t("sharedWithMe") : filter ? ws.folders.find(f => f.id === filter)?.name ?? t("projects") : recent ? t("recent") : t("workspace");
   const currentProject = ws.board ? ws.projects.find(project => project.id === ws.board!.id) : undefined;
@@ -294,7 +304,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") { event.preventDefault(); setCommandOpen(value => !value); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k" && !isProfileRoute()) { event.preventDefault(); setCommandOpen(value => !value); }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "f") { event.preventDefault(); setFocusMode(value => !value); }
     };
     window.addEventListener("keydown", shortcut); return () => window.removeEventListener("keydown", shortcut);
@@ -489,7 +499,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const workspaceBackLabel = language === "vi" ? "Về Workspace" : "Back to Workspace";
   const canvasBackLabel = modal === "share" ? (language === "vi" ? "Về canvas" : "Back to canvas") : filter && !filter.startsWith("__") ? pageTitle : workspaceBackLabel;
   const backFromCanvas = () => { if (modal === "share") { setModal(null); return; } setMobileProjectMenuOpen(false); setAiPanelMode("closed"); setCanvasFullscreen(false); void ws.home(); };
-  return <PageChromeProvider openQuickActions={showQuickActions}><div className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
+  return <PageChromeProvider openQuickActions={showQuickActions}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
     {webBackground && <div className="web-background-layer" aria-hidden="true">{webBackground.kind === "video" ? <video src={webBackground.src} muted autoPlay loop playsInline style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/> : <img src={webBackground.src} alt="" style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/>}<span style={{ background: webBackground.overlay ?? "#000000" }}/></div>}
     <AppSidebar projects={ws.projects} folders={ws.folders} boardOpen={!!ws.board} recent={recent} filter={filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={() => { leaveLearningSpace(); void ws.home(); setFilter("__manager"); setRecent(false); }} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
     <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`}>
@@ -498,7 +508,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
         <NotificationBell owner={user?.id ?? null} onNavigate={openNotification}/>
         {pageHelpScope && pageHelpUnlocked && <button type="button" className="icon-button page-help-trigger" aria-label={language === "vi" ? "Trợ giúp trang này" : "Help for this page"} title={language === "vi" ? "Trợ giúp trang này" : "Help for this page"} aria-expanded={pageHelpOpen} onClick={() => setPageHelpOpen(value => !value)}><CircleHelp size={19}/></button>}
-        <div className="topbar-account-actions">{plusTrial?.eligible && !plusTrial.consumed && !plusTrial.active && <button type="button" className="topbar-trial-button" aria-label="Kích hoạt 3 ngày Plus miễn phí" title="3 ngày Plus miễn phí" onClick={() => { setTrialActivated(false); setTrialError(""); setTrialOpen(true); }}><Gift size={15}/><span>3 ngày Plus</span></button>}<button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
+        <div className="topbar-account-actions">{plusTrial?.eligible && !plusTrial.consumed && !plusTrial.active && <button type="button" className="topbar-trial-button" aria-label="Kích hoạt 3 ngày Plus miễn phí" title="3 ngày Plus miễn phí" onClick={() => { setTrialActivated(false); setTrialError(""); setTrialOpen(true); }}><Gift size={15}/><span>3 ngày Plus</span></button>}<button type="button" className="topbar-plan-button" aria-label={`${t("currentPlan")}: ${accountPlan.name}`} title={t("planUpgradeTitle")} onClick={openPlans}><Crown size={15}/><span>{accountPlan.name}</span></button><TopbarProfile user={user} accountName={accountName} customAvatarUrl={personalProfile.profile?.signedAvatarUrl} onProfile={openProfileRoute} working={working} canSignIn={!!user || isSupabaseConfigured} onAuth={() => void auth()} isAdmin={isAdmin} onAdmin={openAdmin}/></div></div>
       </header>
       {ws.board && <header className="mobile-canvas-header">
         <BackButton className="mobile-canvas-back" aria-label={canvasBackLabel} title={canvasBackLabel} onClick={backFromCanvas}><span className="sr-only">{canvasBackLabel}</span></BackButton>
@@ -553,7 +563,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>
     <MusicIsland/>
-    <FeatureGuideManager key={user?.id ?? "guest"} ownerId={user?.id ?? null} trigger={guideTrigger} manualGuideId={manualGuideId} onManualConsumed={() => setManualGuideId(null)} onPracticeDecision={decideCanvasPractice} blocked={focusMode || modal !== null}/>
+    <FeatureGuideManager key={user?.id ?? "guest"} ownerId={user?.id ?? null} trigger={guideTrigger} manualGuideId={manualGuideId} onManualConsumed={() => setManualGuideId(null)} onPracticeDecision={decideCanvasPractice} blocked={focusMode || modal !== null || profileOpen}/>
     {pageHelpOpen && pageHelpScope && pageHelpUnlocked && <PageHelpPanel scope={pageHelpScope} onClose={() => setPageHelpOpen(false)}/>}
    {trialOpen && plusTrial && <PlusTrialPopup trial={plusTrial} working={trialWorking} activated={trialActivated} error={trialError} onActivate={() => void startTrial()} onClose={closeTrial}/>}
    {(modal === "project" || modal === "folder") && <Dialog title={t(modal === "project" ? "newProject" : "newFolder")} onClose={() => { if (!working) setModal(null); }}><form onSubmit={e => void create(e)}>
@@ -598,7 +608,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       }}/>} {/* Keep this mounted while minimized so its request survives. */}
     {commandOpen && <CommandPalette projects={ws.projects} onClose={() => setCommandOpen(false)} onOpenProject={project => void ws.open(project)} onCreateProject={() => askName("project")} onOpenLearningTool={openQuickLearning} onOpenSettings={() => setModal("settings")} onImport={() => fileInput.current?.click()}/>}
     </Suspense>
-  </div></PageChromeProvider>;
+  </div>{profileOpen && <Suspense fallback={<div className="profile-screen"><RouteLoading/></div>}><PersonalProfilePage state={personalProfile} signedIn={!!user} onBack={closeProfileRoute} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/></Suspense>}</PageChromeProvider>;
 }
 function RouteLoading() {
   const { t } = useLanguage();

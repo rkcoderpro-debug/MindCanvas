@@ -1,0 +1,162 @@
+{
+  "version": "5.30.0",
+  "baseVersion": "5.29.3",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V5.30.0.md",
+      "bytes": 1552,
+      "sha256": "e4bb12ea4f82c950d15ef11426dd874b35b37dc320a61dc68d4855f8466fa2e3"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 813,
+      "sha256": "8c7f3b473d345a5a212e3c2329a2e8c79adad88d8a32c3298c8294d3a297de18"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "bytes": 18598,
+      "sha256": "4df3e97cd9778516f2cffeffa423946ed108a772880218a016262eda93bc4ac3"
+    },
+    {
+      "path": "apps/server/src/systemAnnouncements.ts",
+      "bytes": 3211,
+      "sha256": "25aac6218461052611e435d0032505fa39d125a6f2c2f9c6f7a75d31855828de"
+    },
+    {
+      "path": "apps/server/tests/systemAnnouncements.test.ts",
+      "bytes": 3873,
+      "sha256": "5c54835a514ca4fe4e461b64d3b9542e0fbf65ee0824d708e8d116dc81c17126"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1050,
+      "sha256": "45a575a409a54221c5e2bb4e4771bcabdd9259fcea4418a4a5312f2a8d19e9c4"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 34473,
+      "sha256": "6f7fee77e8a65edda79bd671301c4b05736054cba4dced5479e0a607d55c1c06"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 63753,
+      "sha256": "ea4bdadd1ef0ca7b84708c222ff0f87e5b7652a4f0df9c24f933ebfec2601b3b"
+    },
+    {
+      "path": "apps/web/src/components/AdminAnnouncements.tsx",
+      "bytes": 7364,
+      "sha256": "0192b5a61d111856ae00f99388080444a4c804e9525bacaf7f8b294817de7aed"
+    },
+    {
+      "path": "apps/web/src/components/AdminDashboard.tsx",
+      "bytes": 11773,
+      "sha256": "fa45c7fbee2521f129601cbf848d76915a86d51a38cee0057d13440c2c09b131"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 12923,
+      "sha256": "7852e552862da62fb739e40f99e08246e44e3a13cf65319b2f7bc253c13960f8"
+    },
+    {
+      "path": "apps/web/src/components/NotificationBell.test.tsx",
+      "bytes": 8054,
+      "sha256": "20fcf0679cbb056076755782b1ece00295f9814e3c01415364cf8189f4d7bca8"
+    },
+    {
+      "path": "apps/web/src/components/NotificationBell.tsx",
+      "bytes": 10610,
+      "sha256": "608381caa9588e09a9cfad1d321f2fddabcf53ca17a68906e8fec07ea303172d"
+    },
+    {
+      "path": "apps/web/src/components/PersonalProfilePage.tsx",
+      "bytes": 13554,
+      "sha256": "a79034a54cef2868d9d116c2186f3b8366b0d9f506cf3a993e50bc15a7d71642"
+    },
+    {
+      "path": "apps/web/src/components/PhaseOneAccounts.test.tsx",
+      "bytes": 6016,
+      "sha256": "3f29ff14947c16e1d5f2b2979ada38ffe0339aa1428e197689702230c22d6bd7"
+    },
+    {
+      "path": "apps/web/src/components/ProfileAvatar.tsx",
+      "bytes": 481,
+      "sha256": "56afc3e8375732bd43e949f1297f7cbf338e7ff33ca6864b6d53651e8e785f38"
+    },
+    {
+      "path": "apps/web/src/components/TopbarProfile.tsx",
+      "bytes": 2950,
+      "sha256": "538e919a61706c5e98f567898ad1d8e623635c2ae017cc4b73130c5fb323fdbb"
+    },
+    {
+      "path": "apps/web/src/hooks/useCanvasLinks.ts",
+      "bytes": 3971,
+      "sha256": "17fed2ce5f9879f07a3acbeb034132ed4a928bbb10e998f85f87bd2425ce7d01"
+    },
+    {
+      "path": "apps/web/src/hooks/usePersonalProfile.ts",
+      "bytes": 1812,
+      "sha256": "6f26c51fe2759051243fba97200d4fb148a7b40c8de08b4e8b711bd1b2b1e57f"
+    },
+    {
+      "path": "apps/web/src/hooks/useSystemAnnouncements.ts",
+      "bytes": 3993,
+      "sha256": "643a3eaed0287dc8954f7d64541fe0fbc30df325d8bfbdc82a47accff5682f6e"
+    },
+    {
+      "path": "apps/web/src/lib/accountProfile.ts",
+      "bytes": 8739,
+      "sha256": "e5770b15ed6af81b7467593c75f00453457a2de0c7fbc300c763221e8f655d7c"
+    },
+    {
+      "path": "apps/web/src/lib/api.ts",
+      "bytes": 14139,
+      "sha256": "a660d8283eb4c51934d75a2e7ec83dba24700311b6b544cca97a50012725e7d2"
+    },
+    {
+      "path": "apps/web/src/lib/connections.ts",
+      "bytes": 5197,
+      "sha256": "9894b8a6b638f2032a3ae54b3fa6f6941e90a3fe3ef92dd01a764a003c61ed15"
+    },
+    {
+      "path": "apps/web/src/lib/profileNavigation.ts",
+      "bytes": 1338,
+      "sha256": "6cb2aa5d3618dbf73e2e57765637dda5145238975ad4f9d61e1d1bf323bb4aca"
+    },
+    {
+      "path": "apps/web/src/lib/systemAnnouncements.ts",
+      "bytes": 1354,
+      "sha256": "1e42b44baad258a44e13da67b09875fdd5a6ad1ad86d5d27b303ca88b26e9073"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 500363,
+      "sha256": "b98dcf6d3d5b859b7435e340a1d8dbd79c7782fdda57376d20ab37d5ffe4190e"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 181769,
+      "sha256": "4e74f4eb596295caf115efc2c0c996fc3ccc078c9c1299b8e911d4f954500a13"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "74631ba80dbcf5e5ce04efdfdb8e95da7524a7dffe5288bd99c3d4b1a4320d92"
+    },
+    {
+      "path": "supabase/migrations/0036_system_announcements.sql",
+      "bytes": 5152,
+      "sha256": "3ee87406269989863ad09c7f0eb72ae6ea5f5d4dc4f252e9390b973551c7f99e"
+    },
+    {
+      "path": "supabase/migrations/0037_personal_profiles.sql",
+      "bytes": 9112,
+      "sha256": "0e93405e1c155f10073616ac4ad62c7671045ac85847fe1fa8c842b995aa7480"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 19675,
+      "sha256": "d36eac6c047af2827f28f82a2bde96d86b1d278436639babed535bfc700ecc3d"
+    }
+  ]
+}

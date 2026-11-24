@@ -19,6 +19,7 @@ import { analyzeExam, generateExam, parseExamInput, readExamSource } from "./exa
 import { generateNote, parseNoteInput } from "./takenotes.js";
 import { NoteValidationError } from "../../../packages/shared/src/takenotes.js";
 import { aiScheduler } from "./aiScheduler.js";
+import { systemAnnouncementsAdmin } from "./systemAnnouncements.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.MAX_DOCUMENT_BYTES, files: 1 } });
@@ -57,6 +58,8 @@ app.get("/api/admin/me", requireUser, (req, res) => {
   const isAdmin = Boolean(config.ADMIN_EMAIL && config.SUPABASE_SERVICE_ROLE_KEY && (req.userEmail ?? "").trim().toLocaleLowerCase() === config.ADMIN_EMAIL.trim().toLocaleLowerCase());
   return res.json({ isAdmin });
 });
+
+app.use("/api/admin/system-announcements", systemAnnouncementsAdmin);
 
 app.get("/api/admin/summary", requireAdmin, async (_req, res) => {
   try { return res.json(await getAdminSummary()); }

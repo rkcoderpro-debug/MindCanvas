@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { cacheProject, waitForProjectCache } from "./lib/projectStore";
 import { blankBoard } from "./lib/board";
+import { openProfileRoute } from "./lib/profileNavigation";
 import { APP_VERSION_LABEL } from "./lib/appVersion";
 let root: Root, host: HTMLDivElement;
 async function waitForUI(check: () => void) {
@@ -57,6 +58,24 @@ describe("Workspace UI", () => {
     }
   });
 
+  it("opens the personal profile as its own page and returns to the same canvas instance", async () => {
+    const board = blankBoard("Canvas before profile");
+    cacheProject(null, { board, id: board.id, title: board.title, updatedAt: board.updatedAt, folderId: null, pending: false });
+    window.history.replaceState({}, "", `/?canvas=${board.id}`);
+    await import("./components/CanvasBoard"); await import("./components/PersonalProfilePage");
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.querySelector(".canvas-editor-heading")).not.toBeNull());
+    const editor = host.querySelector(".canvas-editor-heading");
+    await act(async () => openProfileRoute());
+    await waitForUI(() => expect(document.querySelector(".profile-screen")).not.toBeNull());
+    expect(window.location.search).toContain("profile=1");
+    expect(host.querySelector(".app-shell")?.hasAttribute("inert")).toBe(true);
+    const back = document.querySelector<HTMLButtonElement>(".profile-screen .page-back-button")!;
+    await act(async () => back.click());
+    await waitForUI(() => expect(document.querySelector(".profile-screen")).toBeNull());
+    expect(window.location.search).toBe(`?canvas=${board.id}`);
+    expect(host.querySelector(".canvas-editor-heading")).toBe(editor);
+  });
   it("does not open an unavailable local canvas from a URL", async () => {
     window.history.replaceState(null, "", "/?canvas=3f710a1f-840c-4e5e-97f4-ad50c1d69501");
     await act(async () => root.render(<App/>));

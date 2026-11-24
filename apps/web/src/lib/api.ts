@@ -1,3 +1,4 @@
+import type { AnnouncementCursor, SystemAnnouncement } from "./systemAnnouncements";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import type { MindMapAiOperation, MindMapEdge, StructuredMindMap } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
@@ -79,6 +80,15 @@ export function consumeAiManualUsage(requestId: string = crypto.randomUUID(), si
 
 export function getAdminStatus(signal?: AbortSignal) {
   return accountRequest<{ isAdmin: boolean }>("/api/admin/me", { signal });
+}
+
+export function listAdminSystemAnnouncements(before?: AnnouncementCursor, signal?: AbortSignal) {
+  const query = before ? new URLSearchParams({ before: before.published_at, beforeId: before.id }) : null;
+  return accountRequest<{ items: SystemAnnouncement[]; hasMore: boolean }>(`/api/admin/system-announcements${query ? `?${query}` : ""}`, { signal });
+}
+
+export function publishAdminSystemAnnouncement(body: { requestId: string; title: string; body: string }, signal?: AbortSignal) {
+  return accountRequest<{ item: SystemAnnouncement }>("/api/admin/system-announcements", { method: "POST", body: JSON.stringify(body), signal });
 }
 
 export function getAdminSummary(signal?: AbortSignal) {

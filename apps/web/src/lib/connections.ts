@@ -1,8 +1,9 @@
 import { getCurrentSession, supabase } from "./supabase";
 import { hashInvitationToken, normalizeInviteEmail } from "./collaboration";
+import { signProfileAvatars } from "./accountProfile";
 import type { LearningKind } from "./learningShare";
 
-export type Connection = { peer_id: string; display_name: string; unread_count: number; connected_at: string };
+export type Connection = { peer_id: string; display_name: string; unread_count: number; connected_at: string; avatar?: string };
 export type ConnectionInvitation = { id: string; sender_id: string; sender_name: string; recipient_email: string | null; token_hash: string; status: string; expires_at: string; outgoing: boolean };
 export type BlockedConnection = { peer_id: string; display_name: string; blocked_at: string };
 export type DirectMessage = { id: string; sender_id: string; recipient_id: string; body: string; resource_kind: LearningKind | null; resource_id: string | null; resource_title: string | null; created_at: string };
@@ -33,7 +34,11 @@ export async function respondConnectionInvitation(tokenOrHash: string, action: "
   checked(await client().rpc("respond_connection_invitation", { p_hash: hash, p_action: action }));
 }
 export async function listConnections(): Promise<Connection[]> {
-  return checked(await client().rpc("list_connections")) as Connection[];
+  const result = await client().rpc("list_connections_with_profile");
+  if (result.error?.code === "PGRST202") return checked(await client().rpc("list_connections")) as Connection[];
+  const people = (checked(result) ?? []) as Array<Connection & { avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null }>;
+  const urls = await signProfileAvatars(people.map(person => ({ ...person, id: person.peer_id })));
+  return people.map(({ peer_id, display_name, unread_count, connected_at }) => ({ peer_id, display_name, unread_count, connected_at, avatar: urls.get(peer_id) }));
 }
 export async function listConnectionInvitations(): Promise<ConnectionInvitation[]> {
   return checked(await client().rpc("list_connection_invitations")) as ConnectionInvitation[];
