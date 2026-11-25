@@ -5414,6 +5414,12 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .a4-stage .canvas-svg { --canvas-text:#172033; }
 
 /* Compact project actions; the existing mobile project sheet is independent. */
+/* The heading and editor animations create separate stacking contexts.
+   Raise the heading while its dropdown is open so the canvas cannot cover it. */
+.canvas-editor-heading:has(.canvas-project-action-list:not([hidden])) {
+  position: relative;
+  z-index: 40;
+}
 .canvas-project-actions { position:relative; }
 .canvas-project-action-list { position:absolute; z-index:36; inset-inline-end:0; top:calc(100% + 6px); min-width:220px; padding:5px; border:1px solid var(--line); border-radius:12px; background:var(--surface-raised); box-shadow:0 12px 30px var(--shadow-strong); }
 .canvas-project-action-list:not([hidden]) { display:grid; gap:2px; }

@@ -1,0 +1,37 @@
+{
+  "version": "6.6.1",
+  "baseVersion": "6.6.0",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.6.1.md",
+      "bytes": 404,
+      "sha256": "bcf4bb24dd93254a10906f9f7f942a71ab507fe9b9d66d705a47f40927a728fb"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "98530234c84cc293e8a522970b0915635dabb4bb36c0c3f08b9193c98f961551"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "243486280455173c3381ae0ec01c7fa94331626424c4df97d7d37f0fa06e70f6"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 522237,
+      "sha256": "5c12fcaefcee8faf4168679bc2ae9d5fb23507ac3eeac2e34462b0f698ed62e9"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "6203b729a4641cf29c10bee056aa5c620a5bb1aac3392ef4c87bea2f9d3e78bb"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "24ebd3643cb1f758ba2eeabb80a37c307ad5a424af4f628883075881b75c7fdb"
+    }
+  ]
+}
