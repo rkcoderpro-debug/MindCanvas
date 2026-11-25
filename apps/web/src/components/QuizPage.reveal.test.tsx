@@ -52,6 +52,19 @@ afterEach(async () => {
   await act(async () => root.unmount()); host.remove(); localStorage.removeItem("mindcanvas:language"); localStorage.removeItem("mindcanvas.output-language.quiz");
 });
 
+it("shows a single share action for each quiz and the same dialog while taking it", async () => {
+  const cards = [...host.querySelectorAll(".quiz-card-actions")];
+  expect(cards).toHaveLength(2);
+  for (const card of cards) {
+    expect(card.querySelectorAll('button[aria-label^="Share:"]')).toHaveLength(1);
+    expect(card.textContent).not.toContain("Legacy invites");
+  }
+  await act(async () => (cards[0].querySelector(".primary-button") as HTMLButtonElement).click());
+  const runner = document.querySelector("[data-learning-viewport]")!;
+  await act(async () => runner.querySelector<HTMLButtonElement>('button[aria-label="Share: Two questions"]')!.click());
+  expect(runner.querySelector("dialog[open].workspace-share-dialog")).toBeTruthy();
+});
+
 it("reveals the selected question immediately and locks its answer", async () => {
   await act(async () => (host.querySelector(".quiz-card-actions .primary-button") as HTMLButtonElement).click());
   await act(async () => (document.querySelectorAll("[data-learning-viewport] .quiz-options button")[0] as HTMLButtonElement).click());

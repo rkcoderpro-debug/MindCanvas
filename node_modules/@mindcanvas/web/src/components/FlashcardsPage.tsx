@@ -26,7 +26,6 @@ import { buildFlashcardsPrompt, ManualAiValidationError, MAX_FLASHCARDS, parseMa
 import { DEFAULT_AI_OPTIONS, type AiGenerationOptions } from "../lib/aiOptions";
 import AiQualityControls from "./AiQualityControls";
 import ManualAiProviderLinks from "./ManualAiProviderLinks";
-import { LearningShareButton } from "./LearningShareDialog";
 
 type DeckDialog = { kind: "create" | "rename"; deck?: FlashcardDeck };
 type CardDialog = { kind: "create" | "edit"; card?: Flashcard };
@@ -468,10 +467,9 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
               <button type="button" className="secondary-button flashcards-ai-trigger" disabled={busyActions} onClick={openAiGenerator}><Sparkles size={16}/>{t("generateFlashcards")}</button>
               <button type="button" className="secondary-button" disabled={busyActions} onClick={openCreateCard}><Plus size={16}/>{t("newCard")}</button>
               <WorkspaceShareButton item={{kind:"flashcard",id:flashcards.selectedDeck.id,title:flashcards.selectedDeck.name}}
-                available={!!owner&&flashcards.selectedDeck.source==="cloud"&&flashcards.cards.every(card=>card.source==="cloud")} compact/>
+                friends={{plan:accountPlan}} available={!!owner&&flashcards.selectedDeck.source==="cloud"&&flashcards.cards.every(card=>card.source==="cloud")} compact/>
               <details className="flashcards-more-actions"><summary>{t("flashcardOtherTools")}</summary><div onClick={event => { if ((event.target as HTMLElement).closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) menu.open = false; } }}>
                 <button type="button" disabled={busyActions} onClick={() => setStudyPlanDialog(true)}><CalendarClock size={16}/>{flashcards.activeStudyPlan ? t("manageStudyPlan") : t("createStudyPlan")}</button>
-                <LearningShareButton kind="flashcard" id={flashcards.selectedDeck.id} title={flashcards.selectedDeck.name} plan={accountPlan} available={!!owner && flashcards.selectedDeck.source === "cloud" && flashcards.cards.every(card => card.source === "cloud")}/>
                 <button type="button" className="danger" aria-label={t("deleteDeck")} onClick={() => setDeleteTarget(flashcards.selectedDeck)}><Trash2 size={16}/>{t("deleteDeck")}</button>
               </div></details>
             </div>
