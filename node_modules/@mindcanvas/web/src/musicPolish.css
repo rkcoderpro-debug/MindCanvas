@@ -1,0 +1,119 @@
+/* Keep the glass above the sticky app header without covering native dialogs. */
+.music-island {
+  --glass-base: color-mix(in srgb, var(--surface-raised) 86%, var(--accent-soft));
+  z-index: 112;
+  top: max(8px, env(safe-area-inset-top));
+  width: 142px;
+  padding: 3px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--glass-base);
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / .57), inset 0 -1px 1px color-mix(in srgb, var(--accent) 23%, transparent),
+    0 8px 28px color-mix(in srgb, var(--shadow-strong) 68%, transparent);
+  pointer-events: auto;
+  isolation: isolate;
+}
+@supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+  .music-island {
+    background: radial-gradient(ellipse at 12% 3%, rgb(255 255 255 / .34), transparent 63%),
+      linear-gradient(155deg, color-mix(in srgb, var(--accent-soft) 65%, transparent), color-mix(in srgb, var(--surface-raised) 81%, transparent));
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+  }
+}
+.music-island::before {
+  content: ""; position: absolute; inset: 1px; z-index: -1; border-radius: inherit; pointer-events: none;
+  border-top: 1px solid rgb(255 255 255 / .32);
+  background: linear-gradient(122deg, rgb(255 255 255 / .10), transparent 45%);
+}
+.music-island.peek { width: min(245px, calc(100vw - 24px)); }
+.music-island.expanded { width: min(385px, calc(100vw - 24px)); border-radius: 21px; }
+.music-island .music-island-open {
+  justify-content: space-between;
+  min-height: 35px; gap: 6px; padding: 4px 10px;
+  color: var(--accent); border-radius: 999px; cursor: pointer;
+}
+.music-island:not(.peek):not(.expanded) .music-island-open { justify-content: space-between; }
+.music-island-open > svg { flex: none; }
+.music-island-open > svg:last-child { opacity: .7; }
+.music-island-open[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+.music-island-open:hover { background: color-mix(in srgb, var(--accent-soft) 72%, transparent); }
+.music-island-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.music-island .music-title { margin: 0; flex: none; color: var(--text); }
+.music-island .music-title.visible { margin-inline: 2px; flex: 1 1 auto; }
+.music-island-details {
+  max-height: min(58dvh, 470px); padding: 12px 13px 8px;
+  border-top: 1px solid color-mix(in srgb, var(--accent-border) 70%, transparent);
+}
+.music-island-details small, .music-island-track span { color: var(--muted); }
+.music-island-details .music-options { display: flex; flex-wrap: wrap; gap: 7px 10px; }
+.music-island-details .music-options input[type="range"] { width: 85px; }
+.music-island-details input[type="range"] { accent-color: var(--accent); }
+.music-island-details select { color: var(--text); background: var(--surface); border-color: var(--line); }
+.music-island-details .music-controls button { background: var(--accent-soft); color: var(--accent); }
+.music-island-details .music-controls button:nth-child(2) { background: var(--accent); color: var(--accent-contrast); }
+.music-island-footer { flex-wrap: wrap; gap: 3px 8px; align-items: center; }
+.music-island-footer button { padding-inline: 7px; color: var(--muted); }
+.music-island-footer button:hover { color: var(--accent); background: var(--accent-soft); }
+.music-island .music-spectrum, .music-island:not(.peek):not(.expanded) .music-spectrum { width: 64px; height: 19px; }
+.music-spectrum { color: var(--accent); }
+.music-wave { display: inline-flex; justify-content: center; align-items: center; gap: 2px; }
+.music-wave i {
+  flex: 1 1 0; max-width: 6px; min-width: 1px;
+  height: 74%; border-radius: 99px; background: currentColor;
+  transform: scaleY(.18); transform-origin: center; opacity: .72;
+}
+.music-wave[data-playing="true"] i {
+  animation: music-glass-wave .84s var(--wave-shift) ease-in-out infinite alternate;
+  opacity: 1;
+}
+@keyframes music-glass-wave {
+  from { transform: scaleY(.24); }
+  to { transform: scaleY(var(--wave-height)); }
+}
+.music-page-visual {
+  display: grid; gap: 2px; place-items: center; padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-border) 55%, var(--line));
+  border-radius: 12px; background: color-mix(in srgb, var(--surface-raised) 68%, transparent);
+  color: var(--muted);
+}
+.music-page-visual small { font-size: 11px; }
+.music-page-visual .music-spectrum-wide { width: min(176px, 90%); height: 29px; }
+.music-page-visual .music-wave { gap: 5px; }
+
+.music-youtube-slot {
+  display: grid; place-content: center; justify-items: center; gap: 5px;
+  height: clamp(245px, 28vw, 300px);
+  border: 1px dashed var(--accent-border); border-radius: 14px;
+  color: var(--accent); background: var(--accent-soft); font-size: 12px;
+}
+.music-youtube-surface {
+  display: grid; grid-template-rows: 36px minmax(200px, 1fr);
+  position: fixed; z-index: 75; box-sizing: border-box;
+  border: 1px solid var(--accent-border); border-radius: 14px;
+  overflow: hidden; background: var(--surface-raised); color: var(--text);
+}
+.music-youtube-surface header { min-width: 0; display: flex; align-items: center; justify-content: space-between; padding-inline: 10px 3px; gap: 6px; }
+.music-youtube-surface header strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.music-youtube-surface header button { min-width: 32px; width: 32px; min-height: 32px; height: 32px; color: var(--muted); }
+.music-youtube-frame, .music-youtube-frame iframe { width: 100%; height: 100%; min-height: 200px; border: 0; display: block; }
+.music-youtube-dock {
+  right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(355px, calc(100vw - 24px)); height: 240px; min-width: 202px; z-index: 105;
+  box-shadow: 0 14px 36px var(--shadow-strong);
+}
+@media (max-width: 700px) {
+  .music-island { top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: auto; right: 10px; transform: none; }
+  .music-island.expanded { max-width: min(385px, calc(100vw - 20px)); }
+  .music-youtube-dock { bottom: calc(66px + env(safe-area-inset-bottom)); }
+  body:has(.music-youtube-dock) .music-island-details { max-height: max(90px, min(42dvh, calc(100dvh - 405px))); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .music-wave[data-playing="true"] i { animation: none; transform: scaleY(var(--wave-height)); }
+  .music-island { transition: none; }
+}
+@media (forced-colors: active) {
+  .music-island { background: Canvas; color: CanvasText; border-color: ButtonBorder; }
+  .music-wave i { background: ButtonText; forced-color-adjust: none; }
+}

@@ -2,8 +2,9 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { MusicPage, MusicProvider } from './MusicPlayer';
+import { MusicIsland, MusicPage, MusicProvider } from './MusicPlayer';
 import { musicStore } from '../lib/musicStorage';
+import type { getYouTube } from '../lib/youtubeIframe';
 vi.mock('../lib/musicStorage', async importOriginal => ({ ...await importOriginal<object>(), musicStore: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it('plays only on request, survives leaving the music tab, and stops on account unmount', async () => {
@@ -51,4 +52,54 @@ it('adds a link from the same control as device files and leaves playback paused
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
   expect(audio.play).not.toHaveBeenCalled();
   await act(async () => root.unmount());
+});
+
+it('uses the YouTube player timeline in both controls and keeps the visible player across app views', async () => {
+  type Events = ConstructorParameters<Awaited<ReturnType<typeof getYouTube>>['Player']>[1]['events'];
+  let events!: Events;
+  const player = {
+    playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn(),
+    getDuration: vi.fn(() => 195), getCurrentTime: vi.fn(() => 31), seekTo: vi.fn(), setVolume: vi.fn(),
+    getPlaylist: vi.fn(), getPlaylistIndex: vi.fn(), playVideoAt: vi.fn(),
+  };
+  const create = vi.fn(function (_frame: HTMLIFrameElement, config: { events: Events }) { events = config.events; return player; });
+  vi.stubGlobal('YT', { Player: create });
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.mocked(musicStore).mockResolvedValue([{ id: 'yt', owner: 'user', title: 'Piano', source: 'youtube-music', url: 'https://music.youtube.com/watch?v=abcdefghijk&list=RDAMVMabcdefghijk' }]);
+  const host = document.createElement('div'), root = createRoot(host);
+  document.body.append(host);
+  const render = (page: boolean) => <MusicProvider owner="user"><MusicIsland/>{page && <MusicPage/>}</MusicProvider>;
+  try {
+    await act(async () => root.render(render(true)));
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Phát Piano"]')!.click());
+    const frame = document.body.querySelector<HTMLIFrameElement>('.music-youtube-surface iframe')!;
+    expect(frame.src).toContain('/embed/abcdefghijk?');
+    expect(frame.src).not.toContain('RDAMVM');
+    expect(player.playVideo).not.toHaveBeenCalled();
+    await act(async () => { events.onReady({ target: player }); events.onStateChange({ data: 1 }); });
+    const mainRange = host.querySelector<HTMLInputElement>('.music-player-card [aria-label="Vị trí phát"]')!;
+    expect(mainRange.disabled).toBe(false);
+    expect(mainRange.value).toBe('31');
+    expect(mainRange.max).toBe('195');
+    expect(host.querySelector('.music-page-visual [data-playing="true"]')).toBeTruthy();
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-island-open')!.click());
+    expect(host.querySelector('.music-island-open')?.getAttribute('aria-expanded')).toBe('true');
+    const islandRange = host.querySelector<HTMLInputElement>('.music-island-details [aria-label="Vị trí phát"]')!;
+    expect(islandRange.value).toBe('31');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(islandRange, '80');
+      islandRange.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(player.seekTo).toHaveBeenCalledWith(80, true);
+    expect(mainRange.value).toBe('80');
+
+    await act(async () => root.render(render(false)));
+    expect(document.body.querySelector('.music-youtube-dock iframe')).toBe(frame);
+    expect(create).toHaveBeenCalledOnce();
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-island-details [aria-label="Tạm dừng"]')!.click());
+    expect(player.pauseVideo).toHaveBeenCalled();
+    await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="Đóng trình phát YouTube"]')!.click());
+    expect(player.destroy).toHaveBeenCalledOnce();
+    expect(document.body.querySelector('.music-youtube-surface')).toBeNull();
+  } finally { await act(async () => root.unmount()); host.remove(); }
 });

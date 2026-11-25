@@ -1,12 +1,18 @@
 import FilePicker from "./FilePicker";
-import { createContext, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { Music2, Pause, Play, SkipBack, SkipForward, X, ChevronDown, Trash2, Link2, ExternalLink, Disc3, Radio, Plus, Upload, ListMusic, Volume2, Repeat2, Shuffle } from 'lucide-react';
 import { musicStore, nextMusicId, parseMusicLink, musicSourceLabel, type MusicTrack } from '../lib/musicStorage';
+import MusicYouTubeSurface from "./MusicYouTubeSurface";
+import type { Player } from "../lib/youtubeIframe";
+import { useTheme } from "../lib/i18n";
+
+const isYouTube = (track: MusicTrack | null) => track?.source === "youtube" || track?.source === "youtube-music";
 
 type Music = {
   tracks: MusicTrack[]; current: string | null; playing: boolean; time: number; duration: number; volume: number;
   repeat: 'off' | 'all' | 'one'; shuffle: boolean; hidden: boolean; error: string; busy: boolean;
   activeTrack: MusicTrack | null;
+  youtubeOpen: boolean; youtubeNote: string; setYoutubeSlot: (slot: HTMLDivElement | null) => void;
   analyser: AnalyserNode | null; play: (id?: string) => void; pause: () => void; next: (direction: number) => void;
   seek: (time: number) => void; setVolume: (value: number) => void; setRepeat: (value: 'off' | 'all' | 'one') => void;
   setShuffle: (value: boolean) => void; setHidden: (value: boolean) => void;
@@ -23,9 +29,15 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   const [repeat, setRepeat] = useState<Music['repeat']>('off'), [shuffle, setShuffle] = useState(false);
   const [hidden, setHidden] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const [youtubeOpen, setYoutubeOpen] = useState(false), [youtubeNote, setYoutubeNote] = useState("");
+  const [youtubeSlot, setYoutubeSlot] = useState<HTMLDivElement | null>(null);
+  const [youtubeStart, setYoutubeStart] = useState(0), [youtubeAttempt, setYoutubeAttempt] = useState(0);
+  const youtube = useRef<Player | null>(null), wantsPlay = useRef(false), youtubeFailed = useRef(false);
+  const activeId = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null), contextRef = useRef<AudioContext | null>(null);
   const urlRef = useRef(''), loadedId = useRef<string | null>(null), generation = useRef(0);
   const alive = useRef(true), lock = useRef(false);
+  const activeTrack = tracks.find(track => track.id === current) ?? null;
   useEffect(() => {
     alive.current = true;
     void musicStore(scope, 'list').then(rows => { if (alive.current) setTracks(old => [...rows, ...old.filter(t => !rows.some(r => r.id === t.id))]); }).catch(() => { if (alive.current) setError('Không mở được thư viện nhạc trên thiết bị.'); });
@@ -39,11 +51,12 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   const ensureAudio = () => {
     if (!audioRef.current) {
       const audio = new Audio(); audio.volume = volume; audio.preload = 'metadata';
-      audio.onplay = () => { if (alive.current) setPlaying(true); };
-      audio.onpause = () => { if (alive.current) setPlaying(false); };
-      audio.ontimeupdate = () => { if (alive.current) setTime(audio.currentTime); };
-      audio.onloadedmetadata = () => { if (alive.current) setDuration(Number.isFinite(audio.duration) ? audio.duration : 0); };
-      audio.onerror = () => { if (alive.current) { setError('Không đọc được file nhạc này. Hãy thử MP3, WAV hoặc M4A tương thích thiết bị.'); setPlaying(false); } };
+      const isActive = () => alive.current && !!loadedId.current && loadedId.current === activeId.current;
+      audio.onplay = () => { if (isActive()) setPlaying(true); };
+      audio.onpause = () => { if (isActive()) setPlaying(false); };
+      audio.ontimeupdate = () => { if (isActive()) setTime(audio.currentTime); };
+      audio.onloadedmetadata = () => { if (isActive()) setDuration(Number.isFinite(audio.duration) ? audio.duration : 0); };
+      audio.onerror = () => { if (isActive()) { setError('Không đọc được file nhạc này. Hãy thử MP3, WAV hoặc M4A tương thích thiết bị.'); setPlaying(false); } };
       audioRef.current = audio;
     }
     if (!contextRef.current) {
@@ -58,31 +71,62 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     }
     return audioRef.current;
   };
+  const selectTrack = (id: string | null) => {
+    activeId.current = id;
+    setCurrent(id); setTime(0); setDuration(0); setPlaying(false);
+  };
+  const dismissYouTube = () => {
+    wantsPlay.current = false;
+    youtube.current?.pauseVideo();
+    youtube.current = null;
+    youtubeFailed.current = false;
+    setYoutubeOpen(false); setYoutubeNote("");
+  };
   const play = (id = current ?? tracks[0]?.id) => {
     const track = tracks.find(item => item.id === id); if (!track) return;
+    if ((!track.source || track.source === "local") && !track.blob) { setError('Bài hát này không còn dữ liệu trên thiết bị. Hãy xóa và thêm lại.'); return; }
+    if (isYouTube(track) && (!track.url || !parseMusicLink(track.url)?.embedUrl)) { setError("Liên kết YouTube không còn hợp lệ. Hãy thêm lại từ nguồn nhạc."); return; }
+    const changed = activeId.current !== track.id;
+    if (changed) { dismissYouTube(); selectTrack(track.id); }
+    setError("");
+    if (isYouTube(track)) {
+      generation.current++;
+      audioRef.current?.pause();
+      wantsPlay.current = true;
+      if (!changed && youtubeOpen && youtube.current && !youtubeFailed.current) {
+        setYoutubeNote(""); youtube.current.playVideo();
+      } else {
+        if (youtubeFailed.current) { youtube.current = null; youtubeFailed.current = false; setYoutubeAttempt(n => n + 1); }
+        setYoutubeStart(changed ? 0 : time);
+        setYoutubeOpen(true);
+        setYoutubeNote("Đang kết nối trình phát YouTube…");
+      }
+      return;
+    }
     if (track.source && track.source !== 'local') {
       generation.current++;
       audioRef.current?.pause();
-      setCurrent(track.id); setTime(0); setDuration(0); setError(''); setPlaying(true);
+      setPlaying(true);
       return;
     }
-    if (!track.blob) { setError('Bài hát này không còn dữ liệu trên thiết bị. Hãy xóa và thêm lại.'); return; }
     const audio = ensureAudio(), token = ++generation.current;
-    setError('');
     if (loadedId.current !== track.id) {
       audio.pause(); if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      urlRef.current = URL.createObjectURL(track.blob); audio.src = urlRef.current; loadedId.current = track.id;
-      setCurrent(track.id); setTime(0); setDuration(0);
+      urlRef.current = URL.createObjectURL(track.blob!); loadedId.current = track.id; audio.src = urlRef.current;
+    } else if (changed) {
+      setTime(audio.currentTime); setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
     }
     // Both calls start inside the user's gesture for Safari autoplay rules.
     void contextRef.current?.resume().catch(() => {});
     void audio.play().catch(() => { if (alive.current && token === generation.current) { setError('Không phát được nhạc. Bấm Phát để thử lại hoặc chọn file khác.'); setPlaying(false); } });
   };
-  const pause = () => { generation.current++; audioRef.current?.pause(); setPlaying(false); };
+  const pause = () => { generation.current++; wantsPlay.current = false; youtube.current?.pauseVideo(); audioRef.current?.pause(); setPlaying(false); };
+  const hideYouTube = () => { pause(); dismissYouTube(); };
   const next = (direction: number) => { const id = nextMusicId(tracks.map(t => t.id), current, direction, shuffle); if (id) play(id); };
   useEffect(() => {
     const audio = audioRef.current; if (!audio) return;
     audio.onended = () => {
+      if (!current || activeId.current !== loadedId.current) return;
       setPlaying(false);
       if (repeat === 'one') { audio.currentTime = 0; play(); }
       else if (shuffle || repeat === 'all' || tracks.findIndex(t => t.id === current) < tracks.length - 1) next(1);
@@ -118,8 +162,8 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   const remove = async (track: MusicTrack) => {
     try {
       await musicStore(scope, 'delete', track);
-      if (track.id === loadedId.current) { pause(); audioRef.current?.removeAttribute('src'); audioRef.current?.load(); if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = ''; loadedId.current = null; setCurrent(null); setTime(0); setDuration(0); }
-      else if (track.id === current) { pause(); setCurrent(null); setTime(0); setDuration(0); }
+      if (track.id === activeId.current) { hideYouTube(); selectTrack(null); }
+      if (track.id === loadedId.current) { loadedId.current = null; audioRef.current?.pause(); audioRef.current?.removeAttribute('src'); audioRef.current?.load(); if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = ''; }
       setTracks(old => old.filter(t => t.id !== track.id));
     } catch { setError('Không xóa được bài hát. Hãy thử lại.'); }
   };
@@ -129,20 +173,65 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     try { await musicStore(scope, 'put', next); setTracks(old => old.map(t => t.id === next.id ? next : t)); }
     catch { setError('Không lưu được tên bài hát.'); }
   };
-  const activeTrack = tracks.find(track => track.id === current) ?? null;
-  const value: Music = { tracks, current, activeTrack, playing, time, duration, volume, repeat, shuffle, hidden, error, busy, analyser, play, pause, next, add, addOnline, remove, rename, setRepeat, setShuffle, setHidden,
-    seek: value => { if (audioRef.current && duration > 0) { audioRef.current.currentTime = Math.max(0, Math.min(duration, value)); setTime(audioRef.current.currentTime); } },
-    setVolume: value => { changeVolume(value); if (audioRef.current) audioRef.current.volume = value; } };
-  return <Context.Provider value={value}><OnlinePlayback track={activeTrack} playing={playing}/>{children}</Context.Provider>;
+  const value: Music = { tracks, current, activeTrack, playing, time, duration, volume, repeat, shuffle, hidden, error, busy,
+    youtubeOpen, youtubeNote, setYoutubeSlot, analyser, play, pause, next, add, addOnline, remove, rename, setRepeat, setShuffle, setHidden,
+    seek: value => {
+      if (duration <= 0 || !Number.isFinite(value)) return;
+      const seconds = Math.max(0, Math.min(duration, value));
+      if (isYouTube(activeTrack)) { if (youtube.current) { youtube.current.seekTo(seconds, true); setTime(seconds); } }
+      else if (audioRef.current && loadedId.current === current) { audioRef.current.currentTime = seconds; setTime(seconds); }
+    },
+    setVolume: value => { changeVolume(value); if (audioRef.current) audioRef.current.volume = value; youtube.current?.setVolume(Math.round(value * 100)); } };
+  const youtubeEmbed = isYouTube(activeTrack) && activeTrack?.url ? parseMusicLink(activeTrack.url)?.embedUrl : undefined;
+  const syncYouTube = (player: Player, state?: number) => {
+    if (!alive.current || !activeTrack || activeTrack.id !== activeId.current || player !== youtube.current || youtubeFailed.current) return;
+    const length = player.getDuration(), progress = player.getCurrentTime();
+    setDuration(Number.isFinite(length) && length > 0 ? length : 0);
+    if (Number.isFinite(progress) && progress >= 0) setTime(progress);
+    if (state === 1) {
+      if (document.visibilityState === "hidden") { pause(); return; }
+      wantsPlay.current = false; setPlaying(true); setYoutubeNote("");
+    } else if (state === 2 || state === 5) {
+      setPlaying(false);
+    } else if (state === 0) {
+      setPlaying(false);
+      if (document.visibilityState === "hidden") return;
+      const list = activeTrack.isPlaylist ? player.getPlaylist() : undefined;
+      const index = activeTrack.isPlaylist ? player.getPlaylistIndex() : -1;
+      if (list?.length && index >= 0 && index < list.length - 1) return; // The embed handles the next video in its own list.
+      if (repeat === "one") {
+        if (list?.length) player.playVideoAt(0);
+        else { player.seekTo(0, true); player.playVideo(); }
+      } else if (shuffle || repeat === "all" || tracks.findIndex(t => t.id === current) < tracks.length - 1) {
+        const id = nextMusicId(tracks.map(t => t.id), current, 1, shuffle);
+        if (id === current && list?.length) player.playVideoAt(0);
+        else if (id === current) { player.seekTo(0, true); player.playVideo(); }
+        else if (id) play(id);
+      }
+    }
+  };
+  return <Context.Provider value={value}>
+    <OnlinePlayback track={activeTrack} playing={playing}/>
+    {youtubeEmbed && youtubeOpen && activeTrack && <MusicYouTubeSurface key={`${activeTrack.id}:${youtubeAttempt}`} slot={youtubeSlot}
+      embedUrl={youtubeEmbed} title={activeTrack.title} start={youtubeStart} onClose={hideYouTube} onHidden={pause}
+      onReady={player => {
+        if (activeId.current !== activeTrack.id || youtubeFailed.current) return;
+        youtube.current = player; player.setVolume(Math.round(volume * 100)); syncYouTube(player);
+        setYoutubeNote("");
+        if (wantsPlay.current && document.visibilityState !== "hidden") player.playVideo();
+      }}
+      onUpdate={syncYouTube}
+      onBlocked={() => { wantsPlay.current = false; setPlaying(false); setYoutubeNote("Bấm Phát ngay trên khung YouTube để bắt đầu."); }}
+      onError={() => { youtubeFailed.current = true; wantsPlay.current = false; setPlaying(false); setYoutubeNote("Không phát được video nhúng. Bấm Phát để thử lại hoặc mở nguồn nhạc."); }}/>}
+    {children}
+  </Context.Provider>;
 }
 
-/** Keep an official third-party embed mounted at app scope so route changes do
- * not tear down online playback. Cross-origin players cannot expose PCM data,
- * so the white spectrum remains a source status indicator for these tracks. */
+/** Existing Spotify and SoundCloud playback. YouTube uses the visible surface. */
 function OnlinePlayback({ track, playing }: { track: MusicTrack | null; playing: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
-    if (!track?.embedUrl || !track.source || track.source === 'local') return;
+    if (!track?.embedUrl || !track.source || track.source === 'local' || isYouTube(track)) return;
     const command = track.source === 'soundcloud'
       ? { method: playing ? 'play' : 'pause' }
       : track.source === 'spotify'
@@ -150,30 +239,56 @@ function OnlinePlayback({ track, playing }: { track: MusicTrack | null; playing:
         : { event: 'command', func: playing ? 'playVideo' : 'pauseVideo', args: [] };
     frame.current?.contentWindow?.postMessage(JSON.stringify(command), '*');
   }, [playing, track?.embedUrl, track?.source]);
-  if (!track?.embedUrl || !track.source || track.source === 'local') return null;
+  if (!track?.embedUrl || !track.source || track.source === 'local' || isYouTube(track)) return null;
   return <div className="music-online-runtime" aria-hidden="true"><iframe ref={frame} key={track.id} src={track.embedUrl} title={`${musicSourceLabel(track.source)} player`} allow="autoplay; encrypted-media; picture-in-picture"/></div>;
 }
 
-const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
-function Visualizer() {
-  const { analyser, playing } = useMusic(); const canvas = useRef<HTMLCanvasElement>(null);
+const clock = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds / 60) % 60;
+  const tail = String(Math.floor(seconds % 60)).padStart(2, '0');
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${tail}` : `${minutes}:${tail}`;
+};
+const barHeights = [.22, .42, .72, .47, .91, .56, .79, 1, .6, .87, .44, .68, .34, .19];
+function Visualizer({ wide = false }: { wide?: boolean }) {
+  const { analyser, playing, activeTrack } = useMusic();
+  const node = activeTrack && (!activeTrack.source || activeTrack.source === "local") ? analyser : null;
+  const theme = useTheme().selectedTheme;
+  const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const surface = canvas.current; if (!surface) return;
+    const surface = canvas.current; if (!surface || !node) return;
     const ctx = surface.getContext('2d'); if (!ctx) return;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const data = new Uint8Array(analyser?.frequencyBinCount ?? 64); let frame = 0, previous = 0;
+    const data = new Uint8Array(node.frequencyBinCount);
+    const ink = getComputedStyle(surface).color;
+    let frame = 0, previous = -Infinity;
     const draw = (now: number) => {
       if (now - previous > 40 || !playing) {
         previous = now; ctx.clearRect(0, 0, 120, 32);
-        if (playing && analyser && !reduced) analyser.getByteFrequencyData(data);
-        for (let i = 0; i < 20; i++) { const h = playing && analyser && !reduced ? Math.max(2, data[i * 2] / 255 * 30) : 2; ctx.fillStyle = '#fff'; ctx.fillRect(i * 6, (32 - h) / 2, 3, h); }
+        if (playing && !reduced) node.getByteFrequencyData(data);
+        ctx.fillStyle = ink;
+        for (let i = 0; i < 20; i++) { const h = playing && !reduced ? Math.max(2, data[i * 2] / 255 * 30) : 2; ctx.fillRect(i * 6, (32 - h) / 2, 3, h); }
       }
       if (playing && !reduced && document.visibilityState !== 'hidden') frame = requestAnimationFrame(draw);
     };
     const start = () => { cancelAnimationFrame(frame); draw(performance.now()); }; start(); document.addEventListener('visibilitychange', start);
     return () => { cancelAnimationFrame(frame); document.removeEventListener('visibilitychange', start); };
-  }, [analyser, playing]);
-  return <canvas ref={canvas} width={120} height={32} className="music-spectrum" aria-hidden="true"/>;
+  }, [node, playing, theme]);
+  const name = `music-spectrum${wide ? " music-spectrum-wide" : ""}`;
+  return node ? <canvas ref={canvas} width={120} height={32} className={name} aria-hidden="true"/>
+    : <span className={`${name} music-wave`} data-playing={playing} aria-hidden="true">
+      {barHeights.map((height, i) => <i key={i} style={{ "--wave-height": height, "--wave-shift": `${-i * .131}s` } as CSSProperties}/>)}
+    </span>;
+}
+function PlaybackProgress() {
+  const m = useMusic();
+  const ready = m.duration > 0 && (!isYouTube(m.activeTrack) || m.youtubeOpen);
+  return <div className="music-progress">
+    <input aria-label="Vị trí phát" aria-valuetext={ready ? `${clock(m.time)} / ${clock(m.duration)}` : undefined}
+      type="range" min={0} max={m.duration || 1} step=".1" disabled={!ready}
+      value={Math.min(m.time, m.duration || 1)} onChange={event => m.seek(Number(event.target.value))}/>
+    <div><span>{clock(m.time)}</span><span>{m.duration > 0 ? clock(m.duration) : "—:—"}</span></div>
+  </div>;
 }
 function Controls() {
   const m = useMusic();
@@ -189,20 +304,32 @@ function PlaybackOptions() {
 }
 export function MusicIsland() {
   const m = useMusic(), [expanded, setExpanded] = useState(false), [hovered, setHovered] = useState(false), root = useRef<HTMLElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null), details = useId();
   const track = m.activeTrack;
   useEffect(() => {
     if (!expanded) return;
-    const close = (event: MouseEvent) => { if (!root.current?.contains(event.target as Node)) setExpanded(false); };
-    document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close);
+    const close = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setExpanded(false); };
+    document.addEventListener('pointerdown', close); return () => document.removeEventListener('pointerdown', close);
   }, [expanded]);
+  useEffect(() => { if (m.hidden || !track) { setExpanded(false); setHovered(false); } }, [m.hidden, track?.id]);
   if (!track || m.hidden) return null;
+  const close = () => { setExpanded(false); toggle.current?.focus(); };
   return <aside ref={root} className={`music-island ${expanded ? 'expanded' : hovered ? 'peek' : ''}`} aria-label="Đang phát nhạc"
     onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     onFocusCapture={() => setHovered(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHovered(false); }}
-    onKeyDown={event => { if (event.key === 'Escape') setExpanded(false); }}>
-    <div className="music-island-summary"><button className="music-island-open" aria-label={`Mở điều khiển ${track.title}`} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}><Visualizer/><ScrollingTitle title={track.title} visible={expanded || hovered}/></button></div>
-    {m.error && !expanded && <small role="alert">{m.error}</small>}
-    {expanded && <div className="music-island-details"><div className="music-island-track"><strong>{track.title}</strong><span>{musicSourceLabel(track.source)}{track.isPlaylist ? ' · Playlist' : ''}</span></div>{track.url && <a className="music-source-link" href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Mở nguồn</a>}<input aria-label="Vị trí phát" type="range" min={0} max={m.duration || 1} step=".1" disabled={!m.duration} value={Math.min(m.time, m.duration || 1)} onChange={event => m.seek(Number(event.target.value))}/><small>{track.source && track.source !== 'local' ? 'Điều khiển theo trình phát nguồn' : `${clock(m.time)} / ${clock(m.duration)}`}</small><Controls/><PlaybackOptions/>{m.error && <p role="alert">{m.error}</p>}<div className="music-island-footer"><button onClick={() => setExpanded(false)}><ChevronDown size={15}/>Thu gọn</button><button onClick={() => m.setHidden(true)}><X size={15}/>Ẩn thanh</button></div></div>}
+    onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); close(); } }}>
+    <div className="music-island-summary"><button ref={toggle} type="button" className="music-island-open" aria-label={`Mở điều khiển ${track.title}`} aria-expanded={expanded} aria-controls={expanded ? details : undefined} onClick={() => setExpanded(value => !value)}><Music2 size={15} aria-hidden="true"/><ScrollingTitle title={track.title} visible={expanded || hovered}/><Visualizer/><ChevronDown size={14} aria-hidden="true"/></button></div>
+    {expanded && <div className="music-island-details" id={details}>
+      <div className="music-island-track"><strong>{track.title}</strong><span>{musicSourceLabel(track.source)}{track.isPlaylist ? ' · Playlist' : ''}</span></div>
+      {(!track.source || track.source === "local" || isYouTube(track)) && <PlaybackProgress/>}
+      <Controls/><PlaybackOptions/>
+      {m.youtubeNote && <small role="status">{m.youtubeNote}</small>}
+      {m.error && <small role="alert">{m.error}</small>}
+      <div className="music-island-footer">
+        {track.url && <a className="music-source-link" href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Mở nguồn</a>}
+        <button type="button" onClick={close}><ChevronDown size={15}/>Thu gọn</button><button type="button" onClick={() => m.setHidden(true)}><X size={15}/>Ẩn thanh</button>
+      </div>
+    </div>}
   </aside>;
 }
 export function MusicPage() {
@@ -232,8 +359,11 @@ export function MusicPage() {
           <div><span className="eyebrow">ĐANG PHÁT</span><strong>{track?.title ?? "Chưa chọn bài"}</strong><small>{track ? `${musicSourceLabel(track.source)}${track.isPlaylist ? " · Danh sách phát" : ""}` : "Chọn bài nhạc từ danh sách phát"}</small></div>
           <label className="music-island-toggle"><input type="checkbox" checked={!m.hidden} onChange={event => m.setHidden(!event.target.checked)}/>Hiện trình phát thu nhỏ</label>
         </div>
-        <div className="music-player-art" aria-hidden="true">{track && !localTrack ? <Radio size={36}/> : <Disc3 size={42}/>}</div>
-        {localTrack && <div className="music-progress"><input aria-label="Vị trí phát" type="range" min={0} max={m.duration || 1} step=".1" disabled={!m.duration} value={Math.min(m.time, m.duration || 1)} onChange={event => m.seek(Number(event.target.value))}/><div><span>{clock(m.time)}</span><span>{clock(m.duration)}</span></div></div>}
+        {isYouTube(track) && m.youtubeOpen ? <div className="music-youtube-slot" ref={m.setYoutubeSlot} aria-hidden="true"><Radio size={27}/><span>Trình phát YouTube</span></div>
+          : <div className="music-player-art" aria-hidden="true">{track && !localTrack ? <Radio size={36}/> : <Disc3 size={42}/>}</div>}
+        {track && <div className="music-page-visual"><Visualizer wide/><small>{localTrack && m.analyser ? "Phổ âm thanh" : "Hiệu ứng phát nhạc"}</small></div>}
+        {(localTrack || isYouTube(track)) && <PlaybackProgress/>}
+        {m.youtubeNote && <small className="field-hint" role="status">{m.youtubeNote}</small>}
         {track?.url && <a className="music-source-link" href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Mở nguồn nhạc</a>}
         <Controls/><PlaybackOptions/>
       </section>

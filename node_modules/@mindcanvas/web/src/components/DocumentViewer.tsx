@@ -9,6 +9,7 @@ import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
 import DocxViewer from "./DocxViewer";
 import HtmlDocumentViewer from "./HtmlDocumentViewer";
 import { textFromDataUrl } from "../lib/htmlDocument";
+import DocumentReaderBar, { type ReaderAction } from "./DocumentReaderBar";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type ViewerReadyDetail = { sessionId: string; documentId?: string; kind: DocumentKind };
@@ -17,7 +18,7 @@ type Stroke = AnnotationStroke;
 type AnnotationMode = AnnotationTool | "eraser";
 type ActiveStroke = Stroke & { page: number };
 
-type Props = { source: Source; owner?: string | null; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
+type Props = { source: Source; owner?: string | null; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; reader?: { actions: ReaderAction[]; caption?: string }; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
 
 function bytesFromDataUrl(dataUrl: string): Uint8Array {
   const raw = dataUrl.split(",", 2)[1] ?? "";
@@ -96,8 +97,8 @@ function OfficeViewer({ source, onReady }: { source: Source; onReady?: () => voi
   return <div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc tài liệu…</p>" }}/>;
 }
 
-export default function DocumentViewer({ source, owner = null, embedded = false, dedicated = false, enableGuide = true, onClose, onReady }: Props) {
-  const { t } = useLanguage();
+export default function DocumentViewer({ source, owner = null, embedded = false, dedicated = false, enableGuide = true, reader, onClose, onReady }: Props) {
+  const { t, language } = useLanguage();
   const kind = kindFor(source);
   const viewerSessionId = useMemo(() => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`, [source.dataUrl, source.id]);
   useEffect(() => {
@@ -126,7 +127,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   const annotationCanvas = useRef<HTMLCanvasElement>(null);
   const pdfBody = useRef<HTMLDivElement>(null);
   const pdfPageShell = useRef<HTMLDivElement>(null);
-  const viewer = useRef<HTMLDivElement>(null);
+  const viewer = useRef<HTMLElement>(null);
   const currentStroke = useRef<ActiveStroke | null>(null);
   const activeEraser = useRef<{ page: number; before: Record<number, Stroke[]>; changed: boolean } | null>(null);
   const strokesRef = useRef<Record<number, Stroke[]>>({});
@@ -166,7 +167,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   }, [kind, pdfBytes, source.id, viewerSessionId]);
 
   useEffect(() => {
-    if (!pdf || kind !== "pdf" || !pageCanvas.current || !annotationCanvas.current) return;
+    if (loading || !pdf || kind !== "pdf" || !pageCanvas.current || !annotationCanvas.current) return;
     let alive = true;
     void pdf.getPage(page).then(async (pdfPage: any) => {
       const viewport = pdfPage.getViewport({ scale: 1.35 });
@@ -181,7 +182,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       if (alive) redraw(page);
     }).catch((cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : "Không thể render trang PDF."); });
     return () => { alive = false; };
-  }, [pdf, page]);
+  }, [pdf, page, loading, kind]);
 
   const drawStroke = (context: CanvasRenderingContext2D, stroke: Stroke) => {
     if (!stroke.points.length) return;
@@ -471,8 +472,71 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   const toggleFullscreen = async () => { if (!viewer.current) return; try { if (document.fullscreenElement === viewer.current) await document.exitFullscreen(); else await viewer.current.requestFullscreen(); } catch { setFullscreen(value => !value); } };
   useEffect(() => { const sync = () => setFullscreen(document.fullscreenElement === viewer.current); document.addEventListener("fullscreenchange", sync); return () => document.removeEventListener("fullscreenchange", sync); }, []);
 
+
+  useEffect(() => {
+    if (!reader || !fullscreen || document.fullscreenElement === viewer.current) return;
+    const exitFallback = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector("dialog[open]")) setFullscreen(false);
+    };
+    window.addEventListener("keydown", exitFallback);
+    return () => window.removeEventListener("keydown", exitFallback);
+  }, [Boolean(reader), fullscreen]);
+
+  const zoomControls = (
+    <div className="document-pdf-zoom-control" role="group" aria-label={language === "vi" ? "Thu phóng PDF" : "PDF zoom"}>
+      <button type="button" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomPdfAtCenter(.8)} disabled={pdfZoom <= .5}><Minus size={14}/></button>
+      <span>{Math.round(pdfZoom * 100)}%</span>
+      <button type="button" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomPdfAtCenter(1.25)} disabled={pdfZoom >= 4}><Plus size={14}/></button>
+    </div>
+  );
+  const annotationControls = (<>
+      <div className="document-annotation-tools" role="toolbar" aria-label={t("pdfAnnotationTools")}>
+        <button type="button" className={annotationMode === "pen" ? "active" : ""} aria-pressed={annotationMode === "pen"} title={t("pdfPen")} onClick={() => chooseAnnotationMode("pen")}><PenLine size={14} /><span>{t("pdfPen")}</span></button>
+        <button type="button" className={annotationMode === "highlight" ? "active" : ""} aria-pressed={annotationMode === "highlight"} title={t("pdfHighlight")} onClick={() => chooseAnnotationMode("highlight")}><Highlighter size={14} /><span>{t("pdfHighlight")}</span></button>
+        <button type="button" className={annotationMode === "eraser" ? "active" : ""} aria-pressed={annotationMode === "eraser"} title={t("pdfEraser")} onClick={() => chooseAnnotationMode("eraser")}><Eraser size={14} /><span>{t("pdfEraser")}</span></button>
+      </div>
+      <input aria-label={t("penColor")} disabled={annotationMode === "eraser"} type="color" value={color} onChange={event => setColor(event.target.value)} />
+      <label className="document-width">
+        {annotationMode === "eraser" ? <Eraser size={13} /> : annotationMode === "highlight" ? <Highlighter size={13} /> : <PenLine size={13} />}
+        <input aria-label={annotationMode === "eraser" ? t("eraserSize") : t("penWidth")} type="range" min={annotationMode === "eraser" ? 8 : 1} max={annotationMode === "eraser" ? 48 : 16} value={annotationMode === "eraser" ? eraserSize : width} onChange={event => annotationMode === "eraser" ? setEraserSize(Number(event.target.value)) : setWidth(Number(event.target.value))} />
+      </label>
+      <button type="button" title={t("undoDrawing")} disabled={historyRevision >= 0 && !historyPast.current.length} onClick={undoStroke}><RotateCcw size={15} /></button>
+      <button type="button" title={t("redoDrawing")} disabled={historyRevision >= 0 && !historyFuture.current.length} onClick={redoStroke}><RotateCw size={15} /></button>
+      <button type="button" title={t("clearDrawing")} disabled={!strokesRef.current[page]?.length} onClick={clearPage}><Eraser size={15} /></button>
+  </>);
+  const exportControl = (
+    <button type="button" className={(reader ? "secondary-button" : "primary-button") + " document-export-pdf"} title={t("exportAnnotatedPdf")} onClick={() => void exportPdf()}>
+      <Download size={15}/>{t("exportPdf")}
+    </button>
+  );
+  const fullscreenLabel = fullscreen ? t("exitFullscreen") : t("maximizeCanvas");
+  const fullscreenControl = (
+    <button type="button" className="document-fullscreen-toggle reader-icon" aria-label={fullscreenLabel} title={fullscreenLabel} onClick={() => void toggleFullscreen()}>
+      {fullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}
+    </button>
+  );
+  const pager = <div className="document-pager">
+    <button type="button" title={t("docxPreviousPage")} aria-label={t("docxPreviousPage")} disabled={page <= 1} onClick={() => setPage(value => value - 1)}><ChevronLeft size={17}/></button>
+    <span aria-live="polite">{reader ? t("docxPageCounter", { current: page, total: pageCount }) : `${page} / ${pageCount} · ${Math.round(pdfZoom * 100)}%`}</span>
+    <button type="button" title={t("docxNextPage")} aria-label={t("docxNextPage")} disabled={page >= pageCount} onClick={() => setPage(value => value + 1)}><ChevronRight size={17}/></button>
+  </div>;
+  const pencilLabel = fullscreen || dedicated ? t("drawOnPdf") : t("pdfDrawFullscreenOnly");
+  const readerActions: ReaderAction[] = [
+    ...(reader?.actions ?? []),
+    ...(kind === "pdf" ? [{ id: "export-pdf", label: t("exportAnnotatedPdf"), icon: Download, run: () => void exportPdf(), disabled: loading || !pdf }]
+      : kind === "html" && !reader?.actions.some(action => action.id === "download") ? [{ id: "download", label: t("downloadOriginal"), icon: Download, href: source.dataUrl, download: source.name }] : []),
+  ];
   return (
-    <section ref={viewer} className={`document-viewer ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`} data-document-id={source.id} data-document-kind={kind} data-viewer-session-id={viewerSessionId} aria-label={`${t("documentViewer")} ${source.name}`}>
+    <section ref={viewer} className={`document-viewer ${reader ? "document-reader" : ""} ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`} data-document-id={source.id} data-document-kind={kind} data-viewer-session-id={viewerSessionId} aria-label={`${t("documentViewer")} ${source.name}`}>
+      {reader ? <DocumentReaderBar title={source.name} kind={kind} caption={reader.caption} actions={readerActions}>
+        {kind === "pdf" && <>{zoomControls}<button type="button" className="reader-icon document-draw-toggle"
+          aria-label={pencilLabel} title={pencilLabel} aria-pressed={drawing && (fullscreen || dedicated)}
+          onClick={() => {
+            if (!fullscreen && !dedicated) { setDrawing(true); void toggleFullscreen(); }
+            else setDrawing(value => !value);
+          }}><PenLine size={17}/></button></>}
+        {fullscreenControl}
+      </DocumentReaderBar> :
       <header className="document-viewer-header">
         <div className="document-viewer-title">
           {kind === "xlsx" ? <FileSpreadsheet size={16} /> : <FileText size={16} />}
@@ -482,11 +546,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
         <div className="document-viewer-actions">
           {kind === "pdf" && (
             <>
-              <div className="document-pdf-zoom-control" role="group" aria-label="PDF zoom">
-                <button type="button" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomPdfAtCenter(.8)} disabled={pdfZoom <= .5}><Minus size={14}/></button>
-                <span>{Math.round(pdfZoom * 100)}%</span>
-                <button type="button" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomPdfAtCenter(1.25)} disabled={pdfZoom >= 4}><Plus size={14}/></button>
-              </div>
+              {zoomControls}
               <label className="document-draw-toggle">
                 <input type="checkbox" checked={drawing} disabled={!fullscreen && !dedicated} onChange={event => setDrawing(event.target.checked)} />
                 <PenLine size={15} />
@@ -494,35 +554,23 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
               </label>
               {drawing && (fullscreen || dedicated) && (
                 <>
-                  <div className="document-annotation-tools" role="toolbar" aria-label={t("pdfAnnotationTools")}>
-                    <button type="button" className={annotationMode === "pen" ? "active" : ""} aria-pressed={annotationMode === "pen"} title={t("pdfPen")} onClick={() => chooseAnnotationMode("pen")}><PenLine size={14} /><span>{t("pdfPen")}</span></button>
-                    <button type="button" className={annotationMode === "highlight" ? "active" : ""} aria-pressed={annotationMode === "highlight"} title={t("pdfHighlight")} onClick={() => chooseAnnotationMode("highlight")}><Highlighter size={14} /><span>{t("pdfHighlight")}</span></button>
-                    <button type="button" className={annotationMode === "eraser" ? "active" : ""} aria-pressed={annotationMode === "eraser"} title={t("pdfEraser")} onClick={() => chooseAnnotationMode("eraser")}><Eraser size={14} /><span>{t("pdfEraser")}</span></button>
-                  </div>
-                  <input aria-label={t("penColor")} disabled={annotationMode === "eraser"} type="color" value={color} onChange={event => setColor(event.target.value)} />
-                  <label className="document-width">
-                    {annotationMode === "eraser" ? <Eraser size={13} /> : annotationMode === "highlight" ? <Highlighter size={13} /> : <PenLine size={13} />}
-                    <input aria-label={annotationMode === "eraser" ? t("eraserSize") : t("penWidth")} type="range" min={annotationMode === "eraser" ? 8 : 1} max={annotationMode === "eraser" ? 48 : 16} value={annotationMode === "eraser" ? eraserSize : width} onChange={event => annotationMode === "eraser" ? setEraserSize(Number(event.target.value)) : setWidth(Number(event.target.value))} />
-                  </label>
-                  <button type="button" title={t("undoDrawing")} disabled={historyRevision >= 0 && !historyPast.current.length} onClick={undoStroke}><RotateCcw size={15} /></button>
-                  <button type="button" title={t("redoDrawing")} disabled={historyRevision >= 0 && !historyFuture.current.length} onClick={redoStroke}><RotateCw size={15} /></button>
-                  <button type="button" title={t("clearDrawing")} disabled={!strokesRef.current[page]?.length} onClick={clearPage}><Eraser size={15} /></button>
+                  {annotationControls}
                 </>
               )}
-              <button className="primary-button document-export-pdf" title={t("exportAnnotatedPdf")} onClick={() => void exportPdf()}>
-                <Download size={15} />
-                {t("exportPdf")}
-              </button>
+              {exportControl}
             </>
           )}
           {kind === "html" && <a className="secondary-button" href={source.dataUrl} download={source.name}><Download size={15}/>Tải HTML</a>}
-          <button className="document-fullscreen-toggle" title={fullscreen ? t("exitFullscreen") : t("maximizeCanvas")} onClick={() => void toggleFullscreen()}>
-            {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-          </button>
+          {fullscreenControl}
           {onClose && <button title={t("close")} onClick={onClose}><X size={16} /></button>}
         </div>
-      </header>
+      </header>}
+      {reader && kind === "pdf" && drawing && (fullscreen || dedicated) && <div className="document-reader-annotation">
+        {annotationControls}
+        {exportControl}
+      </div>}
       {kind === "pdf" ? (
+          <div className={reader ? "document-reader-pdf" : "document-legacy-pdf"}>
           <div ref={pdfBody} className={`document-pdf-body ${spaceHeld ? "pdf-hand-active" : ""}`} onWheel={zoomPdfWheel} onPointerDown={beginPdfPointer} onPointerMove={movePdfPointer} onPointerUp={finishPdfPointer} onPointerCancel={finishPdfPointer} style={{ touchAction: fullscreen ? "none" : "auto" }}>
           {loading && <div className="document-loading">Đang render PDF…</div>}
           {error && <div className="document-error">{error}</div>}
@@ -534,13 +582,11 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
                 <canvas ref={annotationCanvas} className={`pdf-annotation-canvas annotation-${effectiveAnnotationMode} ${annotationActive ? "annotation-active" : "annotation-inactive"}`} style={{ pointerEvents: annotationActive ? "auto" : "none" }} onPointerDown={beginStroke} onPointerMove={moveStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { eraserCursor.current = null; redraw(page); }} />
                 </div>
               </div>
-              <div className="document-pager">
-                <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}><ChevronLeft size={16} /></button>
-                <span>{page} / {pageCount} · {Math.round(pdfZoom * 100)}%</span>
-                <button disabled={page >= pageCount} onClick={() => setPage(value => value + 1)}><ChevronRight size={16} /></button>
-              </div>
+              {!reader && pager}
             </>
           )}
+        </div>
+        {reader && !loading && !error && pageCount > 0 && <footer className="document-reader-footer">{pager}</footer>}
         </div>
       ) : kind === "docx" ? <DocxViewer dataUrl={source.dataUrl} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>
         : kind === "html" ? <StoredHtmlViewer source={source} owner={owner} onReady={() => onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind })}/>

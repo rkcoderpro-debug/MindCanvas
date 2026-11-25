@@ -8,6 +8,8 @@ import { restoreFolderSignIn } from "./lib/folderLinks";
 import { installThemeTooltips } from "./lib/themeTooltips";
 import "./styles.css";
 import "./studioPolish.css";
+import "./musicPolish.css";
+import "./documentReader.css";
 
 restoreOnlineRoomSignIn();
 restoreFolderSignIn();

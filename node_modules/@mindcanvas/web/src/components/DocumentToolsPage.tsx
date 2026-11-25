@@ -1,6 +1,6 @@
 import { PageBack } from "./PageNavigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, FileType2, FolderOpen, HardDrive, Search, Upload, Wrench } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, Download, FileSpreadsheet, FileText, FileType2, FolderOpen, LibraryBig, Search, Share2, Trash2, Upload } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
 import WorkspaceFilePreview from "./WorkspaceFilePreview";
 import Dialog from "./Dialog";
@@ -13,7 +13,8 @@ import { listMyLearningCopySources, type LearningCopySource } from "../lib/learn
 import type { AccountPlan } from "../lib/account";
 import { emitGuideAction } from "../lib/featureGuides";
 import { buildDocxPackage } from "../lib/docxModel";
-import { LearningShareButton } from "./LearningShareDialog";
+import { LearningShareDialog } from "./LearningShareDialog";
+import type { ReaderAction } from "./DocumentReaderBar";
 import { useLanguage } from "../lib/i18n";
 import { FOLDER_ROOT } from "../lib/folderLinks";
 import type { useWorkspaceFiles } from "../hooks/useWorkspaceFiles";
@@ -36,17 +37,17 @@ export async function buildDocx(html: string) {
   return buildDocxPackage(html);
 }
 
-const filterTabs: Array<{ id: ToolTab; label: string; icon: typeof FileText }> = [
-  { id: "all", label: "Tất cả", icon: FileText },
-  { id: "html", label: "HTML", icon: FileText },
-  { id: "pdf", label: "PDF", icon: FileText },
-  { id: "docx", label: "DOCX", icon: FileType2 },
-  { id: "pptx", label: "PPTX", icon: FileSpreadsheet },
-  { id: "xlsx", label: "XLSX", icon: FileSpreadsheet },
+const filterTabs: Array<{ id: ToolTab; label: string }> = [
+  { id: "all", label: "Tất cả" },
+  { id: "html", label: "HTML" },
+  { id: "pdf", label: "PDF" },
+  { id: "docx", label: "DOCX" },
+  { id: "pptx", label: "PPTX" },
+  { id: "xlsx", label: "XLSX" },
 ];
 
 function documentIcon(kind: DocumentKind | null) {
-  return kind === "pdf" ? FileText : kind === "docx" ? FileType2 : FileSpreadsheet;
+  return kind === "xlsx" ? FileSpreadsheet : kind === "docx" ? FileType2 : FileText;
 }
 
 function folderLabel(folders: ProjectFolder[], id: string) {
@@ -81,11 +82,15 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   const [syncingSelected, setSyncingSelected] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [libraryCollapsed, setLibraryCollapsed] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [copyTarget, setCopyTarget] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement>(null), root = useRef<HTMLElement>(null);
+  const returnTo = useRef<{ id?: string; scrollTop: number } | null>(null);
+  const rememberBrowse = (id?: string) => {
+    returnTo.current = { id, scrollTop: root.current?.closest(".main-area")?.scrollTop ?? 0 };
+  };
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const scope = workspace?.scope === undefined ? localScope : workspace.scope;
   const folders = workspace?.folders ?? [];
@@ -113,15 +118,15 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }, [cloudFiles, documents, normalizedQuery, owner, savedSources, tab]);
 
-  const clearPreview = () => { setWorkspaceSelection(null); setSelected(null); setLibraryCollapsed(false); setCopyTarget(null); };
+  const clearPreview = () => { setWorkspaceSelection(null); setSelected(null); setSharing(false); setCopyTarget(null); };
   const showDocument = (file: UploadedDocument) => {
-    const show = () => { setWorkspaceSelection(null); setSelected(file); setLibraryCollapsed(file.kind === "html"); };
+    const show = () => { setWorkspaceSelection(null); setSelected(file); };
     if (navigation) navigation.open("document-viewer", show, clearPreview);
     else show();
   };
   const showWorkspaceFile = (file: WorkspaceFile) => {
     setError(""); setNotice("");
-    const show = () => { setSelected(null); setWorkspaceSelection(file.id); setLibraryCollapsed(documentKindFor(file.name) === "html"); };
+    const show = () => { setSelected(null); setWorkspaceSelection(file.id); };
     if (navigation) navigation.open("document-viewer", show, clearPreview);
     else show();
   };
@@ -130,7 +135,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     if (fromWorkspace) emitGuideAction("documents:back");
   };
   const changeScope = (value: string | null) => {
-    closeDocument(); setTab("all"); setQuery(""); setError(""); setNotice("");
+    setTab("all"); setQuery(""); setError(""); setNotice("");
     if (workspace?.onScope) workspace.onScope(value); else setLocalScope(value);
   };
   const openDocument = async (file: UploadedDocument) => {
@@ -161,6 +166,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
 
   const upload = async (file?: File) => {
     if (!file || uploading) return;
+    rememberBrowse();
     if (scope && workspace) {
       if (!scopeExists) return;
       if (file.size > MAX_DOCUMENT_BYTES) { setError(label("Tài liệu vượt quá 40 MB.", "File exceeds 40 MB.")); return; }
@@ -207,8 +213,23 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     ...folderItems.map(file => ({ source: "workspace" as const, file, kind: documentKindFor(file.name), date: file.createdAt })),
     ...legacyItems.map(file => ({ source: "library" as const, file, kind: file.kind, date: file.updatedAt })),
   ].sort((a, b) => b.date.localeCompare(a.date));
-  const chosenId = selectedFile?.id ?? selected?.id;
   const hasPreview = !!(selected || selectedFile);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element || element.closest("[hidden]")) return;
+    const area = element.closest<HTMLElement>(".main-area");
+    if (hasPreview) {
+      if (area) area.scrollTop = 0;
+      element.querySelector<HTMLElement>(".document-reader-title h2")?.focus({ preventScroll: true });
+    } else if (returnTo.current) {
+      const previous = returnTo.current;
+      returnTo.current = null;
+      if (area) area.scrollTop = previous.scrollTop;
+      const row = [...element.querySelectorAll<HTMLButtonElement>(".document-library-list button")]
+        .find(button => button.dataset.documentId === previous.id);
+      (row ?? element.querySelector<HTMLButtonElement>(".document-tools-upload"))?.focus({ preventScroll: true });
+    }
+  }, [hasPreview]);
   const noteOpen = (id: string, kind: DocumentKind | null) => {
     emitGuideAction("tools:document-open", { documentId: id, kind });
     if (fromWorkspace) emitGuideAction(kind === "pdf" ? "documents:open:pdf" : "documents:open", { documentId: id, kind });
@@ -231,73 +252,106 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     } catch { setCopyError(true); }
     finally { setCopying(false); }
   };
-  const libraryTitle = tab === "all" ? "Tài liệu trong thư viện" : `${tab.toUpperCase()} trong thư viện`;
+  const selectedIsCloud = selected && cloudFiles.some(row => row.id === selected.id);
+  const readerActions: ReaderAction[] = selected ? [
+    { id: "download", label: label("Tải tệp gốc", "Download original"), icon: Download, href: selected.dataUrl, download: selected.name },
+    ...(owner ? [selectedIsCloud
+      ? { id: "share", label: label("Chia sẻ", "Share"), icon: Share2, run: () => setSharing(true) }
+      : { id: "sync", label: label("Lưu lên cloud để chia sẻ", "Save to cloud to share"), icon: Upload, disabled: syncingSelected, run: () => void publishSelected() }] : []),
+    ...(workspace ? [{ id: "copy", label: label("Lưu bản sao vào thư mục", "Save a copy to folder"), icon: FolderOpen, run: () => { setCopyError(false); setCopyTarget(""); } }] : []),
+    ...(fromWorkspace ? [{ id: "remove", label: label("Xóa bản trên thiết bị", "Remove local copy"), icon: Trash2, danger: true, run: () => void removeLocal(selected) }] : []),
+  ] : [];
+  const where = selected?.savedFrom ? label("Bản sao từ ", "Copied from ") + selected.savedFrom.ownerName
+    : selectedIsCloud ? "Cloud" : label("Trên thiết bị", "On this device");
+  const noMatches = normalizedQuery || tab !== "all" || scope;
+  const formattedDate = useMemo(() => new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", { day: "numeric", month: "short", year: "numeric" }), [language]);
+  const uploadLabel = uploading ? label("Đang tải…", "Uploading…")
+    : scope ? label("Tải vào thư mục này", "Upload to this folder") : label("Tải tài liệu", "Upload document");
 
-  return <section className={`document-tools-page document-tools-shell ${libraryCollapsed ? "library-collapsed" : ""} ${(selected?.kind ?? documentKindFor(selectedFile?.name ?? "")) === "html" ? "html-reading" : ""}`} data-library-collapsed={libraryCollapsed ? "true" : "false"}>
-    <header className="document-tools-header">
-      <div className="document-tools-header-leading">
-        {hasPreview ? <PageBack className="document-tools-back" onBack={closeDocument}>{label("Thư viện tài liệu", "Document library")}</PageBack> : onBack && <PageBack className="document-tools-back" onBack={onBack}>{fromWorkspace ? t("manageFolders") : t("learningHub")}</PageBack>}
-        <span className="document-tools-header-divider" aria-hidden="true"/>
-        <div className="document-tools-heading-inline"><span className="document-tools-heading-icon"><Wrench size={17}/></span><div><strong>{language === "en" ? t("documentViewer") : "Thư viện tài liệu"}</strong><small><HardDrive size={12}/> Thiết bị{owner ? " và cloud" : ""}</small></div></div>
+  return <section ref={root} className={"document-tools-page " + (hasPreview ? "document-reading-view" : "document-browse-view")}>
+    {hasPreview ? <>
+      <PageBack className="reader-back" onBack={closeDocument}>{label("Danh sách tài liệu", "Document list")}</PageBack>
+      <div className="document-reader-notices">
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {notice && <p className="lab-notice" role="status">{notice}</p>}
       </div>
-      <div className="document-tools-header-actions">
-        <div className="document-tools-tabs" role="tablist" aria-label="Loại tài liệu">
-          {filterTabs.map(({ id, label, icon: Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} data-tool-tab={id} onClick={() => { if (hasPreview && id !== "all" && id !== (selected?.kind ?? documentKindFor(selectedFile?.name ?? ""))) closeDocument(); setLibraryCollapsed(false); setTab(id); emitGuideAction(`tools:filter:${id}`); }}><Icon size={16}/><span>{label}</span></button>)}
+      <div className="document-tool-workspace">
+        {selectedFile && workspace
+          ? <WorkspaceFilePreview key={selectedFile.id} owner={owner} file={selectedFile} onFolder={() => workspace.openFolder(fromFolder(selectedFile))}
+              dedicated={!fromWorkspace} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>
+          : selected && <DocumentViewer key={selected.id} owner={owner} source={selected} dedicated={!fromWorkspace && selected.kind === "pdf"}
+              reader={{ actions: readerActions, caption: where }} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>}
+      </div>
+      {sharing && selected && <LearningShareDialog kind="document" id={selected.id} title={selected.name} plan={accountPlan} available onClose={() => setSharing(false)}/>}
+    </> : <>
+      {onBack && <PageBack className="reader-back" onBack={onBack}>{fromWorkspace ? t("manageFolders") : t("learningHub")}</PageBack>}
+      <div className="document-browse-surface">
+        <header className="document-browse-header">
+          <div className="document-tools-heading-inline"><span className="document-browse-symbol"><LibraryBig size={23} aria-hidden="true"/></span>
+            <div><h2>{label("Thư viện tài liệu", "Document library")}</h2><small>{label("Tìm và mở tài liệu để đọc.", "Find and open a document to read.")}</small></div>
+          </div>
+          <input ref={input} hidden type="file" accept={scope ? undefined : DOCUMENT_ACCEPT} onChange={event => { void upload(event.target.files?.[0]); event.currentTarget.value = ""; }}/>
+          <button className="primary-button document-tools-upload" data-help-id="tools-upload" disabled={uploading || (!!scope && !scopeExists)}
+            onClick={() => input.current?.click()}><Upload size={16}/>{uploadLabel}</button>
+        </header>
+        <div className="document-browse-filters">
+          <div className="document-search-area"><label className="search-field tool-document-search"><Search size={17} aria-hidden="true"/>
+            <input value={query} onChange={event => setQuery(event.target.value)} placeholder={label("Tìm theo tên tài liệu…", "Search by title…")} aria-label={label("Tìm tài liệu trong thư viện", "Search the document library")}/>
+          </label>
+          {workspace && <div className="document-browse-scope">
+            <select id="document-library-scope" aria-label={label("Vị trí", "Location")} value={scope ?? ""} disabled={uploading} onChange={event => changeScope(event.currentTarget.value || null)}>
+              <option value="">{label("Tất cả vị trí", "All locations")}</option>
+              <option value={FOLDER_ROOT}>{label("Workspace · Ngoài thư mục", "Workspace · No folder")}</option>
+              {scope && !scopeExists && <option value={scope}>{label("Không mở được thư mục", "Folder unavailable")}</option>}
+              {folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}
+            </select>
+            <button type="button" className="secondary-button" title={scope && scopeExists ? label("Mở thư mục", "Open folder") : t("manageFolders")}
+              onClick={() => workspace.openFolder(scope && scope !== FOLDER_ROOT && scopeExists ? scope : null)}>
+              <FolderOpen size={16}/><span>{scope && scopeExists ? label("Mở thư mục", "Open folder") : t("manageFolders")}</span>
+            </button>
+          </div>}
+          </div>
+          <div className="document-browse-filters-end">
+            <div className="document-tools-tabs" role="group" aria-label={label("Loại tài liệu", "Document type")}>
+              {filterTabs.map(({ id, label: name }) => <button key={id} type="button" aria-pressed={tab === id} className={tab === id ? "active" : ""} data-tool-tab={id}
+                onClick={() => { setTab(id); emitGuideAction("tools:filter:" + id); }}>{id === "all" ? label("Tất cả", "All") : name}</button>)}
+            </div>
+            <small className="document-browse-count">{listing.length} {label("tài liệu", listing.length === 1 ? "document" : "documents")}</small>
+          </div>
         </div>
-        <input ref={input} hidden type="file" accept={scope ? undefined : DOCUMENT_ACCEPT} onChange={event => { void upload(event.target.files?.[0]); event.currentTarget.value = ""; }}/>
-        <button className="primary-button document-tools-upload" data-help-id="tools-upload" disabled={uploading || (!!scope && !scopeExists)} onClick={() => input.current?.click()}><Upload size={16}/><span>{uploading ? label("Đang tải…", "Uploading…") : scope ? label("Tải vào thư mục này", "Upload to this folder") : label("Tải tài liệu", "Upload document")}</span></button>
-      </div>
-    </header>
-    <div className="document-library-meta">
-    {workspace && <div className="document-library-folder-control">
-      <label htmlFor="document-library-scope">{label("Vị trí", "Location")}</label>
-      <select id="document-library-scope" value={scope ?? ""} disabled={uploading} onChange={event => changeScope(event.currentTarget.value || null)}>
-        <option value="">{label("Tất cả tài liệu", "All documents")}</option>
-        <option value={FOLDER_ROOT}>{label("Workspace · Ngoài thư mục", "Workspace · No folder")}</option>
-        {scope && !scopeExists && <option value={scope}>{label("Không mở được thư mục", "Folder unavailable")}</option>}
-        {folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}
-      </select>
-      <button type="button" className="secondary-button" onClick={() => workspace.openFolder(scope && scope !== FOLDER_ROOT && scopeExists ? scope : null)}><FolderOpen size={16}/>{scope && scopeExists ? label("Mở thư mục", "Open folder") : t("manageFolders")}</button>
-    </div>}
-    {error && <p className="form-error document-tools-error" role="alert">{error}</p>}{notice && <p className="lab-notice document-tools-error" role="status">{notice}</p>}
-    {workspace?.repository.error != null && <div className="document-tools-error" role="alert">{label("Chưa tải được tài liệu Workspace.", "Could not load Workspace files.")} <button type="button" className="secondary-button" onClick={workspace.repository.refresh}>{t("retry")}</button></div>}
-    </div>
-    <div className="document-tool-layout document-tools-body">
-      <aside className={`document-tool-list document-library ${libraryCollapsed ? "is-collapsed" : ""}`} aria-label="Thư viện tài liệu">
-        <div className="document-library-heading"><div><span className="document-library-kicker">THƯ VIỆN</span><h2>{libraryTitle}</h2>{!libraryCollapsed && <small>{listing.length} {label("tài liệu", "documents")}</small>}</div><button className="icon-button document-library-toggle" type="button" onClick={() => setLibraryCollapsed(value => !value)} aria-label={libraryCollapsed ? "Mở thư viện tài liệu" : "Thu gọn thư viện tài liệu"} title={libraryCollapsed ? "Mở thư viện" : "Thu gọn thư viện"}>{libraryCollapsed ? <ChevronRight size={17}/> : <ChevronLeft size={17}/>}</button></div>
-        {!libraryCollapsed && <>
-          <label className="document-search tool-document-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm trong thư viện…" aria-label="Tìm tài liệu trong thư viện"/></label>
+        <div className="document-reader-notices">
+          {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="lab-notice" role="status">{notice}</p>}
+          {workspace?.repository.error != null && <div className="form-error" role="alert">{label("Chưa tải được tài liệu Workspace.", "Could not load Workspace files.")} <button type="button" className="secondary-button" onClick={workspace.repository.refresh}>{t("retry")}</button></div>}
+        </div>
+        <div className="document-tool-list document-browse-files" aria-label={label("Tài liệu trong thư viện", "Library documents")}>
           <div className="document-library-list">
             {listing.map(entry => {
               const { file, kind } = entry, Icon = documentIcon(kind);
-              const where = entry.source === "workspace" ? folderLabel(folders, entry.file.folderId ?? "") || "Workspace"
-                : entry.file.savedFrom ? `${label("Từ", "From")} ${entry.file.savedFrom.ownerName}` : cloudFiles.some(row => row.id === file.id) ? "Cloud" : label("Thiết bị", "Device");
-              return <button key={`${entry.source}:${file.id}`} data-document-id={file.id} data-document-kind={kind ?? "file"} className={chosenId === file.id ? "active" : ""} title={file.name} disabled={uploading} onClick={() => {
-                if (entry.source === "workspace") showWorkspaceFile(entry.file); else void openDocument(entry.file);
-                noteOpen(file.id, kind);
-              }}><span className="document-library-file-icon"><Icon size={16}/></span><span className="document-library-file-copy"><strong>{file.name}</strong><small>{kind?.toUpperCase() ?? label("Tệp", "File")} · {where}</small></span></button>;
+              const location = entry.source === "workspace" ? folderLabel(folders, entry.file.folderId ?? "") || "Workspace"
+                : entry.file.savedFrom ? label("Từ ", "From ") + entry.file.savedFrom.ownerName : cloudFiles.some(row => row.id === file.id) ? "Cloud" : label("Thiết bị", "Device");
+              const date = new Date(entry.date);
+              return <button key={entry.source + ":" + file.id} type="button" data-document-id={file.id} data-document-kind={kind ?? "file"} title={file.name}
+                disabled={uploading} onClick={() => {
+                  rememberBrowse(file.id);
+                  if (entry.source === "workspace") showWorkspaceFile(entry.file); else void openDocument(entry.file);
+                  noteOpen(file.id, kind);
+                }}>
+                <span className="document-library-file-icon"><Icon size={18} aria-hidden="true"/></span>
+                <span className="document-browse-file-name"><strong>{file.name}</strong><small>{location}</small></span>
+                {!Number.isNaN(date.getTime()) && <time dateTime={entry.date}>{formattedDate.format(date)}</time>}
+                <span className="document-browse-type">{kind?.toUpperCase() ?? label("Tệp", "File")}</span>
+                <ChevronRight size={15} aria-hidden="true"/>
+              </button>;
             })}
-            {workspace?.repository.loading && <p role="status" className="field-hint document-library-empty">{t("loading")}</p>}
-            {!listing.length && !workspace?.repository.loading && <p className="field-hint document-library-empty">{label("Chưa có tài liệu phù hợp.", "No matching documents.")}</p>}
           </div>
-        </>}
-        {libraryCollapsed && <span className="document-library-collapsed-label" aria-hidden="true">{tab.toUpperCase()}</span>}
-      </aside>
-      <main className="document-tool-workspace">{hasPreview && fromWorkspace && <button type="button" className="secondary-button manager-back-button" onClick={closeDocument}>{label("← Danh sách tài liệu", "← Back to documents")}</button>}
-        {selectedFile && workspace ? <WorkspaceFilePreview key={selectedFile.id} owner={owner} file={selectedFile} onFolder={() => workspace.openFolder(fromFolder(selectedFile))} onClose={closeDocument} dedicated={!fromWorkspace} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>
-        : selected ? <>
-          {(selected.savedFrom || owner || fromWorkspace || workspace) && <div className="document-selected-actions">
-            {selected.savedFrom && <small className="learning-copy-provenance">Đã lưu từ {selected.savedFrom.ownerName} · {selected.savedFrom.title}</small>}
-            <div className="actions">
-              {workspace && <button type="button" className="secondary-button" onClick={() => { setCopyError(false); setCopyTarget(""); }}><FolderOpen size={15}/>{label("Lưu bản sao vào thư mục", "Save a copy to folder")}</button>}
-              {owner && (cloudFiles.some(row => row.id === selected.id) ? <LearningShareButton kind="document" id={selected.id} title={selected.name} plan={accountPlan} available/> : <button className="secondary-button" disabled={syncingSelected} onClick={() => void publishSelected()}><Upload size={15}/>{syncingSelected ? "Đang tải lên…" : "Lưu lên cloud để chia sẻ"}</button>)}
-              {fromWorkspace && <><a className="secondary-button" href={selected.dataUrl} download={selected.name}>{label("Tải xuống", "Download")}</a><button type="button" className="text-danger-button" onClick={() => void removeLocal(selected)}>{label("Xóa bản trên thiết bị", "Remove local copy")}</button></>}
-            </div>
+          {workspace?.repository.loading && <p role="status" className="field-hint document-library-empty">{t("loading")}</p>}
+          {!listing.length && !workspace?.repository.loading && <div className="document-browse-empty">
+            <FileText size={30} aria-hidden="true"/><h3>{noMatches ? label("Không có tài liệu phù hợp", "No matching documents") : label("Thư viện chưa có tài liệu", "No documents yet")}</h3>
+            <p>{noMatches ? label("Thử đổi bộ lọc hoặc nhập tên khác.", "Try a different filter or search term.") : label("Tải một tệp lên để bắt đầu đọc.", "Upload a file to start reading.")}</p>
           </div>}
-          <DocumentViewer key={selected.id} owner={owner} source={selected} dedicated={!fromWorkspace && selected.kind === "pdf"} onClose={closeDocument} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>
-        </>
-        : <div className="tool-empty-state"><FileText size={38}/><h2>{label("Chọn tài liệu để xem", "Choose a document to view")}</h2><p>{label("Xem HTML, PDF, DOCX, PPTX, XLSX và một số tệp mã nguồn. Chọn vị trí để mở hoặc tải tệp vào một thư mục Workspace.", "Preview HTML, PDF, DOCX, PPTX, XLSX and some source files. Choose a location to browse or upload to a Workspace folder.")}</p></div>}</main>
-    </div>
+        </div>
+      </div>
+    </>}
     {copyTarget !== null && selected && <Dialog title={label("Lưu bản sao vào thư mục", "Save a copy to folder")} dismissible={!copying} onClose={() => setCopyTarget(null)}>
       <p>{selected.name}</p>
       <label>{label("Thư mục đích", "Destination folder")}<select value={copyTarget} disabled={copying} onChange={event => setCopyTarget(event.currentTarget.value)}>

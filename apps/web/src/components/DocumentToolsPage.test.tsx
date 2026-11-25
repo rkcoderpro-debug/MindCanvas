@@ -5,8 +5,15 @@ import { createRoot } from "react-dom/client";
 import JSZip from "jszip";
 import DocumentToolsPage, { buildDocx, type LibraryWorkspace } from "./DocumentToolsPage";
 import { shouldHandleAnnotationMove, shouldRequestPdfGuide } from "./DocumentViewer";
+import { PageChromeProvider, ShellBack } from "./PageNavigation";
 import { LanguageProvider } from "../lib/i18n";
 import * as files from "../lib/workspaceFiles";
+
+const pdf = vi.hoisted(() => ({ getPage: vi.fn() }));
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  GlobalWorkerOptions: {},
+  getDocument: () => ({ promise: Promise.resolve({ numPages: 3, getPage: pdf.getPage }) }),
+}));
 
 describe("DOCX editor export", () => {
   it("writes a readable OOXML package instead of renaming HTML", async () => {
@@ -47,9 +54,9 @@ describe("Document Tools localization", () => {
     document.body.append(host);
     const root = createRoot(host);
     await act(async () => root.render(<LanguageProvider><DocumentToolsPage owner={null} documents={[]} onDocumentsChanged={() => {}}/></LanguageProvider>));
-    expect(host.querySelector(".document-tools-heading-inline strong")?.textContent).toBe("Document viewer");
+    expect(host.querySelector(".document-browse-header h2")?.textContent).toBe("Document library");
     expect(host.querySelector(".document-tools-upload")?.textContent).toBe("Upload document");
-    expect(host.querySelector(".tool-empty-state h2")?.textContent).toBe("Choose a document to view");
+    expect(host.querySelector(".document-browse-empty h3")?.textContent).toBe("No documents yet");
     await act(async () => root.unmount());
     host.remove();
     localStorage.removeItem("mindcanvas:language");
@@ -63,12 +70,64 @@ it("opens HTML in a focused sandbox and restores the library when changing forma
     { id: "html-1", owner: "guest", name: "Lesson.html", kind: "html" as const, mimeType: "text/html", dataUrl: "data:text/html;charset=utf-8," + encodeURIComponent("<main><h1>Interactive lesson</h1><button>Try</button></main>"), folderId: null, size: 100, updatedAt: new Date().toISOString() },
     { id: "docx-1", owner: "guest", name: "Lesson.docx", kind: "docx" as const, mimeType: "application/octet-stream", dataUrl: "", folderId: null, size: 100, updatedAt: new Date().toISOString() },
   ];
-  await act(async () => root.render(<LanguageProvider><DocumentToolsPage owner={null} documents={documents} onDocumentsChanged={() => {}}/></LanguageProvider>));
-  await act(async () => host.querySelector<HTMLButtonElement>('[data-document-id="html-1"]')!.click());
-  expect(host.querySelector(".html-reading")).not.toBeNull(); expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts"); expect(host.querySelector('a[download="Lesson.html"]')).not.toBeNull();
-  await act(async () => host.querySelector<HTMLButtonElement>('[data-tool-tab="docx"]')!.click());
-  expect(host.querySelector(".html-reading")).toBeNull(); expect(host.querySelector(".library-collapsed")).toBeNull(); expect(host.querySelector('[data-document-id="docx-1"]')).not.toBeNull();
+  const button = (selector: string) => host.querySelector<HTMLButtonElement>(selector)!;
+  await act(async () => root.render(<LanguageProvider><PageChromeProvider openQuickActions={() => {}}><ShellBack/><DocumentToolsPage owner={null} documents={documents} onDocumentsChanged={() => {}}/></PageChromeProvider></LanguageProvider>));
+  await act(async () => button('[data-tool-tab="html"]').click());
+  await act(async () => button('[data-document-id="html-1"]').click());
+  expect(host.querySelector(".document-reading-view")).not.toBeNull();
+  expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
+  expect(host.querySelector(".document-tools-tabs, .document-library-list, .reader-back")).toBeNull();
+  expect(host.querySelector('.shell-back')?.textContent).toBe("Danh sách tài liệu");
+  expect(host.querySelector('a[download="Lesson.html"]')).toBeNull();
+  await act(async () => button(".reader-more-toggle").click());
+  expect(host.querySelector('a[download="Lesson.html"]')).not.toBeNull();
+  await act(async () => button(".reader-more-toggle").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(host.querySelector('a[download="Lesson.html"]')).toBeNull();
+  await act(async () => button(".shell-back").click());
+  expect(host.querySelector('[data-tool-tab="html"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.activeElement).toBe(button('[data-document-id="html-1"]'));
+  await act(async () => button('[data-tool-tab="docx"]').click());
+  expect(host.querySelector("iframe")).toBeNull();
+  expect(host.querySelector('[data-document-id="docx-1"]')).not.toBeNull();
   await act(async () => root.unmount()); host.remove();
+});
+
+it("keeps PDF paging visible while file actions and annotation controls are collapsed", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+  const context = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    clearRect: vi.fn(), save: vi.fn(), scale: vi.fn(), restore: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  pdf.getPage.mockResolvedValue({
+    getViewport: () => ({ width: 480, height: 600 }),
+    view: [0, 0, 480, 600],
+    render: () => ({ promise: Promise.resolve() }),
+  });
+  try {
+    const document = { id: "pdf-1", owner: "guest", name: "Notes.pdf", mimeType: "application/pdf", kind: "pdf" as const, dataUrl: "data:application/pdf;base64,AA==", folderId: null, size: 1, updatedAt: new Date().toISOString() };
+    const button = (selector: string) => host.querySelector<HTMLButtonElement>(selector)!;
+    const pageLabel = () => host.querySelector(".document-reader-footer [aria-live]")?.textContent;
+    await act(async () => root.render(<LanguageProvider><DocumentToolsPage owner={null} documents={[document]} onDocumentsChanged={() => {}}/></LanguageProvider>));
+    await act(async () => button('[data-document-id="pdf-1"]').click());
+    for (let tries = 0; tries < 15 && !pageLabel(); tries++)
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
+    expect(pageLabel()).toBe("Trang 1 / 3");
+    expect(host.querySelector(".document-reader .document-reader-bar .document-pdf-zoom-control")).not.toBeNull();
+    expect(host.querySelector(".document-pdf-body .document-pager, .document-reader-annotation, .reader-more-panel")).toBeNull();
+    await act(async () => button(".document-reader-footer button:last-child").click());
+    expect(pageLabel()).toBe("Trang 2 / 3");
+    expect(pdf.getPage).toHaveBeenLastCalledWith(2);
+    await act(async () => button(".document-draw-toggle").click());
+    expect(host.querySelector(".document-reader-annotation .document-export-pdf")).not.toBeNull();
+    await act(async () => button(".document-draw-toggle").click());
+    expect(host.querySelector(".document-reader-annotation")).toBeNull();
+    await act(async () => button(".reader-more-toggle").click());
+    expect(host.querySelector(".reader-more-panel")?.textContent).toContain("Xuất PDF có chú thích");
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    context.mockRestore();
+  }
 });
 
 it("opens an existing folder file in the sandbox, keeps the original ID, and lets users navigate to its folder", async () => {
@@ -94,6 +153,7 @@ it("opens an existing folder file in the sandbox, keeps the original ID, and let
     expect(read).not.toHaveBeenCalled();
     expect(host.querySelector(".workspace-file-preview button.primary-button")).not.toBeNull();
 
+    await act(async () => host.querySelector<HTMLButtonElement>(".reader-back")!.click());
     const location = host.querySelector<HTMLSelectElement>("#document-library-scope")!;
     await act(async () => { location.value = folder.id; location.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(host.querySelector(`[data-document-id="${trace.id}"]`)).toBeNull();
@@ -105,9 +165,12 @@ it("opens an existing folder file in the sandbox, keeps the original ID, and let
     });
     expect(read).toHaveBeenCalledWith(null, html.id);
     expect(upload).not.toHaveBeenCalled();
-    await act(async () => host.querySelector<HTMLButtonElement>(".workspace-file-preview .actions button")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".reader-more-toggle")!.click());
+    const openFolderAction = [...host.querySelectorAll<HTMLButtonElement>(".reader-more-panel button")].find(button => button.textContent === "Mở thư mục");
+    await act(async () => openFolderAction!.click());
     expect(openFolder).toHaveBeenCalledWith(folder.id);
 
+    await act(async () => host.querySelector<HTMLButtonElement>(".reader-back")!.click());
     const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
     const zip = new File(["data"], "Homework.zip");
     expect(input.hasAttribute("accept")).toBe(false);

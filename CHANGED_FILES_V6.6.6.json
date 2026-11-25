@@ -1,0 +1,219 @@
+{
+  "version": "6.6.6",
+  "baseVersion": "6.6.0",
+  "alsoAppliesOver": [
+    "6.6.1",
+    "6.6.2",
+    "6.6.3",
+    "6.6.4",
+    "6.6.5"
+  ],
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.6.6.md",
+      "bytes": 1018,
+      "sha256": "e6aee5ed05cd33de8adc06862ca726c731add77800ce51f516942f39dd22125b"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "741560af10c900f7d95385bfd099e83513d5110ae067079cf9d64b023d8df1f5"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "944104f0f777db6505edf2ebeb64ef5680839f8efd0ea04c4688ab1165c100e7"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 48665,
+      "sha256": "03abea261e2d30a5184a7e0f6a023dddb39be547f6562b65d25a24c126719988"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 69863,
+      "sha256": "f2c7f0745463ba6f67a334410cdcdde5d0135ded0ecbad20ff6be03f0b5699ef"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.tsx",
+      "bytes": 12261,
+      "sha256": "496fe82d9766e6e403b76283ff1ff639efe691ecfbce9d048b1a5f3b5a74107c"
+    },
+    {
+      "path": "apps/web/src/components/DocumentReaderBar.tsx",
+      "bytes": 2968,
+      "sha256": "761b836bb4c6ec49eafe263d84290635de54363964986ebcc47f33c585e52ec7"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.test.tsx",
+      "bytes": 12441,
+      "sha256": "6b1c944abe521720b4ae19967f4515646dcdcb76f1bf6d63a141b651bb217e6c"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 25102,
+      "sha256": "b0859abd67540eaa7a835fb8ed2323dd051bc1b197abd54c0d2ed9a41cd61dbc"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "bytes": 39116,
+      "sha256": "59a87947cbb15bef76be1cf32f3f2c6dc299b59729c61f4e96c0c42ca0264472"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "bytes": 27566,
+      "sha256": "24bded8f6140f1c3b16d6bcecf6920d1c3a9da46549fc428b4295d9822e25acd"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "bytes": 31785,
+      "sha256": "9a9f36514c0868d73c7a2040df59da3839554a5487c1985e9364a08e3c125155"
+    },
+    {
+      "path": "apps/web/src/components/ExamModeSwitch.tsx",
+      "bytes": 1391,
+      "sha256": "ad122c4ef674f031472f8d6e015be6c31e34f49d99e7be851c4702ed4b21c57e"
+    },
+    {
+      "path": "apps/web/src/components/FolderProjectList.tsx",
+      "bytes": 6321,
+      "sha256": "4158200dcf4cb999341d3aa66db8c4fc7c62c6eff303b22b2438d065c744d694"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32031,
+      "sha256": "02319f903cc8c8914468f6aa798de2603b9507243facc146427c751697f65b2e"
+    },
+    {
+      "path": "apps/web/src/components/LearningShareDialog.tsx",
+      "bytes": 6328,
+      "sha256": "bb3273e6f33fc3bb05d6c6cf206fa0c6533b2cd6cebcb33f1b016de1e80be336"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.test.tsx",
+      "bytes": 7371,
+      "sha256": "cf985aba4f4afad68a3d321fe559dc82fe4779e6e04e083eb49ad56126fb89c5"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.tsx",
+      "bytes": 30163,
+      "sha256": "75f46cb02a4045ee0425cd323f9a0e12e1e895b1a672c35038a364e26d3c452d"
+    },
+    {
+      "path": "apps/web/src/components/MusicYouTubeSurface.tsx",
+      "bytes": 4961,
+      "sha256": "b7bebc28ed4ab687123674c2c88dbf521ba3096d2f958b1007755336eef100db"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.tsx",
+      "bytes": 6866,
+      "sha256": "4679cc4750234c61e4cae9ed32991c3c028dca5199092f6fb7779a1cf8481097"
+    },
+    {
+      "path": "apps/web/src/components/StudioHeader.tsx",
+      "bytes": 1030,
+      "sha256": "6fb59996076256ab2b4c047e143c76f24414aae62d75c33df57df3e1f650b7a1"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.tsx",
+      "bytes": 30620,
+      "sha256": "34f98b16ded9151a4116458f462d35997d64160d5eba3c1a1ea9db6858040fe8"
+    },
+    {
+      "path": "apps/web/src/components/ToolbarCustomization.tsx",
+      "bytes": 2450,
+      "sha256": "b053fbe0ab039826bee03581908cf0e95e549f1ed82c445ed18165a587d43b4d"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFilePreview.tsx",
+      "bytes": 6275,
+      "sha256": "232368e43428214a21238b0ccd6d33b8f7bcdca415ff2e1eed77a607e06882ef"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 13626,
+      "sha256": "4f989542d417711b462b1431cde69ee102d541e33a8645aec2da4741205d1a36"
+    },
+    {
+      "path": "apps/web/src/components/workspaceFolders.css",
+      "bytes": 8218,
+      "sha256": "a20a93c5afae7e4909cb8f31b838e5383b054808c343bf218c2cb7c408666509"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 13371,
+      "sha256": "12b8a7cbc28619445fa7f28f658804f52ec8ffee34792a4a101eccab11074bdd"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.test.ts",
+      "bytes": 4561,
+      "sha256": "bb46e8aa79241e3e83857a2aa9773746f043a0b7d30dbb3f15c0d9d23a1df137"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 64042,
+      "sha256": "470691557d05d9090a52b8d17c56af8dd2d87de8b8835ed7b613bf14290dd4a6"
+    },
+    {
+      "path": "apps/web/src/lib/folderLinks.ts",
+      "bytes": 4499,
+      "sha256": "744cef0fe0cac460bcff948f6a72aa837e828445a8a56a1dbefb87ab38701a66"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 9652,
+      "sha256": "79329e77fc8a1fb9c1de2b58a73a24c43c98966ed57459caf040eafe96038d43"
+    },
+    {
+      "path": "apps/web/src/lib/musicStorage.ts",
+      "bytes": 5322,
+      "sha256": "8fe16e1b572115dc667217f769a1f141e4bcd0a2a6507cb6c6ea5162c0ae36f0"
+    },
+    {
+      "path": "apps/web/src/lib/themeTooltips.test.ts",
+      "bytes": 2553,
+      "sha256": "d8ce19fbd18913da30c9549b036719d99d01ce46c383c74b657e47cb355c72e9"
+    },
+    {
+      "path": "apps/web/src/lib/themeTooltips.ts",
+      "bytes": 5821,
+      "sha256": "0efaa58f7402bd5e6c619625c25bd0e92a70c5244e6ea29a1b0a912668cb1ed8"
+    },
+    {
+      "path": "apps/web/src/lib/youtubeIframe.ts",
+      "bytes": 1865,
+      "sha256": "82630d9d565079b24d57f614319afa0150b2c9e93fbd47e41f8d6fc3c4929b03"
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "bytes": 778,
+      "sha256": "3682f34f06a01b8335816315fbd6d2b18739394c9d7ccaecb08f69fb2139daf3"
+    },
+    {
+      "path": "apps/web/src/musicPolish.css",
+      "bytes": 6628,
+      "sha256": "cc796dd96eb2ed568903134ecdd4baaba0c114ccdc98b45d8a7a89944e0f57f2"
+    },
+    {
+      "path": "apps/web/src/studioPolish.css",
+      "bytes": 14034,
+      "sha256": "b97fe4d43a514f275d7e00f49aa3628943eb6cddb4b543c9014e0697353d10ca"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 522237,
+      "sha256": "5c12fcaefcee8faf4168679bc2ae9d5fb23507ac3eeac2e34462b0f698ed62e9"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "f501c604b2519119c8189821b71fb0450e3c6f20365d2338b3d58faa94db9d94"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "79849f89985a64fad230b3579517e366b6cca1bcd51a7328d6d747b89dae8d5d"
+    }
+  ]
+}

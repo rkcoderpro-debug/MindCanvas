@@ -12,7 +12,7 @@ export function LearningShareButton({ kind, id, title, plan, available = true }:
     {open && <LearningShareDialog kind={kind} id={id} title={title} plan={plan} available={available} onClose={() => setOpen(false)}/>}</>;
 }
 
-function LearningShareDialog({ kind, id, title, plan, available, onClose }: { kind: LearningKind; id: string; title: string; plan?: AccountPlan; available: boolean; onClose: () => void }) {
+export function LearningShareDialog({ kind, id, title, plan, available, onClose }: { kind: LearningKind; id: string; title: string; plan?: AccountPlan; available: boolean; onClose: () => void }) {
   const [email, setEmail] = useState("");
   const [days, setDays] = useState(7);
   const [invites, setInvites] = useState<LearningInvite[]>([]);

@@ -28,9 +28,12 @@ export function parseMusicLink(raw: string): ParsedMusicLink | null {
     const video = host === "youtu.be"
       ? parsed.pathname.split("/").filter(Boolean)[0]
       : parsed.searchParams.get("v") || parsed.pathname.match(/^\/(?:shorts|embed)\/([^/?]+)/)?.[1];
-    const playlist = parsed.searchParams.get("list") || undefined;
+    const list = parsed.searchParams.get("list") || undefined;
+    // Music mixes (RD...) are not normal embeddable playlists. A watch link
+    // still has a valid standalone track even when it carries its radio mix.
+    const playlist = video && list?.startsWith("RD") ? undefined : list;
     if (!video && !playlist) return null;
-    const params = new URLSearchParams({ autoplay: "1", playsinline: "1", rel: "0", enablejsapi: "1" });
+    const params = new URLSearchParams({ autoplay: "0", playsinline: "1", rel: "0", enablejsapi: "1" });
     if (playlist) params.set("list", playlist);
     if (video) return { source, url: original, embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(video)}?${params.toString()}`, isPlaylist: Boolean(playlist), title: source === "youtube-music" ? "YouTube Music" : "YouTube" };
     params.set("listType", "playlist");

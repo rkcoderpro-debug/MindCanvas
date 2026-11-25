@@ -1097,21 +1097,21 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         titleVi: "Chọn một file",
         titleEn: "Choose a file",
         bodyVi:
-          "Bấm tên tệp để mở trình xem. Dòng bên dưới tên cho biết định dạng và vị trí lưu.",
+          "Bấm tên tệp để mở trình xem. Mỗi dòng cho biết định dạng và vị trí lưu.",
         bodyEn:
-          "Click a file name to preview it. The line below the name shows the file type and its location.",
+          "Click a file name to preview it. Each row shows the file type and its location.",
       },
       {
         target: ".document-tool-workspace .document-viewer",
         titleVi: "Làm việc trong viewer",
         titleEn: "Work in the viewer",
         bodyVi:
-          "PDF có nút toàn màn hình, vẽ và xuất PDF; DOCX/PPTX/Excel có viewer đọc lại ngay trong trang.",
+          "Thanh đọc PDF có nút thu phóng, vẽ và toàn màn hình. Nút ba chấm có các thao tác với tệp, kể cả xuất bản PDF đã chú thích.",
         bodyEn:
-          "PDF offers fullscreen, annotation and export; DOCX, PPTX and Excel reopen in an in-page viewer.",
+          "The PDF toolbar has zoom, drawing and fullscreen controls. File actions, including exporting an annotated PDF, are in the three-dot menu.",
       },
       {
-        target: ".manager-back-button",
+        target: ".topbar-location .shell-back, .document-reading-view .reader-back",
         titleVi: "Quay lại danh sách",
         titleEn: "Return to the list",
         bodyVi:
@@ -1146,7 +1146,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
       { target: ".document-tools-tabs [data-tool-tab=\"pdf\"]", completion: { type: "click" }, titleVi: "Lọc tài liệu PDF", titleEn: "Filter PDF documents", bodyVi: "Chọn bộ lọc PDF để chỉ hiển thị những tài liệu có thể chú thích.", bodyEn: "Choose the PDF filter to show documents that can be annotated." },
       { target: ".document-tool-list button[data-document-kind=\"pdf\"]", completion: { type: "click" }, titleVi: "Mở PDF từ thư viện", titleEn: "Open a PDF from the library", bodyVi: "Chọn một PDF trong danh sách. Nếu thư viện trống, hãy tải một file PDF lên trước.", bodyEn: "Choose a PDF from the list. If the library is empty, upload a PDF first." },
       { target: ".document-tools-page .document-tool-workspace", completion: { type: "action", actions: [{ id: "tools:viewer-ready", labelVi: "Mở viewer tài liệu", labelEn: "Open the document viewer" }] }, titleVi: "Mở viewer tài liệu", titleEn: "Open the document viewer", bodyVi: "Viewer đã sẵn sàng. DOCX, PPTX và XLSX chỉ được xem; PDF có thể chú thích.", bodyEn: "The viewer is ready. DOCX, PPTX and XLSX are view-only; PDFs support annotation." },
-      { target: ".document-draw-toggle", completion: { type: "click" }, titleVi: "Bật vẽ trên PDF", titleEn: "Enable PDF drawing", bodyVi: "Bật công tắc Vẽ trên PDF để hiện các công cụ bút, highlight và tẩy.", bodyEn: "Enable Draw on PDF to reveal the pen, highlighter and eraser tools." },
+      { target: ".document-draw-toggle", completion: { type: "click" }, titleVi: "Bật vẽ trên PDF", titleEn: "Enable PDF drawing", bodyVi: "Bấm biểu tượng bút để hiện công cụ bút, tô sáng và tẩy.", bodyEn: "Enable Draw on PDF to reveal the pen, highlighter and eraser tools." },
       { target: ".document-annotation-tools", completion: { type: "click" }, titleVi: "Chọn công cụ annotation", titleEn: "Choose an annotation tool", bodyVi: "Chọn bút hoặc highlight trong thanh công cụ annotation.", bodyEn: "Choose pen or highlighter from the annotation toolbar." },
       { target: ".document-pdf-body", completion: { type: "action", actions: [{ id: "pdf:draw", labelVi: "Vẽ một nét trên PDF", labelEn: "Draw on the PDF" }] }, titleVi: "Chú thích PDF", titleEn: "Annotate the PDF", bodyVi: "Kéo trong trang PDF để tạo một nét. Bản gốc trong thư viện vẫn được giữ nguyên.", bodyEn: "Drag on the PDF page to create a stroke. The library original remains unchanged." },
       { target: ".document-export-pdf", completion: { type: "action", actions: [{ id: "pdf:export", labelVi: "Xuất PDF mới", labelEn: "Export a new PDF" }] }, kind: "practice", titleVi: "Xuất bản sao PDF", titleEn: "Export a PDF copy", bodyVi: "Xuất bản sao sau khi chú thích xong. Khi tải xong, bấm nút hoàn thành.", bodyEn: "Export a copy after annotating. When the download finishes, complete the guide." },
