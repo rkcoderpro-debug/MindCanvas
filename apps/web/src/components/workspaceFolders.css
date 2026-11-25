@@ -90,6 +90,8 @@
 }
 .folder-more-menu div button { text-align: start; background: transparent; color: var(--text); padding: 7px 9px; border-radius: 5px; }
 .folder-more-menu div button:hover { background: var(--soft); color: var(--accent); }
+.folder-project-list .folder-more-menu div button { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.folder-project-list .folder-more-menu div button.folder-project-menu-delete { color: var(--danger); }
 .folder-library .folder-manager-main { padding: 0; overflow: visible; }
 .workspace-file-preview { min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .workspace-file-preview-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }

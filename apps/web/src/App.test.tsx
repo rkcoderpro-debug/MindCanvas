@@ -118,6 +118,42 @@ describe("Workspace UI", () => {
     expect(host.querySelector(".document-library-list")?.textContent).not.toContain("lab.pcapng");
   });
 
+  it("shares a project from its folder menu and moves it to Trash only after confirmation", async () => {
+    const folder = await addFolder(null, "Bài tập");
+    const board = blankBoard("Project cần quản lý");
+    cacheProject(null, { board, id: board.id, title: board.title, folderId: folder.id, updatedAt: board.updatedAt, pending: false });
+    const href = `?folders=${folder.id}`;
+    window.history.replaceState({}, "", href);
+    await act(async () => root.render(<App/>));
+    const menu = () => host.querySelector<HTMLDetailsElement>(".folder-project-list .folder-more-menu")!;
+    const button = (parent: ParentNode, name: string) => [...parent.querySelectorAll("button")].find(item => item.textContent?.trim() === name)!;
+    const dialog = () => host.querySelector<HTMLDialogElement>("dialog[open]")!;
+    const choose = async (name: string) => {
+      await act(async () => menu().querySelector("summary")!.click());
+      await act(async () => button(menu(), name).click());
+    };
+    await waitForUI(() => expect(menu()).toBeTruthy());
+    await choose("Chia sẻ project");
+    expect(dialog().querySelector("h2")?.textContent).toContain(board.title);
+    expect(dialog().textContent).toContain("Đăng nhập");
+    expect(window.location.search).toBe(href);
+    await act(async () => dialog().querySelector<HTMLButtonElement>('button[aria-label="Đóng"]')!.click());
+    await choose("Xóa");
+    await act(async () => button(dialog(), "Hủy").click());
+    expect(menu()).toBeTruthy();
+    await choose("Xóa");
+    await act(async () => dialog().querySelector<HTMLButtonElement>("button.danger-button")!.click());
+    await waitForUI(() => expect(menu()).toBeNull());
+    expect(window.location.search).toBe(href);
+    await act(async () => host.querySelector<HTMLButtonElement>(".workspace-expand")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('.workspace-subnav button[title="Thùng rác"]')!.click());
+    await waitForUI(() => expect(host.querySelector(".project-card .project-meta")?.textContent).toContain(board.title));
+    await act(async () => host.querySelector<HTMLButtonElement>(".project-card-menu-trigger")!.click());
+    await act(async () => button(host.querySelector(".project-menu")!, "Khôi phục").click());
+    await act(async () => host.querySelector<HTMLButtonElement>(`[data-folder-id="${folder.id}"] .folder-open`)!.click());
+    await waitForUI(() => expect(host.querySelector(".folder-project-list .workspace-file-name")?.textContent).toContain(board.title));
+  });
+
   it("opens a stable private file link after the file is moved", async () => {
     const parent = await addFolder(null,"Tệp cũ");
     const destination = await addFolder(null,"Tệp mới");

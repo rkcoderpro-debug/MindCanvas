@@ -8,6 +8,7 @@ import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
+import { fetchBoard } from "./lib/projectStore";
 import { CircleHelp, Cloud, Crown, Download, Focus, FolderPlus, Gift, History, Link2, MoreHorizontal, Redo2, RefreshCw, Save, Search, Share2, Smartphone, Sparkles, Undo2, X } from "lucide-react";
 import WorkspaceHome from "./components/WorkspaceHome";
 import CanvasProjectActions, { type CanvasProjectAction } from "./components/CanvasProjectActions";
@@ -573,7 +574,12 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       onFolder={openFolder} onRoot={manageFolders} onNewFolder={() => askName("folder",current?.id ?? null)}
       onNewProject={() => askName("project")} onImportProject={() => fileInput.current?.click()} onLibrary={() => openDocumentLibrary(current?.id ?? null)}
       projectList={<FolderProjectList folderId={current?.id ?? null} projects={ws.projects} folders={ws.folders} loading={ws.loading}
-        onOpen={project => void ws.open(project)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject}/>}/>
+        onOpen={project => void ws.open(project)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject}
+        onSignIn={!user && isSupabaseConfigured ? () => void auth() : undefined}
+        prepareSharing={user ? async project => {
+          if (!await ws.flush(project.id)) throw new Error(t("saveBeforeLeave"));
+          await ensureCanvasAttachments(user.id, await fetchBoard(user.id, project.id));
+        } : undefined}/>}/>
   </div>;
   return <PageChromeProvider openQuickActions={showQuickActions}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
     {webBackground && <div className="web-background-layer" aria-hidden="true">{webBackground.kind === "video" ? <video src={webBackground.src} muted autoPlay loop playsInline style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/> : <img src={webBackground.src} alt="" style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/>}<span style={{ background: webBackground.overlay ?? "#000000" }}/></div>}

@@ -1,0 +1,106 @@
+{
+  "version": "6.6.3",
+  "baseVersion": "6.6.0",
+  "alsoAppliesOver": [
+    "6.6.1",
+    "6.6.2"
+  ],
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.6.3.md",
+      "bytes": 779,
+      "sha256": "3bcfed4eef22755d12d08bcc0d7a067db3783fbd1b5eab641c7a2f0c3ee9fd41"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "4300732c119dd7fef1508a542bb2c9e750b389e745653a646bf2ed39f059d4f1"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "91c5ae8312bd696899eb80bb70843184ec0f19488abecab8244d3a88b3aa7a01"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 48665,
+      "sha256": "03abea261e2d30a5184a7e0f6a023dddb39be547f6562b65d25a24c126719988"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 70045,
+      "sha256": "a1b3466fd697a31345c6998b61359cd4fcc7a07f05cbcdb9f28afbb1bfb174df"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.test.tsx",
+      "bytes": 8368,
+      "sha256": "7706beed355e17ed28371a58f1f92151ae4181935c63f750c1e2ac16948624de"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 24351,
+      "sha256": "232d081ccf32d2fa399913d89e967a3a2050923c070d9471aeb2d1e0e4b56ee0"
+    },
+    {
+      "path": "apps/web/src/components/FolderProjectList.tsx",
+      "bytes": 6321,
+      "sha256": "4158200dcf4cb999341d3aa66db8c4fc7c62c6eff303b22b2438d065c744d694"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32031,
+      "sha256": "02319f903cc8c8914468f6aa798de2603b9507243facc146427c751697f65b2e"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFilePreview.tsx",
+      "bytes": 5260,
+      "sha256": "c7065dd37d073b0d7b71d484ceb45cb73fe9d8c758cb9b70bd4cb239d5c6d273"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 13626,
+      "sha256": "4f989542d417711b462b1431cde69ee102d541e33a8645aec2da4741205d1a36"
+    },
+    {
+      "path": "apps/web/src/components/workspaceFolders.css",
+      "bytes": 8218,
+      "sha256": "a20a93c5afae7e4909cb8f31b838e5383b054808c343bf218c2cb7c408666509"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.test.ts",
+      "bytes": 4561,
+      "sha256": "bb46e8aa79241e3e83857a2aa9773746f043a0b7d30dbb3f15c0d9d23a1df137"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 63946,
+      "sha256": "6e386a48cd28dee2da00f1c8aaacfa6f21b6584e12d6ed8593c205c2d3038238"
+    },
+    {
+      "path": "apps/web/src/lib/folderLinks.ts",
+      "bytes": 4499,
+      "sha256": "744cef0fe0cac460bcff948f6a72aa837e828445a8a56a1dbefb87ab38701a66"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 9652,
+      "sha256": "79329e77fc8a1fb9c1de2b58a73a24c43c98966ed57459caf040eafe96038d43"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 522237,
+      "sha256": "5c12fcaefcee8faf4168679bc2ae9d5fb23507ac3eeac2e34462b0f698ed62e9"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "83d5f4b8620b41766031b3d49b042dbb2902a3f1d8ffe95e30355f06898da510"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "3302a86109d813f2bf485067ec2446dcd8e52a57218e78e9836808f5ef66be44"
+    }
+  ]
+}
