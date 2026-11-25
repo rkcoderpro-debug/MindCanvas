@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Armchair, Crown, Hand, Mic, MicOff, Monitor, Phone, PhoneOff, ScreenShare, ScreenShareOff, Video, VideoOff, Volume2 } from "lucide-react";
 import { ConnectionState, Room, RoomEvent, Track, type AudioTrack, type Participant, type VideoTrack } from "livekit-client";
 import { OnlineRoomError, roomIssue, type MeetingConnection, type OnlineRoom, type RoomAction, type RoomAttendee, type RoomLayout, type RoomReaction, type RoomCanvasAction, type RoomCanvasResult } from "../lib/onlineRooms";
+import RoomIsland from "./RoomIsland";
+import { useRoomAudioPriority } from "./MusicPlayer";
 import { ProfileAvatar } from "./ProfileAvatar";
 
 const MeetingCanvas = lazy(() => import("./MeetingCanvasPanel"));
@@ -10,6 +12,8 @@ type Props = {
   presenter: string | null; vi: boolean; busy: boolean; token: () => Promise<MeetingConnection>;
   run: (action: RoomAction) => Promise<unknown>; serverNow: () => number;
   canvas: (action: RoomCanvasAction) => Promise<RoomCanvasResult>; canvasSignal: number;
+  foreground: boolean; reconnecting: boolean; islandExpanded: boolean; setIslandExpanded: (value: boolean) => void;
+  onRestore: () => void; onLeave: () => void;
 };
 
 const REACTIONS = { clap: ["👏", "Vỗ tay", "Applaud"], heart: ["❤️", "Thả tim", "Send a heart"], like: ["👍", "Đồng ý", "Thumbs up"] } as const;
@@ -48,7 +52,7 @@ function MeetingAudio({ track }: { track: AudioTrack }) {
   return <audio ref={element} autoPlay/>;
 }
 
-export default function OnlineMeetingBoard({ layout, room, owner, members, avatars, presenter, vi, busy, token, run, serverNow, canvas, canvasSignal }: Props) {
+export default function OnlineMeetingBoard({ layout, room, owner, members, avatars, presenter, vi, busy, token, run, serverNow, canvas, canvasSignal, foreground, reconnecting, islandExpanded, setIslandExpanded, onRestore, onLeave }: Props) {
   const label = (vn: string, en: string) => vi ? vn : en;
   const [call, setCall] = useState<Room | null>(null);
   const current = useRef<Room | null>(null);
@@ -155,6 +159,14 @@ export default function OnlineMeetingBoard({ layout, room, owner, members, avata
       return track ? [{ key: `${person.id}:${source}`, track }] : [];
     });
   });
+  useRoomAudioPriority(Boolean(connected && call));
+  const activeCamera = cameras.find(({ person }) => call?.activeSpeakers.some(speaker => speaker.identity === person.id))
+    ?? cameras.find(({ person }) => person.id !== owner) ?? cameras[0];
+  const preview = screen ?? activeCamera?.track;
+  const previewName = screen ? label("Màn hình đang chia sẻ", "Shared screen") : activeCamera?.person.name ?? label("Camera", "Camera");
+  const status = connecting ? label("Đang kết nối cuộc gọi…", "Connecting call…")
+    : reconnecting || (call && !connected) ? label("Đang kết nối lại…", "Reconnecting…")
+    : connected ? label("Đang trong cuộc gọi", "In the call") : label("Chưa kết nối cuộc gọi", "Not in the call");
   const bySeat = new Map(members.map(person => [person.seat, person]));
   const supportsCapture = Boolean(navigator.mediaDevices?.getUserMedia);
   const supportsScreen = Boolean(navigator.mediaDevices?.getDisplayMedia);
@@ -165,6 +177,11 @@ export default function OnlineMeetingBoard({ layout, room, owner, members, avata
     { id: "screen", on: isSharing, OnIcon: ScreenShareOff, OffIcon: ScreenShare, text: isSharing ? label("Dừng chia sẻ", "Stop sharing") : label("Chia sẻ màn hình", "Share screen") },
   ] as const;
 
+  const deviceButtons = deviceControls.map(({ id, on, OnIcon, OffIcon, text }) => {
+    const disabled = !connected || mediaBusy || (id === "screen" ? !canPresent || !supportsScreen : !supportsCapture);
+    const Icon = on ? OnIcon : OffIcon;
+    return <button type="button" key={id} className="secondary-button" disabled={disabled} aria-pressed={on} onClick={() => void toggle(id)}><Icon size={15}/>{text}</button>;
+  });
   return <section className="online-meeting" data-view={layout} aria-label={label("Không gian họp", "Meeting space")}>
     <div className="online-meeting-heading">
       <span className="online-room-live-tag"><Armchair size={15}/>{members.length}/{room.capacity} {label("chỗ ngồi", "seats")}</span>
@@ -177,13 +194,13 @@ export default function OnlineMeetingBoard({ layout, room, owner, members, avata
     <div className="online-meeting-table" data-expanded={expanded || surface === "canvas"}>
       <div className="online-meeting-display">
         {canvasOpened && <Suspense fallback={surface === "canvas" ? <p role="status">{label("Đang mở Canvas…","Opening Canvas…")}</p> : null}>
-          <MeetingCanvas owner={owner} roomId={room.id} host={room.host_id === owner} vi={vi} visible={surface === "canvas"} updateSignal={canvasSignal} request={canvas}/>
+          <MeetingCanvas owner={owner} roomId={room.id} host={room.host_id === owner} vi={vi} visible={foreground && surface === "canvas"} updateSignal={canvasSignal} request={canvas}/>
         </Suspense>}
         {surface === "video" && <><header className="online-meeting-display-heading"><Monitor size={16}/><strong>{screen ? `${presenterName ?? label("Thành viên", "Participant")} · ${label("Đang trình chiếu", "Presenting")}` : label("Màn hình chung", "Shared screen")}</strong>
           {screen && <button type="button" className="online-meeting-focus" aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? label("Thu gọn", "Shrink") : label("Phóng to", "Expand")}</button>}
         </header>
-        {screen ? <div className="online-meeting-screen"><MeetingVideo track={screen} name={label("Màn hình đang chia sẻ", "Shared screen")}/></div>
-          : cameras.length ? <div className="online-meeting-cameras" data-single={cameras.length === 1}>
+        {screen && foreground ? <div className="online-meeting-screen"><MeetingVideo track={screen} name={label("Màn hình đang chia sẻ", "Shared screen")}/></div>
+          : foreground && cameras.length ? <div className="online-meeting-cameras" data-single={cameras.length === 1}>
             {cameras.map(({ person, track }) => <figure key={person.id}><MeetingVideo track={track} name={person.name}/><figcaption>{person.name}</figcaption></figure>)}
           </div> : <div className="online-meeting-placeholder"><Monitor size={32}/><p>{label("Phần trình chiếu sẽ hiện ở đây", "Shared content will appear here")}</p><small>{label("Mic và camera tắt khi bạn kết nối.", "Your mic and camera are off when you connect.")}</small></div>}</>}
       </div>
@@ -202,14 +219,24 @@ export default function OnlineMeetingBoard({ layout, room, owner, members, avata
       })}
     </div>
     {audio.map(({ key, track }) => <MeetingAudio key={key} track={track}/>)}
+    {!foreground && <RoomIsland name={room.name} meeting vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
+      onRestore={onRestore} onLeave={onLeave} live={connected} status={status} indicators={<>
+        {local?.isMicrophoneEnabled && <Mic size={13} aria-label={label("Mic đang bật", "Mic is on")}/>}
+        {local?.isCameraEnabled && <Video size={13} aria-label={label("Camera đang bật", "Camera is on")}/>}
+        {isSharing && <ScreenShare size={13} aria-label={label("Đang chia sẻ màn hình", "Sharing your screen")}/>}
+      </>}>
+      {preview && islandExpanded && <figure className="room-island-preview"><MeetingVideo track={preview} name={previewName}/><figcaption>{previewName}</figcaption></figure>}
+      <div className="room-island-controls">
+        {call ? deviceButtons : <button type="button" className="secondary-button" disabled={connecting} onClick={() => void connect()}><Phone size={15}/>{label("Kết nối cuộc gọi", "Connect to call")}</button>}
+        <button type="button" className="secondary-button" disabled={busy} aria-pressed={handRaised} onClick={() => void run({ name: "hand", raised: !handRaised })}><Hand size={15}/>{handRaised ? label("Hạ tay", "Lower hand") : label("Giơ tay", "Raise hand")}</button>
+        {connected && !call?.canPlaybackAudio && <button className="secondary-button" type="button" onClick={() => void call?.startAudio().catch(() => setError(label("Không bật được âm thanh.", "Could not enable audio.")))}><Volume2 size={15}/>{label("Bật âm thanh", "Enable audio")}</button>}
+      </div>
+      {error && <small role="alert">{error}</small>}
+    </RoomIsland>}
     <div className="online-meeting-controls" aria-label={label("Điều khiển cuộc gọi", "Call controls")} role="group">
       {!call ? <button type="button" className="primary-button" disabled={connecting} onClick={() => void connect()}><Phone size={16}/>{label("Kết nối cuộc gọi", "Connect to call")}</button>
         : <>
-          {deviceControls.map(({ id, on, OnIcon, OffIcon, text }) => {
-            const disabled = !connected || mediaBusy || (id === "screen" ? !canPresent || !supportsScreen : !supportsCapture);
-            const Icon = on ? OnIcon : OffIcon;
-            return <button type="button" key={id} className="secondary-button" disabled={disabled} aria-pressed={on} onClick={() => void toggle(id)}><Icon size={16}/>{text}</button>;
-          })}
+          {deviceButtons}
           <button className="secondary-button" type="button" onClick={() => endCall(call)}><PhoneOff size={16}/>{label("Rời cuộc gọi", "Leave call")}</button>
           {connected && !call.canPlaybackAudio && <button className="secondary-button" type="button" onClick={() => void call.startAudio().catch(() => setError(label("Trình duyệt chưa cho phép phát âm thanh.", "The browser has not allowed audio playback.")))}><Volume2 size={16}/>{label("Bật âm thanh", "Enable audio")}</button>}
         </>}

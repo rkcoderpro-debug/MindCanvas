@@ -116,7 +116,7 @@ export function useOnlineRoom(link: OnlineRoomLink) {
       try {
         const result = await joinOnlineRoom(id, client, link.invite, link.code || password !== undefined ? { ...(link.code && { code: link.code }), ...(password !== undefined && { password }) } : undefined);
         if (!alive) {
-          if (result.state === "active") release();
+          if (result.state === "active" || result.state === "waiting") release();
           return;
         }
         if (result.name) setRoomName(result.name);

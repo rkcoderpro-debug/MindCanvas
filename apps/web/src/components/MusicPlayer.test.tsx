@@ -63,6 +63,9 @@ it('uses the YouTube player timeline in both controls and keeps the visible play
     getPlaylist: vi.fn(), getPlaylistIndex: vi.fn(), playVideoAt: vi.fn(),
   };
   const create = vi.fn(function (_frame: HTMLIFrameElement, config: { events: Events }) { events = config.events; return player; });
+  const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('music-youtube-slot') ? new DOMRect(24, 75, 348, 250) : new DOMRect();
+  });
   vi.stubGlobal('YT', { Player: create });
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.mocked(musicStore).mockResolvedValue([{ id: 'yt', owner: 'user', title: 'Piano', source: 'youtube-music', url: 'https://music.youtube.com/watch?v=abcdefghijk&list=RDAMVMabcdefghijk' }]);
@@ -94,12 +97,13 @@ it('uses the YouTube player timeline in both controls and keeps the visible play
     expect(mainRange.value).toBe('80');
 
     await act(async () => root.render(render(false)));
-    expect(document.body.querySelector('.music-youtube-dock iframe')).toBe(frame);
+    expect(document.body.querySelector('.music-youtube-inside-island:not([hidden]) iframe')).toBe(frame);
+    expect(host.querySelector('.music-island-details .personal-youtube-slot')).toBeTruthy();
     expect(create).toHaveBeenCalledOnce();
     await act(async () => host.querySelector<HTMLButtonElement>('.music-island-details [aria-label="Tạm dừng"]')!.click());
     expect(player.pauseVideo).toHaveBeenCalled();
     await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="Đóng trình phát YouTube"]')!.click());
     expect(player.destroy).toHaveBeenCalledOnce();
     expect(document.body.querySelector('.music-youtube-surface')).toBeNull();
-  } finally { await act(async () => root.unmount()); host.remove(); }
+  } finally { await act(async () => root.unmount()); host.remove(); measure.mockRestore(); }
 });

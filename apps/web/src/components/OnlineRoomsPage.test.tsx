@@ -6,9 +6,12 @@ import { LanguageProvider } from "../lib/i18n";
 import type { OnlineRoom, RoomSnapshot } from "../lib/onlineRooms";
 import OnlineRoomsPage from "./OnlineRoomsPage";
 import ClassOnlineRoomCard from "./ClassOnlineRoomCard";
+import { OnlineRoomSessionHost, OnlineRoomSessionProvider, ROOM_ROUTE_CHANGED } from "./OnlineRoomSession";
+import { LearningNavigationProvider, LearningToolScope, useLearningNavigation } from "../lib/learningNavigation";
+import { onlineRoomUrl } from "../lib/onlineRoomRoutes";
 
 const mock = vi.hoisted(() => ({
-  list: vi.fn(), lookup: vi.fn(), deleteRoom: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(), classRoom: vi.fn(),
+  list: vi.fn(), lookup: vi.fn(), deleteRoom: vi.fn(), join: vi.fn(), read: vi.fn(), chat: vi.fn(), leave: vi.fn(), act: vi.fn(), watch: vi.fn(), create: vi.fn(), token: vi.fn(), manage: vi.fn(), canvas: vi.fn(), upload: vi.fn(), download: vi.fn(), classRoom: vi.fn(), rtcConnect: vi.fn(), rtcDisconnect: vi.fn(), videoAttach: vi.fn(), videoDetach: vi.fn(),
 }));
 vi.mock("../lib/onlineRooms", async actual => ({
   ...await actual<typeof import("../lib/onlineRooms")>(),
@@ -17,6 +20,30 @@ vi.mock("../lib/onlineRooms", async actual => ({
   listOnlineRooms: mock.list, lookupOnlineRoomCode: mock.lookup, deleteOnlineRoom: mock.deleteRoom, joinOnlineRoom: mock.join, readOnlineRoom: mock.read, readOnlineRoomChat: mock.chat,
   pingOnlineRoom: mock.leave, actOnlineRoom: mock.act, watchOnlineRoom: mock.watch, loadRoomAvatars: vi.fn(async () => new Map()),
 }));
+vi.mock("livekit-client", async imported => {
+  const rtc = await imported<typeof import("livekit-client")>();
+  const track = { attach: mock.videoAttach, detach: mock.videoDetach };
+  class FakeRoom {
+    state: string = rtc.ConnectionState.Disconnected;
+    activeSpeakers: unknown[] = [];
+    canPlaybackAudio = true;
+    screen = { identity: "remote", isSpeaking: true, getTrackPublication: (kind: string) => kind === rtc.Track.Source.ScreenShare ? { track, isMuted: false } : undefined };
+    remoteParticipants = new Map([["remote", this.screen]]);
+    localParticipant = {
+      isMicrophoneEnabled: false, isCameraEnabled: false, isScreenShareEnabled: false,
+      trackPublications: new Map(),
+      setMicrophoneEnabled: async (enabled: boolean) => { this.localParticipant.isMicrophoneEnabled = enabled; this.update?.(); },
+      getTrackPublication: () => undefined,
+    };
+    update: (() => void) | undefined;
+    on(_event: string, handler: () => void) { this.update ??= handler; }
+    removeAllListeners() { this.update = undefined; }
+    async connect(...args: unknown[]) { mock.rtcConnect(...args); this.state = rtc.ConnectionState.Connected; }
+    async disconnect(stopTracks: boolean) { mock.rtcDisconnect(stopTracks); }
+    async startAudio() {}
+  }
+  return { ...rtc, Room: FakeRoom };
+});
 vi.mock("./OnlineRoomYouTube", () => ({ default: () => <div data-test-player/> }));
 const owner = "90000000-0000-4000-8000-000000000001";
 const room: OnlineRoom = {
@@ -56,7 +83,7 @@ const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>("b
 it("enters an official room, keeps playback opt-in and changes the seat without tying it to a layout", async () => {
   await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
   await act(async () => button("Vào Góc nhạc tập trung").click());
-  await tick();
+  for (let n = 0; n < 8 && !host.querySelector(".online-room-seat"); n++) await tick();
   expect(host.querySelectorAll(".online-room-seat")).toHaveLength(20);
   expect(host.querySelector('[data-self="true"]')?.getAttribute("title")).toContain("Ghế 3");
   expect(host.querySelector("[data-test-player]")).toBeNull();
@@ -244,4 +271,140 @@ it("lets the host confirm deletion in the lobby, without a delete button for an 
   expect(mock.deleteRoom).toHaveBeenCalledWith(owned.id);
   expect(button("Vào Phòng của mình")).toBeUndefined();
   expect(button("Tạo phòng")).toBeTruthy();
+});
+
+function WorkspacePages() {
+  const navigation = useLearningNavigation();
+  return <OnlineRoomSessionProvider owner={owner} onRestore={id => {
+    navigation.go("rooms");
+    window.history.replaceState({}, "", onlineRoomUrl(id));
+    window.dispatchEvent(new Event(ROOM_ROUTE_CHANGED));
+  }}>
+    <button onClick={() => navigation.go("quiz")}>Mở Quiz</button>
+    <button onClick={() => navigation.go("rooms")}>Mở sảnh</button>
+    {navigation.route.tab === "quiz" && <input aria-label="Đáp án Quiz" defaultValue="Đang làm bài"/>}
+    <LearningToolScope tab="rooms" active={navigation.route.tab === "rooms"}><OnlineRoomsPage owner={owner}/></LearningToolScope>
+    <OnlineRoomSessionHost owner={owner}/>
+  </OnlineRoomSessionProvider>;
+}
+const workspacePages = () => <LanguageProvider><LearningNavigationProvider owner={owner}><WorkspacePages/></LearningNavigationProvider></LanguageProvider>;
+const island = () => document.querySelector<HTMLElement>(".room-island")!;
+const islandButton = (name: string) => [...island().querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent === name)!;
+it("retains the joined room and its player while opening Quiz and only releases the seat on Leave", async () => {
+  await act(async () => root.render(workspacePages()));
+  await act(async () => button("Vào Góc nhạc tập trung").click());
+  for (let n = 0; n < 8 && !button("Nghe cùng phòng"); n++) await tick();
+  await act(async () => button("Nghe cùng phòng").click());
+  const player = host.querySelector("[data-test-player]");
+  const client = mock.join.mock.calls[0][1];
+  await act(async () => button("Mở Quiz").click());
+  expect(host.querySelector('[aria-label="Đáp án Quiz"]')).toBeTruthy();
+  expect(island().querySelector(".room-youtube-slot")).toBeTruthy();
+  expect(host.querySelector("[data-test-player]")).toBe(player);
+  expect(mock.leave).not.toHaveBeenCalled();
+  await act(async () => islandButton("Quay lại phòng").click());
+  expect(host.querySelector(".online-room-session")?.hasAttribute("hidden")).toBe(false);
+  expect(host.querySelector("[data-test-player]")).toBe(player);
+  expect(mock.join).toHaveBeenCalledTimes(1);
+  await act(async () => button("Mở Quiz").click());
+  await act(async () => islandButton("Rời phòng").click());
+  expect(mock.leave).toHaveBeenCalledWith(room.id, client, true);
+  expect(island()).toBeNull();
+  expect(host.querySelector('[aria-label="Đáp án Quiz"]')).toBeTruthy();
+});
+
+it("keeps a single LiveKit connection and screen preview in the island, then closes on Leave", async () => {
+  const meeting: OnlineRoom = { ...room, id: "7a000000-0000-4000-8000-000000000012", name: "Họp nhóm", kind: "meeting", layout: "table" };
+  window.history.replaceState({}, "", onlineRoomUrl(meeting.id));
+  mock.read.mockResolvedValue({ ...fixture(), room: meeting, presenter_id: "remote", members: [...fixture().members, { id: "remote", seat: 9, name: "Bạn học" }] });
+  mock.token.mockResolvedValue({ url: "wss://rtc.example.test", token: "token" });
+  await act(async () => root.render(workspacePages()));
+  for (let n = 0; n < 8 && !button("Kết nối cuộc gọi"); n++) await tick();
+  await act(async () => button("Kết nối cuộc gọi").click());
+  expect(mock.rtcConnect).toHaveBeenCalledTimes(1);
+  const devices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia() {}, getDisplayMedia() {} } });
+  try {
+    await act(async () => button("Mở Quiz").click());
+    expect(mock.rtcDisconnect).not.toHaveBeenCalled();
+    expect(mock.leave).not.toHaveBeenCalled();
+    expect(island().querySelector("video")).toBeTruthy();
+    expect(mock.videoAttach).toHaveBeenLastCalledWith(island().querySelector("video"));
+    await act(async () => islandButton("Bật mic").click());
+    expect(island().querySelector('[aria-label="Mic đang bật"]')).toBeTruthy();
+    await act(async () => (island().querySelector(".music-island-open") as HTMLButtonElement).click());
+    expect(island().querySelector("video")).toBeNull();
+    expect(island().querySelector('[aria-label="Mic đang bật"]')).toBeTruthy();
+    await act(async () => (island().querySelector(".music-island-open") as HTMLButtonElement).click());
+    await act(async () => islandButton("Rời phòng").click());
+    expect(mock.rtcDisconnect).toHaveBeenCalledTimes(1);
+    expect(mock.rtcDisconnect).toHaveBeenCalledWith(true);
+    expect(island()).toBeNull();
+  } finally {
+    if (devices) Object.defineProperty(navigator, "mediaDevices", devices);
+    else Reflect.deleteProperty(navigator, "mediaDevices");
+  }
+});
+
+it("plays the separate official audio source without a player frame or interruption on Quiz", async () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  try {
+    mock.read.mockResolvedValue({ ...fixture(), playback: { ...fixture().playback, video_id: "3Lfr3BhvkQY" } });
+    await act(async () => root.render(workspacePages()));
+    await act(async () => button("Vào Góc nhạc tập trung").click());
+    for (let n = 0; n < 8 && !button("Nghe piano nền"); n++) await tick();
+    await act(async () => button("Nghe piano nền").click());
+    const audio = host.querySelector("audio")!;
+    expect(audio.getAttribute("src")).toContain("mindcanvas-focus-piano.mp3");
+    expect(play).toHaveBeenCalled();
+    await act(async () => button("Mở Quiz").click());
+    expect(host.querySelector("audio")).toBe(audio);
+    expect(host.querySelector("[data-test-player]")).toBeNull();
+    expect(pause).not.toHaveBeenCalled();
+    expect(mock.leave).not.toHaveBeenCalled();
+    await act(async () => (island().querySelector(".music-island-open") as HTMLButtonElement).click());
+    await act(async () => islandButton("Rời phòng").click());
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("audio")).toBeNull();
+  } finally { play.mockRestore(); pause.mockRestore(); }
+});
+
+it("asks before changing rooms and preserves the current seat if the user cancels", async () => {
+  const second = { ...room, id: "7a000000-0000-4000-8000-000000000031", name: "Phòng thứ hai" };
+  mock.list.mockResolvedValue({ rooms: [room, second], can_create_public: false });
+  mock.read.mockImplementation(async (id: string) => ({ ...fixture(), room: id === second.id ? second : room }));
+  await act(async () => root.render(workspacePages()));
+  await act(async () => button("Vào Góc nhạc tập trung").click());
+  for (let n = 0; n < 8 && !button("Thu nhỏ phòng"); n++) await tick();
+  await act(async () => button("Thu nhỏ phòng").click());
+  for (let n = 0; n < 8 && !button("Vào Phòng thứ hai"); n++) await tick();
+  await act(async () => button("Vào Phòng thứ hai").click());
+  const dialogButton = (name: string) => [...document.querySelectorAll<HTMLButtonElement>("dialog[open] button")].find(b => b.textContent === name)!;
+  expect(dialogButton("Rời phòng và chuyển")).toBeTruthy();
+  expect(mock.join).toHaveBeenCalledTimes(1);
+  await act(async () => dialogButton("Ở lại phòng cũ").click());
+  expect(mock.leave).not.toHaveBeenCalled();
+  await act(async () => button("Vào Phòng thứ hai").click());
+  await act(async () => dialogButton("Rời phòng và chuyển").click());
+  for (let n = 0; n < 8 && mock.join.mock.calls.length < 2; n++) await tick();
+  expect(mock.leave).toHaveBeenCalledTimes(1);
+  expect(mock.leave.mock.calls[0][0]).toBe(room.id);
+  expect(mock.join.mock.calls[1][0]).toBe(second.id);
+});
+
+it("stops a room player when the host closes the room while the learner is on Quiz", async () => {
+  const refresh = vi.fn();
+  mock.watch.mockImplementation((_id, listener) => { refresh.mockImplementation(listener); return () => {}; });
+  await act(async () => root.render(workspacePages()));
+  await act(async () => button("Vào Góc nhạc tập trung").click());
+  for (let n = 0; n < 8 && !button("Nghe cùng phòng"); n++) await tick();
+  await act(async () => button("Nghe cùng phòng").click());
+  await act(async () => button("Mở Quiz").click());
+  mock.read.mockResolvedValue({ state: "closed" });
+  await act(async () => refresh("room"));
+  for (let n = 0; n < 8 && host.querySelector("[data-test-player]"); n++) await tick();
+  expect(host.querySelector("[data-test-player]")).toBeNull();
+  expect(island().querySelector('[aria-label="Phòng đã đóng"]')).toBeTruthy();
+  expect(host.querySelector('[aria-label="Đáp án Quiz"]')).toBeTruthy();
 });

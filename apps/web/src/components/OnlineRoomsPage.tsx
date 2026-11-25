@@ -1,23 +1,34 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, BookOpen, DoorOpen, GraduationCap, Headphones, Lock, Plus, Radio, Search, Trash2, Users, Video } from "lucide-react";
 import Dialog from "./Dialog";
-import OnlineMusicRoom from "./OnlineMusicRoom";
+import { OnlineRoomSessionHost, OnlineRoomSessionProvider, ROOM_ROUTE_CHANGED, useRoomSession } from "./OnlineRoomSession";
 import { useLanguage } from "../lib/i18n";
 import { useLearningActive } from "../lib/learningNavigation";
 import { normalizeQuickSearch } from "../lib/learningCommands";
 import { createOnlineRoom, deleteOnlineRoom, listOnlineRooms, lookupOnlineRoomCode, roomIssue, type OnlineRoom, type RoomCreate } from "../lib/onlineRooms";
-import { captureOnlineRoomInvite, forgetOnlineRoomInvite, onlineRoomUrl, readOnlineRoomLink, roomCodePattern, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
+import { captureOnlineRoomInvite, onlineRoomUrl, readOnlineRoomLink, roomCodePattern, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import "./onlineRooms.css";
 
 type Props = { owner: string | null; onSignIn?: () => void };
 type Filter = "all" | "official" | "mine" | "meeting" | "public" | "classroom";
 const DEFAULT_ROOM: RoomCreate = { kind: "music", name: "", topic: "", visibility: "private", layout: "classroom", entryMode: "approval", suggestions: true };
 
-export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
+export default function OnlineRoomsPage(props: Props) {
+  const session = useRoomSession();
+  if (session) return <RoomLobby {...props}/>;
+  return <OnlineRoomSessionProvider owner={props.owner} onRestore={id => {
+    window.history.pushState({}, "", onlineRoomUrl(id));
+    window.dispatchEvent(new Event(ROOM_ROUTE_CHANGED));
+  }}><RoomLobby {...props}/><OnlineRoomSessionHost owner={props.owner}/></OnlineRoomSessionProvider>;
+}
+
+function RoomLobby({ owner, onSignIn }: Props) {
   const { language, t } = useLanguage();
   const vi = language === "vi";
   const label = (vn: string, en: string) => vi ? vn : en;
   const active = useLearningActive();
+  const session = useRoomSession()!;
+  const route = session.route;
   const [link, setLink] = useState<OnlineRoomLink | null>(() => readOnlineRoomLink());
   const [rooms, setRooms] = useState<OnlineRoom[]>([]);
   const [canCreatePublic, setCanCreatePublic] = useState(false);
@@ -47,11 +58,17 @@ export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
       const next = readOnlineRoomLink();
       captureOnlineRoomInvite();
       setLink(next);
+      route(next ? { link: next, fromClass: window.history.state?.mindcanvasFromClass === next.id } : null);
     };
     sync();
     window.addEventListener("popstate", sync);
-    return () => window.removeEventListener("popstate", sync);
-  }, [active]);
+    window.addEventListener(ROOM_ROUTE_CHANGED, sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener(ROOM_ROUTE_CHANGED, sync);
+      route(null);
+    };
+  }, [active, route]);
   useEffect(() => {
     if (!active || !owner || link) return;
     const controller = new AbortController();
@@ -76,17 +93,7 @@ export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
 
   const enter = (id: string, roomCode?: string) => {
     window.history.pushState({ ...window.history.state, mindcanvasFromRoomLobby: id }, "", onlineRoomUrl(id, undefined, undefined, roomCode));
-    setLink(roomCode ? { id, code: roomCode } : { id });
-  };
-  const back = () => {
-    if (link) forgetOnlineRoomInvite(link.id);
-    const current = new URL(window.location.href);
-    if (current.searchParams.get("learn") === "rooms") {
-      if (window.history.state?.mindcanvasFromClass === link?.id) window.history.back();
-      else if (window.history.state?.mindcanvasFromRoomLobby === link?.id) window.history.back();
-      else window.history.replaceState(window.history.state, "", onlineRoomUrl(null));
-    }
-    setLink(null);
+    window.dispatchEvent(new Event(ROOM_ROUTE_CHANGED));
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -125,12 +132,12 @@ export default function OnlineRoomsPage({ owner, onSignIn }: Props) {
     && (!term || normalizeQuickSearch(`${room.name} ${room.topic} ${room.host_name}`).includes(term)));
 
   if (!active) return null;
-  if (owner && link) return <OnlineMusicRoom key={link.id} link={link} owner={owner} onBack={back} vi={vi} fromClass={window.history.state?.mindcanvasFromClass === link.id}/>;
+  if (owner && link && session.state.foreground) return null;
   return <section className="online-rooms">
     <header className="online-rooms-hero">
       <div><span className="online-room-live-tag"><Radio size={15}/>{label("HỌC CÙNG NHAU", "STUDY TOGETHER")}</span>
         <h1>{label("Phòng Online", "Online Rooms")}</h1>
-        <p>{link ? label("Bạn có lời mời vào một phòng. Đăng nhập để tiếp tục.", "You have a room invitation. Sign in to continue.")
+        <p>{link && !owner ? label("Bạn có lời mời vào một phòng. Đăng nhập để tiếp tục.", "You have a room invitation. Sign in to continue.")
           : label("Chọn một chỗ để nghe nhạc, học hoặc họp với mọi người.", "Take a seat to listen, study or meet with others.")}</p>
         {owner ? <button type="button" className="primary-button" onClick={() => { setFormError(""); setDraft(DEFAULT_ROOM); }}><Plus size={18}/>{label("Tạo phòng", "Create a room")}</button>
           : onSignIn && <button type="button" className="primary-button" onClick={onSignIn}><DoorOpen size={18}/>{label("Đăng nhập để vào phòng", "Sign in to join")}</button>}

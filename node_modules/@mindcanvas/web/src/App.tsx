@@ -4,7 +4,9 @@ import { FOLDER_LIBRARY, FOLDER_ROOT, fileIdFromUrl, folderNavigationFromUrl, li
 import { newA4Layout } from "./lib/a4Canvas";
 import { BackButton, PageChromeProvider, ShellBack } from "./components/PageNavigation";
 import { enterLearningSpace, leaveLearningSpace, learningTabFromUrl, openLearningTool, type HubTab } from "./lib/learningNavigation";
-import { MusicProvider, MusicIsland } from "./components/MusicPlayer";
+import { OnlineRoomSessionProvider, OnlineRoomSessionHost, PersonalMusicIsland, ROOM_ROUTE_CHANGED } from "./components/OnlineRoomSession";
+import { onlineRoomUrl } from "./lib/onlineRoomRoutes";
+import { MusicProvider } from "./components/MusicPlayer";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { ProjectFolder } from "./lib/projectStore";
@@ -581,7 +583,16 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
           await ensureCanvasAttachments(user.id, await fetchBoard(user.id, project.id));
         } : undefined}/>}/>
   </div>;
-  return <PageChromeProvider openQuickActions={showQuickActions}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
+  const returnToOnlineRoom = (id: string) => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    canvasLinks.leaveUnopenedLink();
+    void ws.home();
+    setFilter("__learning"); setActiveFileId(null); setRecent(false); setNotificationDestination(null);
+    enterLearningSpace("rooms");
+    window.history.replaceState(window.history.state, "", onlineRoomUrl(id));
+    window.dispatchEvent(new Event(ROOM_ROUTE_CHANGED));
+  };
+  return <PageChromeProvider openQuickActions={showQuickActions}><OnlineRoomSessionProvider owner={user?.id ?? null} onRestore={returnToOnlineRoom}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
     {webBackground && <div className="web-background-layer" aria-hidden="true">{webBackground.kind === "video" ? <video src={webBackground.src} muted autoPlay loop playsInline style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/> : <img src={webBackground.src} alt="" style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/>}<span style={{ background: webBackground.overlay ?? "#000000" }}/></div>}
     <AppSidebar projects={ws.projects} folders={ws.folders} files={workspaceFiles.files}
       activeFileId={activeFileId} onBrowseFiles={() => setBrowseFiles(true)} onOpenFile={openWorkspaceFile} boardOpen={!!ws.board} recent={recent} filter={selectedFolder?.id ?? filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={manageFolders} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
@@ -653,11 +664,12 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
             {workspaceFiles.error != null && <button type="button" className="secondary-button" onClick={workspaceFiles.refresh}>{t("retry")}</button>}</div>}
       </section> : filter === "__documents" ? <DocumentToolsPage owner={user?.id ?? null} documents={documents} onDocumentsChanged={refreshDocuments}
         accountPlan={accountPlan} workspace={{ ...libraryWorkspace, scope: libraryScope, onScope: changeLibraryScope }} fromWorkspace/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage key={notificationDestination?.nonce ?? "learning"} owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab={notificationDestination?.tab ?? (connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined)} initialPeerId={notificationDestination?.peerId} initialClassId={notificationDestination?.classId} libraryWorkspace={libraryWorkspace} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/> : folderUnavailable && !ws.loading ? <div className="empty-state workspace-folder-unavailable"><h1>{language === "vi" ? "Không mở được thư mục" : "Folder unavailable"}</h1><p>{language === "vi" ? "Thư mục không còn tồn tại hoặc không thuộc tài khoản này." : "This folder is missing or does not belong to this account."}</p><div className="actions"><button className="secondary-button" onClick={manageFolders}>{t("manageFolders")}</button>{!user && isSupabaseConfigured && <button className="primary-button" onClick={() => void auth()}>{language === "vi" ? "Đăng nhập" : "Sign in"}</button>}</div></div> : folderView ? (folderUnavailable ? <RouteLoading/> : workspaceFolderArea(selectedFolder ?? null)) : <>{filter === "__shared" && <WorkspaceSharedInbox owner={user?.id ?? null}/>}<WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnails={ws.loadThumbnails} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/></>}</Suspense>
+      <OnlineRoomSessionHost owner={user?.id ?? null}/>
       <PetCompanion inline={filter === "__learning" || filter === "__flashcards" || filter === "__lab"} visible={petVisible} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>
-    <MusicIsland/>
+    <PersonalMusicIsland/>
     <FeatureGuideManager key={user?.id ?? "guest"} ownerId={user?.id ?? null} trigger={guideTrigger} manualGuideId={manualGuideId} onManualConsumed={() => setManualGuideId(null)} onPracticeDecision={decideCanvasPractice} blocked={focusMode || modal !== null || profileOpen}/>
     {pageHelpOpen && pageHelpScope && pageHelpUnlocked && <PageHelpPanel scope={pageHelpScope} onClose={() => setPageHelpOpen(false)}/>}
    {trialOpen && plusTrial && <PlusTrialPopup trial={plusTrial} working={trialWorking} activated={trialActivated} error={trialError} onActivate={() => void startTrial()} onClose={closeTrial}/>}
@@ -711,7 +723,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       }}/>} {/* Keep this mounted while minimized so its request survives. */}
     {commandOpen && <CommandPalette projects={ws.projects} onClose={() => setCommandOpen(false)} onOpenProject={project => void ws.open(project)} onCreateProject={() => askName("project")} onOpenLearningTool={openQuickLearning} onOpenSettings={() => setModal("settings")} onImport={() => fileInput.current?.click()}/>}
     </Suspense>
-  </div>{profileOpen && <Suspense fallback={<div className="profile-screen"><RouteLoading/></div>}><PersonalProfilePage state={personalProfile} signedIn={!!user} onBack={closeProfileRoute} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/></Suspense>}</PageChromeProvider>;
+  </div>{profileOpen && <Suspense fallback={<div className="profile-screen"><RouteLoading/></div>}><PersonalProfilePage state={personalProfile} signedIn={!!user} onBack={closeProfileRoute} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/></Suspense>}</OnlineRoomSessionProvider></PageChromeProvider>;
 }
 function RouteLoading() {
   const { t } = useLanguage();

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, X } from "lucide-react";
+import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, Volume2, X } from "lucide-react";
 import { useOnlineRoom } from "../hooks/useOnlineRoom";
 import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, deleteOnlineRoom, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
 import { onlineRoomUrl, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
@@ -7,6 +7,9 @@ import { copyTextWithFallback } from "../lib/share";
 import { PageBack } from "./PageNavigation";
 import { ProfileAvatar } from "./ProfileAvatar";
 import OnlineRoomYouTube from "./OnlineRoomYouTube";
+import RoomBackgroundAudio from "./RoomBackgroundAudio";
+import RoomIsland from "./RoomIsland";
+import { useRoomAudioPriority } from "./MusicPlayer";
 import Dialog from "./Dialog";
 
 type Tab = "chat" | "queue" | "people";
@@ -21,7 +24,10 @@ function storedLayout(meeting: boolean): RoomLayout | null {
   catch { return null; }
 }
 
-export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = false }: { link: OnlineRoomLink; owner: string; onBack: () => void; vi: boolean; fromClass?: boolean }) {
+export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = false, foreground = true, onMinimize, onRestore }: {
+  link: OnlineRoomLink; owner: string; onBack: () => void; vi: boolean; fromClass?: boolean; foreground?: boolean;
+  onMinimize: () => void; onRestore: () => void;
+}) {
   const session = useOnlineRoom(link);
   const label: Labels = (vn, en) => vi ? vn : en;
   const exit = () => { session.leave(); onBack(); };
@@ -38,8 +44,16 @@ export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = f
     finally { setSubmittingPassword(false); }
   };
   const snapshot = session.snapshot;
-  return <section className="online-rooms">
-    <PageBack onBack={exit}>{fromClass ? label("Về lớp học","Back to class") : label("Sảnh Phòng Online", "Online Rooms lobby")}</PageBack>
+  const [statusExpanded, setStatusExpanded] = useState(false);
+  return <section className="online-rooms online-room-session" hidden={!foreground} inert={!foreground}>
+    <PageBack active={foreground} onBack={onMinimize}>{label("Thu nhỏ phòng", "Minimize room")}</PageBack>
+    {!snapshot && !foreground && <RoomIsland name={session.roomName || label("Phòng Online", "Online Rooms")} vi={vi}
+      status={session.phase === "waiting" ? label("Đang chờ duyệt", "Waiting for approval")
+        : session.phase === "closed" ? label("Phòng đã đóng", "Room closed")
+        : session.phase === "removed" ? label("Chủ phòng đã mời bạn rời phòng", "The host removed you")
+        : session.phase === "connecting" || session.phase === "active" ? label("Đang kết nối…", "Connecting…")
+        : label("Phiên phòng chưa kết nối", "Room is not connected")}
+      expanded={statusExpanded} setExpanded={setStatusExpanded} onRestore={onRestore} onLeave={exit}/>}
     {!snapshot ? <div className="online-room-state">
       <span className="online-room-card-symbol">{session.phase === "waiting" ? <Users size={26}/> : <DoorOpen size={26}/>}</span>
       <h1>{session.roomName || label("Phòng Online", "Online Rooms")}</h1>
@@ -66,15 +80,15 @@ export default function OnlineMusicRoom({ link, owner, onBack, vi, fromClass = f
       <div className="online-room-actions"><button type="button" className="secondary-button" onClick={exit}>{fromClass ? label("Về lớp học","Back to class") : label("Về sảnh", "Back to lobby")}</button>
         {["failed","full","waiting_full","expired","other_tab"].includes(session.phase) && <button type="button" className="primary-button" onClick={session.retry}>{session.phase === "other_tab" ? label("Dùng tab này", "Use this tab") : label("Thử lại", "Try again")}</button>}
       </div>
-    </div> : <RoomInterior snapshot={snapshot} messages={session.messages} owner={owner} vi={vi} serverNow={session.serverNow} reconnecting={session.isReconnecting} action={session.act} meetingToken={session.meetingToken} meetingCommand={session.meetingCommand} canvas={session.canvas} canvasSignal={session.canvasSignal} upload={session.upload} download={session.download} exit={exit}/>}
+    </div> : <RoomInterior snapshot={snapshot} messages={session.messages} owner={owner} vi={vi} serverNow={session.serverNow} reconnecting={session.isReconnecting} action={session.act} meetingToken={session.meetingToken} meetingCommand={session.meetingCommand} canvas={session.canvas} canvasSignal={session.canvasSignal} upload={session.upload} download={session.download} exit={exit} foreground={foreground} minimize={onMinimize} restore={onRestore}/>}
   </section>;
 }
 
-function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, meetingCommand, canvas, canvasSignal, upload, download, serverNow, exit, reconnecting }: {
+function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, meetingCommand, canvas, canvasSignal, upload, download, serverNow, exit, reconnecting, foreground, minimize, restore }: {
   snapshot: RoomSnapshot; messages: RoomMessage[]; owner: string; vi: boolean;
   action: ReturnType<typeof useOnlineRoom>["act"];
   canvas: ReturnType<typeof useOnlineRoom>["canvas"]; canvasSignal: number; upload: ReturnType<typeof useOnlineRoom>["upload"]; download: ReturnType<typeof useOnlineRoom>["download"];
-  meetingToken: ReturnType<typeof useOnlineRoom>["meetingToken"]; meetingCommand: ReturnType<typeof useOnlineRoom>["meetingCommand"]; serverNow: () => number; exit: () => void; reconnecting: boolean;
+  meetingToken: ReturnType<typeof useOnlineRoom>["meetingToken"]; meetingCommand: ReturnType<typeof useOnlineRoom>["meetingCommand"]; serverNow: () => number; exit: () => void; reconnecting: boolean; foreground: boolean; minimize: () => void; restore: () => void;
 }) {
   const label: Labels = (vn, en) => vi ? vn : en;
   const { room, playback, members, can_manage, suggestions, waiting, queue } = snapshot;
@@ -87,6 +101,13 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const [panel, setPanel] = useState<Tab>("chat");
   const [av, setAv] = useState<Map<string,string>>(new Map());
   const [listen, setListen] = useState(() => room.official && room.music_enabled && playback.video_id === OFFICIAL_PIANO_VIDEO);
+  const [background, setBackground] = useState(false);
+  const [volume, setVolume] = useState(.65);
+  const [islandExpanded, setIslandExpanded] = useState(false);
+  const [inlinePlayer, setInlinePlayer] = useState<HTMLDivElement | null>(null);
+  const [miniPlayer, setMiniPlayer] = useState<HTMLDivElement | null>(null);
+  const [inlineActions, setInlineActions] = useState<HTMLDivElement | null>(null);
+  const [miniActions, setMiniActions] = useState<HTMLDivElement | null>(null);
   const [wide, setWide] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -106,11 +127,35 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const mayControl = can_manage && !room.official && room.music_enabled;
   const showQueue = room.music_enabled && !room.official;
   const current = playback.video_id ? { ...playback, video_id: playback.video_id } : null;
+  const backgroundAvailable = room.official && room.music_enabled && current?.video_id === OFFICIAL_PIANO_VIDEO;
+  const audioOnly = Boolean(backgroundAvailable && background);
+  const youtubeRequested = Boolean(current && listen && !audioOnly);
+  const playerSlot = foreground ? inlinePlayer : miniPlayer;
+  const actionsSlot = foreground ? inlineActions : miniActions;
+  const projectedRoomAudio = !isMeeting && listen && !!current && playback.playing && volume > 0 && (audioOnly || foreground || islandExpanded);
+  useRoomAudioPriority(projectedRoomAudio);
+  useEffect(() => {
+    if (foreground) {
+      setIslandExpanded(false);
+    } else {
+      setIslandExpanded(isMeeting || youtubeRequested);
+      setShareShown(false); setConfirm(null); setReport(null);
+    }
+  // Choosing to collapse the player remains effective until the next change of screen.
+  }, [foreground]);
+  const volumeControl = <label className="room-island-volume"><Volume2 size={15}/>{label("Âm lượng của bạn", "Your volume")}
+    <input aria-label={label("Âm lượng trong phòng", "Room volume")} type="range" min="0" max="1" step=".01" value={volume} onChange={event => setVolume(Number(event.target.value))}/></label>;
+  const sourceControl = backgroundAvailable && <button className="secondary-button" type="button" onClick={() => { setListen(true); setBackground(!audioOnly); }}>
+    <Music2 size={14}/>{audioOnly ? label("Đổi sang YouTube", "Switch to YouTube") : label("Nghe piano nền", "Play background piano")}
+  </button>;
+  const stopOrPlay = <button className="secondary-button" type="button" onClick={() => setListen(!listen)}>
+    {listen ? <Pause size={14}/> : <Play size={14}/>}{listen ? label("Dừng nghe", "Stop listening") : label("Nghe cùng phòng", "Listen with the room")}
+  </button>;
   const readyTracks = queue.filter(track => track.status === "queued");
   const pendingTracks = queue.filter(track => track.status === "pending");
   const avatarSignature = JSON.stringify(members.map(person => [person.id, person.avatar_url, person.avatar_slot, person.avatar_revision]));
 
-  useEffect(() => { heading.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => { if (foreground) heading.current?.focus({ preventScroll: true }); }, [foreground]);
   useEffect(() => {
     const controller = new AbortController();
     void loadRoomAvatars(members, owner, controller.signal).then(urls => {
@@ -193,6 +238,22 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
     text: isMeeting ? label("Cuộc gọi và chat sẽ dừng cho mọi người. Liên kết mời sẽ hết hiệu lực.", "The call and chat will end for everyone. The invitation link will expire.") : label("Nhạc và chat sẽ dừng cho mọi người. Liên kết mời của phòng này sẽ hết hiệu lực.", "Music and chat will stop for everyone. This room's invitation link will stop working.") });
 
   return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide}>
+    {!isMeeting && !foreground && <RoomIsland name={room.name} vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
+      onRestore={restore} onLeave={exit} live={!reconnecting}
+      status={reconnecting ? label("Đang kết nối lại…", "Reconnecting…") : listen && current && playback.playing
+        ? audioOnly ? label("Đang nghe piano nền", "Background piano playing") : label("YouTube · đang nghe cùng phòng", "YouTube · listening with the room")
+        : label("Vẫn ở trong phòng", "Still in the room")}>
+      {current && <>
+        <strong>{audioOnly ? label("Bình minh · Piano MindCanvas", "Daybreak · MindCanvas Piano") : current.title || "YouTube"}</strong>
+        {youtubeRequested && <div ref={setMiniPlayer} className="room-youtube-slot"/>}
+        <div ref={setMiniActions}/>
+        <div className="room-island-controls">{stopOrPlay}{sourceControl}{listen && volumeControl}</div>
+        {backgroundAvailable && <small>{label("Piano nền là bản khác video YouTube.", "Background piano is a separate track from the YouTube video.")}</small>}
+      </>}
+    </RoomIsland>}
+    {!isMeeting && current && youtubeRequested && <OnlineRoomYouTube key={current.video_id} playback={current} serverNow={serverNow}
+      onEnded={revision => void onEnded(revision)} vi={vi} slot={playerSlot} compact={!foreground} volume={volume} controlSlot={actionsSlot}/>}
+    {!isMeeting && current && listen && audioOnly && <RoomBackgroundAudio playback={current} serverNow={serverNow} volume={volume} slot={actionsSlot} vi={vi}/>}
     <header className="online-room-header">
       <div><span className="online-room-live-tag">{isMeeting ? <Video size={15}/> : <Radio size={15}/>} {isMeeting ? label("PHÒNG HỌC / HỌP", "STUDY / MEETING") : label("PHÒNG NGHE NHẠC", "MUSIC ROOM")}{room.visibility === "private" && <Lock size={13} aria-label={label("Phòng riêng", "Private room")}/>}</span>
         <h1 ref={heading} tabIndex={-1}>{room.name}</h1><p>{room.topic || `${label("Chủ phòng:", "Host:")} ${room.host_name}`}</p></div>
@@ -204,6 +265,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
         </div>
         {(can_manage || room.visibility === "public") && <button type="button" className="secondary-button" disabled={busy} onClick={() => void share(false)}><Link2 size={16}/>{label("Chia sẻ phòng", "Share room")}</button>}
         {canDelete && <button type="button" className="secondary-button online-room-delete" disabled={busy} onClick={deleteRoom}><Trash2 size={16}/>{label("Xóa phòng", "Delete room")}</button>}
+        <button type="button" className="secondary-button" onClick={minimize}><Minimize2 size={16}/>{label("Thu nhỏ phòng", "Minimize room")}</button>
         <button type="button" className="secondary-button" onClick={exit}><DoorOpen size={16}/>{label("Rời phòng", "Leave room")}</button>
       </div>
     </header>
@@ -213,7 +275,8 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
     <div className="online-room-workspace">
       {isMeeting ? <Suspense fallback={<p className="online-room-feedback" role="status">{label("Đang tải bàn họp…", "Loading the meeting table…")}</p>}>
         <MeetingBoard layout={roomLayout} room={room} owner={owner} members={members} avatars={av} presenter={snapshot.presenter_id ?? room.host_id}
-          vi={vi} busy={busy} token={meetingToken} run={run} serverNow={serverNow} canvas={canvas} canvasSignal={canvasSignal}/>
+          vi={vi} busy={busy} token={meetingToken} run={run} serverNow={serverNow} canvas={canvas} canvasSignal={canvasSignal}
+          foreground={foreground} reconnecting={reconnecting} islandExpanded={islandExpanded} setIslandExpanded={setIslandExpanded} onRestore={restore} onLeave={exit}/>
       </Suspense> : <section className="online-room-stage-zone" aria-label={label("Không gian học chung", "Shared study space")}>
         {roomLayout === "classroom" && <div className="online-room-classroom-windows" aria-hidden="true"><span/><span/><span/></div>}
         <div className="online-room-stage-tools"><span>{label("Bảng chung", "Shared board")}</span>
@@ -224,10 +287,17 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
           {current ? <>
             <strong className="online-room-track-title">{current.title || label("Video YouTube", "YouTube video")}</strong>
             {current.attribution && <small className="online-room-credit">{current.attribution}</small>}
-            {listen ? <OnlineRoomYouTube key={current.video_id} playback={current} serverNow={serverNow} onEnded={revision => void onEnded(revision)} vi={vi}/>
-              : <div className="online-room-board-invite"><Headphones size={31}/><p>{playback.playing ? label("Nghe cùng đoạn mọi người đang nghe.", "Catch up to the part everyone is listening to.") : label("Chủ phòng đang tạm dừng bài.", "The host has paused this track.")}</p>
-                <button type="button" className="primary-button" onClick={() => setListen(true)}><Play size={16}/>{label("Nghe cùng phòng", "Listen with the room")}</button></div>}
-            {listen && <button type="button" className="text-button online-room-stop-listening" onClick={() => setListen(false)}><X size={14}/>{label("Dừng nghe trên máy này", "Stop listening on this device")}</button>}
+            {youtubeRequested ? <div ref={setInlinePlayer} className="room-youtube-slot in-room"/>
+              : <div className="online-room-board-invite"><Headphones size={31}/><p>{listen && audioOnly
+                ? label("Bình minh · Piano MindCanvas — có thể nghe khi chuyển sang làm bài.", "Daybreak · MindCanvas Piano — keeps playing while you study.")
+                : playback.playing ? label("Nghe cùng đoạn mọi người đang nghe.", "Catch up to the part everyone is listening to.") : label("Chủ phòng đang tạm dừng bài.", "The host has paused this track.")}</p>
+                {!listen && stopOrPlay}</div>}
+            <div ref={setInlineActions}/>
+            <div className="online-room-player-local room-island-controls">
+              {listen && <button className="text-button online-room-stop-listening" type="button" onClick={() => setListen(false)}><X size={14}/>{label("Dừng nghe trên máy này", "Stop listening on this device")}</button>}
+              {sourceControl}{listen && volumeControl}
+            </div>
+            {backgroundAvailable && <small className="room-audio-status">{label("Piano nền là bản khác video YouTube.", "Background piano is a separate track from the YouTube video.")}</small>}
           </> : <div className="online-room-board-invite"><BookOpen size={37}/>
             <strong>{room.music_enabled ? label("Chưa phát nhạc", "No music playing yet") : label("Cùng ngồi học nhé", "Let’s study together")}</strong>
             <p>{room.music_enabled ? label("Bài hát sẽ hiện ở đây khi chủ phòng chọn.", "A track will appear here when the host chooses one.")
@@ -251,7 +321,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
           {showQueue && <button type="button" aria-pressed={panel === "queue"} onClick={() => setPanel("queue")}><Music2 size={15}/>{label("Hàng đợi", "Queue")}</button>}
           <button type="button" aria-pressed={panel === "people"} onClick={() => setPanel("people")}><Users size={15}/>{label("Mọi người", "People")}{waiting.length > 0 && <small>{waiting.length}</small>}</button>
         </div>
-        {panel === "chat" && <RoomChat messages={messages} label={label} owner={owner} busy={busy} canManage={can_manage} chatLocked={!!room.chat_locked} onReport={openReport} run={run} vi={vi} upload={isMeeting ? upload : undefined} download={isMeeting ? download : undefined}/>}
+        {panel === "chat" && <RoomChat foreground={foreground} messages={messages} label={label} owner={owner} busy={busy} canManage={can_manage} chatLocked={!!room.chat_locked} onReport={openReport} run={run} vi={vi} upload={isMeeting ? upload : undefined} download={isMeeting ? download : undefined}/>}
         {panel === "queue" && showQueue && <RoomQueue label={label} run={run} mayControl={mayControl} suggestions={suggestions} busy={busy} queued={readyTracks} pending={pendingTracks}/>}
         {panel === "people" && <div className="online-room-people">
           {waiting.length > 0 && <section><h2>{label("Đang chờ vào", "Waiting to join")}</h2><ul>{waiting.map(person => <li key={person.id}><strong>{person.name}</strong>
@@ -276,7 +346,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
         </div>}
       </aside>
     </div>
-    {shareShown && <Dialog title={label("Chia sẻ phòng", "Share room")} onClose={() => setShareShown(false)} className="online-room-dialog" workspace>
+    {foreground && shareShown && <Dialog title={label("Chia sẻ phòng", "Share room")} onClose={() => setShareShown(false)} className="online-room-dialog" workspace>
       <div className="online-room-share-form"><p>{classRoom ? label("Chỉ thành viên đang tham gia lớp có thể mở liên kết này.", "Only currently enrolled members can open this link.") : room.visibility === "public"
         ? label("Ai đã đăng nhập đều có thể vào phòng công khai.", "Anyone signed in can join a public room.")
         : room.entry_mode === "password" ? label("Người nhận cần nhập mật khẩu. Hãy gửi mật khẩu riêng.", "Guests must enter the room password. Send the password separately.")
@@ -290,11 +360,11 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
         {problem && <p role="alert" className="form-error">{problem}</p>}
       </div>
     </Dialog>}
-    {report && <RoomReportDialog key={report.message?.id ?? "room"} message={report.message} label={label} busy={busy} error={problem} onClose={() => setReport(null)} onSubmit={async (reason,detail) => {
+    {foreground && report && <RoomReportDialog key={report.message?.id ?? "room"} message={report.message} label={label} busy={busy} error={problem} onClose={() => setReport(null)} onSubmit={async (reason,detail) => {
       const result = await run({ name:"report",...(report.message ? { id:report.message.id } : {}),reason,detail });
       if (result?.state === "active") { setReport(null); setNote(label("Đã gửi báo cáo cho quản trị viên.","Report sent to the administrator.")); }
     }}/>}
-    {confirm && <Dialog title={confirm.title} onClose={() => setConfirm(null)} className="online-room-dialog" dismissible={!busy} workspace>
+    {foreground && confirm && <Dialog title={confirm.title} onClose={() => setConfirm(null)} className="online-room-dialog" dismissible={!busy} workspace>
       <div className="online-room-share-form"><p>{confirm.text}</p><div className="online-room-actions">
         <button type="button" className="secondary-button" onClick={() => setConfirm(null)} disabled={busy}>{label("Hủy", "Cancel")}</button>
         <button type="button" className={confirm.action.name === "delete" ? "secondary-button online-room-delete" : "primary-button"} disabled={busy} onClick={() => {
@@ -366,7 +436,7 @@ function RoomReportDialog({ message,label,busy,error,onClose,onSubmit }: { messa
   </Dialog>;
 }
 
-function RoomChat({ messages, label, owner, busy, canManage, chatLocked,onReport, run, vi, upload, download }: { messages: RoomMessage[]; label: Labels; owner: string; busy: boolean; canManage: boolean; chatLocked:boolean; onReport:(message?:RoomMessage)=>void; run: Run; vi: boolean; upload?: (file:File,key:string) => Promise<void>; download?: (id:string) => Promise<Blob> }) {
+function RoomChat({ foreground, messages, label, owner, busy, canManage, chatLocked,onReport, run, vi, upload, download }: { foreground: boolean; messages: RoomMessage[]; label: Labels; owner: string; busy: boolean; canManage: boolean; chatLocked:boolean; onReport:(message?:RoomMessage)=>void; run: Run; vi: boolean; upload?: (file:File,key:string) => Promise<void>; download?: (id:string) => Promise<Blob> }) {
   const postingBlocked = chatLocked && !canManage;
   const input = useRef<HTMLInputElement>(null), fileWorking = useRef(false);
   const [file, setFile] = useState<{ value: File; key: string } | null>(null);
@@ -432,7 +502,7 @@ function RoomChat({ messages, label, owner, busy, canManage, chatLocked,onReport
     {file && <div className="meeting-file-pending"><span>{file.value.name}</span>
       <button type="button" className="primary-button" disabled={fileBusy || postingBlocked} onClick={() => void sendFile()}>{fileBusy ? label("Đang gửi…","Sending…") : label("Gửi tệp","Send file")}</button>
       <button type="button" className="icon-button" disabled={fileBusy} aria-label={label("Bỏ chọn tệp","Remove selected file")} onClick={() => { setFile(null); setFileError(null); }}><X size={16}/></button></div>}
-    {preview && download && <Suspense fallback={<p role="status">{label("Đang mở tệp…","Opening file…")}</p>}><MeetingFilePreview key={preview.id} file={preview} vi={vi} load={download} onClose={() => setPreview(null)}/></Suspense>}
+    {foreground && preview && download && <Suspense fallback={<p role="status">{label("Đang mở tệp…","Opening file…")}</p>}><MeetingFilePreview key={preview.id} file={preview} vi={vi} load={download} onClose={() => setPreview(null)}/></Suspense>}
     <form className="online-room-chat-form" data-files={Boolean(upload)} onSubmit={event => void send(event)}>
       {upload && <><input type="file" ref={input} className="meeting-file-input" aria-label={label("Chọn tệp để gửi","Choose file to send")} accept={MEETING_FILE_ACCEPT} onChange={event => {
         const picked = event.currentTarget.files?.[0]; event.currentTarget.value = "";

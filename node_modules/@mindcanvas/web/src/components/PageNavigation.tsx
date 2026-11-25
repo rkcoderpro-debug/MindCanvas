@@ -83,16 +83,27 @@ export function useActivityFocus(active: boolean) {
     const area = ref.current;
     if (!active || !area || area.closest("[hidden]")) return;
     const prior = document.activeElement as HTMLElement | null;
-    const tabbable = () => [...area.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, iframe, [tabindex='0']")].filter(el => el.offsetParent !== null && !el.closest("[hidden], [inert]"));
+    const focusSelector = "button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, iframe, [tabindex='0']";
+    const visible = (element: HTMLElement) => (element.offsetParent !== null || element.getClientRects().length > 0) && !element.closest("[hidden], [inert]");
     area.querySelector<HTMLElement>(".page-back-button")?.focus({ preventScroll: true });
     const onTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || area.closest("[hidden]") || document.querySelector("dialog[open]")) return;
-      const options = tabbable(), first = options[0], last = options.at(-1);
-      const focus = document.activeElement;
-      if (first && last && (!area.contains(focus) || (event.shiftKey ? focus === first : focus === last))) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
+      const options = [...area.querySelectorAll<HTMLElement>(focusSelector)].filter(visible);
+      const outside = [...document.querySelectorAll<HTMLElement>("[data-study-island], [data-study-island-media]")]
+        .flatMap(container => [...container.querySelectorAll<HTMLElement>(focusSelector)]).filter(visible);
+      const first = options[0], last = options.at(-1), startIsland = outside[0], endIsland = outside.at(-1);
+      if (!first || !last) return;
+      const focus = document.activeElement as HTMLElement | null;
+      let destination: HTMLElement | undefined;
+      if (!focus || (!area.contains(focus) && !outside.includes(focus))) destination = event.shiftKey ? (endIsland ?? last) : first;
+      else if (event.shiftKey) {
+        if (focus === first) destination = endIsland ?? last;
+        else if (focus === startIsland) destination = last;
+      } else {
+        if (focus === last) destination = startIsland ?? first;
+        else if (focus === endIsland) destination = first;
       }
+      if (destination) { event.preventDefault(); destination.focus(); }
     };
     window.addEventListener("keydown", onTab);
     return () => { window.removeEventListener("keydown", onTab); if (prior?.isConnected) prior.focus({ preventScroll: true }); };

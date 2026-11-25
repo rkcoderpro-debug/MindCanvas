@@ -1,0 +1,45 @@
+.music-island[data-study-island] { z-index: 131; }
+.music-island.room-island:not(.expanded) { width: min(285px, calc(100vw - 20px)); }
+.music-island.room-island.expanded { width: min(392px, calc(100vw - 20px)); }
+.room-island .music-island-open { justify-content: flex-start; min-height: 34px; }
+.room-island-name { flex: 1; min-width: 0; overflow: hidden; text-align: start; text-overflow: ellipsis; white-space: nowrap; }
+.room-island-indicators { display: inline-flex; align-items: center; gap: 5px; }
+.room-island-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.room-island-dot[data-live="true"] { background: var(--success); }
+.room-island-details { display: grid; gap: 8px; padding: 8px 9px 9px; max-height: max(180px, calc(100dvh - 123px)); overflow: auto; border-top: 1px solid var(--line); scrollbar-width: thin; }
+.room-island-status, .room-island-details > small { font-size: 11px; color: var(--muted); }
+.room-island-details > strong { font-size: 13px; overflow-wrap: anywhere; }
+.room-island-actions, .room-island-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.room-island-actions { justify-content: space-between; }
+.room-island :is(.text-button, .secondary-button) { font-size: 11px; min-height: 34px; padding: 5px 8px; box-shadow: none; }
+.room-island .room-island-leave { color: var(--danger); }
+.room-island-controls > button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border); }
+.room-island-volume { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; font-size: 11px; color: var(--muted); }
+.room-island-volume input { width: min(106px, 26vw); accent-color: var(--accent); }
+.room-island-preview { overflow: hidden; margin: 0; border-radius: 9px; background: var(--canvas); }
+.room-island-preview video { display: block; width: 100%; max-height: min(32dvh, 185px); aspect-ratio: 16/9; object-fit: contain; background: #171b20; }
+.room-island-preview figcaption { padding: 5px 8px; font-size: 11px; color: var(--muted); }
+.room-youtube-slot { display: block; width: 100%; min-height: 200px; aspect-ratio: 16 / 9; border-radius: 9px; background: var(--soft); }
+.room-youtube-slot.in-room { aspect-ratio: 16 / 9; }
+.room-youtube-float { position: fixed; z-index: 5; overflow: hidden; border-radius: 9px; background: var(--soft); }
+.room-youtube-float.on-island { z-index: 132; }
+.room-youtube-float iframe { display: block; width: 100%; height: 100%; border: 0; }
+.room-youtube-controls .online-room-player-actions { justify-content: start; }
+.room-island .room-youtube-controls .online-room-player-actions { margin-top: 0; }
+.music-island .personal-youtube-slot { margin: 6px 0; }
+.music-youtube-surface.music-youtube-inside-island { z-index: 132; }
+.room-audio-status { display: block; color: var(--muted); font-size: 12px; }
+@media (max-width: 700px) {
+  .room-island-details { max-height: max(160px, calc(100dvh - 160px)); }
+}
+.music-youtube-surface[hidden], .room-youtube-float[hidden], .online-room-session[hidden] { display: none !important; }
+.online-room-player-local { justify-content: center; margin: 8px 0 4px; }
+.music-youtube-slot.personal-youtube-slot { min-height: 244px; height: auto; aspect-ratio: 16 / 11; }
+.music-island:has(.personal-youtube-slot) .music-island-details { max-height: max(175px, calc(100dvh - 139px)); overflow: auto; }
+
+body:has([data-study-island]):has([data-learning-viewport]:not([hidden])) [data-study-island] {
+  top: max(6px, env(safe-area-inset-top)); left: 50%; right: auto; transform: translateX(-50%);
+}
+body:has([data-study-island]) .activity-screen:not([hidden]) {
+  padding-top: calc(max(6px, env(safe-area-inset-top)) + 45px);
+}
