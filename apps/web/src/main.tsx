@@ -5,12 +5,15 @@ import App from "./App";
 import { registerMindCanvasServiceWorker } from "./lib/pwa";
 import { restoreOnlineRoomSignIn } from "./lib/onlineRoomRoutes";
 import { restoreFolderSignIn } from "./lib/folderLinks";
+import { installThemeTooltips } from "./lib/themeTooltips";
 import "./styles.css";
+import "./studioPolish.css";
 
 restoreOnlineRoomSignIn();
 restoreFolderSignIn();
 restoreWorkspaceShareSignIn();
 registerMindCanvasServiceWorker();
+installThemeTooltips(document);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode><App /></StrictMode>,

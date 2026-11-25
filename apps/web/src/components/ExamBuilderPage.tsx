@@ -1,4 +1,5 @@
 import FilePicker from "./FilePicker";
+import { StudioHeader, StudioLegend } from "./StudioHeader";
 import { PageBack } from "./PageNavigation";
 import ContentLanguageField from "./ContentLanguageField";
 import { readContentLanguage, rememberContentLanguage } from "../lib/contentLanguage";
@@ -160,18 +161,20 @@ export default function ExamBuilderPage({ owner, documents = [], quizzes, accoun
   });
   const selectedReference = result?.sources.find(source => source.id === reference?.sourceId);
   if (isManual) return <ExamManualStudio key={owner} owner={owner} documents={documents} accountPlan={accountPlan} onAuto={() => setWork(current => ({ ...current, aiMode: "auto" }))}/>;
-  return <section className="exam-builder-page">
-    <header className="exam-builder-heading"><div><span className="eyebrow">EXAM STUDIO</span><h1>Tạo đề thi bằng AI</h1><p>Tải đề mẫu, tài liệu hoặc nhập nội dung để AI tạo đề cho bạn.</p></div><button className="secondary-button" disabled={!!busy} onClick={() => { setShowResult(false); setPaste(""); setWork(emptyExamWorkspace(initialLanguage)); setAnswers(false); setReference(null); setError(""); }}>Tạo đề mới</button></header>
+  return <section className="studio-page exam-builder-page">
+    <StudioHeader kind="exam" title="Tạo đề thi bằng AI" description="Tải đề mẫu, tài liệu hoặc nhập nội dung để AI tạo đề cho bạn." actions={<><button className="secondary-button" disabled={!!busy} onClick={() => { setShowResult(false); setPaste(""); setWork(emptyExamWorkspace(initialLanguage)); setAnswers(false); setReference(null); setError(""); }}>Tạo đề mới</button></>}/>
+    <fieldset className="studio-mode-panel"><StudioLegend step={1}>Chế độ AI</StudioLegend>
     <ExamModeSwitch mode="auto" disabled={!!busy} onChange={mode => { setWork(current => ({ ...current, aiMode: mode })); setError(""); setNotice(""); }}/>
+    </fieldset>
     {error && <p role="alert" className="form-error">{error}</p>}{persistError && <p role="alert" className="form-error">{persistError}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}{busy && <p role="status" className="exam-busy"><RefreshCw size={16}/>{busy}</p>}
-    <div className="exam-builder-layout exam-creation-layout"><div className="exam-builder-controls" hidden={showResult && !!result}><fieldset disabled={!!busy}>
-      <legend>Thuộc tính đề thi</legend><div className="exam-setup-grid">
+    <div className="exam-builder-layout exam-creation-layout"><div className="exam-builder-controls studio-workflow" hidden={showResult && !!result}><fieldset disabled={!!busy}>
+      <StudioLegend step={2}>Thuộc tính đề thi</StudioLegend><div className="exam-setup-grid">
       <label>Hình thức đề<select aria-label="Hình thức đề" value={work.settings.format} onChange={event => setting({ format: event.target.value as ExamSettings["format"], ...(event.target.value === "paper" ? { mode: "template" } : {}) })}><option value="quiz">Quiz thông thường · 4 lựa chọn</option><option value="paper">Đề nhiều dạng · theo mẫu · PDF</option></select></label>
       <label>Cách tạo<select value={work.settings.mode} onChange={event => setting({ mode: event.target.value as ExamSettings["mode"] })}><option value="materials" disabled={work.settings.format === "paper"}>Theo tài liệu</option><option value="template">Tương tự đề mẫu</option></select></label>
       <label>Độ khó<select aria-label="Độ khó" value={work.settings.difficulty} onChange={event => setting({ difficulty: event.target.value as ExamSettings["difficulty"] })}><option value="easy">Dễ · nhận biết, áp dụng trực tiếp</option><option value="medium">Vừa · hiểu và vận dụng</option><option value="hard">Khó · suy luận nhiều bước</option></select></label>
       </div><details><summary>Tùy chọn nâng cao</summary><div className="exam-fields"><label>Môn học<input value={work.settings.subject} maxLength={160} onChange={event => setting({ subject: event.target.value })}/></label><label>Lớp / trình độ<input value={work.settings.level} maxLength={160} onChange={event => setting({ level: event.target.value })}/></label></div>
       <ContentLanguageField bilingual value={work.settings.language} onChange={value => { rememberContentLanguage("exam-auto", value); setting({ language: value }); }} />
-      </details></fieldset><fieldset disabled={!!busy}><legend>File mẫu hoặc nội dung tạo đề</legend><div className="exam-source-grid"><div>
+      </details></fieldset><fieldset disabled={!!busy}><StudioLegend step={3}>File mẫu hoặc nội dung tạo đề</StudioLegend><div className="exam-source-grid"><div>
       {work.settings.mode === "template" && <FilePicker className="exam-upload" label="Chọn đề mẫu" accept={EXAM_FILE_ACCEPT} description="PDF, DOCX, PPTX, TXT, MD, CSV hoặc ảnh · tối đa 10 MB/tệp" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "template"); }}/>}
       <FilePicker className="exam-upload" label={work.settings.mode === "template" ? "Tài liệu kiến thức bổ sung" : "Tải tài liệu"} aria-label="Tải tài liệu" multiple accept={EXAM_FILE_ACCEPT} description="PDF, DOCX, PPTX, TXT, MD, CSV hoặc ảnh · tối đa 10 MB/tệp" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void read(files, "material"); }}/>
       <p className="exam-hint">Tối đa 6 nguồn, 10 MB/file. Kiểm tra lại nội dung đọc từ ảnh hoặc PDF scan.</p></div><div>

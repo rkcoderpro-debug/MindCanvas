@@ -1,4 +1,4 @@
-import { PageBack, PageNavigation, useListScrollReturn } from "./PageNavigation";
+import { PageBack, useListScrollReturn } from "./PageNavigation";
 import { useEffect, useState } from "react";
 import { X, BookOpen, ClipboardList, Code2, Download, FileText, Search, Trash2 } from "lucide-react";
 import type { SavedExam } from "@mindcanvas/shared";
@@ -65,7 +65,7 @@ export default function DocumentCreatorPage({ owner, documents = [], onDocuments
       </section>
     </div>
     <div hidden={!choice || previewVisible}>
-      <PageBack active={!!choice && !previewVisible} onBack={closeCreator}>{vi ? "Thư viện tài liệu" : "Document library"}</PageBack><div className="creator-chrome"><PageNavigation title={choice === "note" ? "Takenote" : vi ? "Đề thi & bài tập" : "Exams & exercises"}/></div>
+      <PageBack active={!!choice && !previewVisible} onBack={closeCreator}>{vi ? "Thư viện tài liệu" : "Document library"}</PageBack>
       {visited.has("note") && <LearningVisibility active={choice === "note" && !previewVisible}><TakenoteBuilderPage key={owner} owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} onSaved={refresh} openNote={openNote}/></LearningVisibility>}
       {visited.has("exam") && <LearningVisibility active={choice === "exam" && !previewVisible}><ExamBuilderPage key={owner} owner={owner} documents={documents} quizzes={quizzes} accountPlan={accountPlan} onOpenQuiz={onOpenQuiz}/></LearningVisibility>}
     </div>
