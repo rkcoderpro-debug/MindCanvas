@@ -91,4 +91,21 @@
 .folder-more-menu div button { text-align: start; background: transparent; color: var(--text); padding: 7px 9px; border-radius: 5px; }
 .folder-more-menu div button:hover { background: var(--soft); color: var(--accent); }
 .folder-library .folder-manager-main { padding: 0; overflow: visible; }
-.workspace-file-detail p { overflow-wrap: anywhere; }
+.workspace-file-preview { min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.workspace-file-preview-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.workspace-file-preview-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.workspace-file-preview-title svg { flex: none; color: var(--accent); }
+.workspace-file-preview-title h2 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.workspace-file-preview-header .actions { flex-wrap: wrap; margin: 0; }
+.workspace-file-preview pre { background: var(--soft); padding: 12px; border-radius: 8px; margin: 0; max-block-size: 65dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.document-tools-shell .document-library-meta { grid-row: 2; display: grid; gap: 5px; min-width: 0; }
+.document-tools-shell .document-library-meta .document-tools-error { margin: 0; }
+.document-library-folder-control { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 4px 0; }
+.document-library-folder-control select { max-width: min(360px, 100%); }
+.document-tools-shell .document-tool-workspace:has(> .workspace-file-preview, > .document-viewer) { display: flex; flex-direction: column; }
+.document-tool-workspace > .workspace-file-preview { flex: 1; min-height: 0; overflow: auto; }
+.document-tool-workspace .workspace-file-preview > .document-viewer { flex: 1; }
+.workspace-file-preview > .document-viewer[data-document-kind="html"] { min-height: min(430px, 65dvh); }
+.workspace-direct-document .workspace-file-preview > .document-viewer { height: max(490px, calc(100dvh - 220px)); }
+.workspace-folder-tools .manager-documents { margin-top: 0; padding-top: 8px !important; }
+.workspace-direct-document .workspace-file-preview { margin-top: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }

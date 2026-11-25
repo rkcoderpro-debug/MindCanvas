@@ -25,7 +25,7 @@ import { MAX_FILE_BYTES } from "../lib/board";
 import { saveDocumentToStorage } from "../lib/supabase";
 import type { AiGenerationOptions } from "../lib/aiOptions";
 import { emitGuideAction, GUIDE_REQUEST_EVENT } from "../lib/featureGuides";
-import DocumentToolsPage from "./DocumentToolsPage";
+import DocumentToolsPage, { type LibraryWorkspace } from "./DocumentToolsPage";
 import type { UploadedDocument } from "../lib/documentStore";
 import { LEARNING_TABS, LearningNavigationProvider, LearningToolScope, useLearningNavigation, type HubTab } from "../lib/learningNavigation";
 
@@ -48,11 +48,11 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void };
+type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void; libraryWorkspace?: LibraryWorkspace };
 export default function LearningHubPage(props: LearningHubProps) {
   return <LearningNavigationProvider key={props.owner ?? "guest"} owner={props.owner} initialTab={props.initialTab}><LearningSpace {...props}/></LearningNavigationProvider>;
 }
-function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn }: LearningHubProps) {
+function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn, libraryWorkspace }: LearningHubProps) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
@@ -104,7 +104,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
       case "plan": return <StudyPlannerPanel owner={owner} maxCards={accountPlan?.maxCards ?? 50} openAiPlan={openAiPlan} onAiPlanOpened={() => setOpenAiPlan(false)} flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>;
       case "progress": return <ProgressPanel flashcards={flashcards} quizzes={quizzes} language={language} t={t}/>;
       case "lab": return <LabPage owner={owner} embedded accountPlan={accountPlan}/>;
-      case "tools": return <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan}/>;
+      case "tools": return <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan} workspace={libraryWorkspace}/>;
       case "music": return <MusicPage/>;
       case "rooms": return <Suspense fallback={<p role="status">{t("loading")}</p>}><OnlineRoomsPage key={owner ?? "guest"} owner={owner} onSignIn={onSignIn}/></Suspense>;
       case "connections": return <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => pickTab("shared")}/>;

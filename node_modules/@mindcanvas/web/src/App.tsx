@@ -1,6 +1,6 @@
 import { restoreWorkspaceShareSignIn, workspaceShareToken } from "./lib/workspaceShareLinks";
 import { ensureCanvasAttachment, ensureCanvasAttachments } from "./lib/shareAttachments";
-import { FOLDER_LIBRARY, FOLDER_ROOT, fileIdFromUrl, folderNavigationFromUrl, writeFolderRoute } from "./lib/folderLinks";
+import { FOLDER_LIBRARY, FOLDER_ROOT, fileIdFromUrl, folderNavigationFromUrl, libraryFolderFromUrl, writeFolderRoute } from "./lib/folderLinks";
 import { newA4Layout } from "./lib/a4Canvas";
 import { BackButton, PageChromeProvider, ShellBack } from "./components/PageNavigation";
 import { enterLearningSpace, leaveLearningSpace, learningTabFromUrl, openLearningTool, type HubTab } from "./lib/learningNavigation";
@@ -57,7 +57,8 @@ const WorkspaceFolderArea = lazy(() => import("./components/WorkspaceFolderArea"
 const FolderProjectList = lazy(() => import("./components/FolderProjectList"));
 const WorkspaceSharedPage = lazy(() => import("./components/WorkspaceSharedPage"));
 const WorkspaceSharedInbox = lazy(() => import("./components/WorkspaceSharedInbox"));
-const FolderManager = lazy(() => import("./components/FolderManager"));
+const DocumentToolsPage = lazy(() => import("./components/DocumentToolsPage"));
+const WorkspaceFilePreview = lazy(() => import("./components/WorkspaceFilePreview"));
 const AiPanel = lazy(() => import("./components/AiPanel"));
 const VersionHistory = lazy(() => import("./components/VersionHistory"));
 const LearningHubPage = lazy(() => import("./components/LearningHubPage"));
@@ -202,9 +203,10 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const [connectionInviteError, setConnectionInviteError] = useState("");
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [activeFileId,setActiveFileId] = useState<string | null>(() => fileIdFromUrl());
+  const [libraryScope,setLibraryScope] = useState(() => libraryFolderFromUrl());
   const [browseFiles,setBrowseFiles] = useState(false);
   const folderView = filter === "__manager" || (!!filter && !filter.startsWith("__"));
-  const workspaceFiles = useWorkspaceFiles(user?.id ?? null, browseFiles || folderView);
+  const workspaceFiles = useWorkspaceFiles(user?.id ?? null, browseFiles || folderView || filter === "__documents" || filter === "__learning" || filter === "__flashcards");
   // File bookmarks use the ID alone, so they follow a file when it moves.
   const linkedFile = workspaceFiles.files.find(file => file.id === activeFileId);
   const currentFolderId = activeFileId ? linkedFile?.folderId ?? null : folderView && filter !== "__manager" ? filter : null;
@@ -224,7 +226,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     resetView: canvas => {
       const learning = !canvas && learningTabFromUrl();
       if (learning && ["__learning", "__flashcards", "__lab"].includes(filter ?? "") && !ws.board) return;
-      setFilter(filterFromLocation()); setActiveFileId(canvas ? null : fileIdFromUrl()); setRecent(false); setNotificationDestination(null);
+      setFilter(filterFromLocation()); setLibraryScope(libraryFolderFromUrl()); setActiveFileId(canvas ? null : fileIdFromUrl()); setRecent(false); setNotificationDestination(null);
       setMobileProjectMenuOpen(false); setCanvasFullscreen(false); setModal(null);
     },
   });
@@ -452,23 +454,23 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     setNotificationDestination(previous => ({ tab, peerId:tab === "connections" && item.kind === "message" ? item.actor_id : undefined,
       classId:tab === "classrooms" ? item.target_id ?? undefined : undefined, nonce:(previous?.nonce ?? 0) + 1 }));
   };
-  const goToFolder = (route: string, mode: "push" | "replace" = "push") => {
+  const goToFolder = (route: string, mode: "push" | "replace" = "push", scope: string | null = null) => {
     canvasLinks.leaveUnopenedLink();
-    writeFolderRoute(route,mode);
+    writeFolderRoute(route,mode,null,scope);
     setActiveFileId(null);
+    setLibraryScope(scope);
     void ws.home();
     setFilter(route === FOLDER_ROOT ? "__manager" : route === FOLDER_LIBRARY ? "__documents" : route);
     setRecent(false); setNotificationDestination(null);
   };
   const openFolder = (id: string) => goToFolder(id);
   const manageFolders = () => goToFolder(FOLDER_ROOT);
-  const openDocumentLibrary = () => { goToFolder(FOLDER_LIBRARY); emitGuideAction("documents:library"); };
-  const openWorkspaceFile = (id: string | null) => {
-    if (!id) {
-      if (activeFileId && window.history.state?.mindcanvasFileEntry === activeFileId) window.history.back();
-      else goToFolder(selectedFolder?.id ?? FOLDER_ROOT,"replace");
-      return;
-    }
+  const openDocumentLibrary = (scope: string | null) => { goToFolder(FOLDER_LIBRARY, "push", scope); emitGuideAction("documents:library"); };
+  const closeWorkspaceFile = () => {
+    if (activeFileId && window.history.state?.mindcanvasFileEntry === activeFileId) window.history.back();
+    else goToFolder(selectedFolder?.id ?? FOLDER_ROOT,"replace");
+  };
+  const openWorkspaceFile = (id: string) => {
     canvasLinks.leaveUnopenedLink();
     writeFolderRoute(FOLDER_ROOT,"push",id);
     setActiveFileId(id);
@@ -561,11 +563,15 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const workspaceBackLabel = language === "vi" ? "Về Workspace" : "Back to Workspace";
   const canvasBackLabel = modal === "share" ? (language === "vi" ? "Về canvas" : "Back to canvas") : selectedFolder ? selectedFolder.name : workspaceBackLabel;
   const backFromCanvas = () => { if (modal === "share") { setModal(null); return; } setMobileProjectMenuOpen(false); setAiPanelMode("closed"); setCanvasFullscreen(false); void ws.home(); };
+  const changeLibraryScope = (scope: string | null) => { setLibraryScope(scope); writeFolderRoute(FOLDER_LIBRARY, "replace", null, scope); };
+  const backFromLibrary = () => goToFolder(ws.folders.some(folder => folder.id === libraryScope) ? libraryScope! : FOLDER_ROOT);
+  const refreshDocuments = () => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")));
+  const libraryWorkspace = { repository: workspaceFiles, folders: ws.folders, openFolder: (id: string | null) => goToFolder(id ?? FOLDER_ROOT) };
   const workspaceFolderArea = (current: ProjectFolder | null) => <div className="workspace-folder-browser">
     <WorkspaceFolderArea key={current?.id ?? FOLDER_ROOT} owner={user?.id ?? null} current={current} folders={ws.folders}
-      repository={workspaceFiles} activeFileId={activeFileId} onOpenFile={openWorkspaceFile} onSignIn={!user && isSupabaseConfigured ? () => void auth() : undefined}
+      repository={workspaceFiles} onOpenFile={openWorkspaceFile}
       onFolder={openFolder} onRoot={manageFolders} onNewFolder={() => askName("folder",current?.id ?? null)}
-      onNewProject={() => askName("project")} onImportProject={() => fileInput.current?.click()} onLibrary={openDocumentLibrary}
+      onNewProject={() => askName("project")} onImportProject={() => fileInput.current?.click()} onLibrary={() => openDocumentLibrary(current?.id ?? null)}
       projectList={<FolderProjectList folderId={current?.id ?? null} projects={ws.projects} folders={ws.folders} loading={ws.loading}
         onOpen={project => void ws.open(project)} onManage={ws.manageProject} onDuplicate={ws.duplicateProject}/>}/>
   </div>;
@@ -575,7 +581,8 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       activeFileId={activeFileId} onBrowseFiles={() => setBrowseFiles(true)} onOpenFile={openWorkspaceFile} boardOpen={!!ws.board} recent={recent} filter={selectedFolder?.id ?? filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={manageFolders} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
     <main className={`main-area ${modal === "share" ? "share-open-mode" : ""}`} data-topbar-pinned={stickyTopbar}>
       <header className={`topbar ${ws.board ? "canvas-desktop-topbar" : ""}`}><div className="topbar-location"><ShellBack fallback={ws.board ? { label: canvasBackLabel, run: backFromCanvas }
-        : filter === "__documents" ? { label: t("manageFolders"), run: manageFolders }
+        : activeFileId ? { label: selectedFolder?.name ?? t("manageFolders"), run: closeWorkspaceFile }
+        : filter === "__documents" ? { label: ws.folders.find(folder => folder.id === libraryScope)?.name ?? t("manageFolders"), run: backFromLibrary }
         : filter || recent ? { label: workspaceBackLabel, run: home } : undefined}/>{ws.board && <span className="topbar-canvas-title" title={ws.board.title}>{ws.board.title}</span>}</div>
         <div className="actions"><button className="icon-button command-trigger" aria-label={t("commandPalette")} title={`${t("commandPalette")} · Ctrl/⌘ K`} onClick={showQuickActions}><Search size={18}/></button><button className={`icon-button focus-mode-toggle ${focusMode ? "active" : ""}`} aria-label={t(focusMode ? "exitFocusMode" : "focusMode")} aria-pressed={focusMode} title={`${t(focusMode ? "exitFocusMode" : "focusMode")} · Ctrl/⌘ Shift F`} onClick={() => setFocusMode(value => !value)}><Focus size={18}/></button>{ws.board && <><CollaboratorPresence projectId={ws.board.id} user={user} role={readOnly ? "viewer" : currentProject?.accessRole ?? "owner"}/><button role="status" className={`save-status ${ws.status}`} title={ws.conflict?.error || t("syncCenter")} onClick={() => setModal("sync")}>{t(ws.status)}{ws.pendingCount > 0 && <span>{ws.pendingCount}</span>}</button>{!readOnly && <><button className="icon-button" aria-label={t("save")} title={t("save")} onClick={() => void ws.flush(ws.board?.id)}><Save size={18}/></button><button className="icon-button" aria-label={t("versionHistory")} title={t("versionHistory")} onClick={() => { setModal("versions"); void ws.loadVersions(); }}><History size={18}/></button><button className="icon-button" aria-label={t("undo")} title={t("undo")} disabled={!ws.canUndo} onClick={ws.undo}><Undo2 size={18}/></button><button className="icon-button" aria-label={t("redo")} title={t("redo")} disabled={!ws.canRedo} onClick={ws.redo}><Redo2 size={18}/></button></>}</>}
         {!ws.board && <button className="icon-button" aria-label={t("refresh")} onClick={() => void ws.refresh()}><RefreshCw size={18}/></button>}
@@ -633,7 +640,14 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
           </div>
         </aside></div>}
         <CanvasEditor key={ws.board.id} board={ws.board} documents={documents} onChange={ws.change} onDraftChange={ws.checkpointDraft} onViewportChange={ws.navigate} onUndo={readOnly ? () => {} : ws.undo} onRedo={readOnly ? () => {} : ws.redo} canUndo={!readOnly && ws.canUndo} canRedo={!readOnly && ws.canRedo} onSave={readOnly ? () => {} : () => void ws.flush(ws.board?.id)} canUseAi={!!user && !readOnly} canUseCanvasBackground={accountPlan.effectivePlanId === "pro" || accountPlan.effectivePlanId === "max"} onRequestCanvasBackgroundUpgrade={openPlans} readOnly={readOnly} isFullscreen={canvasFullscreen} onToggleFullscreen={toggleCanvasFullscreen} toolbarPosition={toolbarPosition} timerVisible={timerVisible} onToggleTimer={() => setTimerVisible(value => !value)} showMobileZoomControls={mobileZoomControlsVisible} visibleToolIds={visibleToolIds} onDocumentSaved={saveCanvasDocument}/>
-      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__documents" ? <FolderManager owner={user?.id ?? null} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} /> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage key={notificationDestination?.nonce ?? "learning"} owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab={notificationDestination?.tab ?? (connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined)} initialPeerId={notificationDestination?.peerId} initialClassId={notificationDestination?.classId} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/> : folderUnavailable && !ws.loading ? <div className="empty-state workspace-folder-unavailable"><h1>{language === "vi" ? "Không mở được thư mục" : "Folder unavailable"}</h1><p>{language === "vi" ? "Thư mục không còn tồn tại hoặc không thuộc tài khoản này." : "This folder is missing or does not belong to this account."}</p><div className="actions"><button className="secondary-button" onClick={manageFolders}>{t("manageFolders")}</button>{!user && isSupabaseConfigured && <button className="primary-button" onClick={() => void auth()}>{language === "vi" ? "Đăng nhập" : "Sign in"}</button>}</div></div> : folderView ? (folderUnavailable ? <RouteLoading/> : workspaceFolderArea(selectedFolder ?? null)) : <>{filter === "__shared" && <WorkspaceSharedInbox owner={user?.id ?? null}/>}<WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnails={ws.loadThumbnails} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/></>}</Suspense>
+      </> : filter === "__admin" && isAdmin ? <AdminDashboard onBack={home} ownerId={user?.id ?? null} onRunGuide={runGuide}/> : filter === "__guides" ? <FeatureGuidePage ownerId={user?.id ?? null} onRunGuide={runGuide}/>  : activeFileId ? <section className="workspace-home workspace-direct-document">
+        <button type="button" className="secondary-button manager-documents" onClick={() => openDocumentLibrary(selectedFolder?.id ?? null)}>{language === "vi" ? "Thư viện tài liệu" : "Document library"}</button>
+        {linkedFile ? <WorkspaceFilePreview key={linkedFile.id} owner={user?.id ?? null} file={linkedFile} onClose={closeWorkspaceFile}/>
+          : workspaceFiles.loading ? <RouteLoading/> : <div className="empty-state"><p role="status">{language === "vi" ? "Không mở được tệp. Hãy kiểm tra tệp còn tồn tại và bạn đang dùng đúng tài khoản." : "Could not open the file. Check that it exists and you are using the right account."}</p>
+            {!user && isSupabaseConfigured && <button type="button" className="primary-button" onClick={() => void auth()}>{t("login")}</button>}
+            {workspaceFiles.error != null && <button type="button" className="secondary-button" onClick={workspaceFiles.refresh}>{t("retry")}</button>}</div>}
+      </section> : filter === "__documents" ? <DocumentToolsPage owner={user?.id ?? null} documents={documents} onDocumentsChanged={refreshDocuments}
+        accountPlan={accountPlan} workspace={{ ...libraryWorkspace, scope: libraryScope, onScope: changeLibraryScope }} fromWorkspace/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage key={notificationDestination?.nonce ?? "learning"} owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab={notificationDestination?.tab ?? (connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined)} initialPeerId={notificationDestination?.peerId} initialClassId={notificationDestination?.classId} libraryWorkspace={libraryWorkspace} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/> : folderUnavailable && !ws.loading ? <div className="empty-state workspace-folder-unavailable"><h1>{language === "vi" ? "Không mở được thư mục" : "Folder unavailable"}</h1><p>{language === "vi" ? "Thư mục không còn tồn tại hoặc không thuộc tài khoản này." : "This folder is missing or does not belong to this account."}</p><div className="actions"><button className="secondary-button" onClick={manageFolders}>{t("manageFolders")}</button>{!user && isSupabaseConfigured && <button className="primary-button" onClick={() => void auth()}>{language === "vi" ? "Đăng nhập" : "Sign in"}</button>}</div></div> : folderView ? (folderUnavailable ? <RouteLoading/> : workspaceFolderArea(selectedFolder ?? null)) : <>{filter === "__shared" && <WorkspaceSharedInbox owner={user?.id ?? null}/>}<WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnails={ws.loadThumbnails} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/></>}</Suspense>
       <PetCompanion inline={filter === "__learning" || filter === "__flashcards" || filter === "__lab"} visible={petVisible} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>

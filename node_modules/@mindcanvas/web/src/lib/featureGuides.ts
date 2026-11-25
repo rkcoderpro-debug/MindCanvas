@@ -1088,21 +1088,21 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         titleVi: "Mở thư viện tài liệu",
         titleEn: "Open the document library",
         bodyVi:
-          "Trong Quản lý thư mục, bấm Tài liệu đã tải lên để xem lại các file PDF, DOCX, PPTX và Excel.",
+          "Trong Quản lý thư mục, bấm Thư viện tài liệu để xem lại các tệp đã tải lên.",
         bodyEn:
-          "In Folder Manager, click Uploaded documents to revisit PDF, DOCX, PPTX and Excel files.",
+          "In Folder Manager, click Document library to reopen uploaded files.",
       },
       {
-        target: ".document-file-table",
+        target: ".document-library-list",
         titleVi: "Chọn một file",
         titleEn: "Choose a file",
         bodyVi:
-          "Bấm một dòng file hoặc nút con mắt để mở viewer. Tên, loại và ngày cập nhật giúp bạn nhận diện nhanh.",
+          "Bấm tên tệp để mở trình xem. Dòng bên dưới tên cho biết định dạng và vị trí lưu.",
         bodyEn:
-          "Click a file row or its eye button to open the viewer. Name, type and updated date help you identify it.",
+          "Click a file name to preview it. The line below the name shows the file type and its location.",
       },
       {
-        target: ".manager-document-viewer",
+        target: ".document-tool-workspace .document-viewer",
         titleVi: "Làm việc trong viewer",
         titleEn: "Work in the viewer",
         bodyVi:
@@ -1179,12 +1179,12 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         titleVi: "Mở thư viện tài liệu",
         titleEn: "Open the document library",
         bodyVi:
-          "Guide đưa bạn tới Quản lý thư mục trước. Bấm Tài liệu đã tải lên để chọn PDF cần chú thích.",
+          "Trong Quản lý thư mục, bấm Thư viện tài liệu để chọn PDF cần chú thích.",
         bodyEn:
-          "The guide takes you to Folder Manager first. Click Uploaded documents to choose the PDF you want to annotate.",
+          "In Folder Manager, click Document library to choose the PDF you want to annotate.",
       },
       {
-        target: '.document-file-table .file-row[data-document-kind="pdf"]',
+        target: '.document-library-list button[data-document-kind="pdf"]',
         completion: {
           type: "action",
           actions: [
@@ -1198,9 +1198,9 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
         titleVi: "Mở file PDF",
         titleEn: "Open the PDF",
         bodyVi:
-          "Bấm đúng dòng PDF hoặc nút con mắt của PDF. DOCX, PPTX và XLSX không hoàn thành bước này.",
+          "Bấm tên tệp PDF để mở trình xem.",
         bodyEn:
-          "Click the PDF row or its eye button. DOCX, PPTX and XLSX do not complete this step.",
+          "Click the PDF file name to open the viewer.",
       },
       {
         target: ".document-fullscreen-toggle",

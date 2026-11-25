@@ -25,14 +25,22 @@ export function folderRouteFromUrl(url = new URL(window.location.href)) {
   return (value === FOLDER_ROOT || value === FOLDER_LIBRARY) ? value : value && folderIdPattern.test(value) ? value.toLowerCase() : null;
 }
 
+export function libraryFolderFromUrl(url = new URL(window.location.href)) {
+  if (folderRouteFromUrl(url) !== FOLDER_LIBRARY) return null;
+  const scope = url.searchParams.get("in");
+  return scope === FOLDER_ROOT ? scope : scope && folderIdPattern.test(scope) ? scope.toLowerCase() : null;
+}
+
 export function folderPermalink(folderId: string | null, base = new URL(window.location.href)) {
   const url = new URL(base.pathname, base.origin);
   url.searchParams.set(key, folderId ?? FOLDER_ROOT);
   return url.toString();
 }
 
-export function writeFolderRoute(folder: string | null, mode: "push" | "replace" = "push", fileId: string | null = null) {
+export function writeFolderRoute(folder: string | null, mode: "push" | "replace" = "push", fileId: string | null = null, libraryFolder: string | null = null) {
   const url = new URL(window.location.href);
+  if (!fileId && folder === FOLDER_LIBRARY && libraryFolder && (libraryFolder === FOLDER_ROOT || folderIdPattern.test(libraryFolder))) url.searchParams.set("in", libraryFolder);
+  else url.searchParams.delete("in");
   if (fileId && folderIdPattern.test(fileId)) url.searchParams.set("file",fileId.toLowerCase());
   else url.searchParams.delete("file");
   if (folder || fileId) {
@@ -51,7 +59,7 @@ export function rememberFolderSignIn() {
     const route = folderRouteFromUrl(url);
     const file = fileIdFromUrl(url);
     if ((route || file) && !["canvas","learn","invite","learning_invite","connection_invite"].some(param => url.searchParams.has(param))) {
-      sessionStorage.setItem(returnKey,JSON.stringify({ route, file, path: url.pathname, until: Date.now()+30*60*1000 }));
+      sessionStorage.setItem(returnKey,JSON.stringify({ route, file, scope: libraryFolderFromUrl(url), path: url.pathname, until: Date.now()+30*60*1000 }));
     } else sessionStorage.removeItem(returnKey);
   } catch { /* The copied link still works when browser storage is unavailable. */ }
 }
@@ -70,6 +78,7 @@ export function restoreFolderSignIn() {
     url.pathname = saved.path;
     if (file) url.searchParams.set("file",file);
     else if (route) url.searchParams.set(key,route);
+    if (!file && route === FOLDER_LIBRARY && typeof saved.scope === "string" && (saved.scope === FOLDER_ROOT || folderIdPattern.test(saved.scope))) url.searchParams.set("in", saved.scope);
     window.history.replaceState(window.history.state,"",url);
   } catch { /* Recovery is optional. */ }
 }

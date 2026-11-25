@@ -6,7 +6,7 @@ import Dialog from "./Dialog";
 import type { useWorkspaceFiles } from "../hooks/useWorkspaceFiles";
 import FilePicker from "./FilePicker";
 import { useLanguage } from "../lib/i18n";
-import { folderPermalink, workspaceFilePermalink } from "../lib/folderLinks";
+import { folderPermalink } from "../lib/folderLinks";
 import { copyTextWithFallback } from "../lib/share";
 import { type ProjectFolder } from "../lib/projectStore";
 import { addWorkspaceFile, deleteWorkspaceFile, downloadWorkspaceBlob, moveWorkspaceFile, readWorkspaceFile, type WorkspaceFile } from "../lib/workspaceFiles";
@@ -33,13 +33,11 @@ type Props = {
   onNewProject: () => void;
   onImportProject: () => void;
   onLibrary: () => void;
-  onOpenFile: (id: string | null) => void;
-  onSignIn?: () => void;
-  activeFileId: string | null;
+  onOpenFile: (id: string) => void;
   repository: ReturnType<typeof useWorkspaceFiles>;
   projectList: ReactNode;
 };
-export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onRoot,onNewFolder,onNewProject,onImportProject,onLibrary,onOpenFile,onSignIn,activeFileId,repository,projectList }: Props) {
+export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onRoot,onNewFolder,onNewProject,onImportProject,onLibrary,onOpenFile,repository,projectList }: Props) {
   const { language,t } = useLanguage();
   const vn = language === "vi";
   const label = (vi: string, en: string) => vn ? vi : en;
@@ -48,9 +46,6 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
   const children = folders.filter(folder => (folder.parentId ?? null) === currentId);
   const trail = folderTrail(folders,currentId);
   const { files,setFiles,loading,refresh,error: readError } = repository;
-  const activeFile = files.find(file => file.id === activeFileId);
-  const fileLinkInput = useRef<HTMLInputElement>(null);
-  const [fileLinkCopied,setFileLinkCopied] = useState(false);
   const [query,setQuery] = useState("");
   const [status,setStatus] = useState("");
   const [error,setError] = useState("");
@@ -73,7 +68,6 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
   };
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { setFileLinkCopied(false); }, [activeFileId]);
 
   const copy = async () => {
     const href = folderPermalink(currentId);
@@ -148,7 +142,7 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
         <button type="button" className="secondary-button" onClick={() => void copy()}><Link2 size={17}/>{label("Sao chép link thư mục", "Copy folder link")}</button>
         {current && <WorkspaceShareButton item={{kind:"folder",id:current.id,title:current.name}} available={!!owner}
           prepare={owner ? ()=>ensureFolderAttachments(owner,current.id) : undefined}/>}
-        {!current && <button type="button" className="secondary-button manager-documents" onClick={onLibrary}><LibraryBig size={17}/>{label("Tài liệu đã tải lên", "Uploaded documents")}</button>}
+        <button type="button" className="secondary-button manager-documents" onClick={onLibrary}><LibraryBig size={17}/>{label("Thư viện tài liệu", "Document library")}</button>
       </div>
     </div>
     </header>
@@ -175,25 +169,6 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
         </li>)}</ul>}
     </div>
     {projectList}
-    {activeFileId && <Dialog title={activeFile?.name ?? label("Tài liệu", "File")} onClose={() => onOpenFile(null)}>
-      {loading && !activeFile ? <p role="status">{t("loading")}</p> : !activeFile
-        ? <div><p role="status">{label("Tệp không còn tồn tại hoặc tài khoản hiện tại không có quyền mở.", "This file no longer exists or you do not have access.")}</p>
-          {onSignIn && <button type="button" className="primary-button" onClick={onSignIn}>{t("login")}</button>}</div>
-        : <div className="workspace-file-detail">
-          <p>{activeFile.ready ? label("Link cá nhân dùng để mở lại tệp này trong Workspace.", "Use this private link to reopen the file in Workspace.") : label("Tải lên chưa hoàn tất.", "Upload incomplete.")}</p>
-          <label>{label("Link cá nhân", "Private link")}<input ref={fileLinkInput} readOnly value={workspaceFilePermalink(activeFile.id)} onFocus={event => event.currentTarget.select()}/></label>
-          {error && <p role="alert">{error}</p>}
-          <footer className="actions">
-            {activeFile.ready&&<WorkspaceShareButton item={{kind:"file",id:activeFile.id,title:activeFile.name}} available={!!owner}/>}
-            <button type="button" className="secondary-button" onClick={async () => setFileLinkCopied(await copyTextWithFallback(workspaceFilePermalink(activeFile.id),fileLinkInput.current))}>
-              <Link2 size={16}/>{fileLinkCopied ? t("shareCopied") : t("copyLink")}
-            </button>
-            <button type="button" className="primary-button" disabled={!activeFile.ready || !enabled} onClick={() => void download(activeFile)}>
-              <Download size={16}/>{label("Tải xuống", "Download")}
-            </button>
-          </footer>
-        </div>}
-    </Dialog>}
     {action && <Dialog title={action.kind === "move" ? label("Chuyển tài liệu", "Move file") : label("Xóa tài liệu?", "Delete file?")} dismissible={!working} onClose={() => setAction(null)}>
       <p className="workspace-file-status">{action.file.name}</p>
       {action.kind === "move" && <label>{t("folders")}<select value={destination} onChange={event => setDestination(event.target.value)}><option value="">{label("Ngoài thư mục", "No folder")}</option>

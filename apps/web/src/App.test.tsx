@@ -107,10 +107,15 @@ describe("Workspace UI", () => {
     expect(toolbar?.querySelector("input[type=file]")).toBeTruthy();
     const fileRow = main().querySelector<HTMLButtonElement>(".workspace-file-list .workspace-file-open")!;
     await act(async () => fileRow.click());
-    await waitForUI(() => expect(host.querySelector("dialog[open]")?.textContent).toContain("Link cá nhân"));
+    await waitForUI(() => expect(host.querySelector(".workspace-file-preview pre")?.textContent).toBe("int main() {}"));
+    expect(host.querySelector("dialog[open]")).toBeNull();
     await act(async () => window.history.back());
-    await waitForUI(() => expect(host.querySelector("dialog[open]")).toBeNull());
-    expect(main().querySelector("h1")?.textContent).toBe(child.name);
+    await waitForUI(() => expect(main()?.querySelector("h1")?.textContent).toBe(child.name));
+    await act(async () => main().querySelector<HTMLButtonElement>(".manager-documents")!.click());
+    await waitForUI(() => expect(host.querySelector<HTMLSelectElement>("#document-library-scope")?.value).toBe(child.id));
+    expect(new URLSearchParams(window.location.search).get("in")).toBe(child.id);
+    expect(host.querySelector(".document-library-list")?.textContent).toContain("bai4.cpp");
+    expect(host.querySelector(".document-library-list")?.textContent).not.toContain("lab.pcapng");
   });
 
   it("opens a stable private file link after the file is moved", async () => {
@@ -122,10 +127,14 @@ describe("Workspace UI", () => {
     await moveWorkspaceFile(null,file.id,destination.id);
     window.history.replaceState({},"",href);
     await act(async () => root.render(<App/>));
-    await waitForUI(() => expect(host.querySelector(".workspace-folder-area h1")?.textContent).toBe(destination.name));
-    const detail = host.querySelector("dialog[open]")!;
+    await waitForUI(() => expect(host.querySelector(".workspace-file-preview pre")?.textContent).toBe(".text"));
+    const detail = host.querySelector(".workspace-file-preview")!;
     expect(detail.textContent).toContain(file.name);
-    expect(detail.querySelector<HTMLInputElement>("input[readonly]")?.value).toBe(href);
+    const back = host.querySelector<HTMLButtonElement>(".topbar .shell-back")!;
+    expect(back.textContent).toBe(destination.name);
+    await act(async () => back.click());
+    await waitForUI(() => expect(host.querySelector(".workspace-folder-area h1")?.textContent).toBe(destination.name));
+    expect(window.location.search).toBe(`?folders=${destination.id}`);
   });
 
   it("shows an unavailable direct folder instead of displaying Workspace as if it were that folder", async () => {

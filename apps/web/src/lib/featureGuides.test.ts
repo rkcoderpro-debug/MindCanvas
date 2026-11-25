@@ -30,7 +30,7 @@ describe("feature guides", () => {
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "folder-manager")?.steps.map(step => step.target)).toContain(".folder-manager-new-folder");
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "pdf-annotation")?.steps.slice(0, 2).map(step => step.target)).toEqual([
       ".manager-documents",
-      '.document-file-table .file-row[data-document-kind="pdf"]',
+      '.document-library-list button[data-document-kind="pdf"]',
     ]);
     expect(GUIDE_DEFINITIONS.find(guide => guide.id === "tool-hold-shortcuts")?.steps.slice(0, 4).map(step => step.target)).toEqual([
       ".workspace-nav-row > button:first-child",

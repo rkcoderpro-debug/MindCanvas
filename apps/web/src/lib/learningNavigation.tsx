@@ -13,7 +13,7 @@ export function learningTabFromUrl(): HubTab | null {
 }
 export function learningUrl(tab: HubTab | null) {
   const url = new URL(window.location.href);
-  if (tab) { url.searchParams.set("learn", tab); url.searchParams.delete("canvas"); url.searchParams.delete("folders"); url.searchParams.delete("file"); } else url.searchParams.delete("learn");
+  if (tab) { url.searchParams.set("learn", tab); url.searchParams.delete("canvas"); url.searchParams.delete("folders"); url.searchParams.delete("file"); url.searchParams.delete("in"); } else url.searchParams.delete("learn");
   if (tab !== "rooms") { url.searchParams.delete("room"); url.searchParams.delete("room_invite"); url.searchParams.delete("room_code"); }
   return `${url.pathname}${url.search}${url.hash}`;
 }
