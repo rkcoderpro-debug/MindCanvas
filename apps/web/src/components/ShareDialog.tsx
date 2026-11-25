@@ -1,3 +1,4 @@
+import type { AccountPlan } from "../lib/account";
 import type { CanvasEmbed } from "@mindcanvas/shared";
 import { WorkspaceShareButton,WorkspaceShareSettings } from "./WorkspaceShareDialog";
 import { shareErrorText } from "../lib/workspaceSharing";
@@ -19,12 +20,13 @@ import {
 } from "../lib/collaboration";
 
 type Props = {
+  accountPlan?: AccountPlan;
   attachmentEmbeds?:CanvasEmbed[];
   prepareSharing?:()=>Promise<void>;
   prepareAttachment?:(embed:CanvasEmbed)=>Promise<string>;
   shellBack?: boolean; projectId: string; title: string; onClose: () => void; isAuthenticated?: boolean; onSignIn?: () => void };
 
-export default function ShareDialog({ projectId, title, onClose, isAuthenticated = true, onSignIn, attachmentEmbeds,prepareSharing,prepareAttachment,shellBack }: Props) {
+export default function ShareDialog({ projectId, title, onClose, isAuthenticated = true, onSignIn, attachmentEmbeds,prepareSharing,prepareAttachment,shellBack,accountPlan }: Props) {
   const { t, language } = useLanguage();
   const linkInput = useRef<HTMLInputElement>(null);
   const iosDevice = isIOSDevice();
@@ -176,7 +178,7 @@ export default function ShareDialog({ projectId, title, onClose, isAuthenticated
         {attachmentBusy&&<p role="status">{t("loading")}</p>}
         {attachmentError&&<p role="alert">{attachmentError}</p>}
         {attachmentNotice&&<p role="status">{attachmentNotice}</p>}
-        {attachment&&<WorkspaceShareButton key={attachment.id} item={{kind:"file",...attachment}}/>}
+        {attachment&&<WorkspaceShareButton key={attachment.id} item={{kind:"file",...attachment}} friends={{plan:accountPlan}}/>}
       </section>}
     </div>}
     <div className="share-dialog">

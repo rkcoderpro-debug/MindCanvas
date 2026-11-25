@@ -149,3 +149,4 @@ Có thể chạy `supabase/verification/online_music_rooms.sql` trên cơ sở d
 - `0044_workspace_folder_files.sql`: thư mục con và kho tệp Workspace riêng tư, tối đa 40 MB mỗi tệp. Chạy sau `0043_online_room_codes_and_delete.sql`. Xem `RELEASE_V6.5.0.md`.
 
 - `0045_workspace_sharing.sql`: chạy sau `0044`; thêm chia sẻ theo link và email có phân quyền, tệp Canvas và quyền kế thừa thư mục. Xem `RELEASE_V6.6.0.md`.
+- `0046_workspace_file_friends.sql`: chạy sau `0045`; gửi tệp Workspace đến bạn bè qua tin nhắn với quyền xem theo tài khoản. Xem `RELEASE_V6.7.2.md`.

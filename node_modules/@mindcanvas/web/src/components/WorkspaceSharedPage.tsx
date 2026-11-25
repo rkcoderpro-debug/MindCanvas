@@ -78,9 +78,15 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}
         <button className="primary-button" disabled={pending}>{tr("Xác minh","Verify")}</button>
       </form>
     </section>:state?.state==="sign-in"?<section className="workspace-share-block">
-      <h1>{tr("Cần đăng nhập bằng email được mời","Sign in with the invited email")}</h1>
-      <p>{tr("Chỉ tài khoản khớp địa chỉ nhận lời mời mới được chỉnh sửa.","Only the account matching the invitation can edit.")}</p>
-      {login}
+      {state.audience==="friend" ? <>
+        <h1>{tr("Đăng nhập để mở tài liệu","Sign in to open the file")}</h1>
+        <p>{tr("Hãy dùng tài khoản MindCanvas mà người gửi đã chọn.","Use the MindCanvas account selected by the sender.")}</p>
+        <button type="button" className="primary-button" onClick={onSignIn}><LogIn size={16}/>{t("login")}</button>
+      </> : <>
+        <h1>{tr("Cần đăng nhập bằng email được mời","Sign in with the invited email")}</h1>
+        <p>{tr("Chỉ tài khoản khớp địa chỉ nhận lời mời mới được chỉnh sửa.","Only the account matching the invitation can edit.")}</p>
+        {login}
+      </>}
     </section>:state?.state==="ok"?<>
       <header className="workspace-share-main-heading"><div><span className="eyebrow">{typeName(tr,state.kind)} · {editable?tr("Có thể chỉnh sửa","Can edit"):tr("Chỉ xem","View only")}</span><h1>{state.title}</h1></div>
         {state.signInToEdit && login}

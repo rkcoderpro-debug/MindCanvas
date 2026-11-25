@@ -9,7 +9,7 @@ export type ShareGrant = {email:string;role:ShareRole;token:string};
 export type ShareReceived = Omit<ShareItem,"id"> & Pick<ShareGrant,"role"|"token">;
 export type SharedCard = {id:string;front:string;back:string;revision:string};
 export type SharedQuestion = {id:string;prompt:string;options:string[];correctIndex?:number;explanation?:string};
-export type ShareView = {state:"verify"|"sign-in"} | ({
+export type ShareView = {state:"verify"} | {state:"sign-in";audience?:"friend"} | ({
   state:"ok";id:string;title:string;role:ShareRole|"owner";signInToEdit?:boolean;
 } & (
   | {kind:"folder";data:ShareItem[]}

@@ -9,13 +9,14 @@ import type { ShareGrant, ShareItem, ShareRole } from "../lib/workspaceSharing";
 
 const mock = vi.hoisted(() => ({
   connections: vi.fn(), direct: vi.fn(), history: vi.fn(), removeMember: vi.fn(), revoke: vi.fn(),
-  manage: vi.fn(), invite: vi.fn(), copy: vi.fn(),
+  manage: vi.fn(), invite: vi.fn(), copy: vi.fn(), fileFriends: vi.fn(),
 }));
 vi.mock("../lib/connections", () => ({ listConnections: mock.connections, sendDirectMessage: mock.direct }));
 vi.mock("../lib/learningShare", async imported => ({ ...await imported<typeof import("../lib/learningShare")>(),
   listLearningInvites: mock.history, removeLearningMember: mock.removeMember, revokeLearning: mock.revoke }));
 vi.mock("../lib/workspaceSharing", async imported => ({ ...await imported<typeof import("../lib/workspaceSharing")>(),
   shareManage: mock.manage, shareInvite: mock.invite }));
+vi.mock("../lib/workspaceFileFriends", () => ({ manageWorkspaceFileFriends: mock.fileFriends }));
 vi.mock("../lib/share", () => ({ copyTextWithFallback: mock.copy }));
 
 const quiz: ShareItem = { kind: "quiz", id: "quiz-1", title: "Ôn tập" };
@@ -103,4 +104,24 @@ it("keeps previous grants manageable and does not gate new link or email sharing
   expect(mock.removeMember).toHaveBeenCalledExactlyOnceWith("flashcard", deck.id, "known-member");
   await act(async () => actions[1].click());
   expect(mock.revoke).toHaveBeenCalledExactlyOnceWith("invitation-1");
+});
+
+it("sends a Workspace file to a connected account without changing the link or email settings", async () => {
+  const file: ShareItem = { kind: "file", id: "file-1", title: "Công thức.html" };
+  mock.fileFriends.mockResolvedValueOnce([]).mockResolvedValueOnce([{ user_id: "peer-1", display_name: "Minh" }]).mockResolvedValueOnce([]);
+  const plan = { ...FREE_ACCOUNT_PLAN, effectivePlanId: "pro" as const };
+  await act(async () => root.render(<LanguageProvider><WorkspaceShareButton item={file} friends={{ plan }}/></LanguageProvider>));
+  await act(async () => button("button").click());
+  await choose(host.querySelector(".workspace-share-friend-form select")!, "peer-1");
+  await act(async () => button(".workspace-share-friend-form button").click());
+  expect(mock.fileFriends).toHaveBeenLastCalledWith(file.id, "send", "peer-1");
+  expect(mock.direct).not.toHaveBeenCalled();
+  expect(mock.manage.mock.calls.every(call => call[1] === "list")).toBe(true);
+  expect(mock.invite).not.toHaveBeenCalled();
+  expect(host.querySelector<HTMLSelectElement>(".workspace-share-settings > div select")?.value).toBe("private");
+  const details = host.querySelector<HTMLDetailsElement>(".workspace-share-prior")!;
+  await act(async () => { details.open = true; });
+  await act(async () => details.querySelector<HTMLButtonElement>('button[aria-label="Thu hồi quyền của Minh"]')!.click());
+  expect(mock.fileFriends).toHaveBeenLastCalledWith(file.id, "remove", "peer-1");
+  expect(host.querySelector(".workspace-share-prior")).toBeNull();
 });

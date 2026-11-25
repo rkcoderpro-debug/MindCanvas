@@ -14,6 +14,8 @@ const value=(q,args=[])=>rows(q,args).then(x=>x[0]?.v);
 const role=async(name)=>db.exec("reset role; set role "+name);
 const manage=(actor,k,id,op,addr,right,token)=>value("select ws_share_manage($1,$2,$3,$4,$5,$6,$7) as v",[actor,k,id,op,addr,right,token]);
 const open=(token,actor=null,proof=null,k=null,id=null,op="view",payload={})=>value("select ws_share_read($1,$2,$3,$4,$5,$6,$7::jsonb) as v",[token,actor,proof,k,id,op,JSON.stringify(payload)]);
+const friend=(file,op,peer=null)=>value("select ws_share_file_friend($1,$2,$3) as v",[file,op,peer]);
+const actorAs=async(id)=>{await role("authenticated");await rows("select set_config('request.jwt.claim.sub',$1,false)",[id]);};
 const write=(token,actor,k,id,op,payload)=>value("select ws_share_write($1,$2,$3,$4,$5,$6::jsonb) as v",[token,actor,k,id,op,JSON.stringify(payload)]);
 const mail=(token,actor,op,code=null,proof=null)=>value("select ws_share_mail($1,$2,$3,$4,$5) as v",[token,actor,op,code,proof]);
 try{
@@ -23,6 +25,7 @@ try{
   grant usage on schema public,auth,storage to anon,authenticated,service_role;
   create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb,email_confirmed_at timestamptz);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+  create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
   create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
   create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
   create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name,'/') $$;
@@ -33,10 +36,23 @@ try{
   await migrate("0005_flashcards.sql");
   await db.exec(`alter table notes add column deleted_at timestamptz,add column revision bigint not null default 0,add column thumbnail jsonb;
     create table quiz_tests(id uuid primary key,user_id uuid references auth.users,title text,description text,questions jsonb,updated_at timestamptz default now());`);
+  // These are the account interfaces used by learning_share_tier in production.
+  await db.exec(`create table account_entitlements(user_id uuid primary key, plan_id text, status text, expires_at timestamptz);
+    create function learning_share_tier(p_user uuid) returns integer language sql stable as $$
+      select coalesce((select case plan_id when 'max' then 3 when 'pro' then 2 when 'plus' then 1 else 0 end
+        from public.account_entitlements where user_id=p_user and status='active'),0)
+    $$;
+    create function learning_required_tier(p_kind text) returns integer language sql immutable as $$
+      select case p_kind when 'document' then 2 when 'quiz' then 1 else 100 end
+    $$;
+    create table learning_share_members(owner_id uuid,user_id uuid);`);
+  await migrate("0026_v5_15_0_connections_messages.sql");
   await migrate("0044_workspace_folder_files.sql");
   await migrate("0045_workspace_sharing.sql");
   await migrate("0045_workspace_sharing.sql");
   await rows("insert into auth.users(id,email,email_confirmed_at) values ($1,'owner@test.test',now()),($2,'recipient@test.test',now()),($3,'other@test.test',now()),($4,'unverified@test.test',null)",[owner,recipient,other,unverified]);
+  await rows("insert into profiles(id,display_name) values ($1,'My Friend') on conflict(id) do update set display_name=excluded.display_name",[recipient]);
+  await rows("insert into connections(user_a,user_b) values($1,$2)",[owner,recipient]);
   await rows("insert into folders(id,user_id,name) values ($1,$2,'DSA'),($3,$2,'Private')",[root,owner,outside]);
   await rows("insert into folders(id,user_id,name,parent_id) values ($1,$2,'Lab',$3)",[child,owner,root]);
   const digest="f".repeat(64);
@@ -112,10 +128,74 @@ try{
   assert.equal((await open(link(7))).state,"ok");
   await manage(owner,"folder",root,"remove","","viewer",null);
   await assert.rejects(open(link(1)),/SHARE_FORBIDDEN/);
+  await db.exec("reset role");
+  await migrate("0046_workspace_file_friends.sql");
+  await migrate("0046_workspace_file_friends.sql");
+  await actorAs(owner);
+  await assert.rejects(friend(file,"send",recipient),/SHARE_NOT_ALLOWED/);
+  await db.exec("reset role");
+  await rows("insert into account_entitlements(user_id,plan_id,status) values($1,'pro','active')",[owner]);
+  await actorAs(owner);
+  await assert.rejects(friend(file,"send",other),/CONNECTION_REQUIRED/);
+  await assert.rejects(friend(uid(101),"send",recipient),/SHARE_FORBIDDEN/);
+  assert.deepEqual(await friend(file,"send",recipient),[{user_id:recipient,display_name:"My Friend"}]);
+  const message=await rows("select body,resource_kind,resource_id,resource_title,workspace_file_token from direct_messages");
+  assert.equal(message.length,1);
+  const [cardMessage]=message;
+  assert.equal(cardMessage.body,"");
+  assert.equal(cardMessage.resource_kind,"document");
+  assert.equal(cardMessage.resource_id,file);
+  assert.equal(cardMessage.resource_title,"lab.cpp");
+  assert.match(cardMessage.workspace_file_token,/^[a-f0-9]{48}$/);
+  const privateToken=cardMessage.workspace_file_token;
+  await actorAs(other);
+  assert.equal((await rows("select id from direct_messages")).length,0);
+  await assert.rejects(friend(file,"remove",recipient),/SHARE_FORBIDDEN/);
+  await actorAs(recipient);
+  assert.equal((await rows("select id from direct_messages")).length,1);
+  await role("service_role");
+  assert.deepEqual(await open(privateToken),{state:"sign-in",audience:"friend"});
+  await assert.rejects(open(privateToken,other),/SHARE_FORBIDDEN/);
+  assert.equal((await open(privateToken,recipient)).role,"viewer");
+  assert.equal((await open(link(4),recipient)).role,"editor");
+  assert.equal((await open(link(8),unverified)).state,"sign-in");
+  assert.equal((await open(link(7))).role,"viewer");
+  assert.equal((await open(privateToken,recipient,null,"file",file,"download")).object,staged);
+  await assert.rejects(open(privateToken,recipient,null,"file",attach),/SHARE_FORBIDDEN/);
+  await assert.rejects(open(privateToken,null,null,"file",file,"download"),/SHARE_FORBIDDEN/);
+  await assert.rejects(write(privateToken,recipient,"file",file,"rename",{title:"No"}),/SHARE_FORBIDDEN/);
+  await assert.rejects(mail(privateToken,null,"challenge","hash"),/SHARE_FORBIDDEN/);
+  assert.ok((await value("select ws_share_received($1) as v",[recipient])).some(row=>row.token===privateToken));
+  assert.equal((await value("select ws_share_received($1) as v",[other])).some(row=>row.token===privateToken),false);
+  assert.equal((await manage(owner,"file",file,"list","","viewer",null)).some(row=>row.token===privateToken),false);
+  await manage(owner,"file",file,"set","","editor",link(99));
+  assert.equal((await open(privateToken,recipient)).role,"viewer");
+  await manage(owner,"file",file,"remove","","viewer",null);
+  assert.equal((await open(privateToken,recipient)).role,"viewer");
+  await db.exec("reset role");
+  await rows("update account_entitlements set plan_id='plus' where user_id=$1",[owner]);
+  await role("service_role");
+  await assert.rejects(open(privateToken,recipient),/SHARE_FORBIDDEN/);
+  await db.exec("reset role");
+  await rows("update account_entitlements set plan_id='pro' where user_id=$1",[owner]);
+  await actorAs(owner);
+  assert.deepEqual(await friend(file,"remove",recipient),[]);
+  await role("service_role");
+  await assert.rejects(open(privateToken,recipient),/SHARE_FORBIDDEN/);
+  await actorAs(owner);
+  await friend(file,"send",recipient);
+  const secondToken=(await rows("select workspace_file_token from direct_messages order by created_at desc limit 1"))[0].workspace_file_token;
+  assert.notEqual(privateToken,secondToken);
+  await rows("select remove_connection($1)",[recipient]);
+  assert.deepEqual(await friend(file,"list"),[]);
+  await role("service_role");
+  await assert.rejects(open(secondToken,recipient),/SHARE_FORBIDDEN/);
+  await role("anon");
+  await assert.rejects(friend(file,"send",recipient),/permission denied/);
   for(const actor of ["anon","authenticated"]){
     await role(actor);
     await assert.rejects(open(link(2)),/permission denied/);
     await assert.rejects(rows("select token from workspace_share_grants"),/permission denied/);
   }
-  console.log("Workspace sharing SQL passed: anonymous and verified emails, editor writes, attachment and folder scopes, revoke, and RLS.");
+  console.log("Workspace sharing SQL passed: anonymous and verified emails, editor writes, attachment and folder scopes, revoke, friend messaging, and RLS.");
 } finally { await db.close(); }

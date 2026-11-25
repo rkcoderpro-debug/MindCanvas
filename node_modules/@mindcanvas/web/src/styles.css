@@ -5772,7 +5772,7 @@ dialog .file-picker label.file-picker-trigger, .file-picker label.file-picker-tr
 .connections-resource { display: flex; align-items: center; gap: 9px; padding: 9px 11px; }
 .connections-resource > svg { flex: 0 0 auto; }
 .connections-resource > span { display: grid; flex: 1 1 auto; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
-button.connections-resource:hover { border-color: var(--accent); background: var(--accent-soft); }
+:is(button,a).connections-resource:hover { border-color: var(--accent); background: var(--accent-soft); }
 .connections-composer { padding: 9px clamp(10px, 2vw, 20px); border-top: 1px solid var(--line); }
 .connections-composer textarea { resize: none; min-height: 44px; max-height: 100px; }
 .connections-conversation > .connections-empty { padding: 20px; }

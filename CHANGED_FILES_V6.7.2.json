@@ -1,0 +1,382 @@
+{
+  "version": "6.7.2",
+  "baseVersion": "6.6.0",
+  "alsoAppliesOver": [
+    "6.6.1",
+    "6.6.2",
+    "6.6.3",
+    "6.6.4",
+    "6.6.5",
+    "6.6.6",
+    "6.7.0",
+    "6.7.1"
+  ],
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.7.2.md",
+      "bytes": 1259,
+      "sha256": "6f4e14a7ce90c9d05b6eda63c9d0006fbef5ab0f102b9e5174bef274b9a10b9a"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "7381f07133474ccb62d941b5595b5708a4b3655c07f1b28ead432b0e3f6be6c3"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "2a8cbfc3ca29bdb2731d95fa74997daa8bd4ac5fac3d89266a4dbeb10e31cf0a"
+    },
+    {
+      "path": "apps/web/public/audio/mindcanvas-focus-piano.mp3",
+      "bytes": 224730,
+      "sha256": "d027c8c237b3e63aa1ffe7ea2dd4231106ed40499e917efd0bd531afb807eb2d"
+    },
+    {
+      "path": "apps/web/scripts/generate-focus-piano.py",
+      "bytes": 1940,
+      "sha256": "21e478186d6cb6673899f59814a8f4134ac52377de6adc4650d928b2ec2f378c"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 48665,
+      "sha256": "03abea261e2d30a5184a7e0f6a023dddb39be547f6562b65d25a24c126719988"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 70764,
+      "sha256": "4d7905ed150c5769c2d471126e534bff9425828dc44c9cfbe51a736e34feded0"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 5604,
+      "sha256": "7bde783de5470ac608f40fddaf4e5300f9cc6fcb3b00bc41508ffd100ef00428"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 23268,
+      "sha256": "cd2b3901143432bb86e5b5b6616a81de95cefe5ba35565b559fdadd3607335a0"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.tsx",
+      "bytes": 12261,
+      "sha256": "496fe82d9766e6e403b76283ff1ff639efe691ecfbce9d048b1a5f3b5a74107c"
+    },
+    {
+      "path": "apps/web/src/components/DocumentReaderBar.tsx",
+      "bytes": 2968,
+      "sha256": "761b836bb4c6ec49eafe263d84290635de54363964986ebcc47f33c585e52ec7"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.test.tsx",
+      "bytes": 12441,
+      "sha256": "6b1c944abe521720b4ae19967f4515646dcdcb76f1bf6d63a141b651bb217e6c"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 25128,
+      "sha256": "e67cb69ee5ad3b6d74a018c394cf797b6eac3e162115f735943deda68d2f6868"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "bytes": 39116,
+      "sha256": "59a87947cbb15bef76be1cf32f3f2c6dc299b59729c61f4e96c0c42ca0264472"
+    },
+    {
+      "path": "apps/web/src/components/ExamBuilderPage.tsx",
+      "bytes": 27566,
+      "sha256": "24bded8f6140f1c3b16d6bcecf6920d1c3a9da46549fc428b4295d9822e25acd"
+    },
+    {
+      "path": "apps/web/src/components/ExamManualStudio.tsx",
+      "bytes": 31785,
+      "sha256": "9a9f36514c0868d73c7a2040df59da3839554a5487c1985e9364a08e3c125155"
+    },
+    {
+      "path": "apps/web/src/components/ExamModeSwitch.tsx",
+      "bytes": 1391,
+      "sha256": "ad122c4ef674f031472f8d6e015be6c31e34f49d99e7be851c4702ed4b21c57e"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 62439,
+      "sha256": "53c12284828dac7ecf289ae980f826a7d2e78e80b0cecfccad2fc18202e985e1"
+    },
+    {
+      "path": "apps/web/src/components/FolderProjectList.tsx",
+      "bytes": 6321,
+      "sha256": "4158200dcf4cb999341d3aa66db8c4fc7c62c6eff303b22b2438d065c744d694"
+    },
+    {
+      "path": "apps/web/src/components/FriendShareSettings.tsx",
+      "bytes": 9758,
+      "sha256": "a6d4666c7526c15f8c4c9b61e47fb1d3b9add68f62e366134ef74af0d92905b7"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32031,
+      "sha256": "02319f903cc8c8914468f6aa798de2603b9507243facc146427c751697f65b2e"
+    },
+    {
+      "path": "apps/web/src/components/LearningShareDialog.tsx",
+      "bytes": 6328,
+      "sha256": "bb3273e6f33fc3bb05d6c6cf206fa0c6533b2cd6cebcb33f1b016de1e80be336"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.test.tsx",
+      "bytes": 7642,
+      "sha256": "f942ab37e92ca044aa072eb374bb1e931ab151af96c149b0ae1409d665e6af44"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.tsx",
+      "bytes": 32158,
+      "sha256": "e712927d0a899f84c1e8f8a5f2a0905c52fc36560366f917f304908a475b6a89"
+    },
+    {
+      "path": "apps/web/src/components/MusicYouTubeSurface.tsx",
+      "bytes": 4439,
+      "sha256": "5bb412617c4397a25dd1e5832bf1c0f693a086f6324551c8f668ca6c6272ec7c"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMeetingBoard.tsx",
+      "bytes": 19751,
+      "sha256": "aba9f54b31cf7a6a42a1b034d46bbb9a3b54efd6ef61ef118987357c2c77631e"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 53704,
+      "sha256": "2a347c1b7449a4588b679b975554469157e106a46514dc356bce414492c0c14c"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomSession.tsx",
+      "bytes": 4426,
+      "sha256": "b8cafbbadb00bc5d623354dbf4a5944e177855bd07d67ef7a095dc85b2b5bf87"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.test.tsx",
+      "bytes": 3281,
+      "sha256": "a9dd1e38b5d5a3954a9292ca8e360fcb0b259ad08dbd76d5e5def2a12ba76361"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.tsx",
+      "bytes": 6436,
+      "sha256": "e208dc7516656127630c2380f38348696d2b0151a86e8d04fe4ab1f473c74016"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.test.tsx",
+      "bytes": 27372,
+      "sha256": "48a7c0b9754f2c82c750357e4a81260681fad032b369cdbdfdb6014daab7513f"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.tsx",
+      "bytes": 17733,
+      "sha256": "0df608cb316d41e26c96d76787a73b3ea613ef1b8f67ebdacc9038de7fd06e68"
+    },
+    {
+      "path": "apps/web/src/components/PageNavigation.tsx",
+      "bytes": 7224,
+      "sha256": "4c4c4c2cd4a7f086c6a6ee900fa338d6a17cd238996cf43e43d68f8baf7d8837"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.reveal.test.tsx",
+      "bytes": 12410,
+      "sha256": "395fd99f92ccffb0cdaac5ab538f84957a5586d9741bf870fda0960916f3eb14"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 17043,
+      "sha256": "dc78c862598dd8a0428dd83e6643902a42d8e4ed4fda62ccc30c85ea929e95b3"
+    },
+    {
+      "path": "apps/web/src/components/RoomBackgroundAudio.tsx",
+      "bytes": 2865,
+      "sha256": "a0357a6344d5b6103f24dc64578c3b95fdcae63d3d8e93b4842e5bbda97ad87a"
+    },
+    {
+      "path": "apps/web/src/components/RoomIsland.tsx",
+      "bytes": 2026,
+      "sha256": "ad0c9901ae3b1024c4c894aad1d3860a255a251679cf01674e8f3615b17a51b3"
+    },
+    {
+      "path": "apps/web/src/components/ShareDialog.tsx",
+      "bytes": 11954,
+      "sha256": "19eba4736f4de2ee6a3ce2656aed6ef0bcce707da577b646421e926f6b4845a9"
+    },
+    {
+      "path": "apps/web/src/components/StudioHeader.tsx",
+      "bytes": 1030,
+      "sha256": "6fb59996076256ab2b4c047e143c76f24414aae62d75c33df57df3e1f650b7a1"
+    },
+    {
+      "path": "apps/web/src/components/TakenoteBuilderPage.tsx",
+      "bytes": 30620,
+      "sha256": "34f98b16ded9151a4116458f462d35997d64160d5eba3c1a1ea9db6858040fe8"
+    },
+    {
+      "path": "apps/web/src/components/ToolbarCustomization.tsx",
+      "bytes": 2450,
+      "sha256": "b053fbe0ab039826bee03581908cf0e95e549f1ed82c445ed18165a587d43b4d"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFilePreview.tsx",
+      "bytes": 6400,
+      "sha256": "20b86e79f2cb3a9117d9eefa75cd733a7b8c615a60a9de9804e2fd67011d6ee7"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 13747,
+      "sha256": "a6149e44255d87c30e80944d1dacbf08d71612bc89d188f72089d31355a2b3a8"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceShareDialog.test.tsx",
+      "bytes": 8205,
+      "sha256": "34074212d53443a29eb2b95b318276b81851b7bd6a03bce177e8afd08544378c"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceShareDialog.tsx",
+      "bytes": 9307,
+      "sha256": "644f3a9bf8623fe91d42451fb586250d99e2d99805fd14051ba46e9117d7a731"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedInbox.tsx",
+      "bytes": 1084,
+      "sha256": "2250bc028876fa77e98882093db160988f96b9039b4950533d3b35ba375552f8"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 20579,
+      "sha256": "3344078ba72f7612452337f996fb85b9717a54a816f058771d0b031033a8bda9"
+    },
+    {
+      "path": "apps/web/src/components/activityIsland.css",
+      "bytes": 3741,
+      "sha256": "8c7db88b8322e65b189bdc236bf7a6ac2193be7f69f6058876e12f459ee7aa84"
+    },
+    {
+      "path": "apps/web/src/components/usePlayerSlot.ts",
+      "bytes": 2629,
+      "sha256": "7ff8b8b33a392803dcc4c4d7a2645717ea630cce3990e391af4e3f170990616a"
+    },
+    {
+      "path": "apps/web/src/components/workspaceFolders.css",
+      "bytes": 8218,
+      "sha256": "a20a93c5afae7e4909cb8f31b838e5383b054808c343bf218c2cb7c408666509"
+    },
+    {
+      "path": "apps/web/src/components/workspaceSharing.css",
+      "bytes": 4180,
+      "sha256": "d3dfd1eaaef573d42e958028914560bf5d1243aaadba763852b3d2ff40d7cced"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 13371,
+      "sha256": "12b8a7cbc28619445fa7f28f658804f52ec8ffee34792a4a101eccab11074bdd"
+    },
+    {
+      "path": "apps/web/src/hooks/useOnlineRoom.ts",
+      "bytes": 10576,
+      "sha256": "923e7276205e39f569ed666b16aa579a7ec2c262be67759f4148058e724631ba"
+    },
+    {
+      "path": "apps/web/src/lib/connections.ts",
+      "bytes": 6479,
+      "sha256": "053394a6c56e0e31e00e2bc2bf10163648ac5dfe05f4acc814a60bf34064b473"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.test.ts",
+      "bytes": 4561,
+      "sha256": "bb46e8aa79241e3e83857a2aa9773746f043a0b7d30dbb3f15c0d9d23a1df137"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 64042,
+      "sha256": "470691557d05d9090a52b8d17c56af8dd2d87de8b8835ed7b613bf14290dd4a6"
+    },
+    {
+      "path": "apps/web/src/lib/folderLinks.ts",
+      "bytes": 4499,
+      "sha256": "744cef0fe0cac460bcff948f6a72aa837e828445a8a56a1dbefb87ab38701a66"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 9652,
+      "sha256": "79329e77fc8a1fb9c1de2b58a73a24c43c98966ed57459caf040eafe96038d43"
+    },
+    {
+      "path": "apps/web/src/lib/musicStorage.ts",
+      "bytes": 5322,
+      "sha256": "8fe16e1b572115dc667217f769a1f141e4bcd0a2a6507cb6c6ea5162c0ae36f0"
+    },
+    {
+      "path": "apps/web/src/lib/themeTooltips.test.ts",
+      "bytes": 2553,
+      "sha256": "d8ce19fbd18913da30c9549b036719d99d01ce46c383c74b657e47cb355c72e9"
+    },
+    {
+      "path": "apps/web/src/lib/themeTooltips.ts",
+      "bytes": 5821,
+      "sha256": "0efaa58f7402bd5e6c619625c25bd0e92a70c5244e6ea29a1b0a912668cb1ed8"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceFileFriends.ts",
+      "bytes": 655,
+      "sha256": "18260ab9c56fdc0141e94b71c48919795b21951e7feebd8d2e04ea029f5583b9"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceSharing.ts",
+      "bytes": 7595,
+      "sha256": "42188a89d5c78ccc64ea8905fb829ba74eff35d8385b165384ae6e4cb5148e7c"
+    },
+    {
+      "path": "apps/web/src/lib/youtubeIframe.ts",
+      "bytes": 1865,
+      "sha256": "82630d9d565079b24d57f614319afa0150b2c9e93fbd47e41f8d6fc3c4929b03"
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "bytes": 778,
+      "sha256": "3682f34f06a01b8335816315fbd6d2b18739394c9d7ccaecb08f69fb2139daf3"
+    },
+    {
+      "path": "apps/web/src/musicPolish.css",
+      "bytes": 6181,
+      "sha256": "1169b6c0736403ec8dd62b46b27e2e61a5b82f1261f5154037c5f7cab6deba4e"
+    },
+    {
+      "path": "apps/web/src/studioPolish.css",
+      "bytes": 14034,
+      "sha256": "b97fe4d43a514f275d7e00f49aa3628943eb6cddb4b543c9014e0697353d10ca"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 522244,
+      "sha256": "9c232d40e1d9b6a387db288ace420e9244665b425dcf79a3d64d02592bc08aa2"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "2b9ae605716e90a2916d8d6af80089ce9e64aa9984eb7b3855ad737265a89e54"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "cc98a9542b2397f3589dd4ceab4f1f67f2d148d8b6469f9fc6d84c8fd727b8bc"
+    },
+    {
+      "path": "supabase/migrations/0046_workspace_file_friends.sql",
+      "bytes": 17832,
+      "sha256": "2bb0b5a5e0d2d34b407486a77c74e24a12577980f3697704b8cc9fe779c07337"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 22654,
+      "sha256": "677aa08c7ae760a304ee65a593f2ee3fba51f1a85b1b3cc15482d3cd7889da09"
+    },
+    {
+      "path": "supabase/tests/workspace-sharing.pglite.mjs",
+      "bytes": 15891,
+      "sha256": "571ccd365cdbfab3e78636037fe695b05ab07ab7abfe78b79628600bcbf1b212"
+    }
+  ]
+}

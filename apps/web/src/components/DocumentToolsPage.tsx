@@ -277,7 +277,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
       </div>
       <div className="document-tool-workspace">
         {selectedFile && workspace
-          ? <WorkspaceFilePreview key={selectedFile.id} owner={owner} file={selectedFile} onFolder={() => workspace.openFolder(fromFolder(selectedFile))}
+          ? <WorkspaceFilePreview key={selectedFile.id} owner={owner} accountPlan={accountPlan} file={selectedFile} onFolder={() => workspace.openFolder(fromFolder(selectedFile))}
               dedicated={!fromWorkspace} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>
           : selected && <DocumentViewer key={selected.id} owner={owner} source={selected} dedicated={!fromWorkspace && selected.kind === "pdf"}
               reader={{ actions: readerActions, caption: where }} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>}

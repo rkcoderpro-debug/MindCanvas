@@ -9,7 +9,7 @@ export type Connection = {
 };
 export type ConnectionInvitation = { id: string; sender_id: string; sender_name: string; recipient_email: string | null; token_hash: string; status: string; expires_at: string; outgoing: boolean };
 export type BlockedConnection = { peer_id: string; display_name: string; blocked_at: string };
-export type DirectMessage = { id: string; sender_id: string; recipient_id: string; body: string; resource_kind: LearningKind | null; resource_id: string | null; resource_title: string | null; created_at: string };
+export type DirectMessage = { id: string; sender_id: string; recipient_id: string; body: string; resource_kind: LearningKind | null; resource_id: string | null; resource_title: string | null; workspace_file_token?: string | null; created_at: string };
 
 function client() {
   if (!supabase) throw new Error("Cần cấu hình cloud để dùng kết nối.");
@@ -62,9 +62,13 @@ export async function listDirectMessages(peerId: string, before?: Pick<DirectMes
   if (!session) throw new Error("Hãy đăng nhập để xem tin nhắn.");
   const ownId = session.user.id;
   const cursor = before ? `,or(created_at.lt.${before.created_at},and(created_at.eq.${before.created_at},id.lt.${before.id}))` : "";
-  return checked(await client().from("direct_messages").select("id,sender_id,recipient_id,body,resource_kind,resource_id,resource_title,created_at")
+  const columns = "id,sender_id,recipient_id,body,resource_kind,resource_id,resource_title,created_at";
+  const list = (fields: string) => client().from("direct_messages").select(fields)
     .or(`and(sender_id.eq.${ownId},recipient_id.eq.${peerId}${cursor}),and(sender_id.eq.${peerId},recipient_id.eq.${ownId}${cursor})`)
-    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50)) as DirectMessage[];
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50);
+  const result = await list(columns + ",workspace_file_token");
+  if (result.error?.code === "42703" || result.error?.code === "PGRST204") return checked(await list(columns)) as unknown as DirectMessage[];
+  return checked(result) as unknown as DirectMessage[];
 }
 export async function sendDirectMessage(peerId: string, body: string, kind?: LearningKind, resourceId?: string) {
   if (!body.trim() && !resourceId) throw new Error("Nhập tin nhắn hoặc chọn học liệu để gửi.");

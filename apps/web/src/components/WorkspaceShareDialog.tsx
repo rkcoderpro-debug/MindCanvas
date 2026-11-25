@@ -78,7 +78,7 @@ export function WorkspaceShareSettings({item,available=true,prepare,friends}: Sh
   const invited=rows.find(row=>row.email && row.email===invitedEmail);
   const privateLink=invited?workspaceShareUrl(invited.token):"";
   return <div className="workspace-share-settings">
-    {friends && (item.kind==="quiz" || item.kind==="flashcard") && <FriendShareSettings key={item.kind+item.id} kind={item.kind} id={item.id} plan={friends.plan}/>}
+    {friends && (item.kind==="quiz" || item.kind==="flashcard" || item.kind==="file") && <FriendShareSettings key={item.kind+item.id} kind={item.kind} id={item.id} plan={friends.plan}/>}
     <div className="workspace-share-block">
       <h2><Link2 size={18}/>{tr("Quyền truy cập qua link","Link access")}</h2>
       <label>{tr("Ai có thể mở link?","Who can open the link?")}<select value={byLink?.role??"private"} disabled={!ready||busy} onChange={event=>void setChannel(event.target.value)}>

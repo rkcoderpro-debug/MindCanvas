@@ -1,3 +1,4 @@
+import type { AccountPlan } from "../lib/account";
 import { WorkspaceShareButton } from "./WorkspaceShareDialog";
 import { ensureFolderAttachments } from "../lib/shareAttachments";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -25,6 +26,7 @@ export function folderTrail(folders: readonly ProjectFolder[], id: string | null
 
 type Props = {
   owner: string | null;
+  accountPlan?: AccountPlan;
   current: ProjectFolder | null;
   folders: ProjectFolder[];
   onFolder: (id: string) => void;
@@ -37,7 +39,7 @@ type Props = {
   repository: ReturnType<typeof useWorkspaceFiles>;
   projectList: ReactNode;
 };
-export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onRoot,onNewFolder,onNewProject,onImportProject,onLibrary,onOpenFile,repository,projectList }: Props) {
+export default function WorkspaceFolderArea({ owner,accountPlan,current,folders,onFolder,onRoot,onNewFolder,onNewProject,onImportProject,onLibrary,onOpenFile,repository,projectList }: Props) {
   const { language,t } = useLanguage();
   const vn = language === "vi";
   const label = (vi: string, en: string) => vn ? vi : en;
@@ -161,7 +163,7 @@ export default function WorkspaceFolderArea({ owner,current,folders,onFolder,onR
           <File size={18} aria-hidden="true"/><button type="button" className="workspace-file-open workspace-file-name" onClick={() => onOpenFile(file.id)}><strong title={file.name}>{file.name}</strong>
             <small>{!file.ready ? label("Tải lên chưa hoàn tất", "Upload incomplete") : `${file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1048576).toFixed(1)} MB`} · ${new Date(file.createdAt).toLocaleDateString(vn ? "vi-VN" : "en-US")}`}</small></button>
           <div className="workspace-file-actions">
-            {file.ready&&<WorkspaceShareButton item={{kind:"file",id:file.id,title:file.name}} available={!!owner} compact/>}
+            {file.ready&&<WorkspaceShareButton item={{kind:"file",id:file.id,title:file.name}} friends={{plan:accountPlan}} available={!!owner} compact/>}
             <button type="button" className="icon-button" disabled={!enabled || !file.ready} aria-label={`${label("Tải xuống", "Download")}: ${file.name}`} title={label("Tải xuống", "Download")} onClick={() => void download(file)}><Download size={17}/></button>
             <button type="button" className="icon-button" disabled={!enabled || !file.ready} aria-label={`${t("move")}: ${file.name}`} title={t("move")} onClick={() => { setError(""); setDestination(currentId ?? ""); setAction({ file,kind:"move" }); }}><Move size={17}/></button>
             <button type="button" className="icon-button workspace-file-danger" disabled={!enabled} aria-label={`${t("delete")}: ${file.name}`} title={t("delete")} onClick={() => { setError(""); setAction({ file,kind:"delete" }); }}><Trash2 size={17}/></button>

@@ -1,3 +1,4 @@
+import type { AccountPlan } from "../lib/account";
 import { useEffect, useState } from "react";
 import { Download, FileText, FolderOpen, Link2, Share2 } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
@@ -15,6 +16,7 @@ const isPlainText = (name: string) => /\.(txt|md|csv|tsv|c|cc|cpp|cxx|h|hh|hpp|s
 
 type Props = {
   owner: string | null;
+  accountPlan?: AccountPlan;
   file: WorkspaceFile;
   onFolder?: () => void;
   onLibrary?: () => void;
@@ -23,7 +25,7 @@ type Props = {
 };
 type Preview = { dataUrl: string } | { text: string; truncated: boolean } | { failed: true };
 
-export default function WorkspaceFilePreview({ owner, file, onFolder, onLibrary, onReady, dedicated }: Props) {
+export default function WorkspaceFilePreview({ owner, accountPlan, file, onFolder, onLibrary, onReady, dedicated }: Props) {
   const { language, t } = useLanguage();
   const label = (vi: string, en: string) => language === "vi" ? vi : en;
   const kind = documentKindFor(file.name);
@@ -88,7 +90,7 @@ export default function WorkspaceFilePreview({ owner, file, onFolder, onLibrary,
     {linkState === "copied" && <p className="reader-status" role="status">{t("shareCopied")}</p>}
     {downloadError && <p className="form-error reader-status" role="alert">{label("Không thể tải tệp xuống. Hãy thử lại.", "Could not download the file. Try again.")}</p>}
     {sharing && <Dialog workspace className="workspace-share-dialog" title={`${label("Chia sẻ", "Share")}: ${file.name}`} onClose={() => setSharing(false)}>
-      <WorkspaceShareSettings item={{ kind: "file", id: file.id, title: file.name }} available={!!owner}/>
+      <WorkspaceShareSettings item={{ kind: "file", id: file.id, title: file.name }} friends={{ plan: accountPlan }} available={!!owner}/>
     </Dialog>}
   </div>;
 }

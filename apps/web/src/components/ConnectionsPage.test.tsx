@@ -61,3 +61,19 @@ it("keeps late history out of the open conversation and returns to the inbox", a
   expect(host.querySelector(".connections-layout")?.getAttribute("data-thread-open")).toBe("false");
   expect(host.querySelector(".connections-composer")).toBeNull();
 });
+
+it("opens a received Workspace file directly from the chat card", async () => {
+  const token = "af".repeat(24);
+  vi.mocked(listDirectMessages).mockResolvedValueOnce([{
+    id: "workspace-card", sender_id: "peer-1", recipient_id: "me", body: "",
+    resource_kind: "document", resource_id: "file-1", resource_title: "Công thức.html",
+    workspace_file_token: token, created_at: "2026-10-08T00:00:00Z",
+  }]);
+  await act(async () => host.querySelector<HTMLButtonElement>(".connections-person")!.click());
+  const link = host.querySelector<HTMLAnchorElement>("a.connections-resource")!;
+  expect(link.textContent).toContain("Công thức.html");
+  expect(link.hash).toBe(`#share=${token}`);
+  expect(link.target).toBe("_blank");
+  expect(host.querySelector(".connections-messages")?.textContent).not.toContain(token);
+  expect(onOpenShared).not.toHaveBeenCalled();
+});

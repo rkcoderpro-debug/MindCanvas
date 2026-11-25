@@ -13,6 +13,6 @@ export default function WorkspaceSharedInbox({owner}:{owner:string|null}){
     return()=>abort.abort();
   },[owner]);
   if(!items.length)return null;
-  return <section className="workspace-home workspace-shared-inbox"><h2>{language==="vi"?"Nội dung được mời qua email":"Shared with you by email"}</h2>
+  return <section className="workspace-home workspace-shared-inbox"><h2>{language==="vi"?"Tệp và nội dung được chia sẻ":"Files and content shared with you"}</h2>
     <ul>{items.map(item=><li key={item.token}><a href={workspaceShareUrl(item.token)}><Link2 size={16}/>{item.title}</a><small>{item.role==="editor"?t("shareEditor"):t("shareViewer")}</small></li>)}</ul></section>;
 }

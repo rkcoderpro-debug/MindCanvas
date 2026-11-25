@@ -8,6 +8,7 @@ import {
 } from "../lib/connections";
 import { ProfileAvatar } from "./ProfileAvatar";
 import { copyTextWithFallback } from "../lib/share";
+import { workspaceShareUrl } from "../lib/workspaceShareLinks";
 import { useLearningActive } from "../lib/learningNavigation";
 
 const resourceLabels = { quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu" };
@@ -280,12 +281,16 @@ function MessageBubble({ message, mine, date, onOpenShared }: { message: DirectM
   const kind = message.resource_kind;
   const Icon = kind ? resourceIcons[kind] : FileText;
   const title = kind ? message.resource_title || resourceLabels[kind] : "";
-  const asset = <><Icon size={18}/><span><strong>{title}</strong><small>{mine ? "Học liệu đã gửi" : "Mở trong Được chia sẻ với tôi"}</small></span>{!mine && <ArrowUpRight size={16}/>}</>;
+  const token = kind === "document" ? message.workspace_file_token : null;
+  const fileLink = token && /^[a-f0-9]{48}$/.test(token) ? workspaceShareUrl(token) : "";
+  const asset = <><Icon size={18}/><span><strong>{title}</strong><small>{token ? (fileLink ? "Mở tài liệu" : "Tài liệu không còn khả dụng") : mine ? "Học liệu đã gửi" : "Mở trong Được chia sẻ với tôi"}</small></span>{(!mine || fileLink) && <ArrowUpRight size={16}/>}</>;
   return <>
     {date && <div className="connections-date">{date}</div>}
     <article className={mine ? "mine" : "theirs"}>
       {message.body && <p>{message.body}</p>}
-      {kind && (mine ? <span className="connections-resource">{asset}</span> : <button type="button" className="connections-resource" onClick={onOpenShared}>{asset}</button>)}
+      {token
+        ? (fileLink ? <a className="connections-resource" href={fileLink} target="_blank" rel="noopener noreferrer">{asset}</a> : <span className="connections-resource">{asset}</span>)
+        : kind && (mine ? <span className="connections-resource">{asset}</span> : <button type="button" className="connections-resource" onClick={onOpenShared}>{asset}</button>)}
       <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</time>
     </article>
   </>;
