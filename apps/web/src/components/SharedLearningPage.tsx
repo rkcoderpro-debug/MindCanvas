@@ -1,7 +1,7 @@
 import { ActivityViewport, BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import { useLearningActive } from "../lib/learningNavigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Clock3, FileText, Inbox, Play, RefreshCw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
+import { BookOpen, ClipboardList, Clock3, FileText, FlaskConical, Folder, Inbox, LayoutDashboard, Play, RefreshCw, Save, Search, SlidersHorizontal } from "lucide-react";
 import LabViewer from "./LabViewer";
 import { cleanLabViewer } from "../lib/labModes";
 import QuizRunner, { QuizResult } from "./QuizRunner";
@@ -46,6 +46,7 @@ export type SharedLearningProps = {
 };
 
 const kindLabels = { all: "Tất cả", quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu", canvas: "Project", folder: "Thư mục" } as const;
+const kindIcons = { quiz: ClipboardList, flashcard: BookOpen, lab: FlaskConical, document: FileText, canvas: LayoutDashboard, folder: Folder };
 const openLabels: Record<InboxKind, string> = {
   quiz: "Làm Quiz", flashcard: "Ôn Flashcard", lab: "Chạy Lab", document: "Xem tài liệu", canvas: "Mở project", folder: "Mở thư mục",
 };
@@ -309,34 +310,36 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
       {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small><button type="button" className="secondary-button" disabled={busy} onClick={() => void downloadOriginal(active.resource_id)}>Tải bản gốc</button></div></div>}
     </ActivityViewport> : <>
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}
-      <div className="shared-learning-summary" aria-label="Tóm tắt nội dung chia sẻ">
-        <article><Inbox size={18}/><strong>{inbox.length}</strong><span>Tổng nội dung</span></article>
-        <article><Users size={18}/><strong>{activeCount}</strong><span>Có quyền truy cập</span></article>
-        <article><Clock3 size={18}/><strong>{inbox.length - activeCount}</strong><span>Cần kiểm tra</span></article>
-      </div>
       <div className="shared-learning-controls">
-        <div className="shared-learning-filters">{(Object.keys(kindLabels) as Array<keyof typeof kindLabels>).map(value =>
+        <div className="shared-learning-search-row">
+          <label className="shared-learning-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc người chia sẻ…" aria-label="Tìm nội dung được chia sẻ"/></label>
+          <label className="shared-learning-sort"><SlidersHorizontal size={15}/><select value={sort} onChange={event => setSort(event.target.value as "updated" | "title")} aria-label="Sắp xếp nội dung"><option value="updated">Mới nhất</option><option value="title">Tên A–Z</option></select></label>
+        </div>
+        <div className="shared-learning-filters" role="group" aria-label="Loại nội dung">{(Object.keys(kindLabels) as Array<keyof typeof kindLabels>).map(value =>
           <button key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>{kindLabels[value]}
             <small>{value === "all" ? inbox.length : inbox.filter(item => item.kind === value).length}</small>
           </button>)}</div>
-        <label className="shared-learning-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc người chia sẻ…" aria-label="Tìm nội dung được chia sẻ"/></label>
-        <label className="shared-learning-sort"><SlidersHorizontal size={15}/><select value={sort} onChange={event => setSort(event.target.value as "updated" | "title")} aria-label="Sắp xếp nội dung"><option value="updated">Mới nhất</option><option value="title">Tên A–Z</option></select></label>
       </div>
+      {inbox.length > activeCount && <div className="shared-learning-attention"><Clock3 size={15}/>{inbox.length - activeCount} mục cần kiểm tra quyền truy cập</div>}
       <div className="shared-learning-list">{visibleItems.map(item => {
         const { learning, project, link } = item;
+        const Icon = kindIcons[item.kind];
         const canSaveLearning = learning?.status === "active";
         const saved = learning && savedCopies.some(copy => copy.kind === learning.kind && copy.source_id === learning.resource_id);
         const canEdit = link?.role === "editor" || project?.accessRole === "editor";
         const openLink = link && (link.role === "editor" ? project?.accessRole !== "editor" : !project && !canSaveLearning);
         return <article className={`shared-learning-item status-${item.status}`} key={item.key}>
-          <div className="shared-learning-item-top">
-            <span className="shared-learning-kind">{kindLabels[item.kind]}</span>
-            <span className={`shared-learning-status status-${item.status}`}>{item.status === "active" ? canEdit ? "Có thể chỉnh sửa" : "Có quyền truy cập" : item.status === "paused" ? "Tạm dừng" : "Đã gỡ"}</span>
+          <span className="shared-learning-item-icon" aria-hidden="true"><Icon size={20}/></span>
+          <div className="shared-learning-item-copy">
+            <h3>{item.title}</h3>
+            <div className="shared-learning-item-meta">
+              <span className="shared-learning-kind">{kindLabels[item.kind]}</span>
+              {item.ownerName && <span>{item.ownerName}</span>}
+              {item.date && <time dateTime={item.date}>{new Date(item.date).toLocaleDateString("vi-VN")}</time>}
+            </div>
+            {item.status !== "active" && <p>{item.status === "paused" ? "Chủ học liệu đã tạm dừng quyền truy cập." : "Học liệu gốc không còn khả dụng."}</p>}
           </div>
-          <h3>{item.title}</h3>
-          {item.ownerName && <small>Chia sẻ bởi <strong>{item.ownerName}</strong></small>}
-          {item.date && <small>{new Date(item.date).toLocaleDateString("vi-VN")}</small>}
-          {item.status !== "active" && <p>{item.status === "paused" ? "Chủ học liệu đã tạm dừng quyền truy cập." : "Học liệu gốc không còn khả dụng."}</p>}
+          <span className={`shared-learning-status status-${item.status}`}>{item.status === "active" ? canEdit ? "Có thể chỉnh sửa" : "Chỉ xem" : item.status === "paused" ? "Tạm dừng" : "Đã gỡ"}</span>
           <div className="shared-learning-item-actions">
             {openLink && link ? <a className="primary-button" href={workspaceShareUrl(link.token)}>{openLabels[item.kind]}</a>
               : project && workspace ? <button className="primary-button" onClick={() => workspace.open(project)}>{openLabels[item.kind]}</button>

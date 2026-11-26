@@ -1,0 +1,72 @@
+{
+  "version": "6.8.5",
+  "baseVersion": "6.8.4",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.5.md",
+      "bytes": 1163,
+      "sha256": "e48f7f7c388e4596e6b4356d1d03761769e04e2ee8a6e1764055f06f46c371bd"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "d3fb7b1d1f2800999a1968d1e0b7aa7504d88cd1097771bf1dae438b6bb2b266"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "1aef04059f7303b4e9c70e6acb500fc8c8d6831b1fc5532c1d91da4ff408b797"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.test.tsx",
+      "bytes": 64166,
+      "sha256": "7b269d0c34e5df37f8df4de6b61d36aa48d84d90b5793b42b0c2e06e0da23079"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "bytes": 171650,
+      "sha256": "06b7d60c2fd5183a854b1dd39e5248cb93e6d07e80afc19c5bd5988602989047"
+    },
+    {
+      "path": "apps/web/src/components/CanvasInspector.tsx",
+      "bytes": 5522,
+      "sha256": "ecf35c8f0e9aa0b7f314a3a225f8d8f1519a103ce5002b1dc0d19fe9e906beff"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "bytes": 2746,
+      "sha256": "07d89b41c84af783c7625b900b27f0bdea0509623ab3dba775928c122d1b5b1a"
+    },
+    {
+      "path": "apps/web/src/components/ElementsPanel.tsx",
+      "bytes": 6274,
+      "sha256": "5f4e5f99533f9515529f35a0947ed421f28f45f6f9f4d25986c35402c3a0ec9d"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 25649,
+      "sha256": "df55ca25b1b694aa50769d8e6dd939b50efe501828a1d724d0e1e5ee6085195d"
+    },
+    {
+      "path": "apps/web/src/components/canvasInspector.css",
+      "bytes": 3913,
+      "sha256": "cfcab602b06fb25608f87aa3641d9fe0c71600795997d33462defd31b5a39148"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 526302,
+      "sha256": "3ea3b428ffe1a5181c0e8655967297f85261bd86d5d7da0bb3e9ef3c8d0b95ed"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "a01bfb34e5d5686cb2f0beadcce03fec58f89ff8ee2b356479a2856720792eaf"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "2aa9772200c61af2fd8e927513ae04add30d5cb5d646a93d5e5008686f25e3c0"
+    }
+  ]
+}

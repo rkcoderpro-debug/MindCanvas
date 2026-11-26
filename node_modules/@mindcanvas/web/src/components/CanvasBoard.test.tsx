@@ -229,6 +229,49 @@ describe("Canvas interactions", () => {
     await act(async () => (host.querySelector('[aria-label="Mở thanh thuộc tính"]') as HTMLButtonElement).click());
     expect(inspector.classList.contains("is-open")).toBe(true);
   });
+  it("keeps the properties view stable when choosing a layer and remembers its resized width", async () => {
+    const b = { ...blankBoard(), texts: [{ id: "text", text: "Selected note", x: 10, y: 20, width: 120 }] };
+    const scroll = vi.fn();
+    const priorScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
+    try {
+      await act(async () => root.render(<Harness initial={b}/>));
+      const aside = host.querySelector<HTMLElement>(".canvas-inspector")!;
+      const tabs = [...aside.querySelectorAll<HTMLButtonElement>(".canvas-inspector-tabs button")];
+      await act(async () => tabs[2].click());
+      const layers = aside.querySelector<HTMLElement>(".canvas-inspector-scroll:not([hidden])")!;
+      layers.scrollTop = 63;
+      await act(async () => layers.querySelector<HTMLButtonElement>(".element-select")!.click());
+      expect(layers.scrollTop).toBe(63);
+      expect(tabs[2].getAttribute("aria-pressed")).toBe("true");
+      expect(scroll).not.toHaveBeenCalled();
+      await act(async () => tabs[0].click());
+      expect(aside.querySelector(".canvas-inspector-scroll:not([hidden]) [aria-label='x']")).not.toBeNull();
+      const handle = aside.querySelector('[role="separator"]')!;
+      await act(async () => { pointer(handle, "pointerdown", 700, 100); pointer(handle, "pointermove", 620, 100); pointer(handle, "pointerup", 620, 100); });
+      expect(aside.style.width).toBe("360px");
+      expect(localStorage.getItem("mindcanvas:canvas-inspector-width")).toBe("360");
+      await act(async () => handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })));
+      expect(aside.style.width).toBe("344px");
+    } finally {
+      if (priorScroll) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", priorScroll);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
+  it("toggles the canvas hint in place and minimizes the toolbar to icons", async () => {
+    await act(async () => root.render(<Harness initial={blankBoard()}/>));
+    const tip = host.querySelector<HTMLButtonElement>(".canvas-hint-toggle")!;
+    const label = tip.textContent;
+    await act(async () => tip.click());
+    expect(tip.getAttribute("aria-expanded")).toBe("false");
+    expect(tip.textContent).toBe("");
+    expect(localStorage.getItem("mindcanvas:canvas-hint-hidden")).toBe("true");
+    await act(async () => tip.click());
+    expect(tip.textContent).toBe(label);
+    await act(async () => host.querySelector<HTMLButtonElement>(".toolbar-toggle")!.click());
+    expect(host.querySelector(".toolbar-current-tool")?.textContent).toBe("");
+    expect(host.querySelector(".toolbar-current-tool")?.getAttribute("aria-label")).toBe("Chọn");
+  });
   it("moves text in one undoable commit per gesture", async () => {
     const b = { ...blankBoard(), texts: [{ id: "txt", text: "Hello", x: 20, y: 40, width: 200 }] };
     await act(async () => root.render(<Harness initial={b}/>));

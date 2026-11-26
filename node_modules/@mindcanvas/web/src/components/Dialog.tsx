@@ -15,7 +15,7 @@ export default function Dialog({ title, children, onClose, onMinimize, dismissib
     if (!learningActive || !dialog) return;
     const previous = document.activeElement as HTMLElement | null;
     dialog.showModal();
-    return () => { dialog.close(); if (previous?.isConnected) previous.focus(); };
+    return () => { dialog.close(); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, [learningActive]);
   function outside(event: PointerEvent<HTMLDialogElement>) {
     if (event.target !== event.currentTarget) return false;

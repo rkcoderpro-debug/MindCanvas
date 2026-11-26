@@ -8,10 +8,11 @@ import { useLanguage, type MessageKey } from "../lib/i18n";
 const iconByKind = { nodes: Network, texts: Type, shapes: Square, drawings: PenLine, media: Image, embeds: Globe2, edges: ArrowUpRight } as const;
 const labelKey: Record<Selection["kind"], MessageKey> = { nodes: "node", shapes: "rect", drawings: "pen", texts: "text", media: "media", embeds: "embed", edges: "connector" };
 
-export default function ElementsPanel({ board, selections, hiddenElements, onSelect, onMove, onToggleHidden, onToggleLocked }: {
+export default function ElementsPanel({ board, selections, hiddenElements, onSelect, onMove, onToggleHidden, onToggleLocked, followSelection = true }: {
   board: BoardState;
   selections: Selection[];
   hiddenElements: Set<string>;
+  followSelection?: boolean;
   onSelect: (selection: Selection, additive: boolean) => void;
   onMove: (sourceId: string, targetId: string) => void;
   onToggleHidden: (selection: Selection, hidden: boolean) => void;
@@ -31,9 +32,14 @@ export default function ElementsPanel({ board, selections, hiddenElements, onSel
   }), [board, normalized, t]);
 
   useEffect(() => {
-    if (selections.length !== 1) return;
-    [...(list.current?.querySelectorAll<HTMLElement>("[data-element-row]") ?? [])].find(row => row.dataset.elementRow === selections[0].id)?.scrollIntoView?.({ block: "nearest" });
-  }, [selections]);
+    const container = list.current;
+    if (!followSelection || !container || selections.length !== 1) return;
+    const row = [...container.querySelectorAll<HTMLElement>("[data-element-row]")].find(row => row.dataset.elementRow === selections[0].id);
+    if (!row) return;
+    const viewport = container.getBoundingClientRect(), bounds = row.getBoundingClientRect();
+    if (bounds.top < viewport.top) container.scrollTop += bounds.top - viewport.top;
+    else if (bounds.bottom > viewport.bottom) container.scrollTop += bounds.bottom - viewport.bottom;
+  }, [followSelection, selections]);
 
   return <section className="elements-panel" aria-label={t("layers")}>
     <div className="elements-panel-heading"><strong>{t("layers")}</strong><span>{orderedElements(board).length}</span></div>

@@ -2,7 +2,7 @@ import FilePicker from "./FilePicker";
 import { actualPointerSamples, LiveInk } from "../lib/liveInk";
 import { sameBoardContent, sameBoardState } from "../lib/boardEquality";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, GitFork, Globe2, Hand, Highlighter, ImagePlus, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, AudioLines, Bold, Circle, ClipboardPaste, Copy, Eraser, FileSpreadsheet, FileText, GitFork, Globe2, Hand, Highlighter, ImagePlus, Info, Italic, List, ListChecks, Magnet, Mic, Minimize2, Minus, MousePointer2, PaintBucket, PenLine, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Sparkles, Square, Trash2, Triangle, Type, Underline, ArrowUpRight, Maximize2, Network, Undo2, X, MoreHorizontal, Timer } from "lucide-react";
 import type { BoardState, CanvasBackgroundMedia, CanvasBackgroundPattern, CanvasCrop, CanvasEmbed, CanvasEmbedKind, CanvasMedia, CanvasMediaKind, MindMapLayoutBehavior, ToolMode, Vec2 } from "@mindcanvas/shared";
 import { applyMindMapAiOperations, applySelectionAi, arrangeMindMap, arrangeMindMapMultiSided, arrangeMindMapTwoSided, clamp, connect, connectorGeometry, elementBounds, hiddenNodes, mindMapLayoutBehavior, mindMapSelectionScope, moveElement, pathData, resizeElement, selectionToStudyText, MAX_FILE_BYTES, type Selection } from "../lib/board";
 import { useLanguage, useTheme, type MessageKey } from "../lib/i18n";
@@ -12,6 +12,7 @@ import { addRelativeNode, alignSelection, distributeSelection, duplicateSelectio
 import LayerStack from "./LayerStack";
 import ElementsPanel from "./ElementsPanel";
 import CanvasNavigator from "./CanvasNavigator";
+import CanvasInspector from "./CanvasInspector";
 import { nodeHeight, type MindMapLayoutMode, type MindMapLayoutSummary, type MindMapMultiLayoutSummary } from "../lib/mindMapLayout";
 import CanvasBackground, { BACKGROUND_OPTIONS } from "./CanvasBackground";
 import AiSelectionPanel from "./AiSelectionPanel";
@@ -234,8 +235,10 @@ function drawingPath(points: Vec2[]) {
 const paperPalette = { ink: "#243d63", fill: "#bfdbfe", highlighter: "#e6ac00" };
 const drawingSizeLabelKey: Record<DrawingToolName, MessageKey> = { pen: "penSize", highlighter: "highlighterSize", eraser: "eraserSize" };
 export default function CanvasBoard({ roomMode = false, paperSurface, board, onChange: onChangeProp, onDraftChange, onViewportChange, onUndo, onRedo, canUndo = false, canRedo = false, onSave, canUseAi = false, canUseCanvasBackground = false, onRequestCanvasBackgroundUpgrade, isFullscreen = false, onToggleFullscreen, toolbarPosition = "top", timerVisible = false, onToggleTimer, showMobileZoomControls = false, visibleToolIds = [...CANVAS_TOOL_IDS], readOnly = false, documents = [], onDocumentSaved }: Props) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
+  const vi = language === "vi";
   const { theme } = useTheme(), palette = paperSurface ? paperPalette : THEME_CANVAS_PALETTES[theme];
+  const layout = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), iosTouchActive = useRef(false), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
@@ -297,6 +300,9 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
   const inspectorOpenButton = useRef<HTMLButtonElement>(null), inspectorCloseButton = useRef<HTMLButtonElement>(null);
   const inspectorFocus = useRef(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => !paperSurface && (typeof window === "undefined" || window.innerWidth > 620));
+  const [hintHidden, setHintHidden] = useState(() => {
+    try { return localStorage.getItem("mindcanvas:canvas-hint-hidden") === "true"; } catch { return false; }
+  });
   const [toolbarExpanded, setToolbarExpanded] = useState(() => typeof window === "undefined" || window.innerWidth > 620);
   const [toolbarOverflowing, setToolbarOverflowing] = useState(false);
   const [showToolbarSwipeHint, setShowToolbarSwipeHint] = useState(() => {
@@ -322,10 +328,10 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
   const [drawingSizes, setDrawingSizes] = useState<DrawingToolSizes>(readDrawingSizes);
   const [eraserCursor, setEraserCursor] = useState<Vec2 | null>(null);
   useLayoutEffect(() => {
-    if (!paperSurface || !inspectorFocus.current) return;
+    if (!inspectorFocus.current) return;
     inspectorFocus.current = false;
     (inspectorOpen ? inspectorCloseButton.current : inspectorOpenButton.current)?.focus({ preventScroll: true });
-  }, [inspectorOpen, !!paperSurface]);
+  }, [inspectorOpen]);
   useLayoutEffect(() => {
     inlineEditor.current?.focus({ preventScroll: true });
   }, [editing?.selection.id]);
@@ -554,7 +560,15 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
     const track = toolbarTools.current;
     if (!track || !toolbarExpanded || typeof window === "undefined" || !window.matchMedia?.("(max-width: 620px)").matches) return;
     const active = track.querySelector<HTMLElement>(`[data-tool="${tool}"]`);
-    active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+    if (!active) return;
+    const visible = track.getBoundingClientRect(), button = active.getBoundingClientRect();
+    if (toolbarPosition === "left" || toolbarPosition === "right") {
+      if (button.top < visible.top) track.scrollTop += button.top - visible.top;
+      else if (button.bottom > visible.bottom) track.scrollTop += button.bottom - visible.bottom;
+    } else {
+      if (button.left < visible.left) track.scrollLeft += button.left - visible.left;
+      else if (button.right > visible.right) track.scrollLeft += button.right - visible.right;
+    }
   }, [tool, toolbarExpanded, toolbarPosition]);
   useEffect(() => {
     if (!toolbarExpanded || !toolbarOverflowing || !showToolbarSwipeHint) return;
@@ -760,7 +774,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
     const inputTool = currentInputTool();
     if (!interactive || inputTool === "hand" || input.button === 1) return;
     input.stopPropagation?.(); input.preventDefault();
-    svg.current?.focus();
+    svg.current?.focus({ preventScroll: true });
     if (inputTool === "connector") {
       if (s.kind !== "nodes" && s.kind !== "shapes") return;
       if (!connectorSource) { setConnectorSource(s); setSelected(s); return; }
@@ -785,7 +799,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
     setSelections(targets);
     if (isLocked(s)) return;
     if (s.kind === "edges") return;
-    svg.current?.focus(); if (input.capture) svg.current?.setPointerCapture(input.pointerId);
+    svg.current?.focus({ preventScroll: true }); if (input.capture) svg.current?.setPointerCapture(input.pointerId);
     const p = point(input.clientX, input.clientY, interactionBoard);
     setInputMode("transforming");
     gesture.current = { mode: "move", start: p, screen: { x: input.clientX, y: input.clientY }, base: interactionBoard, selection: s, selections: targets, reparent: input.altKey && targets.length === 1 && s.kind === "nodes", editTap: !input.altKey && targets.length === 1 && (s.kind === "nodes" || s.kind === "texts"), pointer: input.pointerId, next: interactionBoard };
@@ -840,7 +854,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
     commitWheelViewport();
     if (input.button !== 0 && input.button !== 1 && !isStylusPointer(input.pointerType)) return;
     if (editRef.current) { finishEdit(); return; }
-    input.preventDefault(); svg.current?.focus(); window.getSelection()?.removeAllRanges();
+    input.preventDefault(); svg.current?.focus({ preventScroll: true }); window.getSelection()?.removeAllRanges();
     const base = interactionBoard;
     const inputTool = currentInputTool();
     const zoomShortcut = !!(input.ctrlKey || input.metaKey || ctrlRef.current);
@@ -1444,7 +1458,97 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
     onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => endToolbarToolPress(event, id),
     onClick: (event: ReactMouseEvent<HTMLButtonElement>) => { if (event.detail === 0) chooseTool(id); },
   });
-  return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""} ${paperSurface ? "paper-canvas" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode} data-inspector-open={inspectorOpen && !readOnly}>
+  const closeInspector = () => { inspectorFocus.current = true; setInspectorOpen(false); };
+  const inspectorGroup = (label: string, children: ReactNode, collapsible = false) => {
+    if (paperSurface) return children;
+    return collapsible
+      ? <details className="canvas-inspector-group"><summary>{label}</summary><div>{children}</div></details>
+      : <section className="canvas-inspector-group"><h4>{label}</h4>{children}</section>;
+  };
+  const backgroundProperties = <>
+      <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={backgroundPattern === option ? "active" : ""} aria-pressed={backgroundPattern === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div><div className="canvas-background-media-control">
+        {canUseCanvasBackground ? <FilePicker layout="inline" label={t(backgroundMedia ? "replace" : "uploadCanvasBackground")}
+          accept="image/*,video/*,.mov,.m4v,.webm" fileNames={backgroundMedia ? [backgroundMedia.name || t(backgroundMedia.kind === "video" ? "video" : "image")] : []}
+          description={t("canvasBackgroundHint")} onBeforeChoose={() => { finishEdit(); setMediaError(""); }}
+          onChange={event => { void addBackgroundFile(event.currentTarget.files?.[0]); }}/>
+        : <><button type="button" className="secondary-button" onClick={onRequestCanvasBackgroundUpgrade}><ImagePlus size={15}/>{t(backgroundMedia ? "replace" : "uploadCanvasBackground")}</button>
+          <small className="field-hint">{t("backgroundProOnly")}</small></>}
+        {backgroundMedia && <button type="button" className="secondary-button canvas-background-remove" onClick={() => onChange({ ...board, background: "dots" })}><Trash2 size={15}/>{t("clearCanvasBackground")}</button>}
+      </div>{backgroundMedia && <div className="canvas-background-adjustments"><label>{t("backgroundMediaOpacity")}<input type="range" min=".1" max="1" step=".05" value={backgroundMedia.opacity ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, opacity: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBlur")}<input type="range" min="0" max="24" step="1" value={backgroundMedia.blur ?? 0} onChange={event => onChange({ ...board, background: { ...backgroundMedia, blur: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBrightness")}<input type="range" min=".5" max="1.5" step=".05" value={backgroundMedia.brightness ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, brightness: Number(event.target.value) } })}/></label><label>{t("backgroundMediaFit")}<select value={backgroundMedia.fit ?? "cover"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, fit: event.target.value as "cover" | "contain" } })}><option value="cover">{t("backgroundFitCover")}</option><option value="contain">{t("backgroundFitContain")}</option></select></label><label>{t("backgroundMediaPosition")}<select value={backgroundMedia.position ?? "center"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, position: event.target.value } })}><option value="center">{t("center")}</option><option value="top">{t("alignTop")}</option><option value="right">{t("alignRight")}</option><option value="bottom">{t("alignBottom")}</option><option value="left">{t("alignLeft")}</option></select></label></div>}</section>
+      {backgroundMedia && <section className="canvas-background-overlay-control"><label>{t("backgroundMediaOverlay")}<input type="color" value={backgroundMedia.overlay ?? "#000000"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, overlay: event.target.value } })}/></label></section>}
+      {!paperSurface && inspectorGroup(vi ? "Nét vẽ mặc định" : "Default drawing style", <>
+        <label>{t("color")}<input type="color" value={ink} onChange={e => setInk(e.target.value)}/></label><label>{t("stroke")}<input type="range" min="1" max="20" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))}/></label>
+      </>)}
+    </>;
+  const selectionActions = selections.length > 0 && <div className="selection-actions">
+        {inspectorGroup(vi ? "Sắp xếp lớp" : "Layer order", <>
+        <div className="property-grid"><button onClick={() => onChange(reorderSelection(board, selections, "front"))}>{t("bringFront")}</button><button onClick={() => onChange(reorderSelection(board, selections, "back"))}>{t("sendBack")}</button>
+        <button onClick={() => onChange(reorderSelection(board, selections, "forward"))}>{t("bringForward")}</button><button onClick={() => onChange(reorderSelection(board, selections, "backward"))}>{t("sendBackward")}</button></div>
+      </>, true)}
+        {selections.length > 1 && inspectorGroup(vi ? "Căn chỉnh & phân bố" : "Alignment & spacing", <>
+        <div className="property-grid"><button title={t("alignLeft")} onClick={() => onChange(alignSelection(board, selections, "left"))}><AlignStartHorizontal size={15}/>{t("alignLeft")}</button><button title={t("alignCenter")} onClick={() => onChange(alignSelection(board, selections, "center"))}><AlignCenterHorizontal size={15}/>{t("alignCenter")}</button><button title={t("alignRight")} onClick={() => onChange(alignSelection(board, selections, "right"))}><AlignEndHorizontal size={15}/>{t("alignRight")}</button>
+        <button title={t("alignTop")} onClick={() => onChange(alignSelection(board, selections, "top"))}><AlignStartVertical size={15}/>{t("alignTop")}</button><button title={t("alignMiddle")} onClick={() => onChange(alignSelection(board, selections, "middle"))}><AlignCenterVertical size={15}/>{t("alignMiddle")}</button><button title={t("alignBottom")} onClick={() => onChange(alignSelection(board, selections, "bottom"))}><AlignEndVertical size={15}/>{t("alignBottom")}</button>
+        <button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "horizontal"))}>{t("distributeHorizontal")}</button><button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "vertical"))}>{t("distributeVertical")}</button></div>
+      </>, true)}
+        {inspectorGroup(vi ? "Nhóm & thao tác" : "Groups & actions", <>
+        <div className="property-grid"><button disabled={selections.length < 2} onClick={() => onChange(groupSelection(board, selections))}>{t("group")}</button><button disabled={!board.groups?.some(g => g.elementIds.some(id => selections.some(s => s.id === id)))} onClick={() => onChange(ungroupSelection(board, selections))}>{t("ungroup")}</button>
+        <button onClick={() => void copy()}>{t("copyElements")}</button><button onClick={duplicate}>{t("duplicate")}</button><button onClick={() => onChange(setElementFlags(board, selections, { locked: !selections.some(s => isLocked(s)) }))}>{selections.some(s => isLocked(s)) ? t("unlock") : t("lock")}</button><button onClick={() => onChange(setElementFlags(board, selections, { hidden: !selections.every(s => hiddenElements.has(s.id)) }))}>{selections.every(s => hiddenElements.has(s.id)) ? t("show") : t("hide")}</button><button onClick={remove}>{t("delete")}</button></div>{selected?.kind === "nodes" && selections.length === 1 && <><button onClick={() => relative(false)}>{t("addChild")} · Tab</button><button onClick={() => relative(true)}>{t("addSibling")} · Enter</button><small>{t("reparentHint")}</small></>}
+      </>, true)}
+        {selectedMindMapNodes.length > 1 && selectedMindMapNodes.length === selections.length && <section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapSelectionHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapSelectionHasLocked} onClick={() => onChange(rotateMindMapSelection(board, selections, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateSelectionLeft")}</button><button type="button" disabled={selectedMindMapSelectionHasLocked} onClick={() => onChange(rotateMindMapSelection(board, selections, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateSelectionRight")}</button></div></section>}
+      </div>;
+  const selectionProperties = <>
+      {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}
+      {selections.length > 0 && <strong className="canvas-inspector-selection-count">{selections.length} {t("selectedElements")}</strong>}
+      {paperSurface && selectionActions}
+      {selectedStudyText && <button className="ai-selection-button" title={!canUseAi ? t("aiManualHint") : t("askAiSelection")} onClick={() => openAiSelection()}><Sparkles size={15}/>{t("askAiSelection")}</button>}
+      {!selectedEl ? <div className="canvas-inspector-empty"><p>{t("selectHint")}</p>{paperSurface && <><label>{t("color")}<input type="color" value={ink} onChange={e => setInk(e.target.value)}/></label><label>{t("stroke")}<input type="range" min="1" max="20" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))}/></label></>}</div> : <>
+        <div className="property-caption">{t(selectedLabelKey)}</div>
+        {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
+        {inspectorGroup(vi ? "Vị trí & kích thước" : "Position & size", <>
+        {bounds && <div className="property-grid">{(["x", "y", "width", "height"] as const).map(k => <label key={k}>{k === "width" ? t("width") : k === "height" ? t("height") : k.toUpperCase()}<input type="number" step="1" aria-label={k} value={Math.round(bounds[k])} onChange={e => {
+          if (e.target.value === "" || !Number.isFinite(e.target.valueAsNumber)) return;
+          const v = clamp(e.target.valueAsNumber, -100000, 100000);
+          onChange(k === "x" || k === "y" ? moveElement(board, selected!, k === "x" ? v - bounds.x : 0, k === "y" ? v - bounds.y : 0) : resizeElement(board, selected!, k === "width" ? v : bounds.width, k === "height" ? v : bounds.height));
+        }}/></label>)}</div>}
+        {selected?.kind !== "edges" && <div className="rotation-control"><label>{t("rotation")}<input aria-label={t("rotation")} type="number" min="-3600" max="3600" step="1" value={Math.round(selectedRotation)} onChange={e => { if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) patch({ rotation: clamp(e.target.valueAsNumber, -3600, 3600) }); }}/></label><button type="button" className="secondary-button" onClick={() => patch({ rotation: 0 })}><RotateCcw size={14}/>{t("resetRotation")}</button></div>}
+      </>)}
+        {inspectorGroup(vi ? "Màu & hiển thị" : "Appearance", <>
+        {selected?.kind !== "edges" && selected?.kind !== "media" && selected?.kind !== "embeds" && <label>{t("color")}<input type="color" value={selectedColor} onChange={e => patch({ color: e.target.value })}/></label>}
+        <div className="alpha-control"><label>{t("alpha")}<output>{Math.round(selectedOpacity * 100)}%</output><input aria-label={t("alpha")} type="range" min="0" max="1" step=".01" value={selectedOpacity} onChange={e => patch({ opacity: Number(e.target.value) })}/></label><button type="button" className="secondary-button" onClick={() => patch({ opacity: 1 })}><RotateCcw size={14}/>{t("resetAlpha")}</button></div>{selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="120" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
+      </>)}
+        {(selected?.kind === "edges" || selected?.kind === "texts" || selectedMedia) &&
+          inspectorGroup(vi ? "Nội dung & định dạng" : "Content & formatting", <>
+        {selected?.kind === "edges" && <label>{t("label")}<input aria-label={t("label")} maxLength={500} value={"label" in selectedEl ? selectedEl.label ?? "" : ""} onChange={e => patch({ label: e.target.value || undefined })}/></label>}
+        {selectedMedia && <div className="media-inspector-card"><strong>{selectedMedia.name}</strong><small>{t(selectedMedia.kind)} · {selectedMedia.mimeType ?? "media"}</small></div>}
+        {selectedMedia && (selectedMedia.kind === "image" || selectedMedia.kind === "video") && <fieldset className="media-editor-fieldset"><legend>{t("crop")}</legend><div className="property-grid">{(["top", "right", "bottom", "left"] as const).map(edge => <label key={edge}>{t(`crop${edge[0].toUpperCase()}${edge.slice(1)}` as MessageKey)}<input type="number" min="0" max="90" step="1" value={Math.round((selectedMedia.crop?.[edge] ?? 0) * 10) / 10} onChange={e => { if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) updateCrop(edge, e.target.valueAsNumber); }}/></label>)}</div><button type="button" className="secondary-button" onClick={() => patch({ crop: undefined })}><RotateCcw size={14}/>{t("resetCrop")}</button></fieldset>}
+        {selectedMedia && (selectedMedia.kind === "audio" || selectedMedia.kind === "video") && <fieldset className="media-editor-fieldset"><legend>{t("trimStart")} / {t("trimEnd")}</legend><div className="property-grid"><label>{t("trimStart")}<input type="number" min="0" step="0.1" value={selectedMedia.trimStart ?? ""} onChange={e => updateTrim("trimStart", e.target.value === "" ? undefined : e.target.valueAsNumber)}/></label><label>{t("trimEnd")}<input type="number" min="0" step="0.1" value={selectedMedia.trimEnd ?? ""} onChange={e => updateTrim("trimEnd", e.target.value === "" ? undefined : e.target.valueAsNumber)}/></label></div><small>{t("trimHint")}</small><button type="button" className="secondary-button" onClick={() => patch({ trimStart: undefined, trimEnd: undefined })}><RotateCcw size={14}/>{t("resetTrim")}</button></fieldset>}
+        {selected?.kind === "texts" && <><label>{t("fontSize")}<input type="number" min="8" max="200" value={"fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16} onChange={e => { if(e.target.value) patch({ fontSize: clamp(Number(e.target.value), 8, 200) }); }}/></label>
+          <div className="text-format-toolbar" role="toolbar" aria-label={t("editText")}>
+            <button aria-label={t("bold")} title={t("bold")} aria-pressed={"bold" in selectedEl && !!selectedEl.bold} className={"bold" in selectedEl && selectedEl.bold ? "active" : ""} onClick={() => patch({ bold: !("bold" in selectedEl && selectedEl.bold) })}><Bold size={16}/></button>
+            <button aria-label={t("italic")} title={t("italic")} aria-pressed={"italic" in selectedEl && !!selectedEl.italic} className={"italic" in selectedEl && selectedEl.italic ? "active" : ""} onClick={() => patch({ italic: !("italic" in selectedEl && selectedEl.italic) })}><Italic size={16}/></button>
+            <button aria-label={t("underline")} title={t("underline")} aria-pressed={"underline" in selectedEl && !!selectedEl.underline} className={"underline" in selectedEl && selectedEl.underline ? "active" : ""} onClick={() => patch({ underline: !("underline" in selectedEl && selectedEl.underline) })}><Underline size={16}/></button>
+            <button aria-label={t("alignLeft")} title={t("alignLeft")} className={("textAlign" in selectedEl ? selectedEl.textAlign : undefined) === "left" || !("textAlign" in selectedEl && selectedEl.textAlign) ? "active" : ""} onClick={() => patch({ textAlign: "left" })}><AlignLeft size={16}/></button>
+            <button aria-label={t("alignCenter")} title={t("alignCenter")} className={"textAlign" in selectedEl && selectedEl.textAlign === "center" ? "active" : ""} onClick={() => patch({ textAlign: "center" })}><AlignCenter size={16}/></button>
+            <button aria-label={t("alignRight")} title={t("alignRight")} className={"textAlign" in selectedEl && selectedEl.textAlign === "right" ? "active" : ""} onClick={() => patch({ textAlign: "right" })}><AlignRight size={16}/></button>
+            <button aria-label={t("bulletedList")} title={t("bulletedList")} onClick={() => toggleTextPrefix("• ")}><List size={16}/></button>
+            <button aria-label={t("checklist")} title={t("checklist")} onClick={() => toggleTextPrefix("☐ ")}><ListChecks size={16}/></button>
+          </div>
+          <label>{t("textBackground")}<span className="color-with-clear"><input type="color" value={"backgroundColor" in selectedEl ? selectedEl.backgroundColor ?? palette.fill : palette.fill} onChange={e => patch({ backgroundColor: e.target.value })}/><button className="icon-button" aria-label={t("clearBackground")} title={t("clearBackground")} onClick={() => patch({ backgroundColor: undefined })}><X size={14}/></button></span></label>
+        </>}
+      </>)}
+        {selected?.kind === "nodes" && inspectorGroup(vi ? "Nhánh mind map" : "Mind map branch", <>
+        <button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button><button className="secondary-button" onClick={openMindMapLayout}>{t("arrangeMapSmart")}</button><section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateByAngle", { angle: -mindMapRotationAngle })}</button><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateByAngle", { angle: mindMapRotationAngle })}</button></div></section>
+      </>)}
+        {paperSurface && <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>}
+      </>}
+      {!paperSurface && selectionActions}
+    </>;
+  const inspectorLayers = <ElementsPanel board={b} selections={selections} hiddenElements={hiddenElements} followSelection={!!paperSurface}
+        onSelect={(selection, additive) => { setTool("select"); const next = expandGroups(b, [selection]); setSelections(additive ? expandGroups(b, [...selections, ...next]) : next); }}
+        onMove={(sourceId, targetId) => onChange(moveLayer(board, sourceId, targetId))}
+        onToggleHidden={(selection, value) => onChange(setElementFlags(board, [selection], { hidden: value }))}
+        onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>;
+  return <div ref={layout} className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""} ${paperSurface ? "paper-canvas" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode} data-inspector-open={inspectorOpen && !readOnly}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if (!roomMode && [...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); if (!roomMode && !readOnly) addCanvasFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -1457,7 +1561,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
       {onToggleFullscreen && <button type="button" className="canvas-fullscreen-toggle icon-button" aria-label={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} title={t(isFullscreen ? "exitFullscreen" : "maximizeCanvas")} onClick={onToggleFullscreen}>{isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button>}
       {!readOnly && <MobileQuickActions hasSelection={selections.length > 0} canEditSelection={canEditSelection} canPaste onCopy={copy} onPaste={paste} onDuplicate={duplicate} onDelete={remove} canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo}/>}
       {!readOnly && <div ref={toolbar} className={`drawing-toolbar toolbar-${toolbarExpanded ? "expanded" : "collapsed"} ${toolbarOverflowing ? "toolbar-overflowing" : ""}`} role="toolbar" aria-label={t("properties")}>
-        {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(activeToolMode)} title={t(activeToolMode)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/><span>{t(activeToolMode)}</span></button>}
+        {!toolbarExpanded && <button type="button" className="toolbar-current-tool selected" aria-label={t(activeToolMode)} title={t(activeToolMode)} onClick={() => setToolbarExpanded(true)}><ActiveToolIcon size={18}/></button>}
         <button type="button" className="toolbar-toggle" aria-expanded={toolbarExpanded} aria-label={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} title={t(toolbarExpanded ? "collapseToolbar" : "expandToolbar")} onClick={() => { toolbarUserExpanded.current = true; setToolbarExpanded(value => !value); }}>{toolbarExpanded ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
         <span ref={toolbarTools} className="drawing-toolbar-tools" onScroll={() => {
           if (!showToolbarSwipeHint) return;
@@ -1647,10 +1751,17 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
       {mediaError && <div className="canvas-inline-error media-inline-error" role="alert"><span>{mediaError}</span><button className="icon-button" aria-label={t("close")} onClick={() => setMediaError("")}><X size={14}/></button></div>}
       {((inputMode === "drawing" || inputMode === "erasing") && ["pen", "highlighter", "eraser"].includes(activeToolMode)) && <div className="pen-mode-badge" role="status">{activeToolMode === "eraser" ? <Eraser size={14}/> : <PenLine size={14}/>}<span>{t(activeToolMode)}</span></div>}
       {inputMode === "pinching" && <div className="gesture-mode-badge" role="status"><Hand size={14}/><span>{t("gestureMode")}</span></div>}
-      <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div>
+      {paperSurface ? <div className="canvas-hint">{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</div> :
+        <button type="button" className="canvas-hint canvas-hint-toggle" aria-expanded={!hintHidden}
+          aria-label={hintHidden ? (vi ? "Hiện hướng dẫn canvas" : "Show canvas tips") : (vi ? "Ẩn hướng dẫn canvas" : "Hide canvas tips")}
+          onClick={() => {
+            const next = !hintHidden;
+            setHintHidden(next);
+            try { localStorage.setItem("mindcanvas:canvas-hint-hidden", String(next)); } catch {}
+          }}><Info size={15} aria-hidden="true"/>{!hintHidden && <span>{t(activeToolMode === "connector" ? "connectorHint" : activeToolMode === "text" ? "textHint" : activeToolMode === "eraser" ? "eraserHint" : ["pen", "highlighter", "line", "rect", "ellipse", "triangle"].includes(activeToolMode) ? "drawHint" : "canvasHint")}</span>}</button>}
       {tool === "connector" && <div className="connector-status" role="status"><ArrowUpRight size={15}/><span>{t(connectorSource ? "connectorChooseTarget" : "connectorChooseSource")}</span>{connectorSource && <button type="button" onClick={() => { setConnectorSource(null); setSelected(null); }}>{t("cancelConnector")}</button>}</div>}
       <div className="canvas-mobile-dock">
-        {(!paperSurface || (!inspectorOpen && !readOnly)) && <button ref={inspectorOpenButton} type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => { inspectorFocus.current = true; setInspectorOpen(value => !value); }}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>}
+        {(!readOnly && (!paperSurface || !inspectorOpen)) && <button ref={inspectorOpenButton} type="button" className="inspector-toggle" aria-label={t(inspectorOpen ? "closeProperties" : "openProperties")} aria-expanded={inspectorOpen} title={t(inspectorOpen ? "closeProperties" : "openProperties")} onClick={() => { inspectorFocus.current = true; setInspectorOpen(value => !value); }}><SlidersHorizontal size={18}/><span>{t("properties")}</span></button>}
         <CanvasNavigator board={b} selection={selections} svg={svg} onChange={onChange}/>
       </div>
       {mindMapLayoutSummary && <aside className="mind-map-layout-report" aria-label={t("mindMapLayoutReport")}>
@@ -1665,68 +1776,12 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
       </aside>}
       <div className={`zoom-control ${showMobileZoomControls ? "mobile-zoom-visible" : "mobile-zoom-hidden"}`}><button aria-label={t("zoomOut")} onClick={() => zoom(1/1.1)}>−</button><button className="zoom-value" aria-label={t("resetZoom")} onClick={resetZoom}>{Math.round(b.viewport.scale * 100)}%</button><button aria-label={t("zoomIn")} onClick={() => zoom(1.1)}>+</button></div>
     </div>
-    {!readOnly && <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}><div className="inspector-heading"><h3>{t("properties")}</h3><button ref={inspectorCloseButton} type="button" className="icon-button inspector-close" aria-label={t("closeProperties")} title={t("closeProperties")} onClick={() => { inspectorFocus.current = true; setInspectorOpen(false); }}><X size={19}/></button></div>
-      <section className="canvas-background-picker"><div className="property-caption"><PaintBucket size={14}/>{t("canvasBackground")}</div><div className="background-options">{BACKGROUND_OPTIONS.map(option => <button key={option} className={backgroundPattern === option ? "active" : ""} aria-pressed={backgroundPattern === option} title={t(backgroundLabel[option])} onClick={() => onChange({ ...board, background: option })}><span className={`background-swatch ${option}`}/><span>{t(backgroundLabel[option])}</span></button>)}</div><div className="canvas-background-media-control">
-        {canUseCanvasBackground ? <FilePicker layout="inline" label={t(backgroundMedia ? "replace" : "uploadCanvasBackground")}
-          accept="image/*,video/*,.mov,.m4v,.webm" fileNames={backgroundMedia ? [backgroundMedia.name || t(backgroundMedia.kind === "video" ? "video" : "image")] : []}
-          description={t("canvasBackgroundHint")} onBeforeChoose={() => { finishEdit(); setMediaError(""); }}
-          onChange={event => { void addBackgroundFile(event.currentTarget.files?.[0]); }}/>
-        : <><button type="button" className="secondary-button" onClick={onRequestCanvasBackgroundUpgrade}><ImagePlus size={15}/>{t(backgroundMedia ? "replace" : "uploadCanvasBackground")}</button>
-          <small className="field-hint">{t("backgroundProOnly")}</small></>}
-        {backgroundMedia && <button type="button" className="secondary-button canvas-background-remove" onClick={() => onChange({ ...board, background: "dots" })}><Trash2 size={15}/>{t("clearCanvasBackground")}</button>}
-      </div>{backgroundMedia && <div className="canvas-background-adjustments"><label>{t("backgroundMediaOpacity")}<input type="range" min=".1" max="1" step=".05" value={backgroundMedia.opacity ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, opacity: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBlur")}<input type="range" min="0" max="24" step="1" value={backgroundMedia.blur ?? 0} onChange={event => onChange({ ...board, background: { ...backgroundMedia, blur: Number(event.target.value) } })}/></label><label>{t("backgroundMediaBrightness")}<input type="range" min=".5" max="1.5" step=".05" value={backgroundMedia.brightness ?? 1} onChange={event => onChange({ ...board, background: { ...backgroundMedia, brightness: Number(event.target.value) } })}/></label><label>{t("backgroundMediaFit")}<select value={backgroundMedia.fit ?? "cover"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, fit: event.target.value as "cover" | "contain" } })}><option value="cover">{t("backgroundFitCover")}</option><option value="contain">{t("backgroundFitContain")}</option></select></label><label>{t("backgroundMediaPosition")}<select value={backgroundMedia.position ?? "center"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, position: event.target.value } })}><option value="center">{t("center")}</option><option value="top">{t("alignTop")}</option><option value="right">{t("alignRight")}</option><option value="bottom">{t("alignBottom")}</option><option value="left">{t("alignLeft")}</option></select></label></div>}</section>
-      {backgroundMedia && <section className="canvas-background-overlay-control"><label>{t("backgroundMediaOverlay")}<input type="color" value={backgroundMedia.overlay ?? "#000000"} onChange={event => onChange({ ...board, background: { ...backgroundMedia, overlay: event.target.value } })}/></label></section>}
-      {hasCopy && <button className="secondary-button" onClick={() => void paste()}>{t("pasteElements")}</button>}
-      {selections.length > 0 && <div className="selection-actions"><strong>{selections.length} {t("selectedElements")}</strong><div className="property-grid">
-        <button onClick={() => onChange(reorderSelection(board, selections, "front"))}>{t("bringFront")}</button><button onClick={() => onChange(reorderSelection(board, selections, "back"))}>{t("sendBack")}</button>
-        <button onClick={() => onChange(reorderSelection(board, selections, "forward"))}>{t("bringForward")}</button><button onClick={() => onChange(reorderSelection(board, selections, "backward"))}>{t("sendBackward")}</button>
-        <button title={t("alignLeft")} onClick={() => onChange(alignSelection(board, selections, "left"))}><AlignStartHorizontal size={15}/>{t("alignLeft")}</button><button title={t("alignCenter")} onClick={() => onChange(alignSelection(board, selections, "center"))}><AlignCenterHorizontal size={15}/>{t("alignCenter")}</button><button title={t("alignRight")} onClick={() => onChange(alignSelection(board, selections, "right"))}><AlignEndHorizontal size={15}/>{t("alignRight")}</button>
-        <button title={t("alignTop")} onClick={() => onChange(alignSelection(board, selections, "top"))}><AlignStartVertical size={15}/>{t("alignTop")}</button><button title={t("alignMiddle")} onClick={() => onChange(alignSelection(board, selections, "middle"))}><AlignCenterVertical size={15}/>{t("alignMiddle")}</button><button title={t("alignBottom")} onClick={() => onChange(alignSelection(board, selections, "bottom"))}><AlignEndVertical size={15}/>{t("alignBottom")}</button>
-        <button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "horizontal"))}>{t("distributeHorizontal")}</button><button disabled={selections.length < 3} onClick={() => onChange(distributeSelection(board, selections, "vertical"))}>{t("distributeVertical")}</button>
-        <button disabled={selections.length < 2} onClick={() => onChange(groupSelection(board, selections))}>{t("group")}</button><button disabled={!board.groups?.some(g => g.elementIds.some(id => selections.some(s => s.id === id)))} onClick={() => onChange(ungroupSelection(board, selections))}>{t("ungroup")}</button>
-        <button onClick={() => void copy()}>{t("copyElements")}</button><button onClick={duplicate}>{t("duplicate")}</button><button onClick={() => onChange(setElementFlags(board, selections, { locked: !selections.some(s => isLocked(s)) }))}>{selections.some(s => isLocked(s)) ? t("unlock") : t("lock")}</button><button onClick={() => onChange(setElementFlags(board, selections, { hidden: !selections.every(s => hiddenElements.has(s.id)) }))}>{selections.every(s => hiddenElements.has(s.id)) ? t("show") : t("hide")}</button><button onClick={remove}>{t("delete")}</button></div>
-        {selectedMindMapNodes.length > 1 && selectedMindMapNodes.length === selections.length && <section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapSelectionHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapSelectionHasLocked} onClick={() => onChange(rotateMindMapSelection(board, selections, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateSelectionLeft")}</button><button type="button" disabled={selectedMindMapSelectionHasLocked} onClick={() => onChange(rotateMindMapSelection(board, selections, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateSelectionRight")}</button></div></section>}
-        {selectedStudyText && <button className="ai-selection-button" title={!canUseAi ? t("aiManualHint") : t("askAiSelection")} onClick={() => openAiSelection()}><Sparkles size={15}/>{t("askAiSelection")}</button>}
-        {selected?.kind === "nodes" && selections.length === 1 && <><button onClick={() => relative(false)}>{t("addChild")} · Tab</button><button onClick={() => relative(true)}>{t("addSibling")} · Enter</button><small>{t("reparentHint")}</small></>}
-      </div>}
-      {!selectedEl ? <><p>{t("selectHint")}</p><label>{t("color")}<input type="color" value={ink} onChange={e => setInk(e.target.value)}/></label><label>{t("stroke")}<input type="range" min="1" max="20" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))}/></label></> : <>
-        <div className="property-caption">{t(selectedLabelKey)}</div>
-        {bounds && <div className="property-grid">{(["x", "y", "width", "height"] as const).map(k => <label key={k}>{k === "width" ? t("width") : k === "height" ? t("height") : k.toUpperCase()}<input type="number" step="1" aria-label={k} value={Math.round(bounds[k])} onChange={e => {
-          if (e.target.value === "" || !Number.isFinite(e.target.valueAsNumber)) return;
-          const v = clamp(e.target.valueAsNumber, -100000, 100000);
-          onChange(k === "x" || k === "y" ? moveElement(board, selected!, k === "x" ? v - bounds.x : 0, k === "y" ? v - bounds.y : 0) : resizeElement(board, selected!, k === "width" ? v : bounds.width, k === "height" ? v : bounds.height));
-        }}/></label>)}</div>}
-        {selected?.kind !== "edges" && <div className="rotation-control"><label>{t("rotation")}<input aria-label={t("rotation")} type="number" min="-3600" max="3600" step="1" value={Math.round(selectedRotation)} onChange={e => { if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) patch({ rotation: clamp(e.target.valueAsNumber, -3600, 3600) }); }}/></label><button type="button" className="secondary-button" onClick={() => patch({ rotation: 0 })}><RotateCcw size={14}/>{t("resetRotation")}</button></div>}
-        {selected?.kind !== "edges" && selected?.kind !== "media" && selected?.kind !== "embeds" && <label>{t("color")}<input type="color" value={selectedColor} onChange={e => patch({ color: e.target.value })}/></label>}
-        <div className="alpha-control"><label>{t("alpha")}<output>{Math.round(selectedOpacity * 100)}%</output><input aria-label={t("alpha")} type="range" min="0" max="1" step=".01" value={selectedOpacity} onChange={e => patch({ opacity: Number(e.target.value) })}/></label><button type="button" className="secondary-button" onClick={() => patch({ opacity: 1 })}><RotateCcw size={14}/>{t("resetAlpha")}</button></div>
-        {selected?.kind === "edges" && <label>{t("label")}<input aria-label={t("label")} maxLength={500} value={"label" in selectedEl ? selectedEl.label ?? "" : ""} onChange={e => patch({ label: e.target.value || undefined })}/></label>}
-        {selectedMedia && <div className="media-inspector-card"><strong>{selectedMedia.name}</strong><small>{t(selectedMedia.kind)} · {selectedMedia.mimeType ?? "media"}</small></div>}
-        {selectedMedia && (selectedMedia.kind === "image" || selectedMedia.kind === "video") && <fieldset className="media-editor-fieldset"><legend>{t("crop")}</legend><div className="property-grid">{(["top", "right", "bottom", "left"] as const).map(edge => <label key={edge}>{t(`crop${edge[0].toUpperCase()}${edge.slice(1)}` as MessageKey)}<input type="number" min="0" max="90" step="1" value={Math.round((selectedMedia.crop?.[edge] ?? 0) * 10) / 10} onChange={e => { if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) updateCrop(edge, e.target.valueAsNumber); }}/></label>)}</div><button type="button" className="secondary-button" onClick={() => patch({ crop: undefined })}><RotateCcw size={14}/>{t("resetCrop")}</button></fieldset>}
-        {selectedMedia && (selectedMedia.kind === "audio" || selectedMedia.kind === "video") && <fieldset className="media-editor-fieldset"><legend>{t("trimStart")} / {t("trimEnd")}</legend><div className="property-grid"><label>{t("trimStart")}<input type="number" min="0" step="0.1" value={selectedMedia.trimStart ?? ""} onChange={e => updateTrim("trimStart", e.target.value === "" ? undefined : e.target.valueAsNumber)}/></label><label>{t("trimEnd")}<input type="number" min="0" step="0.1" value={selectedMedia.trimEnd ?? ""} onChange={e => updateTrim("trimEnd", e.target.value === "" ? undefined : e.target.valueAsNumber)}/></label></div><small>{t("trimHint")}</small><button type="button" className="secondary-button" onClick={() => patch({ trimStart: undefined, trimEnd: undefined })}><RotateCcw size={14}/>{t("resetTrim")}</button></fieldset>}
-        {selected?.kind === "texts" && <><label>{t("fontSize")}<input type="number" min="8" max="200" value={"fontSize" in selectedEl ? selectedEl.fontSize ?? 16 : 16} onChange={e => { if(e.target.value) patch({ fontSize: clamp(Number(e.target.value), 8, 200) }); }}/></label>
-          <div className="text-format-toolbar" role="toolbar" aria-label={t("editText")}>
-            <button aria-label={t("bold")} title={t("bold")} aria-pressed={"bold" in selectedEl && !!selectedEl.bold} className={"bold" in selectedEl && selectedEl.bold ? "active" : ""} onClick={() => patch({ bold: !("bold" in selectedEl && selectedEl.bold) })}><Bold size={16}/></button>
-            <button aria-label={t("italic")} title={t("italic")} aria-pressed={"italic" in selectedEl && !!selectedEl.italic} className={"italic" in selectedEl && selectedEl.italic ? "active" : ""} onClick={() => patch({ italic: !("italic" in selectedEl && selectedEl.italic) })}><Italic size={16}/></button>
-            <button aria-label={t("underline")} title={t("underline")} aria-pressed={"underline" in selectedEl && !!selectedEl.underline} className={"underline" in selectedEl && selectedEl.underline ? "active" : ""} onClick={() => patch({ underline: !("underline" in selectedEl && selectedEl.underline) })}><Underline size={16}/></button>
-            <button aria-label={t("alignLeft")} title={t("alignLeft")} className={("textAlign" in selectedEl ? selectedEl.textAlign : undefined) === "left" || !("textAlign" in selectedEl && selectedEl.textAlign) ? "active" : ""} onClick={() => patch({ textAlign: "left" })}><AlignLeft size={16}/></button>
-            <button aria-label={t("alignCenter")} title={t("alignCenter")} className={"textAlign" in selectedEl && selectedEl.textAlign === "center" ? "active" : ""} onClick={() => patch({ textAlign: "center" })}><AlignCenter size={16}/></button>
-            <button aria-label={t("alignRight")} title={t("alignRight")} className={"textAlign" in selectedEl && selectedEl.textAlign === "right" ? "active" : ""} onClick={() => patch({ textAlign: "right" })}><AlignRight size={16}/></button>
-            <button aria-label={t("bulletedList")} title={t("bulletedList")} onClick={() => toggleTextPrefix("• ")}><List size={16}/></button>
-            <button aria-label={t("checklist")} title={t("checklist")} onClick={() => toggleTextPrefix("☐ ")}><ListChecks size={16}/></button>
-          </div>
-          <label>{t("textBackground")}<span className="color-with-clear"><input type="color" value={"backgroundColor" in selectedEl ? selectedEl.backgroundColor ?? palette.fill : palette.fill} onChange={e => patch({ backgroundColor: e.target.value })}/><button className="icon-button" aria-label={t("clearBackground")} title={t("clearBackground")} onClick={() => patch({ backgroundColor: undefined })}><X size={14}/></button></span></label>
-        </>}
-        {selected?.kind === "drawings" && <label>{t("stroke")}<input type="range" min="1" max="120" value={"width" in selectedEl ? selectedEl.width : 3} onChange={e => patch({ width: Number(e.target.value) })}/></label>}
-        {(selected?.kind === "texts" || selected?.kind === "nodes") && <button className="secondary-button" onClick={() => edit(selected!)}>{t("editText")}</button>}
-        {selected?.kind === "nodes" && <><button className="secondary-button" onClick={() => patch({ collapsed: !("collapsed" in selectedEl && selectedEl.collapsed) })}>{t("collapsed" in selectedEl && selectedEl.collapsed ? "expand" : "collapse")}</button><button className="secondary-button" onClick={openMindMapLayout}>{t("arrangeMapSmart")}</button><section className="mind-map-branch-tools"><strong>{t("mindMapBranchTools")}</strong><small>{selectedMindMapHasLocked ? t("mindMapBranchLocked") : t("mindMapBranchHint")}</small><label>{t("mindMapRotationAngle")}<input type="number" min="15" max="360" step="15" value={mindMapRotationAngle} onChange={event => { if (event.target.value !== "" && Number.isFinite(event.target.valueAsNumber)) setMindMapRotationAngle(clamp(Math.round(event.target.valueAsNumber / 15) * 15, 15, 360)); }}/></label><div><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, -mindMapRotationAngle))}><RotateCcw size={14}/>{t("rotateByAngle", { angle: -mindMapRotationAngle })}</button><button type="button" disabled={selectedMindMapHasLocked} onClick={() => onChange(rotateMindMapSubtree(board, selected.id, mindMapRotationAngle))}><RotateCw size={14}/>{t("rotateByAngle", { angle: mindMapRotationAngle })}</button></div></section></>}
-        <div className="actions">{selected?.kind !== "edges" && <button className="icon-button" aria-label={t("duplicate")} title={t("duplicate")} onClick={duplicate}><Copy size={18}/></button>}<button className="icon-button danger" aria-label={t("delete")} title={t("delete")} onClick={remove}><Trash2 size={18}/></button></div>
-      </>}
-      <ElementsPanel board={b} selections={selections} hiddenElements={hiddenElements}
-        onSelect={(selection, additive) => { setTool("select"); const next = expandGroups(b, [selection]); setSelections(additive ? expandGroups(b, [...selections, ...next]) : next); }}
-        onMove={(sourceId, targetId) => onChange(moveLayer(board, sourceId, targetId))}
-        onToggleHidden={(selection, value) => onChange(setElementFlags(board, [selection], { hidden: value }))}
-        onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>
-    </aside>}
+    {!readOnly && (paperSurface ? <aside className={`inspector ${inspectorOpen ? "is-open" : "is-closed"}`}>
+      <div className="inspector-heading"><h3>{t("properties")}</h3><button ref={inspectorCloseButton} type="button" className="icon-button inspector-close"
+        aria-label={t("closeProperties")} title={t("closeProperties")} onClick={closeInspector}><X size={19}/></button></div>
+      {backgroundProperties}{selectionProperties}{inspectorLayers}
+    </aside> : <CanvasInspector layout={layout} open={inspectorOpen} onClose={closeInspector} closeButton={inspectorCloseButton}
+      selection={selectionProperties} background={backgroundProperties} layers={inspectorLayers}/>)}
     {aiSelectionKey && <AiSelectionPanel key={aiSelectionKey} visible={aiOpen} sourceText={selectedStudyText} canUse={canUseAi} mindMapScope={selectedMindMapScope} sourceRevision={aiOpen ? selectionRevision(selectedStudyText, selectedMindMapScope) : aiSelectionKey} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
     {mindMapLayoutOpen && <Dialog title={t("arrangeMapSmart")} onClose={() => setMindMapLayoutOpen(false)}><form onSubmit={event => { event.preventDefault(); applyMindMapLayout(); }}>
       <p className="dialog-hint">{t("mindMapLayoutPreviewHint")}</p>
