@@ -8,6 +8,8 @@ import { documentKindFor, fileToDataUrl, type UploadedDocument } from "../lib/do
 import { downloadWorkspaceBlob } from "../lib/workspaceFiles";
 import { shareCanvasAsset, shareChallenge, shareDownload, shareEdit, shareErrorText, shareOpen, shareSaveCanvas, shareSubmit, shareUpload, shareVerify, type ShareItem, type ShareView, type SharedCard } from "../lib/workspaceSharing";
 import { workspaceShareTarget,workspaceShareUrl } from "../lib/workspaceShareLinks";
+import FlashcardReview from "./FlashcardReview";
+import QuizRunner, { QuizResult } from "./QuizRunner";
 import FormulaText from "./FormulaText";
 import { cleanLabViewer } from "../lib/labModes";
 import "./workspaceSharing.css";
@@ -192,6 +194,7 @@ function SharedCanvas({item,ctx}:{item:StateByKind<"canvas">;ctx:Context}){
   </section>;
 }
 function SharedQuiz({item,ctx}:{item:StateByKind<"quiz">;ctx:Context}){
+  const [index,setIndex]=useState(0);
   const [answers,setAnswers]=useState<Array<number|null>>(()=>item.data.questions.map(()=>null));
   const [result,setResult]=useState<Awaited<ReturnType<typeof shareSubmit>>|null>(null);
   const [editing,setEditing]=useState(false),[title,setTitle]=useState(item.title),[description,setDescription]=useState(item.data.description);
@@ -199,7 +202,7 @@ function SharedQuiz({item,ctx}:{item:StateByKind<"quiz">;ctx:Context}){
   const {tr,act,token,pending}=ctx;
   const update=(index:number,patch:Partial<typeof qs[number]>)=>setQs(xs=>xs.map((q,i)=>i===index?{...q,...patch}:q));
   return <>
-    <p>{item.data.description}</p>
+    {item.data.description && <p>{item.data.description}</p>}
     {ctx.editable&&<button type="button" className="secondary-button" onClick={()=>setEditing(v=>!v)}><Pencil size={16}/>{editing?tr("Về làm quiz","Back to quiz"):tr("Chỉnh sửa quiz","Edit quiz")}</button>}
     {editing&&ctx.editable?<form className="workspace-shared-quiz workspace-shared-quiz-edit" onSubmit={e=>{e.preventDefault();act(()=>shareEdit(token,item,"quiz",{title,description,revision:item.data.revision,questions:qs}),true);}}>
       <label>{tr("Tiêu đề","Title")}<input required value={title} maxLength={200} onChange={e=>setTitle(e.target.value)}/></label>
@@ -213,18 +216,22 @@ function SharedQuiz({item,ctx}:{item:StateByKind<"quiz">;ctx:Context}){
       </fieldset>)}
       <button type="button" className="secondary-button" disabled={qs.length>=100} onClick={()=>setQs(prev=>[...prev,{id:crypto.randomUUID(),prompt:"",options:["","","",""],correctIndex:0}])}>{tr("Thêm câu","Add question")}</button>
       <button className="primary-button" disabled={pending}>{tr("Lưu quiz","Save quiz")}</button>
-    </form>:<form className="workspace-shared-quiz" onSubmit={e=>{e.preventDefault();act(async()=>setResult(await shareSubmit(token,item.id,item.data.revision,answers)));}}>
-      {item.data.questions.map((q,i)=><fieldset key={q.id} disabled={!!result||pending}><legend>{i+1}. <FormulaText text={q.prompt}/></legend>
-        {q.options.map((value,n)=><label key={n}><input type="radio" name={"q"+i} checked={answers[i]===n} onChange={()=>setAnswers(xs=>xs.map((x,k)=>k===i?n:x))}/><FormulaText text={value}/></label>)}
-        {result?.answers[i]&&<p>{tr("Đáp án","Answer")}: {String.fromCharCode(65+result.answers[i].correct)}{result.answers[i].explanation&&<> · <FormulaText text={result.answers[i].explanation}/></>}</p>}
-      </fieldset>)}
-      {result?<><strong role="status">{result.score} / {result.total}</strong><button type="button" className="secondary-button" onClick={()=>{setResult(null);setAnswers(item.data.questions.map(()=>null));}}>{tr("Làm lại","Try again")}</button></>:
-      <button className="primary-button" disabled={pending}>{tr("Nộp bài","Submit quiz")}</button>}
-    </form>}
+    </form> : item.data.questions.length > 0 && <section className="workspace-shared-study activity-quiz" aria-label={item.title}>
+      {result ? <QuizResult score={result.score} total={result.total} answers={answers}
+        questions={item.data.questions.map((question, position) => {
+          const feedback = result.answers[position];
+          return { ...question, correctIndex: feedback?.correct ?? -1, explanation: feedback?.explanation };
+        })}
+        onRetake={() => { setResult(null); setIndex(0); setAnswers(item.data.questions.map(() => null)); }}/>
+        : <QuizRunner questions={item.data.questions} answers={answers} index={index} freeNavigation busy={pending} lockAnswer={pending}
+            onPick={option => setAnswers(current => current.map((answer, position) => position === index ? option : answer))}
+            onNavigate={setIndex} onSubmit={() => act(async () => setResult(await shareSubmit(token,item.id,item.data.revision,answers)))}/>}
+    </section>}
   </>;
 }
 function SharedFlashcards({item,ctx}:{item:StateByKind<"flashcard">;ctx:Context}){
   const {tr,act,pending}=ctx;
+  const {t}=useLanguage();
   const [index,setIndex]=useState(0),[flip,setFlip]=useState(false);
   const [edit,setEdit]=useState<Partial<SharedCard>|null>(null);
   const current=item.data[index];
@@ -234,11 +241,14 @@ function SharedFlashcards({item,ctx}:{item:StateByKind<"flashcard">;ctx:Context}
     if(edit)act(()=>shareEdit(ctx.token,item,"card",edit),true);
   };
   return <>
-    {current?<><button type="button" className="workspace-shared-card" onClick={()=>setFlip(v=>!v)} aria-pressed={flip}><FormulaText text={flip?current.back:current.front}/></button>
-      <div className="actions"><button type="button" className="secondary-button" disabled={!index} onClick={()=>show(index-1)}>{tr("Thẻ trước","Previous")}</button>
-        <span>{index+1}/{item.data.length}</span>
-        <button type="button" className="secondary-button" disabled={index>=item.data.length-1} onClick={()=>show(index+1)}>{tr("Thẻ sau","Next")}</button></div></>:
-      <p>{tr("Chưa có thẻ.","No cards yet.")}</p>}
+    {current ? <section className="workspace-shared-study activity-flashcards" aria-label={item.title}>
+      <FlashcardReview target={{ ...current, front: <FormulaText text={current.front}/>, back: <FormulaText text={current.back}/> }}
+        index={index} total={item.data.length} showAnswer={flip} onToggleAnswer={() => setFlip(value => !value)} t={t}
+        footer={<div className="review-swipe-actions">
+          <button type="button" className="secondary-button" disabled={index === 0} onClick={() => show(index - 1)}>{tr("Thẻ trước","Previous")}</button>
+          <button type="button" className="secondary-button" disabled={index === item.data.length - 1} onClick={() => show(index + 1)}>{tr("Thẻ sau","Next")}</button>
+        </div>}/>
+    </section> : <p>{t("noCards")}</p>}
     {ctx.editable&&<><Rename item={item} ctx={ctx}/><div className="actions">
       <button type="button" className="secondary-button" onClick={()=>setEdit({front:"",back:""})}>{tr("Thêm thẻ","Add card")}</button>
       {current&&<button type="button" className="secondary-button" onClick={()=>setEdit({...current})}>{tr("Sửa thẻ này","Edit this card")}</button>}

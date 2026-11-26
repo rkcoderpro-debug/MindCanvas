@@ -18,12 +18,13 @@ export function folderAncestors<T extends FolderTreeNode>(folders: readonly T[],
   return trail;
 }
 
-export default function FolderTreePicker({ folders, selected, onSelect, label, rootLabel, disabled = false }: {
+export default function FolderTreePicker({ folders, selected, onSelect, label, rootLabel, hideLabel = false, disabled = false }: {
   folders: readonly FolderTreeNode[];
   selected: string | null | undefined;
   onSelect: (id: string | null) => void;
   label: string;
   rootLabel?: string;
+  hideLabel?: boolean;
   disabled?: boolean;
 }) {
   const { language } = useLanguage();
@@ -90,7 +91,7 @@ export default function FolderTreePicker({ folders, selected, onSelect, label, r
     setOpen(false);
     toggle.current?.focus();
   }}>
-    <span id={id}>{label}</span>
+    <span id={id} hidden={hideLabel}>{label}</span>
     <button type="button" className="folder-tree-trigger" ref={toggle} disabled={disabled}
       aria-labelledby={`${id} ${id}-selection`} aria-controls={`${id}-choices`} aria-expanded={open && !disabled}
       onClick={() => {

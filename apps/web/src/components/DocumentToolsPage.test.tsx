@@ -130,10 +130,11 @@ it("keeps PDF paging visible while file actions and annotation controls are coll
   }
 });
 
-it("opens an existing folder file in the sandbox, keeps the original ID, and lets users navigate to its folder", async () => {
+it("browses nested folders in the library and returns from an opened file to its folder", async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
-  const folder = { id: "65000000-0000-4000-8000-000000000001", name: "DSA" };
+  const parent = { id: "65000000-0000-4000-8000-000000000003", name: "DSA" };
+  const folder = { id: "65000000-0000-4000-8000-000000000001", name: "Thực hành", parentId: parent.id };
   const otherFolder = { id: "65000000-0000-4000-8000-000000000002", name: "Mạng" };
   const html = { id: "65000000-0000-4000-8000-000000000010", folderId: folder.id, name: "Notes.html", size: 75, ready: true, createdAt: new Date().toISOString() };
   const trace = { ...html, id: "65000000-0000-4000-8000-000000000011", folderId: otherFolder.id, name: "Sample.pcapng" };
@@ -143,7 +144,7 @@ it("opens an existing folder file in the sandbox, keeps the original ID, and let
   const upload = vi.spyOn(files, "addWorkspaceFile").mockImplementation(async (_owner, folderId, file) => ({ ...html, id: "65000000-0000-4000-8000-000000000012", folderId, name: file.name }));
   function Library() {
     const [rows, setFiles] = useState<files.WorkspaceFile[]>([html, trace]);
-    const workspace: LibraryWorkspace = { repository: { files: rows, setFiles, refresh, loading: false, error: null }, folders: [folder, otherFolder], openFolder };
+    const workspace: LibraryWorkspace = { repository: { files: rows, setFiles, refresh, loading: false, error: null }, folders: [parent, folder, otherFolder], openFolder };
     return <DocumentToolsPage owner={null} documents={[]} onDocumentsChanged={() => {}} workspace={workspace}/>;
   }
   try {
@@ -154,8 +155,13 @@ it("opens an existing folder file in the sandbox, keeps the original ID, and let
     expect(host.querySelector(".workspace-file-preview button.primary-button")).not.toBeNull();
 
     await act(async () => host.querySelector<HTMLButtonElement>(".reader-back")!.click());
-    const location = host.querySelector<HTMLSelectElement>("#document-library-scope")!;
-    await act(async () => { location.value = folder.id; location.dispatchEvent(new Event("change", { bubbles: true })); });
+    const picker = host.querySelector(".document-browse-scope .folder-tree-picker")!;
+    await act(async () => picker.querySelector<HTMLButtonElement>(".folder-tree-trigger")!.click());
+    expect(picker.textContent).not.toContain(folder.name);
+    await act(async () => picker.querySelector<HTMLButtonElement>('button[aria-label="Mở rộng DSA"]')!.click());
+    const choose = [...picker.querySelectorAll<HTMLButtonElement>(".folder-tree-choice")].find(button => button.textContent === folder.name)!;
+    await act(async () => choose.click());
+    expect(host.querySelector('.document-library-crumbs [aria-current="page"]')?.textContent).toBe(folder.name);
     expect(host.querySelector(`[data-document-id="${trace.id}"]`)).toBeNull();
     await act(async () => host.querySelector<HTMLButtonElement>(`[data-document-id="${html.id}"]`)!.click());
     await vi.waitFor(() => {
@@ -168,9 +174,16 @@ it("opens an existing folder file in the sandbox, keeps the original ID, and let
     await act(async () => host.querySelector<HTMLButtonElement>(".reader-more-toggle")!.click());
     const openFolderAction = [...host.querySelectorAll<HTMLButtonElement>(".reader-more-panel button")].find(button => button.textContent === "Mở thư mục");
     await act(async () => openFolderAction!.click());
+    expect(openFolder).not.toHaveBeenCalled();
+    expect(host.querySelector('.document-library-crumbs [aria-current="page"]')?.textContent).toBe(folder.name);
+    expect(host.querySelector(`[data-document-id="${html.id}"]`)).not.toBeNull();
+    const parentCrumb = [...host.querySelectorAll<HTMLButtonElement>(".document-library-crumbs button")].find(button => button.textContent === parent.name)!;
+    await act(async () => parentCrumb.click());
+    const childTile = host.querySelector<HTMLButtonElement>(".document-library-folder-list button")!;
+    expect(childTile.textContent).toBe(folder.name);
+    await act(async () => childTile.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".document-browse-scope .secondary-button")!.click());
     expect(openFolder).toHaveBeenCalledWith(folder.id);
-
-    await act(async () => host.querySelector<HTMLButtonElement>(".reader-back")!.click());
     const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
     const zip = new File(["data"], "Homework.zip");
     expect(input.hasAttribute("accept")).toBe(false);

@@ -3,14 +3,14 @@ import { StudyFolderControls, StudyFolderMoveButton } from "./StudyFolders";
 import { WorkspaceShareButton } from "./WorkspaceShareDialog";
 import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useRef, useState } from "react";
-import { Award, Check, CheckCircle2, ClipboardList, FileUp, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { ClipboardList, FileUp, Play, Trash2, X } from "lucide-react";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
-import { allowsQuizNavigation, formatQuizPercent, prepareQuizQuestions, scoreQuiz, type QuizMode, type QuizOrder, type QuizQuestion, type QuizTest } from "../lib/quiz";
+import { allowsQuizNavigation, prepareQuizQuestions, scoreQuiz, type QuizMode, type QuizOrder, type QuizTest } from "../lib/quiz";
 import { formatTimerTime } from "../lib/timer";
 import type { QuizStore } from "../hooks/useQuizzes";
 import { ActivityViewport, BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
-import FormulaText from "./FormulaText";
+import QuizRunner, { QuizResult } from "./QuizRunner";
 import QuizCreateDialog from "./QuizCreateDialog";
 
 type AnswerReveal = "instant" | "submit";
@@ -96,7 +96,6 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
 
   if (activeQuiz && sessionVisible) {
     const question = activeQuiz.questions[questionIndex];
-    const currentAnswer = answers[questionIndex];
     const currentMode = activeMode ?? "learn";
     const immediateFeedback = activeReveal === "instant";
     const freeNavigation = activeReveal === "submit" || allowsQuizNavigation(currentMode);
@@ -105,14 +104,12 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
       <PageNavigation quickActions back={<BackButton onClick={leaveQuiz}>{language === "vi" ? "Danh sách Quiz" : "Quiz list"}</BackButton>} title={activeQuiz.title}
         context={<><span>{modeLabel(t, currentMode)} · {t(activeReveal === "instant" ? "quizRevealInstant" : "quizRevealSubmit")}</span><b>{questionIndex + 1} / {activeQuiz.questions.length}</b>{currentMode === "exam" && !result && <strong className="quiz-exam-clock">{formatTimerTime(examSeconds, true)}</strong>}</>}
         actions={<WorkspaceShareButton item={{kind:"quiz",id:activeQuiz.id,title:activeQuiz.title}} friends={{plan:accountPlan}} available={!!owner && activeQuiz.source === "cloud"}/>}/>
-      {result ? <div className="activity-content"><QuizResult quiz={activeQuiz} score={result.score} answers={answers} onRetake={() => startQuiz(activeQuiz, currentMode, activeOrder)} t={t}/></div> : <div className="quiz-runner">
-        <div className="quiz-progress"><span style={{ width: `${((questionIndex + 1) / activeQuiz.questions.length) * 100}%` }}/></div>
-        {freeNavigation && <div className="quiz-question-nav" aria-label={t("quizQuestionNavigator")}>{activeQuiz.questions.map((item, index) => <button type="button" key={item.id} className={[index === questionIndex ? "current" : "", answers[index] !== null ? "answered" : ""].filter(Boolean).join(" ")} aria-current={index === questionIndex ? "step" : undefined} aria-label={t("questionNumber", { count: index + 1 })} onClick={() => goToQuestion(index)}>{index + 1}</button>)}</div>}
-        {activeReveal === "submit" && currentMode === "practice" && <small className="quiz-practice-hint">{t("quizPracticeHint")}</small>}
-        <div className="activity-content quiz-question-scroll" tabIndex={0} aria-label={t("questionNumber", { count: questionIndex + 1 })} key={question.id}><article className="quiz-question-card"><span className="quiz-question-kicker">{t("questionNumber", { count: questionIndex + 1 })}</span><h2><FormulaText text={question.prompt}/></h2>{question.topic && <small className="quiz-topic">{question.topic}</small>}<div className="quiz-options">{question.options.map((option, optionIndex) => { const selected = currentAnswer === optionIndex; const correct = optionIndex === question.correctIndex; const className = [selected ? "selected" : "", feedbackVisible && correct ? "correct" : "", feedbackVisible && selected && !correct ? "wrong" : ""].filter(Boolean).join(" "); return <button key={`${question.id}-${optionIndex}`} className={className} disabled={feedbackVisible} onClick={() => selectAnswer(optionIndex)}><span className="quiz-option-label">{String.fromCharCode(65 + optionIndex)}</span><span className="quiz-option-content"><FormulaText text={option}/></span></button>; })}</div>{feedbackVisible && <div className={`quiz-feedback ${currentAnswer === question.correctIndex ? "correct" : "wrong"}`}><strong>{currentAnswer === question.correctIndex ? t("quizAnswerCorrect") : t("quizAnswerIncorrect")}</strong>{question.explanation && (question.explanation.length > 160 || question.explanation.includes("\n") ? <details className="quiz-explanation"><summary>{t("explanation")}</summary><p><FormulaText text={question.explanation}/></p></details> : <p><FormulaText text={question.explanation}/></p>)}</div>}{activeReveal === "submit" && currentMode === "exam" && currentAnswer === null && <small className="quiz-exam-hint">{t("quizExamHint")}</small>}</article></div>
-        <footer className="quiz-runner-actions"><button className="secondary-button" disabled={questionIndex === 0} onClick={() => goToQuestion(questionIndex - 1)}>{t("previousQuestion")}</button>{freeNavigation && questionIndex < activeQuiz.questions.length - 1 && <button className="secondary-button quiz-early-submit" disabled={busy} onClick={() => void submitQuiz()}>{t("submitQuiz")}</button>}{questionIndex < activeQuiz.questions.length - 1 ? <button className="primary-button" disabled={!freeNavigation && !feedbackVisible} onClick={() => goToQuestion(questionIndex + 1)}>{t("nextQuestion")}<Play size={15}/></button> : <button className="primary-button" disabled={(!freeNavigation && !feedbackVisible) || busy} onClick={() => void submitQuiz()}><CheckCircle2 size={16}/>{busy ? t("saving") : t("submitQuiz")}</button>}</footer>
-        {error && <p className="form-error" role="alert">{error}</p>}
-      </div>}
+      {result ? <div className="activity-content">
+        <QuizResult questions={activeQuiz.questions} score={result.score} answers={answers} onRetake={() => startQuiz(activeQuiz, currentMode, activeOrder)}/>
+      </div> : <QuizRunner questions={activeQuiz.questions} answers={answers} index={questionIndex} freeNavigation={freeNavigation}
+        feedback={feedbackVisible ? question : undefined} busy={busy} practiceHint={activeReveal === "submit" && currentMode === "practice"}
+        examHint={activeReveal === "submit" && currentMode === "exam"} error={error}
+        onPick={selectAnswer} onNavigate={goToQuestion} onSubmit={() => void submitQuiz()}/>}
     </ActivityViewport>;
   }
 
@@ -127,6 +124,3 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
   }}/></section>;
 }
 
-function QuizResult({ quiz, score, answers, onRetake, t }: { quiz: QuizTest; score: number; answers: Array<number | null>; onRetake: () => void; t: ReturnType<typeof useLanguage>["t"] }) {
-  return <div className="quiz-result"><div className="quiz-result-badge"><Award size={34}/><strong>{formatQuizPercent(score, quiz.questions.length)}%</strong><span>{score} / {quiz.questions.length}</span></div><h2>{t("quizComplete")}</h2><p>{t("quizReviewHint")}</p><div className="quiz-answer-review">{quiz.questions.map((question, index) => { const answer = answers[index]; const correct = answer === question.correctIndex; return <article key={question.id}><div><strong>#{index + 1}</strong><span className={correct ? "correct" : "incorrect"}><FormulaText text={question.prompt}/></span></div><p><b>{t("yourAnswer")}:</b> {answer === null || answer === undefined ? t("notAnswered") : <FormulaText text={question.options[answer]}/>}</p>{!correct && <p><b>{t("correctAnswer")}:</b> <FormulaText text={question.options[question.correctIndex]}/></p>}{question.explanation && <p><b>{t("explanation")}:</b> <FormulaText text={question.explanation}/></p>}</article>; })}</div><button className="primary-button" onClick={onRetake}><RotateCcw size={16}/>{t("retakeQuiz")}</button></div>;
-}

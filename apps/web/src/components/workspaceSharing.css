@@ -26,10 +26,13 @@
 .workspace-shared-quiz { display:grid; gap:12px; }
 .workspace-shared-quiz fieldset { display:grid; gap:6px; border:1px solid var(--line); border-radius:9px; padding:10px; min-width:0; }
 .workspace-shared-quiz label { display:flex; align-items:start; gap:8px; padding:4px 0; }
-.workspace-shared-quiz input[type=radio] { width: auto; flex:none; margin-top:4px; }
 .workspace-shared-quiz legend { overflow-wrap:anywhere; max-width:100%; }
-.workspace-shared-quiz-edit fieldset input:not([type=radio]) { width:100%; }
-.workspace-shared-card { white-space:pre-wrap; overflow-wrap:anywhere; padding:20px; min-height:170px; display:grid; place-items:center; text-align:center; border:1px solid var(--line); border-radius:18px; background:var(--surface); font-size:1.1rem; }
+.workspace-shared-quiz-edit fieldset input { width:100%; }
+.workspace-shared-study { display:flex; flex-direction:column; min-height:min(460px, 68dvh); min-width:0; padding:clamp(10px, 2.2vw, 22px); border:1px solid var(--line); border-radius:16px; }
+.workspace-shared-study .quiz-question-scroll { flex:1 1 auto; overflow:visible; }
+.workspace-shared-study .review-card-scene { min-height:clamp(210px, 42dvh, 400px); }
+.workspace-shared-study .review-card-text { max-height:50dvh; }
+.workspace-shared-study .review-swipe-actions button { width:100%; }
 .workspace-share-view .primary-button, .workspace-share-view .secondary-button, .workspace-share-dialog .primary-button, .workspace-share-dialog .secondary-button { width:fit-content; }
 
 .workspace-share-block small { color:var(--muted); }

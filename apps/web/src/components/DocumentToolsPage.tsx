@@ -1,7 +1,7 @@
-import FolderTreePicker from "./FolderTreePicker";
+import FolderTreePicker, { folderAncestors } from "./FolderTreePicker";
 import { PageBack } from "./PageNavigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Download, FileSpreadsheet, FileText, FileType2, FolderOpen, LibraryBig, Search, Share2, Trash2, Upload } from "lucide-react";
+import { ChevronRight, Download, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LibraryBig, Search, Share2, Trash2, Upload } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
 import WorkspaceFilePreview from "./WorkspaceFilePreview";
 import Dialog from "./Dialog";
@@ -51,17 +51,6 @@ function documentIcon(kind: DocumentKind | null) {
   return kind === "xlsx" ? FileSpreadsheet : kind === "docx" ? FileType2 : FileText;
 }
 
-function folderLabel(folders: ProjectFolder[], id: string) {
-  const path = [], seen = new Set<string>();
-  let folder = folders.find(entry => entry.id === id);
-  while (folder && !seen.has(folder.id) && path.length < 16) {
-    seen.add(folder.id); path.unshift(folder.name);
-    const parent = folder.parentId;
-    folder = folders.find(entry => entry.id === parent);
-  }
-  return path.join(" › ");
-}
-
 /**
  * The Tools tab is intentionally a viewer hub. DOCX remains importable and
  * viewable, but the old editor route is no longer exposed from the product UI.
@@ -96,7 +85,14 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   const scope = workspace?.scope === undefined ? localScope : workspace.scope;
   const folders = workspace?.folders ?? [];
   const selectedFile = workspace?.repository.files.find(file => file.id === workspaceSelection);
-  const scopeExists = scope === FOLDER_ROOT || folders.some(folder => folder.id === scope);
+  const folderTrail = folderAncestors(folders, scope ?? null);
+  const currentFolder = folderTrail.at(-1);
+  const scopeExists = scope === FOLDER_ROOT || !!currentFolder;
+  const childFolders = folders.filter(folder => currentFolder ? folder.parentId === currentFolder.id
+    : (!scope || scope === FOLDER_ROOT) && !folders.some(parent => parent.id === folder.parentId))
+    .sort((a, b) => a.name.localeCompare(b.name, language));
+  const allLocations = label("Tất cả vị trí", "All locations");
+  const workspaceRoot = label("Workspace · Ngoài thư mục", "Workspace · No folder");
   const fromFolder = (file: WorkspaceFile) => folders.some(folder => folder.id === file.folderId) ? file.folderId : null;
   useEffect(() => {
     let alive = true;
@@ -136,9 +132,13 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     if (fromWorkspace) emitGuideAction("documents:back");
   };
   const changeScope = (value: string | null) => {
+    if (scope === value) return;
     setTab("all"); setQuery(""); setError(""); setNotice("");
     if (workspace?.onScope) workspace.onScope(value); else setLocalScope(value);
   };
+  useEffect(() => {
+    setWorkspaceSelection(null); setSelected(null); setSharing(false); setCopyTarget(null);
+  }, [scope]);
   const openDocument = async (file: UploadedDocument) => {
     setError(""); setNotice("");
     if (file.dataUrl) { showDocument(file); return; }
@@ -209,7 +209,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     return file.ready && (!scope || (fromFolder(file) ?? FOLDER_ROOT) === scope) && (tab === "all" || kind === tab) &&
       (!normalizedQuery || file.name.toLocaleLowerCase().includes(normalizedQuery));
   });
-  const legacyItems = scope ? [] : libraryFiles;
+  const legacyItems = scope ? libraryFiles.filter(file => file.folderId === scope) : libraryFiles;
   const listing = [
     ...folderItems.map(file => ({ source: "workspace" as const, file, kind: documentKindFor(file.name), date: file.createdAt })),
     ...legacyItems.map(file => ({ source: "library" as const, file, kind: file.kind, date: file.updatedAt })),
@@ -264,21 +264,24 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   ] : [];
   const where = selected?.savedFrom ? label("Bản sao từ ", "Copied from ") + selected.savedFrom.ownerName
     : selectedIsCloud ? "Cloud" : label("Trên thiết bị", "On this device");
-  const noMatches = normalizedQuery || tab !== "all" || scope;
+  const noMatches = normalizedQuery || tab !== "all";
   const formattedDate = useMemo(() => new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", { day: "numeric", month: "short", year: "numeric" }), [language]);
   const uploadLabel = uploading ? label("Đang tải…", "Uploading…")
     : scope ? label("Tải vào thư mục này", "Upload to this folder") : label("Tải tài liệu", "Upload document");
 
   return <section ref={root} className={"document-tools-page " + (hasPreview ? "document-reading-view" : "document-browse-view")}>
     {hasPreview ? <>
-      <PageBack className="reader-back" onBack={closeDocument}>{label("Danh sách tài liệu", "Document list")}</PageBack>
+      <PageBack className="reader-back" onBack={closeDocument}>{currentFolder?.name ?? label("Danh sách tài liệu", "Document list")}</PageBack>
       <div className="document-reader-notices">
         {error && <p className="form-error" role="alert">{error}</p>}
         {notice && <p className="lab-notice" role="status">{notice}</p>}
       </div>
       <div className="document-tool-workspace">
         {selectedFile && workspace
-          ? <WorkspaceFilePreview key={selectedFile.id} owner={owner} accountPlan={accountPlan} file={selectedFile} onFolder={() => workspace.openFolder(fromFolder(selectedFile))}
+          ? <WorkspaceFilePreview key={selectedFile.id} owner={owner} accountPlan={accountPlan} file={selectedFile} onFolder={() => {
+              closeDocument();
+              changeScope(fromFolder(selectedFile) ?? FOLDER_ROOT);
+            }}
               dedicated={!fromWorkspace} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>
           : selected && <DocumentViewer key={selected.id} owner={owner} source={selected} dedicated={!fromWorkspace && selected.kind === "pdf"}
               reader={{ actions: readerActions, caption: where }} onReady={detail => emitGuideAction("tools:viewer-ready", detail)}/>}
@@ -300,15 +303,11 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder={label("Tìm theo tên tài liệu…", "Search by title…")} aria-label={label("Tìm tài liệu trong thư viện", "Search the document library")}/>
           </label>
           {workspace && <div className="document-browse-scope">
-            <select id="document-library-scope" aria-label={label("Vị trí", "Location")} value={scope ?? ""} disabled={uploading} onChange={event => changeScope(event.currentTarget.value || null)}>
-              <option value="">{label("Tất cả vị trí", "All locations")}</option>
-              <option value={FOLDER_ROOT}>{label("Workspace · Ngoài thư mục", "Workspace · No folder")}</option>
-              {scope && !scopeExists && <option value={scope}>{label("Không mở được thư mục", "Folder unavailable")}</option>}
-              {folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}
-            </select>
-            <button type="button" className="secondary-button" title={scope && scopeExists ? label("Mở thư mục", "Open folder") : t("manageFolders")}
-              onClick={() => workspace.openFolder(scope && scope !== FOLDER_ROOT && scopeExists ? scope : null)}>
-              <FolderOpen size={16}/><span>{scope && scopeExists ? label("Mở thư mục", "Open folder") : t("manageFolders")}</span>
+            <FolderTreePicker folders={[...folders, { id: FOLDER_ROOT, name: workspaceRoot }]}
+              selected={scope && !scopeExists ? undefined : scope} onSelect={changeScope}
+              label={label("Vị trí", "Location")} rootLabel={allLocations} disabled={uploading} hideLabel/>
+            <button type="button" className="secondary-button" onClick={() => workspace.openFolder(currentFolder?.id ?? null)}>
+              <FolderOpen size={16}/><span>{t("manageFolders")}</span>
             </button>
           </div>}
           </div>
@@ -320,7 +319,23 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
             <small className="document-browse-count">{listing.length} {label("tài liệu", listing.length === 1 ? "document" : "documents")}</small>
           </div>
         </div>
+        {workspace && (scope || childFolders.length > 0) && <section className="document-library-folders">
+          {scope && <nav className="document-library-crumbs" aria-label={label("Đường dẫn thư mục", "Folder path")}>
+            <button type="button" disabled={uploading} onClick={() => changeScope(null)}>{allLocations}</button>
+            {scope === FOLDER_ROOT && <><ChevronRight size={14}/><span aria-current="page">{workspaceRoot}</span></>}
+            {folderTrail.map(folder => <span key={folder.id}><ChevronRight size={14}/>
+              {folder.id === scope ? <strong aria-current="page">{folder.name}</strong>
+                : <button type="button" disabled={uploading} onClick={() => changeScope(folder.id)}>{folder.name}</button>}
+            </span>)}
+          </nav>}
+          {childFolders.length > 0 && <ul className="document-library-folder-list" aria-label={label("Thư mục", "Folders")}>
+            {childFolders.map(folder => <li key={folder.id}><button type="button" disabled={uploading} onClick={() => changeScope(folder.id)}>
+              <Folder size={18} aria-hidden="true"/><span>{folder.name}</span><ChevronRight size={15} aria-hidden="true"/>
+            </button></li>)}
+          </ul>}
+        </section>}
         <div className="document-reader-notices">
+          {scope && !scopeExists && <p className="form-error" role="alert">{label("Không mở được thư mục đã chọn.", "The selected folder could not be opened.")}</p>}
           {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="lab-notice" role="status">{notice}</p>}
           {workspace?.repository.error != null && <div className="form-error" role="alert">{label("Chưa tải được tài liệu Workspace.", "Could not load Workspace files.")} <button type="button" className="secondary-button" onClick={workspace.repository.refresh}>{t("retry")}</button></div>}
         </div>
@@ -328,7 +343,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
           <div className="document-library-list">
             {listing.map(entry => {
               const { file, kind } = entry, Icon = documentIcon(kind);
-              const location = entry.source === "workspace" ? folderLabel(folders, entry.file.folderId ?? "") || "Workspace"
+              const location = entry.source === "workspace" ? folderAncestors(folders, entry.file.folderId).map(folder => folder.name).join(" › ") || "Workspace"
                 : entry.file.savedFrom ? label("Từ ", "From ") + entry.file.savedFrom.ownerName : cloudFiles.some(row => row.id === file.id) ? "Cloud" : label("Thiết bị", "Device");
               const date = new Date(entry.date);
               return <button key={entry.source + ":" + file.id} type="button" data-document-id={file.id} data-document-kind={kind ?? "file"} title={file.name}
@@ -347,8 +362,12 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
           </div>
           {workspace?.repository.loading && <p role="status" className="field-hint document-library-empty">{t("loading")}</p>}
           {!listing.length && !workspace?.repository.loading && <div className="document-browse-empty">
-            <FileText size={30} aria-hidden="true"/><h3>{noMatches ? label("Không có tài liệu phù hợp", "No matching documents") : label("Thư viện chưa có tài liệu", "No documents yet")}</h3>
-            <p>{noMatches ? label("Thử đổi bộ lọc hoặc nhập tên khác.", "Try a different filter or search term.") : label("Tải một tệp lên để bắt đầu đọc.", "Upload a file to start reading.")}</p>
+            <FileText size={30} aria-hidden="true"/><h3>{noMatches ? label("Không có tài liệu phù hợp", "No matching documents")
+              : scope ? label("Vị trí này chưa có tài liệu", "No documents in this location") : label("Thư viện chưa có tài liệu", "No documents yet")}</h3>
+            <p>{noMatches ? label("Thử đổi bộ lọc hoặc nhập tên khác.", "Try a different filter or search term.")
+              : childFolders.length ? label("Mở một thư mục ở trên để xem tài liệu bên trong.", "Open a folder above to see its documents.")
+              : scope && !scopeExists ? label("Chọn vị trí khác để tiếp tục.", "Choose another location to continue.")
+              : label("Tải một tệp lên để bắt đầu đọc.", "Upload a file to start reading.")}</p>
           </div>}
         </div>
       </div>

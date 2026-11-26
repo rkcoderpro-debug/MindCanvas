@@ -1,10 +1,12 @@
 import { ActivityViewport, BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import { useLearningActive } from "../lib/learningNavigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock3, FileText, Inbox, RefreshCw, RotateCcw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
+import { Clock3, FileText, Inbox, Play, RefreshCw, Save, Search, SlidersHorizontal, Users } from "lucide-react";
 import LabViewer from "./LabViewer";
 import { cleanLabViewer } from "../lib/labModes";
-import FormulaText from "./FormulaText";
+import QuizRunner, { QuizResult } from "./QuizRunner";
+import FlashcardReview from "./FlashcardReview";
+import { useLanguage } from "../lib/i18n";
 import { mergeInboxItems, normalizeIncomingShares, normalizePendingInvites, normalizeCopySources,
   normalizeReceivedLinks, withInboxTimeout, type InboxKind, type InboxWorkspace } from "../lib/sharedInbox";
 import { shareReceived, shareErrorText, type ShareReceived } from "../lib/workspaceSharing";
@@ -49,6 +51,7 @@ const openLabels: Record<InboxKind, string> = {
 };
 
 export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn }: SharedLearningProps) {
+  const { t } = useLanguage();
   const [items, setItems] = useState<IncomingLearningShare[]>([]);
   const [links, setLinks] = useState<ShareReceived[]>([]);
   const [pending, setPending] = useState<Array<{ id: string; kind: LearningKind; token_hash: string; expires_at: string }>>([]);
@@ -258,10 +261,10 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
 
   const card = cards[cardIndex];
   const cardState = progress.find(p => p.card_id === card?.id);
-  const answeredCount = answers.filter(answer => answer !== null).length;
-  const reviewQuestions = quizResult?.questions ?? [];
   const listScroll = useListScrollReturn();
-  const fits = !!active && (active.kind === "lab" || active.kind === "flashcard" || (active.kind === "quiz" && !!quiz));
+  const activity = active?.kind === "lab" ? "activity-shared" : active?.kind === "flashcard" ? "activity-flashcards"
+    : active?.kind === "quiz" && quiz ? "activity-quiz" : "";
+  const fits = !!activity;
   const activityFocus = useActivityFocus(learningActive && fits);
   if (!owner) return <section className="shared-learning"><h2>Được chia sẻ với tôi</h2><p>Đăng nhập để xem nội dung được chia sẻ với tài khoản của bạn.</p>{onSignIn && <button className="primary-button" onClick={onSignIn}>Đăng nhập</button>}</section>;
 
@@ -270,34 +273,37 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
     {listError && <div role="alert" className="shared-inbox-error"><p>{listError}</p><button className="secondary-button" disabled={listLoading} onClick={refreshAll}>Thử lại</button></div>}
     {(listLoading || workspace?.loading) && <p role="status">Đang tải nội dung chia sẻ…</p>}{opening && <p role="status">Đang mở học liệu…</p>}
     {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}
-    {active ? <ActivityViewport inline={!fits} ref={activityFocus} className={`shared-learning-detail${fits ? " activity-screen activity-shared" : ""}`}>
-      <PageNavigation quickActions back={<BackButton className="shared-back-button" onClick={() => { setActive(null); resetDetail(); reload(); listScroll.restore(); }}>Học liệu chia sẻ</BackButton>} title={active.title} context={`Chia sẻ bởi ${active.owner_name}`} actions={active.status === "active" && <button className="secondary-button" disabled={busy || savedCopies.some(copy => copy.kind === active.kind && copy.source_id === active.resource_id)} onClick={() => void saveCopy(active)}><Save size={15}/>{savedCopies.some(copy => copy.kind === active.kind && copy.source_id === active.resource_id) ? "Đã lưu vào của tôi" : "Lưu vào của tôi"}</button>}/>
-      {fits && error && <p role="alert" className="form-error">{error}</p>}
+    {active ? <ActivityViewport inline={!fits} ref={activityFocus} className={fits && activity !== "activity-shared"
+      ? `activity-screen ${activity}` : `shared-learning-detail${fits ? " activity-screen activity-shared" : ""}`}>
+      <PageNavigation quickActions back={<BackButton className="shared-back-button" onClick={() => { setActive(null); resetDetail(); reload(); listScroll.restore(); }}>Học liệu chia sẻ</BackButton>} title={active.title} context={<><span>Chia sẻ bởi {active.owner_name}</span>{activity === "activity-quiz" && quiz &&
+        <><span>{t(quizRevealMode === "instant" ? "quizRevealInstant" : "quizRevealSubmit")}</span>
+          <b>{questionIndex + 1} / {quiz.questions.length}</b></>}</>} actions={active.status === "active" && <button className="secondary-button" disabled={busy || savedCopies.some(copy => copy.kind === active.kind && copy.source_id === active.resource_id)} onClick={() => void saveCopy(active)}><Save size={15}/>{savedCopies.some(copy => copy.kind === active.kind && copy.source_id === active.resource_id) ? "Đã lưu vào của tôi" : "Lưu vào của tôi"}</button>}/>
+      {fits && error && (!quiz || quizResult) && <p role="alert" className="form-error">{error}</p>}
 
-      {active.kind === "quiz" && (!quiz ? <div className="shared-learning-launch"><p>Bài làm được chấm trên server. Chọn lúc xem đáp án trước khi bắt đầu.</p><label>Hiện đáp án<select value={quizRevealMode} disabled={busy} onChange={event => setQuizRevealMode(event.target.value as "instant" | "submit")}><option value="instant">Ngay khi chọn</option><option value="submit">Sau khi nộp bài</option></select></label><button className="primary-button" disabled={busy} onClick={() => void start()}>Làm Quiz</button></div> : <div className="shared-learning-quiz">
-        <div className="shared-progress-row"><span>Phiên bản {quiz.version}</span><strong>{quizResult ? `Kết quả ${quizResult.score}/${quizResult.total}` : `${answeredCount}/${quiz.questions.length} câu đã chọn`}</strong></div>
-        <div className="shared-progress-track" aria-hidden="true"><span style={{ width: `${quizResult ? 100 : quiz.questions.length ? (questionIndex + 1) / quiz.questions.length * 100 : 0}%` }}/></div>
-        {quizResult ? <div className="shared-quiz-results activity-content"><div className="shared-result-hero"><CheckCircle2 size={22}/><div><strong>{quizResult.score}/{quizResult.total}</strong><span>Đã nộp thành công</span></div></div>{reviewQuestions.map((q, n) => {
-          const selected = answers[n];
-          return <article key={q.id}><strong>{n + 1}. <FormulaText text={q.prompt}/></strong><p>Bạn chọn: {selected === null ? "Bỏ qua" : q.options[selected] ? <FormulaText text={q.options[selected]}/> : "Không hợp lệ"}</p><p>Đáp án: <strong>{q.options[q.correctIndex] ? <FormulaText text={q.options[q.correctIndex]}/> : "—"}</strong></p><p className="shared-explanation"><FormulaText text={q.explanation?.trim() || "Chưa có lời giải"}/></p></article>;
-        })}<button className="secondary-button" disabled={busy} onClick={() => void start()}><RotateCcw size={15}/>Làm lượt mới</button></div> : <>
-          <div className="activity-content" key={questionIndex}>
-          <div className="shared-question-meta">Câu {questionIndex + 1}/{quiz.questions.length}</div>
-          <h3><FormulaText text={quiz.questions[questionIndex]?.prompt ?? ""}/></h3>
-          <div className="shared-answer-grid">{quiz.questions[questionIndex]?.options.map((option, n) => <button disabled={busy || !!quizFeedback[questionIndex]} className={`shared-answer ${answers[questionIndex] === n ? "selected" : ""} ${quizFeedback[questionIndex]?.correctIndex === n ? "correct" : ""} ${answers[questionIndex] === n && quizFeedback[questionIndex]?.correctIndex !== undefined && quizFeedback[questionIndex]?.correctIndex !== n ? "wrong" : ""}`} key={n} onClick={() => void chooseQuizAnswer(n)}><span className="shared-answer-label">{String.fromCharCode(65+n)}</span><span className="shared-answer-content"><FormulaText text={option}/></span></button>)}</div>
-          {quizFeedback[questionIndex] && <p className="shared-explanation" role="status">{answers[questionIndex] === quizFeedback[questionIndex].correctIndex ? "Chính xác." : <>Đáp án đúng: <FormulaText text={quiz.questions[questionIndex]?.options[quizFeedback[questionIndex].correctIndex] ?? "—"}/>.</>} <FormulaText text={quizFeedback[questionIndex].explanation ?? ""}/></p>}
-          </div><footer><button className="secondary-button" disabled={questionIndex === 0 || busy} onClick={() => setQuestionIndex(i => i-1)}>Trước</button>{questionIndex + 1 < quiz.questions.length ? <button className="primary-button" disabled={busy || (quizRevealMode === "instant" && answers[questionIndex] === null)} onClick={() => setQuestionIndex(i => i+1)}>Tiếp</button> : <button className="primary-button" disabled={busy} onClick={() => void submit()}>{busy ? "Đang nộp…" : "Nộp bài"}</button>}</footer>
-        </>}
-      </div>)}
+      {active.kind === "quiz" && (!quiz ? <div className="shared-learning-launch quiz-mode-panel">
+        <div><strong>{t("quizHowToStudy")}</strong><small>Chọn lúc xem đáp án trước khi bắt đầu.</small></div>
+        <label>{t("quizRevealWhen")}<select value={quizRevealMode} disabled={busy} onChange={event => setQuizRevealMode(event.target.value as "instant" | "submit")}>
+          <option value="instant">{t("quizRevealInstant")}</option><option value="submit">{t("quizRevealSubmit")}</option>
+        </select></label>
+        <button className="primary-button" disabled={busy} onClick={() => void start()}><Play size={16}/>Làm Quiz</button>
+      </div> : quizResult ? <div className="activity-content">
+        <QuizResult questions={quizResult.questions ?? []} score={quizResult.score} total={quizResult.total} answers={answers}
+          busy={busy} onRetake={() => void start()}/>
+      </div> : <QuizRunner questions={quiz.questions} answers={answers} index={questionIndex} freeNavigation={quizRevealMode === "submit"}
+        feedback={quizFeedback[questionIndex]} busy={busy} lockAnswer={busy} error={error}
+        onPick={option => void chooseQuizAnswer(option)} onNavigate={setQuestionIndex} onSubmit={() => void submit()}/>)}
 
-      {active.kind === "flashcard" && (card ? <div className="shared-learning-card">
-        <div className="shared-progress-row"><span>Thẻ {cardIndex+1}/{cards.length}</span><strong>{cardState?.reviewed_count ?? 0} lượt ôn</strong></div>
-        <div className="shared-progress-track"><span style={{ width: `${cards.length ? (cardIndex + 1) / cards.length * 100 : 0}%` }}/></div>
-        <small>{cardState ? `Ôn tiếp ${new Date(cardState.due_at).toLocaleString("vi-VN")}` : "Thẻ mới"}</small>
-        {cardState && cardState.content_version < card.content_version && <p className="form-error">Thẻ đã được sửa, cần ôn lại.</p>}
-        <button className={`shared-flip ${revealed ? "revealed" : ""}`} onClick={() => setRevealed(v => !v)}><span>{revealed ? card.back : card.front}</span><small>{revealed ? "Chạm để xem mặt trước" : "Chạm để lật thẻ"}</small></button>
-        {revealed && <div className="shared-ratings">{(["again","hard","good","easy"] as const).map(r => <button disabled={busy} key={r} onClick={() => void rate(r)}>{({ again: "Chưa nhớ", hard: "Khó", good: "Đã nhớ", easy: "Dễ" })[r]}</button>)}</div>}
-      </div> : <p>Bộ thẻ chưa có thẻ.</p>)}
+      {active.kind === "flashcard" && (card ? <FlashcardReview target={card} index={cardIndex} total={cards.length}
+        ratingBusy={busy} showAnswer={revealed} onToggleAnswer={() => setRevealed(value => !value)} onSwipe={rating => void rate(rating)} t={t}
+        status={<strong>{cardState?.reviewed_count ?? 0} lượt ôn</strong>}
+        footer={<small className="review-daily">{cardState && cardState.content_version < card.content_version
+          ? "Thẻ đã được sửa, cần ôn lại." : cardState ? `Ôn tiếp ${new Date(cardState.due_at).toLocaleString("vi-VN")}` : "Thẻ mới"}</small>}
+        revealedActions={<div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-swipe-actions shared-review-ratings">
+          {(["again", "hard", "good", "easy"] as const).map(rating =>
+            <button type="button" className={`rating-${rating}`} disabled={busy} key={rating} onClick={() => void rate(rating)}>
+              {({ again: "Chưa nhớ", hard: "Khó", good: "Đã nhớ", easy: "Dễ" })[rating]}
+            </button>)}
+        </div></div>}/> : <p>{t("noCards")}</p>)}
 
       {active.kind === "lab" && <LabViewer fitViewport key={active.resource_id} frameClassName="shared-lab-frame" html={String(content?.program_html ?? "")} title={active.title} allowExternalResources={content?.allow_external_resources === true} viewerConfig={cleanLabViewer(content?.viewer_config)}/>}
       {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small><button type="button" className="secondary-button" disabled={busy} onClick={() => void downloadOriginal(active.resource_id)}>Tải bản gốc</button></div></div>}

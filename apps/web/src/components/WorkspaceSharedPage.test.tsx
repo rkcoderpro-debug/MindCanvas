@@ -27,7 +27,8 @@ it("lets a guest submit a public quiz without showing answers before submission"
   expect(host.textContent).toContain("Abacus");
   expect(host.textContent).not.toContain("Answer explanation");
   expect(button("Chỉnh sửa quiz")).toBeUndefined();
-  await act(async()=>host.querySelector<HTMLInputElement>("input[type=radio]")!.click());
+  expect(host.querySelector(".workspace-shared-study .quiz-question-card")).not.toBeNull();
+  await act(async()=>host.querySelector<HTMLButtonElement>(".quiz-options button")!.click());
   await act(async()=>button("Nộp bài").click());
   expect(stubs.submit).toHaveBeenCalledWith(token,resource,"r",[0]);
   expect(host.textContent).toContain("Answer explanation");
@@ -41,6 +42,18 @@ it("asks for sign-in and withholds edit controls even on a public editor link",a
   expect(host.querySelector("input[type=file]")).toBeNull();
   await act(async()=>button("Đăng nhập để chỉnh sửa").click());
   expect(login).toHaveBeenCalledOnce();
+});
+it("uses the Flashcard tab's review card when opening a shared deck link", async () => {
+  stubs.open.mockResolvedValue({ state: "ok", kind: "flashcard", id: resource, title: "Study deck", role: "viewer",
+    data: [{ id: "one", front: "First card", back: "First answer", revision: "r1" },
+      { id: "two", front: "Second card", back: "Second answer", revision: "r2" }] });
+  await act(async () => root.render(<LanguageProvider><WorkspaceSharedPage token={token} signedIn={false} onSignIn={vi.fn()}/></LanguageProvider>));
+  const review = host.querySelector(".workspace-shared-study.activity-flashcards")!;
+  expect(review.querySelector(".review-card-text")?.textContent).toBe("First card");
+  await act(async () => review.querySelector<HTMLButtonElement>(".show-answer")!.click());
+  expect(review.querySelector(".review-card-text")?.textContent).toBe("First answer");
+  await act(async () => button("Thẻ sau").click());
+  expect(review.querySelector(".review-card-text")?.textContent).toBe("Second card");
 });
 it("returns OAuth to the same scoped link without putting its token in the query sent to the server",()=>{
   window.history.replaceState({},"",workspaceShareUrl(token,{kind:"file",id:resource}));

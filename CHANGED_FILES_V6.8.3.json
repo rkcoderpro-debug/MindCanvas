@@ -1,0 +1,112 @@
+{
+  "version": "6.8.3",
+  "baseVersion": "6.8.2",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.3.md",
+      "bytes": 763,
+      "sha256": "a069dc024cc40847a6081914ad3a9e9cb83a5a44398958581162d7710f30056b"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "956ae2a4cd969134e011748eb6acfdb6ddc9306a4635bcde9df82c0712b56030"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "8659653752e0f9c958513540fff457496712ed187544b34d7258d00627ee665f"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 50169,
+      "sha256": "02903cf9d59949c23a0755ab878864ee0d27d19c337ca33ca4f11dc860dac1cc"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 72880,
+      "sha256": "a7d041a56935afad92a580dd89bebbb19e19e1af33ac56db8e61f71b0f5dbb61"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.test.tsx",
+      "bytes": 13660,
+      "sha256": "7543f4e2950f9dca2f6c5724a781083065db1dc74c64311a45810aa87acba216"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 26616,
+      "sha256": "3d9951318f851d5494e4f1cd829f05610f7eb7bbf5881b17e4c68c8e99425f33"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardReview.tsx",
+      "bytes": 6244,
+      "sha256": "2e2e6e9c1e3e32d151e58015cf74b7685423b8bc4af60b4ba3e2a97b4e6e42e7"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 59206,
+      "sha256": "87a15b20adefd5756f800cd7d0eb21214c50d5a9cd771de898fb1997c77a5bc1"
+    },
+    {
+      "path": "apps/web/src/components/FolderTreePicker.tsx",
+      "bytes": 5078,
+      "sha256": "54bea0aca53dad0c7d730bdb047a4a3f65bca20461791b3961057009fe5ab0db"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 13645,
+      "sha256": "88fa29889ba3fc2593e767f5dfc0a376eae7a22a5778441c13538beaa306c4a9"
+    },
+    {
+      "path": "apps/web/src/components/QuizRunner.tsx",
+      "bytes": 6142,
+      "sha256": "bad162cd7bdaf8d1a43a7d59a69779ecc531e3426ba2cf8dd6b529cd160a2cd5"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.recovery.test.tsx",
+      "bytes": 12090,
+      "sha256": "6ecd163c541dd7be52b53c9c414b71711207cb5d7fd91dd327e01d5853485545"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 25397,
+      "sha256": "04ce6fd9274686369184334d9cd44b811809282a03760703daf659a15962ba41"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.test.tsx",
+      "bytes": 6312,
+      "sha256": "7783a3b4ef3f25c552de990753100b00a1a169baa9e363548fcb4f8aef99ebe2"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 22016,
+      "sha256": "1d3831994dc1e0b449fe80cc8d91cdeee54aa59afeeb965814764e85a6da8692"
+    },
+    {
+      "path": "apps/web/src/components/workspaceSharing.css",
+      "bytes": 4318,
+      "sha256": "a6a733b849570b999d9471c0e228c449143f802f12384e54f12c1ea8dc4f8c71"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 14956,
+      "sha256": "6fc21ac79067eabecf3b580c9add0a03af2a79fb5bf03c4d1d296820a7cf3f8d"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 524004,
+      "sha256": "727d194945f89a46daaba1f31e5ed96a42d0a7803fad9a6d0b3cef03e0912c25"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "c2ac85068a42f6a1de5786f32122ab72db0a78ced9f0e0b37577e5747a6b6c31"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "dab0a0cf52b9a19b7bdc66a9b9c1d14fb863689ba9eb8e7737cd671dbed98e2b"
+    }
+  ]
+}

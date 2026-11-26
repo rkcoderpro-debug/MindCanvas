@@ -577,7 +577,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const workspaceBackLabel = language === "vi" ? "Về Workspace" : "Back to Workspace";
   const canvasBackLabel = modal === "share" ? (language === "vi" ? "Về canvas" : "Back to canvas") : selectedFolder ? selectedFolder.name : workspaceBackLabel;
   const backFromCanvas = () => { if (modal === "share") { setModal(null); return; } setMobileProjectMenuOpen(false); setAiPanelMode("closed"); setCanvasFullscreen(false); void ws.home(); };
-  const changeLibraryScope = (scope: string | null) => { setLibraryScope(scope); writeFolderRoute(FOLDER_LIBRARY, "replace", null, scope); };
+  const changeLibraryScope = (scope: string | null) => { setLibraryScope(scope); writeFolderRoute(FOLDER_LIBRARY, "push", null, scope); };
   const backFromLibrary = () => goToFolder(ws.folders.some(folder => folder.id === libraryScope) ? libraryScope! : FOLDER_ROOT);
   const refreshDocuments = () => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")));
   const inboxWorkspace: InboxWorkspace = {

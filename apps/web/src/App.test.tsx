@@ -112,10 +112,16 @@ describe("Workspace UI", () => {
     await act(async () => window.history.back());
     await waitForUI(() => expect(main()?.querySelector("h1")?.textContent).toBe(child.name));
     await act(async () => main().querySelector<HTMLButtonElement>(".manager-documents")!.click());
-    await waitForUI(() => expect(host.querySelector<HTMLSelectElement>("#document-library-scope")?.value).toBe(child.id));
+    await waitForUI(() => expect(host.querySelector(".document-browse-scope .folder-tree-trigger")?.textContent).toBe(`${rootFolder.name} › ${child.name}`));
     expect(new URLSearchParams(window.location.search).get("in")).toBe(child.id);
     expect(host.querySelector(".document-library-list")?.textContent).toContain("bai4.cpp");
     expect(host.querySelector(".document-library-list")?.textContent).not.toContain("lab.pcapng");
+    const allLocations = host.querySelector<HTMLButtonElement>(".document-library-crumbs > button")!;
+    await act(async () => allLocations.click());
+    expect(new URLSearchParams(window.location.search).has("in")).toBe(false);
+    expect(host.querySelector(".document-library-list")?.textContent).toContain("lab.pcapng");
+    await act(async () => window.history.back());
+    await waitForUI(() => expect(host.querySelector('.document-library-crumbs [aria-current="page"]')?.textContent).toBe(child.name));
   });
 
   it("shares a project from its folder menu and moves it to Trash only after confirmation", async () => {

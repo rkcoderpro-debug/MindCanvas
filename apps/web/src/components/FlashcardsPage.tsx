@@ -2,11 +2,12 @@ import { useStudyFolders } from "../hooks/useStudyFolders";
 import { StudyFolderControls, StudyFolderMoveButton } from "./StudyFolders";
 import { WorkspaceShareButton } from "./WorkspaceShareDialog";
 import FilePicker from "./FilePicker";
+import FlashcardReview from "./FlashcardReview";
 import { ActivityViewport, BackButton, PageBack, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import ContentLanguageField, { useContentLanguage } from "./ContentLanguageField";
 import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
-import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type AnimationEvent as ReactAnimationEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, CalendarClock, CheckCircle2, ClipboardPaste, Cloud, FileText, Flame, HardDrive, Layers3, ListOrdered, Pencil, Play, Plus, RotateCcw, Search, Shuffle, Sparkles, Target, Trash2, Zap, X } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import type { Project } from "../lib/projectStore";
@@ -591,61 +592,18 @@ function CardRow({ card, language, onEdit, onDelete, onOpenSource, busy, t }: { 
 }
 
 export function ReviewPanel({ target, finished, index, total, forgottenCount, dailyCurrent, dailyGoal, planMode, ratingBusy, showAnswer, onToggleAnswer, onRate, onBack, t, hideReturnButton = false }: { hideReturnButton?: boolean; target: Flashcard | null; finished: boolean; index: number; total: number; forgottenCount: number; dailyCurrent: number; dailyGoal: number; planMode: boolean; ratingBusy: boolean; showAnswer: boolean; onToggleAnswer: () => void; onRate: (rating: Extract<FlashcardRating, "again" | "good">) => void; onBack: () => void; t: (key: any, values?: Record<string, string | number>) => string }) {
-  const learningActive = useLearningActive();
-  const pointerStart = useRef<{ x: number; y: number; id: number; axis?: "x" | "y" } | null>(null);
-  const skipClick = useRef(false);
-  const [dragX, setDragX] = useState(0);
-  const [turn, setTurn] = useState<"front" | "back" | null>(null);
-  const answerRef = useRef<HTMLButtonElement>(null);
-  const sceneRef = useRef<HTMLElement>(null);
-  const flip = () => {
-    if (ratingBusy) return;
-    if (answerRef.current && document.activeElement === answerRef.current) sceneRef.current?.focus({ preventScroll: true });
-    setTurn(showAnswer ? "front" : "back");
-    onToggleAnswer();
-  };
-  useEffect(() => { pointerStart.current = null; skipClick.current = false; setDragX(0); setTurn(null); }, [target?.id, index]);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!target || finished || ratingBusy || event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey ||
-        (event.target instanceof HTMLElement && event.target.closest("button,input,textarea,select,summary,a,[contenteditable=true],dialog"))) return;
-      if (event.key === " " || event.key === "Enter") { event.preventDefault(); flip(); }
-      if (showAnswer && event.key === "ArrowLeft") { event.preventDefault(); onRate("again"); }
-      if (showAnswer && event.key === "ArrowRight") { event.preventDefault(); onRate("good"); }
-    };
-    if (!learningActive) return;
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [learningActive, finished, onRate, onToggleAnswer, ratingBusy, showAnswer, target]);
-
-  const pointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (ratingBusy || event.button !== 0 || event.isPrimary === false || pointerStart.current) return;
-    skipClick.current = false;
-    pointerStart.current = { x: event.clientX, y: event.clientY, id: event.pointerId };
-    // Leave touch scrolling to the browser. Capture mouse drags even when they leave the card.
-    if (event.pointerType === "mouse") {
-      event.currentTarget.focus({ preventScroll: true });
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-  };
-  const pointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const start = pointerStart.current;
-    if (!start || start.id !== event.pointerId) return;
-    const x = event.clientX - start.x, y = event.clientY - start.y;
-    if (!start.axis && Math.hypot(x, y) >= 10) start.axis = Math.abs(x) > Math.abs(y) ? "x" : "y";
-    if (showAnswer && start.axis === "x") setDragX(x);
-  };
-  const cancelPointer = () => { pointerStart.current = null; setDragX(0); };
-  const pointerUp = (event: ReactPointerEvent<HTMLElement>) => {
-    const start = pointerStart.current;
-    if (!start || start.id !== event.pointerId) return;
-    const x = event.clientX - start.x, y = event.clientY - start.y;
-    cancelPointer();
-    if (start.axis || Math.hypot(x, y) >= 10) skipClick.current = true;
-    if (!ratingBusy && showAnswer && start.axis !== "y" && Math.abs(x) >= 72 && Math.abs(x) > Math.abs(y)) onRate(x > 0 ? "good" : "again");
-  };
-  const endTurn = (event: ReactAnimationEvent<HTMLDivElement>) => { if (event.target === event.currentTarget) setTurn(null); };
   if (finished) return <div className="review-finished"><CheckCircle2 size={46}/><h3>{planMode ? t("reviewGoalComplete") : t("reviewComplete")}</h3><p>{t("reviewCompleteHint", { count: total })}</p>{!hideReturnButton && <button className="secondary-button" onClick={onBack}>{t("backToCards")}</button>}</div>;
   if (!target) return <div className="review-finished"><BookOpen size={46}/><h3>{t("nothingDue")}</h3><p>{t("nothingDueHint")}</p>{!hideReturnButton && <button className="secondary-button" onClick={onBack}>{t("backToCards")}</button>}</div>;
-  return <div className="review-panel"><div className="review-progress"><span>{t("reviewProgress", { current: index + 1, total })}</span><span className="review-keyboard-hint">{t("reviewKeyboardHint")}</span></div><progress className="review-session-progress" value={index} max={Math.max(1, total)} aria-label={t("sessionProgress")}/><article className={`review-card-scene ${showAnswer ? "is-flipped" : ""}`} role="button" aria-pressed={showAnswer} aria-disabled={ratingBusy} tabIndex={0} aria-label={showAnswer ? t("answerSide") : t("questionSide")} ref={sceneRef} onClick={() => { if (skipClick.current) { skipClick.current = false; return; } flip(); }} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelPointer} onLostPointerCapture={cancelPointer} onDragStart={event => event.preventDefault()}><div className="review-card-inner" style={{ transform: `translateX(${dragX}px) rotate(${dragX / 18}deg)` }}><div key={`${target.id}:${showAnswer ? "back" : "front"}`} className={`review-card-face ${showAnswer ? "back" : "front"}`} data-turn={turn ?? undefined} onAnimationEnd={endTurn}><span className="flashcard-label">{showAnswer ? t("answerSide") : t("questionSide")}</span><div className="review-card-text" tabIndex={0}><p>{showAnswer ? target.back : target.front}</p></div><small>{showAnswer ? t("flipBackHint") : t("flipCardHint")}</small></div></div>{showAnswer && dragX !== 0 && <span className={`review-swipe-feedback ${dragX > 0 ? "remembered" : "forgotten"}`}>{dragX > 0 ? t("remembered") : t("forgotten")}</span>}</article><div className="review-controls">{target.sourcePage && <span className="review-source">{t("page")} {target.sourcePage}</span>}{!showAnswer ? <button ref={answerRef} className="primary-button show-answer" disabled={ratingBusy} onClick={flip}>{t("showAnswer")}</button> : <div className="review-ratings"><span>{t("ratePrompt")}</span><div className="review-swipe-actions"><button className="rating-again" disabled={ratingBusy} onClick={() => onRate("again")}>← {t("swipeForgotten")}</button><button className="rating-good" disabled={ratingBusy} onClick={() => onRate("good")}>{t("swipeRemembered")} →</button></div>{forgottenCount > 0 && <small className="review-forgotten-count">{t("forgottenCount", { count: forgottenCount })}</small>}</div>}<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small></div></div>;
+  return <FlashcardReview target={target} index={index} total={total} ratingBusy={ratingBusy} showAnswer={showAnswer}
+    onToggleAnswer={onToggleAnswer} onSwipe={onRate} t={t}
+    status={<span className="review-keyboard-hint">{t("reviewKeyboardHint")}</span>}
+    revealedActions={<div className="review-ratings">
+      <span>{t("ratePrompt")}</span>
+      <div className="review-swipe-actions">
+        <button className="rating-again" disabled={ratingBusy} onClick={() => onRate("again")}>← {t("swipeForgotten")}</button>
+        <button className="rating-good" disabled={ratingBusy} onClick={() => onRate("good")}>{t("swipeRemembered")} →</button>
+      </div>
+      {forgottenCount > 0 && <small className="review-forgotten-count">{t("forgottenCount", { count: forgottenCount })}</small>}
+    </div>}
+    footer={<small className="review-daily">{t("dailyGoal")}: {dailyCurrent} / {dailyGoal}</small>}/>;
 }

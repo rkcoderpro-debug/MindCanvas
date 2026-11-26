@@ -4,11 +4,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SharedLearningPage from "./SharedLearningPage";
 
-const api = vi.hoisted(() => ({ shares: vi.fn(), invites: vi.fn(), copies: vi.fn(), content: vi.fn(), start: vi.fn(), cards: vi.fn(), rate: vi.fn() }));
+const api = vi.hoisted(() => ({ shares: vi.fn(), invites: vi.fn(), copies: vi.fn(), content: vi.fn(), start: vi.fn(), startImmediate: vi.fn(), reveal: vi.fn(), finish: vi.fn(), cards: vi.fn(), rate: vi.fn() }));
 const received = vi.hoisted(() => vi.fn());
 vi.mock("../lib/learningShare", async importOriginal => ({ ...await importOriginal<typeof import("../lib/learningShare")>(),
   listLearningShares: api.shares, listPendingLearningInvites: api.invites, listMyLearningCopySources: api.copies, getSharedContent: api.content,
-  startSharedQuiz: api.start, getSharedCards: api.cards, rateSharedCard: api.rate,
+  startSharedQuiz: api.start, startSharedQuizImmediate: api.startImmediate, revealSharedQuizAnswer: api.reveal,
+  finishSharedQuiz: api.finish, getSharedCards: api.cards, rateSharedCard: api.rate,
 }));
 vi.mock("../lib/workspaceSharing", async importOriginal => ({
   ...await importOriginal<typeof import("../lib/workspaceSharing")>(),
@@ -87,18 +88,43 @@ it("validates a malformed quiz session before storing it in render state", async
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("Dữ liệu Quiz không hợp lệ");
   expect(host.querySelector(".shared-learning-launch")).not.toBeNull();
 });
+it("uses the Quiz tab layout and displays only feedback returned by the shared attempt", async () => {
+  const question = { id: "q1", prompt: "One plus one?", options: ["1", "2", "3", "4"] };
+  api.shares.mockResolvedValue([{ ...valid, kind: "quiz" }]);
+  api.startImmediate.mockResolvedValue({ id: "attempt", version: 1, questions: [question] });
+  api.reveal.mockResolvedValue({ correctIndex: 1, explanation: "Addition" });
+  api.finish.mockResolvedValue({ score: 1, total: 1, version: 1, questions: [{ ...question, correctIndex: 1 }] });
+  await mount();
+  await act(async () => host.querySelector<HTMLButtonElement>(".shared-learning-item .primary-button")!.click());
+  const mode = host.querySelector<HTMLSelectElement>(".shared-learning-launch select")!;
+  await act(async () => { mode.value = "instant"; mode.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => host.querySelector<HTMLButtonElement>(".shared-learning-launch .primary-button")!.click());
+  const player = document.querySelector(".activity-quiz")!;
+  expect(player.querySelector(".quiz-question-card h2")?.textContent).toBe(question.prompt);
+  expect(player.querySelector(".quiz-options .correct")).toBeNull();
+  expect(player.querySelector<HTMLButtonElement>(".quiz-runner-actions .primary-button")?.disabled).toBe(true);
+  await act(async () => player.querySelectorAll<HTMLButtonElement>(".quiz-options button")[1].click());
+  expect(api.reveal).toHaveBeenCalledWith("attempt", 0, 1);
+  expect(player.querySelector(".quiz-feedback")?.textContent).toContain("Addition");
+  await act(async () => player.querySelector<HTMLButtonElement>(".quiz-runner-actions .primary-button")!.click());
+  expect(api.finish).toHaveBeenCalledWith("attempt", [1]);
+  expect(player.querySelector(".quiz-result-badge")?.textContent).toContain("1 / 1");
+});
 it("grades one shared card once on rapid taps", async () => {
   api.shares.mockResolvedValue([{ ...valid, kind: "flashcard" }]);
   api.cards.mockResolvedValue({ cards: [{ id: "card", front: "Front", back: "Back", content_version: 1 }], progress: [] });
   let finish!: () => void; api.rate.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
   await mount(); await act(async () => (host.querySelector(".shared-learning-item .primary-button") as HTMLButtonElement).click());
   const player = document.querySelector("[data-learning-viewport]")!;
-  await act(async () => player.querySelector<HTMLButtonElement>(".shared-flip")!.click());
-  const good = player.querySelectorAll(".shared-ratings button")[2] as HTMLButtonElement;
+  expect(player.classList.contains("activity-flashcards")).toBe(true);
+  await act(async () => player.querySelector<HTMLButtonElement>(".show-answer")!.click());
+  expect(player.querySelector(".review-card-text")?.textContent).toBe("Back");
+  expect(player.querySelectorAll(".shared-review-ratings button")).toHaveLength(4);
+  const good = player.querySelector<HTMLButtonElement>(".shared-review-ratings .rating-good")!;
   await act(async () => { good.click(); good.click(); });
   expect(api.rate).toHaveBeenCalledTimes(1);
   await act(async () => finish());
-  expect(player.querySelector(".shared-flip")?.textContent).toContain("Front");
+  expect(player.querySelector(".review-card-text")?.textContent).toBe("Front");
 });
 it("handles null empty lists without crashing", async () => {
   api.shares.mockResolvedValue(null); api.invites.mockResolvedValue(null); api.copies.mockResolvedValue(null);

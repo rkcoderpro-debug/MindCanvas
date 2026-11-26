@@ -35,9 +35,10 @@
 .document-search-area .tool-document-search { flex: 1; width: auto; min-width: 0; min-height: 38px; margin: 0; background: var(--surface-raised); }
 .document-search-area .tool-document-search input { min-width: 0; }
 .document-browse-scope { flex: 0 1 auto; }
-.document-browse-scope select { max-width: min(28vw, 245px); min-width: 0; }
-.document-browse-scope :is(select, button) { min-height: 38px; padding: 6px 9px; border-radius: 8px; font-size: 12px; box-shadow: none; }
-.document-browse-scope button { flex: none; }
+.document-browse-scope .folder-tree-picker { width: clamp(150px, 26vw, 270px); }
+.document-browse-scope .folder-tree-trigger, .document-browse-scope > .secondary-button { min-height: 38px; padding: 6px 9px; border-radius: 8px; font-size: 12px; box-shadow: none; }
+.document-browse-scope > .secondary-button { flex: none; }
+.document-browse-scope .folder-tree-options { position: absolute; inset: calc(100% + 5px) 0 auto; z-index: 5; box-shadow: 0 8px 20px var(--shadow); }
 .document-browse-filters-end { justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
 .document-browse-filters-end .document-tools-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; background: none; border: 0; box-shadow: none; }
 .document-browse-filters-end .document-tools-tabs button {
@@ -46,6 +47,44 @@
 }
 .document-browse-filters-end .document-tools-tabs button:is(:hover, .active) { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border); }
 .document-browse-count { color: var(--muted); font-size: 11px; }
+
+.document-library-folders {
+  display: grid;
+  gap: 9px;
+  padding: 12px var(--library-gutter);
+  border-bottom: 1px solid var(--line);
+}
+.document-library-crumbs, .document-library-crumbs > span { display:flex; align-items:center; gap:5px; }
+.document-library-crumbs { flex-wrap:wrap; font-size:12px; color:var(--muted); }
+.document-library-crumbs > span { min-width:0; overflow-wrap:anywhere; }
+.document-library-crumbs svg { flex:none; }
+.document-library-crumbs button { padding:5px 3px; color:var(--accent); background:transparent; text-align:start; }
+.document-library-crumbs button:hover { text-decoration:underline; }
+.document-library-crumbs [aria-current="page"] { color:var(--text); }
+.document-library-folder-list {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(min(162px,100%),1fr));
+  gap:8px;
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.document-library-folder-list button {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-height:42px;
+  padding:7px 9px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--surface);
+  text-align:start;
+  overflow-wrap:anywhere;
+}
+.document-library-folder-list button:hover { background:var(--accent-soft); border-color:var(--accent-border); }
+.document-library-folder-list svg { color:var(--accent); }
 
 .document-browse-files.document-tool-list { border: 0; border-radius: 0; padding: 0; max-height: none; overflow: visible; background: transparent; }
 .document-browse-files .document-library-list { padding: 3px var(--library-gutter); }
@@ -193,7 +232,7 @@
   .document-search-area { flex-wrap: wrap; }
   .document-search-area .tool-document-search { flex-basis: 100%; }
   .document-browse-scope { width: 100%; }
-  .document-browse-scope select { flex: 1; max-width: 100%; }
+  .document-browse-scope .folder-tree-picker { flex: 1; width: auto; }
 }
 @media (max-width: 520px) {
   .document-browse-header { flex-wrap: wrap; gap: 10px; }
