@@ -5,7 +5,7 @@ export function workspaceShareToken(url = new URL(window.location.href)) {
   return token && tokenPattern.test(token) ? token : null;
 }
 const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-const kinds = ["file","folder","canvas","quiz","flashcard"] as const;
+const kinds = ["file","folder","canvas","quiz","flashcard","learning_folder","lab"] as const;
 export function workspaceShareTarget(url=new URL(window.location.href)) {
   const params=new URLSearchParams(url.hash.slice(1)),id=params.get("id"),kind=params.get("kind") as typeof kinds[number]|null;
   return id&&uuid.test(id)&&kind&&kinds.includes(kind)?{kind,id}:null;

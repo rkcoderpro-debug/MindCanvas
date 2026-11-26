@@ -9,18 +9,20 @@ import { downloadWorkspaceBlob } from "../lib/workspaceFiles";
 import { shareCanvasAsset, shareChallenge, shareDownload, shareEdit, shareErrorText, shareOpen, shareSaveCanvas, shareSubmit, shareUpload, shareVerify, type ShareItem, type ShareView, type SharedCard } from "../lib/workspaceSharing";
 import { workspaceShareTarget,workspaceShareUrl } from "../lib/workspaceShareLinks";
 import FormulaText from "./FormulaText";
+import { cleanLabViewer } from "../lib/labModes";
 import "./workspaceSharing.css";
 
 const CanvasBoard = lazy(()=>import("./CanvasBoard"));
 const A4CanvasEditor = lazy(()=>import("./A4CanvasEditor"));
 const DocumentViewer = lazy(()=>import("./DocumentViewer"));
+const LabViewer = lazy(()=>import("./LabViewer"));
 type Resource=Extract<ShareView,{state:"ok"}>;
 type StateByKind<K extends Resource["kind"]>=Extract<Resource,{kind:K}>;
 type Tr=(vi:string,en:string)=>string;
 type Context={token:string;editable:boolean;tr:Tr;pending:boolean;act:(fn:()=>Promise<unknown>,refresh?:boolean)=>void;loadItem:(item:ShareItem)=>void};
 const noop=()=>{};
-const fileIcons={folder:Folder,file:File,canvas:FileText,quiz:FileText,flashcard:BookOpen};
-const typeName=(tr:Tr,kind:ShareItem["kind"])=>({folder:tr("Thư mục","Folder"),file:tr("Tài liệu","File"),canvas:"Canvas",quiz:"Quiz",flashcard:"Flashcard"})[kind];
+const fileIcons={folder:Folder,learning_folder:Folder,file:File,canvas:FileText,quiz:FileText,flashcard:BookOpen,lab:FileText};
+const typeName=(tr:Tr,kind:ShareItem["kind"])=>({folder:tr("Thư mục","Folder"),file:tr("Tài liệu","File"),canvas:"Canvas",quiz:"Quiz",flashcard:"Flashcard",learning_folder:tr("Thư mục học liệu","Study folder"),lab:"Lab"})[kind];
 
 export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}:{token:string;signedIn:boolean;onSignIn:()=>void;loginError?:string}){
   const {language,t}=useLanguage(),vi=language==="vi",tr:Tr=(v,e)=>vi?v:e;
@@ -93,6 +95,10 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}
         <button className="secondary-button" type="button" disabled={pending} onClick={reload}><RefreshCw size={16}/>{tr("Mở lại","Reload")}</button>
       </header>
       {state.kind==="folder"&&<SharedFolder key={state.id} item={state} ctx={ctx}/>}
+      {state.kind==="learning_folder" && <SharedItems items={state.data} ctx={ctx}/>}
+      {state.kind==="lab" && <Suspense fallback={<p role="status">{t("loading")}</p>}><LabViewer
+        key={state.id} html={state.data.html} title={state.title} allowExternalResources={state.data.allowExternalResources}
+        viewerConfig={cleanLabViewer(state.data.viewerConfig)}/></Suspense>}
       {state.kind==="file"&&<SharedFile key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="canvas"&&<SharedCanvas key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="quiz"&&<SharedQuiz key={state.id} item={state} ctx={ctx}/>}

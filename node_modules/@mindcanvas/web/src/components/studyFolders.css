@@ -1,0 +1,15 @@
+.study-folders { display: grid; gap: .65rem; margin-block: .75rem; }
+.study-folder-heading { display: flex; align-items: center; justify-content: space-between; gap: .65rem; flex-wrap: wrap; }
+.study-folder-heading nav { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem; min-width: 0; }
+.study-folder-heading nav > span { overflow-wrap: anywhere; }
+.study-folder-crumb { border: 0; background: transparent; color: inherit; padding: .35rem .22rem; }
+.study-folder-crumb[aria-current] { font-weight: 700; }
+.study-folder-crumb:hover { text-decoration: underline; }
+.study-folder-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: .55rem; padding: 0; margin: 0; list-style: none; }
+.study-folder-list > li { display: flex; align-items: center; gap: .25rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--surface-raised); padding: .25rem .4rem; min-width: 0; }
+.study-folder-open { min-width: 0; flex: 1; display: flex; gap: .5rem; align-items: center; text-align: left; border: 0; border-radius: .45rem; background: transparent; color: inherit; padding: .55rem .45rem; font-weight: 600; }
+.study-folder-open > svg { flex-shrink: 0; }
+.study-folder-open > span { overflow-wrap: anywhere; }
+.study-folder-open:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.study-folder-form { display: grid; gap: .8rem; }
+.deck-item > .study-folder-move { position: absolute; top: .65rem; right: 3.15rem; }

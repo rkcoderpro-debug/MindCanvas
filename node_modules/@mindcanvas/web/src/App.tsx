@@ -1,3 +1,4 @@
+import ChatBubble, { OpenChatContext, type ChatRequest } from "./components/ChatBubble";
 import { restoreWorkspaceShareSignIn, workspaceShareToken } from "./lib/workspaceShareLinks";
 import { ensureCanvasAttachment, ensureCanvasAttachments } from "./lib/shareAttachments";
 import { FOLDER_LIBRARY, FOLDER_ROOT, fileIdFromUrl, folderNavigationFromUrl, libraryFolderFromUrl, writeFolderRoute } from "./lib/folderLinks";
@@ -157,6 +158,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     return () => { window.removeEventListener(PROFILE_ROUTE_EVENT, sync); window.removeEventListener("popstate", sync); };
   }, []);
   const [modal, setModal] = useState<"project" | "folder" | "move" | "settings" | "versions" | "sync" | "install" | "plans" | "share" | null>(null);
+  const [chatRequest, setChatRequest] = useState<(ChatRequest & { owner: string }) | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{ tab: "connections" | "shared" | "classrooms"; peerId?: string; classId?: string; nonce: number } | null>(null);
   const [name, setName] = useState(""), [folder, setFolder] = useState(""), [filter, setFilter] = useState<string | null>(filterFromLocation), [folderAction, setFolderAction] = useState<{ folder: ProjectFolder; kind: "rename" | "delete" } | null>(null);
   const [recent, setRecent] = useState(false), [working, setWorking] = useState(false);
@@ -449,7 +451,15 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
   };
   const openView = (view: SidebarView) => { canvasLinks.leaveUnopenedLink(); setActiveFileId(null); writeFolderRoute(null,"replace"); if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview"); else leaveLearningSpace(); void ws.home(); setNotificationDestination(null); if (view === "recent") { setFilter(null); setRecent(true); } else { setFilter(view); setRecent(false); } };
+  const openChat = (peerId: string) => {
+    if (user) setChatRequest(current => ({ owner: user.id, peerId, version: (current?.version ?? 0) + 1 }));
+  };
+  const openChatShared = () => {
+    setActiveFileId(null); writeFolderRoute(null, "replace"); void ws.home(); setRecent(false);
+    setFilter("__learning"); setNotificationDestination(null); enterLearningSpace("shared");
+  };
   const openNotification = (item: ActivityNotification) => {
+    if (item.kind === "message" && item.actor_id) { openChat(item.actor_id); return; }
     setActiveFileId(null); writeFolderRoute(null,"replace"); void ws.home(); setRecent(false);
     if (item.target === "workspace") { setFilter(null); setNotificationDestination(null); return; }
     const tab = item.target;
@@ -592,7 +602,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     window.history.replaceState(window.history.state, "", onlineRoomUrl(id));
     window.dispatchEvent(new Event(ROOM_ROUTE_CHANGED));
   };
-  return <PageChromeProvider openQuickActions={showQuickActions}><OnlineRoomSessionProvider owner={user?.id ?? null} onRestore={returnToOnlineRoom}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
+  return <PageChromeProvider openQuickActions={showQuickActions}><OpenChatContext.Provider value={user ? openChat : undefined}><OnlineRoomSessionProvider owner={user?.id ?? null} onRestore={returnToOnlineRoom}><div inert={profileOpen} aria-hidden={profileOpen || undefined} className={`app-shell ${ws.board ? "canvas-open-mode" : ""} ${canvasFullscreen ? "canvas-fullscreen-mode" : ""} ${focusMode ? "focus-mode" : ""} ${iosDevice ? "ios-device" : ""} ${webBackground ? "web-background-active" : ""}`}>
     {webBackground && <div className="web-background-layer" aria-hidden="true">{webBackground.kind === "video" ? <video src={webBackground.src} muted autoPlay loop playsInline style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/> : <img src={webBackground.src} alt="" style={{ objectFit: webBackground.fit ?? "cover", objectPosition: webBackground.position ?? "center", opacity: webBackground.opacity ?? 1, filter: `blur(${webBackground.blur ?? 0}px) brightness(${webBackground.brightness ?? 1})` }}/>}<span style={{ background: webBackground.overlay ?? "#000000" }}/></div>}
     <AppSidebar projects={ws.projects} folders={ws.folders} files={workspaceFiles.files}
       activeFileId={activeFileId} onBrowseFiles={() => setBrowseFiles(true)} onOpenFile={openWorkspaceFile} boardOpen={!!ws.board} recent={recent} filter={selectedFolder?.id ?? filter} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} language={language} selectedTheme={selectedTheme} onHome={home} onOpenView={openView} onOpenFolder={openFolder} onOpenProject={project => void ws.open(project)} onDropProject={dropProjectInto} onNewFolder={() => askName("folder")} onFolderAction={folder => { setName(folder.name); setFolderAction({ folder, kind: "rename" }); }} onManageFolders={manageFolders} onLanguageChange={setLanguage} onThemeChange={setTheme} canUsePremiumTheme={accountPlan.effectivePlanId !== "free"} onLockedTheme={openPlans} onSettings={() => setModal("settings")} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} onResizeStart={resizeSidebar} onResetWidth={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}/>
@@ -665,6 +675,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       </section> : filter === "__documents" ? <DocumentToolsPage owner={user?.id ?? null} documents={documents} onDocumentsChanged={refreshDocuments}
         accountPlan={accountPlan} workspace={{ ...libraryWorkspace, scope: libraryScope, onScope: changeLibraryScope }} fromWorkspace/> : filter === "__lab" ? <LearningHubPage owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab="lab"/> : filter === "__learning" || filter === "__flashcards" ? <LearningHubPage key={notificationDestination?.nonce ?? "learning"} owner={user?.id ?? null} projects={ws.projects} documents={documents} onDocumentsChanged={() => void listDocuments(user?.id ?? null).then(setDocuments).catch(err => ws.setError(errorMessage(err, "Không thể mở thư viện tài liệu.")))} accountPlan={accountPlan} initialTab={notificationDestination?.tab ?? (connectionInviteState === "accepted" ? "connections" : learningInviteState === "accepted" ? "shared" : undefined)} initialPeerId={notificationDestination?.peerId} initialClassId={notificationDestination?.classId} libraryWorkspace={libraryWorkspace} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/> : folderUnavailable && !ws.loading ? <div className="empty-state workspace-folder-unavailable"><h1>{language === "vi" ? "Không mở được thư mục" : "Folder unavailable"}</h1><p>{language === "vi" ? "Thư mục không còn tồn tại hoặc không thuộc tài khoản này." : "This folder is missing or does not belong to this account."}</p><div className="actions"><button className="secondary-button" onClick={manageFolders}>{t("manageFolders")}</button>{!user && isSupabaseConfigured && <button className="primary-button" onClick={() => void auth()}>{language === "vi" ? "Đăng nhập" : "Sign in"}</button>}</div></div> : folderView ? (folderUnavailable ? <RouteLoading/> : workspaceFolderArea(selectedFolder ?? null)) : <>{filter === "__shared" && <WorkspaceSharedInbox owner={user?.id ?? null}/>}<WorkspaceHome projects={visible} title={pageTitle} loading={ws.loading} folders={ws.folders} onManage={ws.manageProject} onDuplicate={ws.duplicateProject} onLoadThumbnails={ws.loadThumbnails} trash={filter === "__trash"} onOpen={p => void ws.open(p)} onCreate={() => askName("project")} onImport={() => fileInput.current?.click()}/></>}</Suspense>
       <OnlineRoomSessionHost owner={user?.id ?? null}/>
+    {user && <ChatBubble key={user.id} owner={user.id} request={chatRequest?.owner === user.id ? chatRequest : null} onOpenShared={openChatShared}/>}
       <PetCompanion inline={filter === "__learning" || filter === "__flashcards" || filter === "__lab"} visible={petVisible} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
       </main>
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
@@ -723,7 +734,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       }}/>} {/* Keep this mounted while minimized so its request survives. */}
     {commandOpen && <CommandPalette projects={ws.projects} onClose={() => setCommandOpen(false)} onOpenProject={project => void ws.open(project)} onCreateProject={() => askName("project")} onOpenLearningTool={openQuickLearning} onOpenSettings={() => setModal("settings")} onImport={() => fileInput.current?.click()}/>}
     </Suspense>
-  </div>{profileOpen && <Suspense fallback={<div className="profile-screen"><RouteLoading/></div>}><PersonalProfilePage state={personalProfile} signedIn={!!user} onBack={closeProfileRoute} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/></Suspense>}</OnlineRoomSessionProvider></PageChromeProvider>;
+  </div>{profileOpen && <Suspense fallback={<div className="profile-screen"><RouteLoading/></div>}><PersonalProfilePage state={personalProfile} signedIn={!!user} onBack={closeProfileRoute} onSignIn={isSupabaseConfigured ? () => void auth() : undefined}/></Suspense>}</OnlineRoomSessionProvider></OpenChatContext.Provider></PageChromeProvider>;
 }
 function RouteLoading() {
   const { t } = useLanguage();

@@ -35,7 +35,9 @@ try{
   await migrate("0001_mindcanvas.sql");
   await migrate("0005_flashcards.sql");
   await db.exec(`alter table notes add column deleted_at timestamptz,add column revision bigint not null default 0,add column thumbnail jsonb;
-    create table quiz_tests(id uuid primary key,user_id uuid references auth.users,title text,description text,questions jsonb,updated_at timestamptz default now());`);
+    create table quiz_tests(id uuid primary key,user_id uuid references auth.users,title text,description text,questions jsonb,updated_at timestamptz default now());
+    create table lab_projects(id uuid primary key,user_id uuid references auth.users,title text,program_html text,
+      allow_external_resources boolean default false,viewer_config jsonb default '{}'::jsonb);`);
   // These are the account interfaces used by learning_share_tier in production.
   await db.exec(`create table account_entitlements(user_id uuid primary key, plan_id text, status text, expires_at timestamptz);
     create function learning_share_tier(p_user uuid) returns integer language sql stable as $$
@@ -43,7 +45,7 @@ try{
         from public.account_entitlements where user_id=p_user and status='active'),0)
     $$;
     create function learning_required_tier(p_kind text) returns integer language sql immutable as $$
-      select case p_kind when 'document' then 2 when 'quiz' then 1 else 100 end
+      select case p_kind when 'document' then 2 when 'quiz' then 1 when 'flashcard' then 1 when 'lab' then 2 else 100 end
     $$;
     create table learning_share_members(owner_id uuid,user_id uuid);`);
   await migrate("0026_v5_15_0_connections_messages.sql");
@@ -197,5 +199,64 @@ try{
     await assert.rejects(open(link(2)),/permission denied/);
     await assert.rejects(rows("select token from workspace_share_grants"),/permission denied/);
   }
-  console.log("Workspace sharing SQL passed: anonymous and verified emails, editor writes, attachment and folder scopes, revoke, friend messaging, and RLS.");
+  await db.exec("reset role");
+  await migrate("0047_study_folders.sql");
+  await migrate("0047_study_folders.sql");
+  const lab=uid(41);
+  await rows("insert into lab_projects(id,user_id,title,program_html) values($1,$2,'Lab','<p>Study</p>')",[lab,owner]);
+  await rows("insert into connections(user_a,user_b) values($1,$2)",[owner,recipient]);
+  const folderSave=(area,id,parent,name)=>value("select study_folder_save($1,$2,$3,$4) as v",[area,id,parent,name]);
+  const place=(area,item,folder)=>value("select study_folder_move($1,$2,$3) as v",[area,item,folder]);
+  const folderFriend=(k,id,op,peer=null)=>value("select ws_share_folder_friend($1,$2,$3,$4) as v",[k,id,op,peer]);
+  await actorAs(owner);
+  const quizFolder=await folderSave("quiz",null,null,"Quiz studies");
+  const quizChild=await folderSave("quiz",null,quizFolder,"Practice tests");
+  const flashFolder=await folderSave("flashcard",null,null,"Deck studies");
+  const labFolder=await folderSave("lab",null,null,"Lab studies");
+  assert.equal(await folderSave("quiz",quizChild,null,"Exercises"),quizChild);
+  assert.equal(await place("quiz",quiz,quizChild),true);
+  assert.equal(await place("flashcard",deck,flashFolder),true);
+  assert.equal(await place("lab",lab,labFolder),true);
+  assert.equal(await place("lab",uid(99),labFolder),false);
+  await assert.rejects(place("quiz",quiz,labFolder),/SHARE_FORBIDDEN/);
+  await assert.rejects(folderSave("lab",null,quizFolder,"Other area"),/SHARE_FORBIDDEN/);
+  await assert.rejects(folderFriend("learning_folder",quizFolder,"send",other),/CONNECTION_REQUIRED/);
+  await folderFriend("learning_folder",quizFolder,"send",recipient);
+  await folderFriend("folder",root,"send",recipient);
+  const folderMessages=await rows("select resource_id,workspace_file_token from direct_messages where workspace_folder_card");
+  const privateQuiz=folderMessages.find(row=>row.resource_id===quizFolder).workspace_file_token;
+  const privateWorkspace=folderMessages.find(row=>row.resource_id===root).workspace_file_token;
+  await actorAs(recipient);
+  assert.deepEqual(await rows("select id from study_folders"),[]);
+  await assert.rejects(place("quiz",quiz,quizFolder),/SHARE_FORBIDDEN/);
+  await assert.rejects(folderSave("quiz",quizChild,null,"Wrong owner"),/SHARE_FORBIDDEN/);
+  await role("service_role");
+  await assert.rejects(open(privateQuiz,other),/SHARE_FORBIDDEN/);
+  assert.equal((await open(privateQuiz)).state,"sign-in");
+  assert.equal((await open(privateWorkspace,recipient)).data[0].id,child);
+  assert.equal((await open(privateQuiz,recipient)).data[0].title,"Exercises");
+  assert.equal((await open(privateQuiz,recipient,null,"learning_folder",quizChild)).data[0].id,quiz);
+  const sharedQuiz=await open(privateQuiz,recipient,null,"quiz",quiz);
+  assert.equal(sharedQuiz.role,"viewer");
+  assert.equal(sharedQuiz.data.questions[0].correctIndex,undefined);
+  assert.equal((await open(privateQuiz,recipient,null,"quiz",quiz,"submit",{revision:sharedQuiz.data.revision,answers:[1]})).score,1);
+  await assert.rejects(open(privateQuiz,recipient,null,"lab",lab),/SHARE_FORBIDDEN/);
+  await assert.rejects(manage(owner,"learning_folder",quizFolder,"set","","editor",link(11)),/SHARE_INVALID/);
+  await manage(owner,"learning_folder",quizFolder,"set","","viewer",link(11));
+  await manage(owner,"learning_folder",flashFolder,"set","","viewer",link(12));
+  await manage(owner,"learning_folder",labFolder,"set","","viewer",link(13));
+  assert.equal((await open(link(11))).role,"viewer");
+  assert.equal((await open(link(12),null,null,"flashcard",deck)).data[0].back,"Back");
+  assert.equal((await open(link(13),null,null,"lab",lab)).data.html,"<p>Study</p>");
+  await actorAs(owner);
+  await place("quiz",quiz,null);
+  await folderFriend("learning_folder",quizFolder,"remove",recipient);
+  await rows("select remove_connection($1)",[recipient]);
+  await role("service_role");
+  await assert.rejects(open(link(11),null,null,"quiz",quiz),/SHARE_FORBIDDEN/);
+  await assert.rejects(open(privateQuiz,recipient),/SHARE_FORBIDDEN/);
+  await assert.rejects(open(privateWorkspace,recipient),/SHARE_FORBIDDEN/);
+  await manage(owner,"learning_folder",quizFolder,"remove","","viewer",null);
+  await assert.rejects(open(link(11)),/SHARE_FORBIDDEN/);
+  console.log("Workspace and study folder sharing SQL passed: legacy grants, nested folders, private cards, view links, revocation, and RLS.");
 } finally { await db.close(); }

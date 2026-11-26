@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, Copy, FileText, FlaskConical, ListChecks, MessageCircle, MoreHorizontal, RefreshCw, Search, Send, UserPlus, Users, X } from "lucide-react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, Copy, FileText, Folder, FlaskConical, ListChecks, MessageCircle, MoreHorizontal, RefreshCw, Search, Send, UserPlus, Users, X } from "lucide-react";
 import {
   blockConnection, cancelConnectionInvitation, createConnectionInvitation, listBlockedConnections, listConnectionInvitations,
   listConnections, listDirectMessages, markDirectMessagesRead, removeConnection,
@@ -32,13 +32,20 @@ function mergeMessages(latest: DirectMessage[], current: DirectMessage[]) {
   return [...latest, ...current.filter(message => !ids.has(message.id))];
 }
 
-export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: { owner: string | null; onOpenShared: () => void; initialPeerId?: string }) {
+export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, initialPeerVersion, compact = false,
+  visible = true, onUnread, onChat }: {
+  owner: string | null; onOpenShared: () => void; initialPeerId?: string; initialPeerVersion?: number;
+  compact?: boolean; visible?: boolean; onUnread?: (count: number) => void; onChat?: (peerId: string) => void;
+}) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [invitations, setInvitations] = useState<ConnectionInvitation[]>([]);
   const [blocked, setBlocked] = useState<BlockedConnection[]>([]);
   const [peerId, setPeerId] = useState<string | null>(null);
   const peer = connections.find(person => person.peer_id === peerId);
-  const active = useLearningActive();
+  const learningActive = useLearningActive();
+  const active = compact ? visible : learningActive;
+  const chatFieldId = useId();
+  const composerId = compact ? chatFieldId : "connection-message";
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const currentMessages = useRef(messages);
   currentMessages.current = messages;
@@ -73,7 +80,10 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
     if (!owner) return;
     const request = ++inboxRequest.current;
     try {
-      const [people, invites, blockedPeople] = await Promise.all([listConnections(true), listConnectionInvitations(), listBlockedConnections()]);
+      const [people, invites, blockedPeople] = await Promise.all([
+        listConnections(true), compact ? Promise.resolve([]) : listConnectionInvitations(),
+        compact ? Promise.resolve([]) : listBlockedConnections(),
+      ]);
       if (request !== inboxRequest.current) return;
       setConnections(people); setInvitations(invites); setBlocked(blockedPeople);
       if (openPeer.current && !people.some(person => person.peer_id === openPeer.current)) {
@@ -83,7 +93,7 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
     } finally {
       if (request === inboxRequest.current) setLoadingPeople(false);
     }
-  }, [owner]);
+  }, [owner, compact]);
 
   const refreshConversation = useCallback(async (id: string, mode: "open" | "poll" | "send") => {
     if (openPeer.current !== id || (mode === "poll" && olderRequest.current)) return;
@@ -125,20 +135,41 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
     element.scrollTop = next === "bottom" ? element.scrollHeight : next.top + element.scrollHeight - next.height;
   }, [messages]);
   useEffect(() => {
+    onUnread?.(connections.reduce((total, person) => total + person.unread_count, 0));
+  }, [connections, onUnread]);
+
+  useEffect(() => {
+    if (!compact || active || !owner) return;
+    const refreshUnread = () => {
+      if (document.visibilityState !== "hidden") void refresh().catch(() => undefined);
+    };
+    refreshUnread();
+    const timer = window.setInterval(refreshUnread, 15000);
+    document.addEventListener("visibilitychange", refreshUnread);
+    window.addEventListener("mindcanvas:activity-updated", refreshUnread);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshUnread);
+      window.removeEventListener("mindcanvas:activity-updated", refreshUnread);
+    };
+  }, [compact, active, owner, refresh]);
+
+  useEffect(() => {
     if (active) void refresh().catch(cause => setError(String(cause?.message ?? cause)));
     return () => { ++inboxRequest.current; };
   }, [refresh, active]);
   useEffect(() => {
-    if (!owner || !active) return;
+    if (!owner || !active || onChat) return;
     const update = () => {
       if (document.visibilityState !== "visible") return;
       if (peerId && !loadingThread) void refreshConversation(peerId, "poll").catch(() => undefined).finally(() => { if (latestVisible.current) void refresh().catch(() => undefined); });
       else if (!peerId) void refresh().catch(() => undefined);
     };
+    if (compact && peerId && !loadingThread) update();
     const timer = window.setInterval(update, peerId ? 5000 : 15000);
     document.addEventListener("visibilitychange", update);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", update); };
-  }, [owner, active, peerId, loadingThread, refresh, refreshConversation]);
+  }, [owner, active, peerId, loadingThread, compact, onChat, refresh, refreshConversation]);
   const invite = async (event: FormEvent) => {
     event.preventDefault();
     await run(async () => { setLink(await createConnectionInvitation(email)); setEmail(""); setNotice("Đã tạo lời mời. Gửi liên kết này cho người bạn muốn kết nối."); });
@@ -159,6 +190,7 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
     requestAnimationFrame(() => listPane.current?.querySelector<HTMLButtonElement>(".connections-person")?.focus({ preventScroll: true }));
   };
   const choose = useCallback(async (person: Connection) => {
+    if (onChat) { onChat(person.peer_id); return; }
     if (openPeer.current === person.peer_id) return;
     openPeer.current = person.peer_id; lastSeen.current = null; olderRequest.current = null;
     adjustScroll.current = null;
@@ -166,15 +198,16 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
     setShowReport(false); setReportText(""); setError("");
     try { await refreshConversation(person.peer_id, "open"); }
     catch (cause) { if (openPeer.current === person.peer_id) setError(cause instanceof Error ? cause.message : "Không thể tải hội thoại."); }
-  }, [refreshConversation]);
-  useEffect(() => { if (peerId) threadHeading.current?.focus({ preventScroll: true }); }, [peerId]);
+  }, [onChat, refreshConversation]);
+  useEffect(() => { if (peerId && active) threadHeading.current?.focus({ preventScroll: true }); }, [peerId, active]);
   const openedInitialPeer = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!initialPeerId) { openedInitialPeer.current = undefined; return; }
-    if (!active || openedInitialPeer.current === initialPeerId) return;
+    const key = initialPeerVersion === undefined ? initialPeerId : `${initialPeerId}:${initialPeerVersion}`;
+    if (!active || openedInitialPeer.current === key) return;
     const candidate = connections.find(person => person.peer_id === initialPeerId);
-    if (candidate) { openedInitialPeer.current = initialPeerId; void choose(candidate); }
-  }, [active, initialPeerId, connections, choose]);
+    if (candidate) { openedInitialPeer.current = key; void choose(candidate); }
+  }, [active, initialPeerId, initialPeerVersion, connections, choose]);
 
   if (!owner) return <section className="connections-page"><h2>Bạn bè và tin nhắn</h2><p>Đăng nhập để kết nối và nhắn tin.</p></section>;
 
@@ -211,12 +244,12 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
   const people = connections.filter(person => person.display_name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const pending = invitations.filter(item => item.status === "pending" && new Date(item.expires_at) > new Date());
   const ordered = [...messages].reverse();
-  return <section className="connections-page">
-    <header><div><span className="eyebrow">KẾT NỐI</span><h2>Bạn bè và tin nhắn</h2><p>Kết nối riêng tư bằng lời mời; gửi học liệu và trao đổi 1–1.</p></div><button type="button" className="secondary-button" onClick={() => void run(async () => undefined)}><RefreshCw size={15}/>Làm mới</button></header>
+  return <section className={`connections-page${onChat ? " connections-contacts" : ""}`}>
+    {!compact && <header><div><span className="eyebrow">KẾT NỐI</span><h2>Bạn bè và tin nhắn</h2><p>Kết nối riêng tư bằng lời mời; gửi học liệu và trao đổi 1–1.</p></div><button type="button" className="secondary-button" onClick={() => void run(async () => undefined)}><RefreshCw size={15}/>Làm mới</button></header>}
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p role="status" className="form-success">{notice}</p>}
     <div className="connections-layout" data-thread-open={!!peer}>
       <aside className="connections-sidebar" ref={listPane} aria-label="Danh sách hội thoại">
-        <details className="connections-invite" open={!!link || undefined}><summary><UserPlus size={18}/>Mời kết nối</summary><p>Nhập email để lời mời hiện trong tài khoản người nhận, hoặc để trống để tạo liên kết dùng một lần.</p><form onSubmit={event => void invite(event)}><label>Email người nhận (tùy chọn)<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="banhoc@example.com"/></label><button className="primary-button" disabled={busy}>Tạo liên kết</button></form>{link && <div className="connections-link"><input ref={linkInput} aria-label="Liên kết kết nối" value={link} readOnly/><button type="button" className="secondary-button" onClick={() => void copyTextWithFallback(link,linkInput.current).then(ok => { if (!ok) setError("Hãy sao chép liên kết thủ công."); })}><Copy size={15}/>Sao chép</button></div>}<form onSubmit={event => void acceptCode(event)}><label>Nhận lời mời bằng mã hoặc liên kết<input value={token} onChange={event => setToken(event.target.value)} placeholder="Dán mã hoặc liên kết"/></label><button className="secondary-button" disabled={busy || !token.trim()}>Kết nối</button></form></details>
+        {!compact && <details className="connections-invite" open={!!link || undefined}><summary><UserPlus size={18}/>Mời kết nối</summary><p>Nhập email để lời mời hiện trong tài khoản người nhận, hoặc để trống để tạo liên kết dùng một lần.</p><form onSubmit={event => void invite(event)}><label>Email người nhận (tùy chọn)<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="banhoc@example.com"/></label><button className="primary-button" disabled={busy}>Tạo liên kết</button></form>{link && <div className="connections-link"><input ref={linkInput} aria-label="Liên kết kết nối" value={link} readOnly/><button type="button" className="secondary-button" onClick={() => void copyTextWithFallback(link,linkInput.current).then(ok => { if (!ok) setError("Hãy sao chép liên kết thủ công."); })}><Copy size={15}/>Sao chép</button></div>}<form onSubmit={event => void acceptCode(event)}><label>Nhận lời mời bằng mã hoặc liên kết<input value={token} onChange={event => setToken(event.target.value)} placeholder="Dán mã hoặc liên kết"/></label><button className="secondary-button" disabled={busy || !token.trim()}>Kết nối</button></form></details>}
         {pending.length > 0 && <section className="connections-pending"><h3>Lời mời đang chờ</h3>{pending.map(item => <article key={item.id}><span>{item.outgoing ? `Đã mời ${item.recipient_email ?? "qua liên kết"}` : `${item.sender_name} muốn kết nối`}</span><small>Hết hạn {new Date(item.expires_at).toLocaleDateString("vi-VN")}</small><div>{item.outgoing ? <button type="button" disabled={busy} onClick={() => void run(() => cancelConnectionInvitation(item.id))}><X size={14}/>Hủy</button> : <><button type="button" disabled={busy} onClick={() => void run(() => respondConnectionInvitation(item.token_hash, "accepted", true))}><Check size={14}/>Chấp nhận</button><button type="button" disabled={busy} onClick={() => void run(() => respondConnectionInvitation(item.token_hash, "declined", true))}>Từ chối</button></>}</div></article>)}</section>}
         <section className="connections-people">
           <h3><Users size={18}/>Hội thoại <small>{connections.length}</small></h3>
@@ -233,7 +266,7 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
         </section>
         {blocked.length > 0 && <section className="connections-pending"><h3>Đã chặn</h3>{blocked.map(person => <article key={person.peer_id}><span>{person.display_name}</span><button type="button" disabled={busy} onClick={() => void run(() => unblockConnection(person.peer_id))}>Bỏ chặn</button></article>)}</section>}
       </aside>
-      <section className="connections-conversation" aria-label="Cuộc trò chuyện">
+      {!onChat && <section className="connections-conversation" aria-label="Cuộc trò chuyện">
         {peer ? <>
           <header>
             <button type="button" className="icon-button connections-thread-back" onClick={returnToList} aria-label="Quay lại danh sách hội thoại" title="Quay lại danh sách hội thoại"><ArrowLeft size={20}/></button>
@@ -263,9 +296,9 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId }: 
               {!messages.length && <p className="connections-empty" role="status">{loadingThread ? "Đang tải tin nhắn…" : "Hãy gửi tin nhắn đầu tiên hoặc chia sẻ học liệu từ thư viện."}</p>}
             </div>
           </div>
-          <form className="connections-composer" onSubmit={event => void send(event)}><label className="sr-only" htmlFor="connection-message">Tin nhắn</label><textarea id="connection-message" rows={2} maxLength={4000} value={body} onChange={event => { const draft = event.target.value; setDrafts(current => ({ ...current, [peer.peer_id]: draft })); }} placeholder="Viết tin nhắn…"/><button className="primary-button" disabled={busy || loadingThread || loadingOlder || !body.trim()}><Send size={17}/>Gửi</button></form>
+          <form className="connections-composer" onSubmit={event => void send(event)}><label className="sr-only" htmlFor={composerId}>Tin nhắn</label><textarea id={composerId} rows={2} maxLength={4000} value={body} onChange={event => { const draft = event.target.value; setDrafts(current => ({ ...current, [peer.peer_id]: draft })); }} placeholder="Viết tin nhắn…"/><button className="primary-button" disabled={busy || loadingThread || loadingOlder || !body.trim()}><Send size={17}/>Gửi</button></form>
         </> : <div className="connections-empty"><MessageCircle size={34}/><h3>Chọn một người kết nối</h3><p>Cuộc trò chuyện riêng của hai người sẽ hiện ở đây.</p></div>}
-      </section>
+      </section>}
     </div>
   </section>;
 }
@@ -279,11 +312,11 @@ function formatPreviewTime(at: string) {
 
 function MessageBubble({ message, mine, date, onOpenShared }: { message: DirectMessage; mine: boolean; date?: string; onOpenShared: () => void }) {
   const kind = message.resource_kind;
-  const Icon = kind ? resourceIcons[kind] : FileText;
+  const Icon = message.workspace_folder_card ? Folder : kind ? resourceIcons[kind] : FileText;
   const title = kind ? message.resource_title || resourceLabels[kind] : "";
   const token = kind === "document" ? message.workspace_file_token : null;
   const fileLink = token && /^[a-f0-9]{48}$/.test(token) ? workspaceShareUrl(token) : "";
-  const asset = <><Icon size={18}/><span><strong>{title}</strong><small>{token ? (fileLink ? "Mở tài liệu" : "Tài liệu không còn khả dụng") : mine ? "Học liệu đã gửi" : "Mở trong Được chia sẻ với tôi"}</small></span>{(!mine || fileLink) && <ArrowUpRight size={16}/>}</>;
+  const asset = <><Icon size={18}/><span><strong>{title}</strong><small>{token ? (fileLink ? message.workspace_folder_card ? "Mở thư mục" : "Mở tài liệu" : "Nội dung không còn khả dụng") : mine ? "Học liệu đã gửi" : "Mở trong Được chia sẻ với tôi"}</small></span>{(!mine || fileLink) && <ArrowUpRight size={16}/>}</>;
   return <>
     {date && <div className="connections-date">{date}</div>}
     <article className={mine ? "mine" : "theirs"}>

@@ -51,3 +51,26 @@ it("returns OAuth to the same scoped link without putting its token in the query
   expect(workspaceShareToken()).toBe(token);
   expect(workspaceShareTarget()).toEqual({kind:"file",id:resource});
 });
+
+it("opens nested study folders and runs a Lab from the scoped share link", async () => {
+  const child = "66000000-0000-4000-8000-000000000002";
+  const lab = "66000000-0000-4000-8000-000000000003";
+  stubs.open.mockResolvedValueOnce({ state: "ok", kind: "learning_folder", id: resource, title: "Study", role: "viewer",
+    data: [{ kind: "learning_folder", id: child, title: "Practice" }] });
+  stubs.open.mockResolvedValueOnce({ state: "ok", kind: "learning_folder", id: child, title: "Practice", role: "viewer",
+    data: [{ kind: "lab", id: lab, title: "Vector Lab" }] });
+  stubs.open.mockResolvedValueOnce({ state: "ok", kind: "lab", id: lab, title: "Vector Lab", role: "viewer",
+    data: { html: "<!doctype html><html><body><p>Vector example</p></body></html>", allowExternalResources: true, viewerConfig: {} } });
+  await act(async () => root.render(<LanguageProvider><WorkspaceSharedPage token={token} signedIn={false} onSignIn={vi.fn()}/></LanguageProvider>));
+  await act(async () => button("Practice").click());
+  await act(async () => {
+    await import("./LabViewer");
+    button("Vector Lab").click();
+  });
+  expect(workspaceShareTarget()).toEqual({ kind: "lab", id: lab });
+  expect(host.querySelector("iframe")).toBeNull();
+  await vi.waitFor(() => expect(button("Cho phép tải thư viện và chạy")).toBeTruthy());
+  await act(async () => button("Cho phép tải thư viện và chạy").click());
+  expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
+  expect(host.querySelector("iframe")?.getAttribute("srcdoc")).toContain("Vector example");
+});

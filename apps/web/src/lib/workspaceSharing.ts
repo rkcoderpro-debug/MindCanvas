@@ -2,7 +2,7 @@ import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession } from "./supabase";
 import { readShareProof, storeShareProof } from "./workspaceShareLinks";
 
-export type ShareKind = "folder"|"canvas"|"file"|"quiz"|"flashcard";
+export type ShareKind = "folder"|"canvas"|"file"|"quiz"|"flashcard"|"learning_folder"|"lab";
 export type ShareRole = "viewer"|"editor";
 export type ShareItem = {kind:ShareKind;id:string;title:string;embed?:string};
 export type ShareGrant = {email:string;role:ShareRole;token:string};
@@ -13,6 +13,8 @@ export type ShareView = {state:"verify"} | {state:"sign-in";audience?:"friend"} 
   state:"ok";id:string;title:string;role:ShareRole|"owner";signInToEdit?:boolean;
 } & (
   | {kind:"folder";data:ShareItem[]}
+  | {kind:"learning_folder";data:ShareItem[]}
+  | {kind:"lab";data:{html:string;allowExternalResources:boolean;viewerConfig:unknown}}
   | {kind:"canvas";data:{board:unknown;revision:string;version:number;files:ShareItem[]}}
   | {kind:"file";data:{size:number;revision:string}}
   | {kind:"quiz";data:{questions:SharedQuestion[];description:string;revision:string}}

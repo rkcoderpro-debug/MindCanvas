@@ -1,3 +1,4 @@
+import FolderTreePicker from "./FolderTreePicker";
 import type { AccountPlan } from "../lib/account";
 import { WorkspaceShareButton } from "./WorkspaceShareDialog";
 import { ensureFolderAttachments } from "../lib/shareAttachments";
@@ -142,7 +143,7 @@ export default function WorkspaceFolderArea({ owner,accountPlan,current,folders,
         <button type="button" className="secondary-button" onClick={onNewProject}><FilePlus2 size={17}/>{t("newProject")}</button>
         <button type="button" className="secondary-button" onClick={onImportProject}><Upload size={17}/>{t("import")}</button>
         <button type="button" className="secondary-button" onClick={() => void copy()}><Link2 size={17}/>{label("Sao chép link thư mục", "Copy folder link")}</button>
-        {current && <WorkspaceShareButton item={{kind:"folder",id:current.id,title:current.name}} available={!!owner}
+        {current && <WorkspaceShareButton item={{kind:"folder",id:current.id,title:current.name}} friends={{plan:accountPlan}} available={!!owner}
           prepare={owner ? ()=>ensureFolderAttachments(owner,current.id) : undefined}/>}
         <button type="button" className="secondary-button manager-documents" onClick={onLibrary}><LibraryBig size={17}/>{label("Thư viện tài liệu", "Document library")}</button>
       </div>
@@ -173,8 +174,8 @@ export default function WorkspaceFolderArea({ owner,accountPlan,current,folders,
     {projectList}
     {action && <Dialog title={action.kind === "move" ? label("Chuyển tài liệu", "Move file") : label("Xóa tài liệu?", "Delete file?")} dismissible={!working} onClose={() => setAction(null)}>
       <p className="workspace-file-status">{action.file.name}</p>
-      {action.kind === "move" && <label>{t("folders")}<select value={destination} onChange={event => setDestination(event.target.value)}><option value="">{label("Ngoài thư mục", "No folder")}</option>
-        {folders.map(folder => <option key={folder.id} value={folder.id}>{folderTrail(folders,folder.id).map(item => item.name).join(" › ")}</option>)}</select></label>}
+      {action.kind === "move" && <FolderTreePicker folders={folders} selected={destination || null}
+        onSelect={id => setDestination(id ?? "")} label={t("folders")} disabled={working}/>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <footer className="actions">
         <button className="secondary-button" disabled={working} onClick={() => setAction(null)}>{t("cancel")}</button>

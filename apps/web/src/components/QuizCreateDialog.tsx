@@ -37,7 +37,7 @@ function readPromptLimit(raw: string, max: number) {
 }
 
 export default function QuizCreateDialog({ owner, store, accountPlan, open = true, onClose, onCreated }: {
-  owner: string | null; store: QuizStore; accountPlan?: AccountPlan; open?: boolean; onClose: () => void; onCreated?: () => void;
+  owner: string | null; store: QuizStore; accountPlan?: AccountPlan; open?: boolean; onClose: () => void; onCreated?: (id: string) => void;
 }) {
   const { t, language } = useLanguage();
   const dialogId = useId();
@@ -180,9 +180,11 @@ export default function QuizCreateDialog({ owner, store, accountPlan, open = tru
     task.current = "save";
     setBusy(true); setSaveError("");
     try {
-      if (mode === "auto") await store.createQuiz({ ...savable, sourceDocumentId: autoDraft?.sourceDocumentId });
-      else await store.createStudioQuiz(savable, mode, saveIds.current[mode] ??= crypto.randomUUID());
-      (onCreated ?? onClose)();
+      const created = mode === "auto"
+        ? await store.createQuiz({ ...savable, sourceDocumentId: autoDraft?.sourceDocumentId })
+        : await store.createStudioQuiz(savable, mode, saveIds.current[mode] ??= crypto.randomUUID());
+      if (onCreated) onCreated(created?.id);
+      else onClose();
     } catch (err) {
       if (err instanceof QuizQuestionLimitError) {
         setCloudLimit(err.limit);

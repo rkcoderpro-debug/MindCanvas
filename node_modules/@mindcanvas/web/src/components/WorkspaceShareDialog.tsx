@@ -1,3 +1,4 @@
+import type { StudyArea } from "../hooks/useStudyFolders";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Clipboard, Link2, Mail, Share2, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
@@ -11,19 +12,20 @@ import "./workspaceSharing.css";
 
 type ShareSettingsProps = {
   item: ShareItem; available?: boolean; prepare?: () => Promise<void>;
-  friends?: { plan?: AccountPlan };
+  friends?: { plan?: AccountPlan; area?: StudyArea };
+  note?: string;
 };
 
-export function WorkspaceShareButton({item,available=true,prepare,compact=false,friends}: ShareSettingsProps & {compact?:boolean}){
+export function WorkspaceShareButton({item,available=true,prepare,compact=false,friends,note}: ShareSettingsProps & {compact?:boolean}){
   const {language}=useLanguage();
   const [open,setOpen]=useState(false);
   const label=language==="vi"?"Chia sẻ":"Share";
   return <><button type="button" aria-label={`${label}: ${item.title}`} title={label} className={compact?"icon-button":"secondary-button"} onClick={()=>setOpen(true)}><Share2 size={17}/>{compact?null:label}</button>
     {open && <Dialog workspace className="workspace-share-dialog" title={`${label}: ${item.title}`} onClose={()=>setOpen(false)}>
-      <WorkspaceShareSettings item={item} available={available} prepare={prepare} friends={friends}/>
+      <WorkspaceShareSettings item={item} available={available} prepare={prepare} friends={friends} note={note}/>
     </Dialog>}</>;
 }
-export function WorkspaceShareSettings({item,available=true,prepare,friends}: ShareSettingsProps){
+export function WorkspaceShareSettings({item,available=true,prepare,friends,note}: ShareSettingsProps){
   const {language,t}=useLanguage(),vi=language==="vi";
   const tr=(v:string,e:string)=>vi?v:e;
   const [rows,setRows]=useState<ShareGrant[]>([]),[ready,setReady]=useState(false),[busy,setBusy]=useState(false);
@@ -73,34 +75,37 @@ export function WorkspaceShareSettings({item,available=true,prepare,friends}: Sh
     setCopied(done?value:"");
     if(!done)setNotice(tr("Có thể chọn và sao chép đường dẫn trong ô liên kết.","Select and copy the URL in the link field."));
   };
-  if(!available)return <p>{tr("Đăng nhập và đồng bộ nội dung lên đám mây trước khi chia sẻ.","Sign in and sync this item to the cloud before sharing.")}</p>;
+  if(!available)return <p>{note ?? tr("Đăng nhập và đồng bộ nội dung lên đám mây trước khi chia sẻ.","Sign in and sync this item to the cloud before sharing.")}</p>;
+  const learningFolder = item.kind === "learning_folder";
   const link=byLink?workspaceShareUrl(byLink.token):"";
   const invited=rows.find(row=>row.email && row.email===invitedEmail);
   const privateLink=invited?workspaceShareUrl(invited.token):"";
   return <div className="workspace-share-settings">
-    {friends && (item.kind==="quiz" || item.kind==="flashcard" || item.kind==="file") && <FriendShareSettings key={item.kind+item.id} kind={item.kind} id={item.id} plan={friends.plan}/>}
+    {note && <p role="status">{note}</p>}
+    {friends && (!prepare || ready) && item.kind !== "canvas" && item.kind !== "lab" && <FriendShareSettings key={item.kind+item.id} kind={item.kind} id={item.id} plan={friends.plan} area={friends.area}/>}
     <div className="workspace-share-block">
       <h2><Link2 size={18}/>{tr("Quyền truy cập qua link","Link access")}</h2>
       <label>{tr("Ai có thể mở link?","Who can open the link?")}<select value={byLink?.role??"private"} disabled={!ready||busy} onChange={event=>void setChannel(event.target.value)}>
         <option value="private">{tr("Chỉ người được mời","Only invited people")}</option>
         <option value="viewer">{tr("Ai có link · Người xem","Anyone with the link · Viewer")}</option>
-        <option value="editor">{tr("Ai có link · Người chỉnh sửa","Anyone with the link · Editor")}</option>
+        {!learningFolder && <option value="editor">{tr("Ai có link · Người chỉnh sửa","Anyone with the link · Editor")}</option>}
       </select></label>
-      <small>{tr("Có thể xem mà không cần tài khoản. Muốn sửa phải đăng nhập.","Viewing does not require an account. Editing requires sign-in.")}</small>
-      {item.kind==="folder"&&<small>{tr("Quyền của thư mục áp dụng cho nội dung bên trong nó.","Folder access includes the items inside it.")}</small>}
+      <small>{learningFolder ? tr("Có thể xem bằng link mà không cần tài khoản.", "Anyone with the link can view without an account.")
+        : tr("Có thể xem mà không cần tài khoản. Muốn sửa phải đăng nhập.","Viewing does not require an account. Editing requires sign-in.")}</small>
+      {(item.kind==="folder" || learningFolder)&&<small>{tr("Quyền của thư mục áp dụng cho nội dung bên trong nó.","Folder access includes the items inside it.")}</small>}
       {link && <div className="workspace-share-link-field">
         <input aria-label={tr("Link chia sẻ chung","General sharing link")} ref={linkInput} readOnly value={link} onFocus={event=>event.target.select()}/>
         <button className="secondary-button" type="button" disabled={busy} onClick={()=>void copy(link,linkInput.current)}><Clipboard size={15}/>{copied===link?t("shareCopied"):t("copyLink")}</button>
       </div>}
     </div>
-    <form className="workspace-share-block" onSubmit={invite}>
+    {!learningFolder && <form className="workspace-share-block" onSubmit={invite}>
       <h2><Mail size={18}/>{tr("Mời qua email","Invite by email")}</h2>
       <label>Email<input type="email" required maxLength={254} value={email} onChange={event=>setEmail(event.target.value)} placeholder="email@example.com"/></label>
       <label>{t("sharePermission")}<select value={inviteRole} onChange={event=>setInviteRole(event.target.value as ShareRole)}>
         <option value="viewer">{roleText("viewer")}</option><option value="editor">{roleText("editor")}</option>
       </select></label>
       <button className="primary-button" disabled={!ready||busy}>{t("sendInvite")}</button>
-    </form>
+    </form>}
     {rows.some(row=>row.email) && <section className="workspace-share-block"><h2>{tr("Email đã được cấp quyền","Invited emails")}</h2>
       <ul className="workspace-share-grants">{rows.filter(row=>row.email).map(row=><li key={row.email}>
         <strong>{row.email}</strong>

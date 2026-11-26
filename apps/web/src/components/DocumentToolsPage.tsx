@@ -1,3 +1,4 @@
+import FolderTreePicker from "./FolderTreePicker";
 import { PageBack } from "./PageNavigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Download, FileSpreadsheet, FileText, FileType2, FolderOpen, LibraryBig, Search, Share2, Trash2, Upload } from "lucide-react";
@@ -354,11 +355,8 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     </>}
     {copyTarget !== null && selected && <Dialog title={label("Lưu bản sao vào thư mục", "Save a copy to folder")} dismissible={!copying} onClose={() => setCopyTarget(null)}>
       <p>{selected.name}</p>
-      <label>{label("Thư mục đích", "Destination folder")}<select value={copyTarget} disabled={copying} onChange={event => setCopyTarget(event.currentTarget.value)}>
-        <option value="" disabled>{label("Chọn thư mục", "Choose a folder")}</option>
-        <option value={FOLDER_ROOT}>{label("Workspace · Ngoài thư mục", "Workspace · No folder")}</option>
-        {folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}
-      </select></label>
+      <FolderTreePicker folders={folders} selected={copyTarget === FOLDER_ROOT ? null : copyTarget || undefined}
+        onSelect={id => setCopyTarget(id ?? FOLDER_ROOT)} label={label("Thư mục đích", "Destination folder")} disabled={copying}/>
       {copyError && <p className="form-error" role="alert">{label("Không thể lưu bản sao. Hãy thử lại.", "Could not save the copy. Try again.")}</p>}
       <footer className="actions"><button type="button" className="secondary-button" disabled={copying} onClick={() => setCopyTarget(null)}>{t("cancel")}</button><button type="button" className="primary-button" disabled={copying || !copyTarget} onClick={() => void copyToFolder()}>{copying ? t("loading") : t("save")}</button></footer>
     </Dialog>}

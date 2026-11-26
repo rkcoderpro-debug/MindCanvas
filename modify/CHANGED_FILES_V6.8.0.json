@@ -1,0 +1,183 @@
+{
+  "version": "6.8.0",
+  "baseVersion": "6.7.2",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "rootFilesDirectory": "modify",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.0.md",
+      "bytes": 1432,
+      "sha256": "af415790ae00ee12c0c75cf09740bd22586e31574134d1d3c23b87f72c1fbde2"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "f1940cd5ad7bddeb5c930607576e1312a09abbf003026df11222785e69514d2c"
+    },
+    {
+      "path": "apps/server/src/workspaceSharing.ts",
+      "bytes": 16259,
+      "sha256": "1194164d69160e3c1d62946ed9da3d58be47976bd16c065c5a2b71a3de6fa5ce"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "bc7301a20339648b7ba9fe56ee88ae696c341abd49afb3334ec9d0d5ebbc93e3"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 71659,
+      "sha256": "07546b24fc22aa8ce752c9435028c747c457af07b1a4d68d4c20a42ceb8776e1"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 3549,
+      "sha256": "e78b723311bd359abbd1d44bd76ab432f9019281be29af3cc9181967930fbaa0"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 7454,
+      "sha256": "b2d0a3fa9531abc9db967e3fdde5cf8f1578acc52f6e4954ed19152a0fd72623"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 24994,
+      "sha256": "4d8eec9c70b5ea70311e1fa9b59b578c966b1fc65816e47e9877ae6b5b5cf0ae"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 24911,
+      "sha256": "98744348886d02f92415e2b205b297015d1ec18f785ceb1f4343acf908866967"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 63427,
+      "sha256": "e5413cdd50d76004d3b4138c3491578da9ae7ff43fbc92d8e7cc20258b805e65"
+    },
+    {
+      "path": "apps/web/src/components/FolderTreePicker.test.tsx",
+      "bytes": 2061,
+      "sha256": "432180e0ca8d2a2ab41273709bc309db29bbb6bd7a8c002b3c4fb551b5b81f96"
+    },
+    {
+      "path": "apps/web/src/components/FolderTreePicker.tsx",
+      "bytes": 5017,
+      "sha256": "3c314082f977faf3be16e050d62ac7210d10e0bd81c26c29279699fc96536d5b"
+    },
+    {
+      "path": "apps/web/src/components/FriendShareSettings.tsx",
+      "bytes": 10750,
+      "sha256": "d9243a8c6a9fedebec51bd90e8277181c11b35e6d46d4e59b6a92bd29bb4eef6"
+    },
+    {
+      "path": "apps/web/src/components/LabPage.tsx",
+      "bytes": 22514,
+      "sha256": "25e559f6ebf118352be69c3b14570bb6867165fe0b1ec619b45264e2764b5f7d"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32181,
+      "sha256": "73ab4bd45d63ac388691120aa962f61f00102f14498d3b844ad62343bd0c3848"
+    },
+    {
+      "path": "apps/web/src/components/QuizCreateDialog.tsx",
+      "bytes": 18175,
+      "sha256": "638fdcde5b67fe7010f09b3741e30185278b398261abecddb7907d019686ad97"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 17929,
+      "sha256": "5bc2a05a23c7028b252d512cfe15905777f708cc90047ce609e78e566dcbe92b"
+    },
+    {
+      "path": "apps/web/src/components/StudyFolders.tsx",
+      "bytes": 7287,
+      "sha256": "651beeafc00ce249039447d7f62a96d2636835948f54175a45450593baa394de"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 13643,
+      "sha256": "a7be8be73fe065a310e4a553aa9ab9efb036b32fe73ad294329c7a01c9732a46"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceShareDialog.tsx",
+      "bytes": 9755,
+      "sha256": "0410c6aa276615aa0043bc39a172049f6096fce770b4e80329d709ef2cf2160e"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.test.tsx",
+      "bytes": 5199,
+      "sha256": "02ef4c0df658e0d5c24316e786f78d736c4bf84190d6b5f5c0dd5d12eafa72cb"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 21172,
+      "sha256": "d512841c60cc746421c2eb2e4f1321af8f1f8c3596d8d7f11c77087dad4e56b5"
+    },
+    {
+      "path": "apps/web/src/components/chatBubble.css",
+      "bytes": 3482,
+      "sha256": "eb6e6aeae9a5b3e8cae47ab2734ef004d6f2edfe4c3942e7acd5e078f89aee15"
+    },
+    {
+      "path": "apps/web/src/components/folderTreePicker.css",
+      "bytes": 1591,
+      "sha256": "5e1d816c85ee56bbc24501ea2e80b39e9302b3d060280664d5574c09ab945c9a"
+    },
+    {
+      "path": "apps/web/src/components/studyFolders.css",
+      "bytes": 1506,
+      "sha256": "530648308b6567a1fe29d58f6a86686a78e0c765e1577a6fbca2579a89bfe341"
+    },
+    {
+      "path": "apps/web/src/hooks/useStudyFolders.ts",
+      "bytes": 7031,
+      "sha256": "f3b12c98f9f55ad856147024a4801286ba663d2897ea17dcf2e32617f1b85e0b"
+    },
+    {
+      "path": "apps/web/src/lib/connections.ts",
+      "bytes": 6642,
+      "sha256": "23108c868e2e8622d305f3376d15c4eaebf40a92e946e080046168ce8be794b9"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceFileFriends.ts",
+      "bytes": 1253,
+      "sha256": "96e666d355108605de4e627a98d5804e41327830e5b27128d67e1870b5989778"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceShareLinks.ts",
+      "bytes": 2401,
+      "sha256": "500a90d8d2879b8773a5c2a5413ef7e89427f158289c9496375f77e873fcec98"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceSharing.ts",
+      "bytes": 7753,
+      "sha256": "e08e917191e6aa710de162cbff7429f35b35d42cf7464c4aa41270a655b91257"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "ce05d8a08896293baf0ce3c75e22fa5fa1596bdb2f93b13841162084b19915ab"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "bb9b6192851bbcb605ce409717c131ee66d26e20f9da98493cc2b224965de8a3"
+    },
+    {
+      "path": "supabase/migrations/0047_study_folders.sql",
+      "bytes": 25363,
+      "sha256": "ccf27fefb78a9dc33056cea5fa03faa42f1a45b897468af1443f0c3df16c8e49"
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 22845,
+      "sha256": "3bf3b848101ccc9174048d936dccf6bfddecabc2f02e4afe3104c1602a1aa76d"
+    },
+    {
+      "path": "supabase/tests/workspace-sharing.pglite.mjs",
+      "bytes": 20373,
+      "sha256": "1ee944c03e0a752807eb0c828b8670edb138b4995fcae38172f4e6ac98f823ae"
+    }
+  ]
+}

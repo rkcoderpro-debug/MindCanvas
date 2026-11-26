@@ -18,6 +18,7 @@ vi.mock("../lib/connections", () => ({
   removeConnection: vi.fn(), blockConnection: vi.fn(), unblockConnection: vi.fn(), reportConnection: vi.fn(),
 }));
 import ConnectionsPage from "./ConnectionsPage";
+import ChatBubble from "./ChatBubble";
 import { listDirectMessages, markDirectMessagesRead, type DirectMessage } from "../lib/connections";
 let root: Root;
 let host: HTMLDivElement;
@@ -76,4 +77,32 @@ it("opens a received Workspace file directly from the chat card", async () => {
   expect(link.target).toBe("_blank");
   expect(host.querySelector(".connections-messages")?.textContent).not.toContain(token);
   expect(onOpenShared).not.toHaveBeenCalled();
+});
+
+it("opens a folder card in the compact chat and keeps the conversation minimized", async () => {
+  const token = "cd".repeat(24);
+  vi.mocked(listDirectMessages).mockResolvedValue([{
+    id: "folder-card", sender_id: "peer-1", recipient_id: "me", body: "",
+    resource_kind: "document", resource_id: "folder-1", resource_title: "DSA",
+    workspace_file_token: token, workspace_folder_card: true, created_at: "2026-10-08T00:00:00Z",
+  }]);
+  await act(async () => root.render(<ChatBubble owner="me" request={null} onOpenShared={onOpenShared}/>));
+  const launcher = host.querySelector<HTMLButtonElement>(".chat-bubble-toggle")!;
+  expect(launcher.textContent).toBe("1");
+  expect(markDirectMessagesRead).not.toHaveBeenCalled();
+  await act(async () => launcher.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".connections-person")!.click());
+  const link = host.querySelector<HTMLAnchorElement>("a.connections-resource")!;
+  expect(link.textContent).toContain("Mở thư mục");
+  expect(link.hash).toBe(`#share=${token}`);
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-panel > header button")!.click());
+  expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(true);
+  await act(async () => launcher.click());
+  expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn học");
+});
+
+it("opens the matching conversation when a message notification arrives", async () => {
+  await act(async () => root.render(<ChatBubble owner="me" request={{ peerId: "peer-2", version: 1 }} onOpenShared={onOpenShared}/>));
+  expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(false);
+  expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn thứ hai");
 });

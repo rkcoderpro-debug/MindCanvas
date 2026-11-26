@@ -9,7 +9,7 @@ import { config } from "./config.js";
 const maxFile = 40*1024*1024, maxBoard = 32*1024*1024;
 const tokenSchema = z.string().regex(/^[a-f0-9]{48}$/);
 const id = z.string().uuid();
-const kind = z.enum(["file","folder","canvas","quiz","flashcard"]);
+const kind = z.enum(["file","folder","canvas","quiz","flashcard","learning_folder","lab"]);
 const role = z.enum(["viewer","editor"]);
 const email = z.string().trim().toLowerCase().email().max(254);
 const otp = z.string().regex(/^[0-9]{6}$/);

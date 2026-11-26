@@ -1,0 +1,13 @@
+.folder-tree-picker { position: relative; display: grid; gap: .35rem; min-width: 0; }
+.folder-tree-trigger { display: flex; align-items: center; justify-content: space-between; gap: .65rem; border: 1px solid var(--line); border-radius: .7rem; padding: .65rem .8rem; background: var(--surface-raised); color: inherit; text-align: left; min-width: 0; }
+.folder-tree-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-tree-trigger svg, .folder-tree-choice svg { flex-shrink: 0; }
+.folder-tree-options { max-height: min(19rem, 38dvh); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface-raised); padding: .3rem; }
+.folder-tree-options ul { list-style: none; padding: 0; margin: 0; }
+.folder-tree-options li > ul { margin-inline-start: .85rem; padding-inline-start: .35rem; border-inline-start: 1px solid var(--line); }
+.folder-tree-row { display: flex; align-items: center; gap: .2rem; }
+.folder-tree-choice { width: 100%; min-width: 0; text-align: left; display: flex; align-items: center; gap: .5rem; padding: .46rem .55rem; min-height: 2.2rem; border: 0; border-radius: .4rem; background: transparent; color: inherit; }
+.folder-tree-choice span { flex: 1; overflow-wrap: anywhere; }
+.folder-tree-choice:hover, .folder-tree-choice[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.folder-tree-expand, .folder-tree-spacer { flex: 0 0 2rem; width: 2rem; }
+.folder-tree-root { padding-inline-start: .8rem; font-weight: 600; }

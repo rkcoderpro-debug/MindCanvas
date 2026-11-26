@@ -1,3 +1,5 @@
+import { useStudyFolders } from "../hooks/useStudyFolders";
+import { StudyFolderControls, StudyFolderMoveButton } from "./StudyFolders";
 import { ActivityViewport, BackButton, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
 import { useLearningActive, useLearningTool } from "../lib/learningNavigation";
 import { useEffect, useRef, useState } from "react";
@@ -37,6 +39,8 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const [deleting, setDeleting] = useState<LabProject | null>(null), [query, setQuery] = useState(""), [filter, setFilter] = useState<"all" | LabMode>("all");
   const [subject, setSubject] = useState("all"), [sort, setSort] = useState("updated"), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [published, setPublished] = useState<string[]>([]), [sources, setSources] = useState<Record<string, string>>({});
+  const studyFolders = useStudyFolders(owner, "lab", published);
+  const folderItems = labs.filter(lab => !lab.systemDemo).map(lab => ({ id: lab.id, title: lab.title, cloud: published.includes(lab.id) }));
   const shelf = useRef<HTMLElement>(null);
   const [page, setPage] = useState(0), [pageSize, setPageSize] = useState(3);
   useEffect(() => {
@@ -59,7 +63,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const cloudAllowed = !!owner && canShare("lab", accountPlan?.effectivePlanId);
   const active = labs.find(lab => lab.id === activeId);
   const activityFocus = useActivityFocus(learningActive && !!active);
-  const visible = labs.filter(lab => (subject === "all" || lab.subject === subject) && (filter === "all" || (lab.mode ?? "freeform") === filter) && (!query.trim() || `${lab.title} ${labModeInfo(lab.mode ?? "freeform", language).label}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
+  const visible = labs.filter(lab => studyFolders.itemFolder(lab.id) === studyFolders.folderId && (subject === "all" || lab.subject === subject) && (filter === "all" || (lab.mode ?? "freeform") === filter) && (!query.trim() || `${lab.title} ${labModeInfo(lab.mode ?? "freeform", language).label}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
     .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, language) : b.updatedAt.localeCompare(a.updatedAt));
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize)), currentPage = Math.min(page, pageCount - 1);
   const pageLabs = visible.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
@@ -98,6 +102,10 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     setLabs(await readStoredLabs(account)); setPublished(ids => ids.filter(id => id !== saved.id));
     setNotice(vi ? "Đã lưu Lab trên thiết bị." : "Lab saved on this device."); setError("");
     if (activeId === draft.id) setActiveId(saved.id);
+    if (!editor?.initial && studyFolders.folderId) {
+      await studyFolders.moveItem(saved.id, studyFolders.folderId, false).catch(() =>
+        setError(vi ? "Lab đã lưu ngoài thư mục. Bạn có thể chuyển Lab sau." : "Lab saved at the root. You can move it to a folder."));
+    }
     if (cloudAllowed && account && !draft.systemDemo) {
       void publishLab(saved, account).then(async () => { const current = (await readStoredLabs(account)).find(lab => lab.id === saved.id); if (ownerRef.current === account && current?.updatedAt === saved.updatedAt) { setPublished(ids => [...new Set([...ids, saved.id])]); setNotice(vi ? "Đã lưu Lab và đồng bộ cloud." : "Lab saved and synced to cloud."); } })
         .catch(e => { if (ownerRef.current === account) setNotice(`${vi ? "Đã lưu trên thiết bị; cloud chưa đồng bộ." : "Saved on device; cloud pending."} ${e.message}`); });
@@ -161,6 +169,7 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
   const menu = (lab: LabProject) => <details className="lab-card-menu"><summary aria-label={`${vi ? "Tùy chọn" : "Options"}: ${lab.title}`}><MoreHorizontal size={21}/></summary><div className="lab-card-menu-items">
     <button type="button" onClick={() => setEditor({ initial: lab })}><Pencil size={16}/>{vi ? "Chỉnh sửa" : "Edit"}{lab.systemDemo ? (vi ? " bản sao" : " a copy") : ""}</button>
     {!lab.systemDemo && <LearningShareButton kind="lab" id={lab.id} title={lab.title} plan={accountPlan} available={published.includes(lab.id)}/>}
+    {!lab.systemDemo && <StudyFolderMoveButton store={studyFolders} item={lab} synced={published.includes(lab.id)} labeled/>}
     <button type="button" onClick={() => downloadHtml(lab)}><Download size={16}/>{vi ? "Tải HTML" : "Download HTML"}</button>
     {!lab.systemDemo && <button type="button" className="text-danger-button" disabled={busy} onClick={() => { setDeleting(lab); setError(""); }}><Trash2 size={16}/>{vi ? "Xóa Lab" : "Delete Lab"}</button>}
   </div></details>;
@@ -174,7 +183,8 @@ export default function LabPage({ owner, onOpenLearning, embedded = false, accou
     {error && <p className="form-error lab-library-message" role="alert">{error}</p>}{notice && <p className="lab-library-message" role="status">{notice}</p>}
     {!ready && !error && <p role="status">{vi ? "Đang tải thư viện Lab…" : "Loading Labs…"}</p>}
     {active ? <ActivityViewport as="main" ref={activityFocus} className="lab-detail activity-screen activity-lab"><PageNavigation quickActions back={<BackButton onClick={backToLabs}>{vi ? "Thư viện Lab" : "Lab library"}</BackButton>} title={active.title} context={labModeInfo(active.mode ?? "freeform", language).label} actions={menu(active)}/><LabViewer fitViewport key={active.id} html={active.programHtml} title={active.title} allowExternalResources={active.allowExternalResources} viewerConfig={active.viewerConfig} onThumbnail={!active.thumbnail && !active.systemDemo ? image => void cacheCover(active, image) : undefined}/></ActivityViewport>
-      : ready && <><div className="lab-library-filters"><label className="lab-library-search"><Search size={19}/><input aria-label={vi ? "Tìm Lab" : "Search Labs"} placeholder={vi ? "Tìm Lab…" : "Search Labs…"} value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label={vi ? "Lọc chế độ" : "Filter modes"} value={filter} onChange={e => setFilter(e.target.value as "all" | LabMode)}><option value="all">{vi ? "Tất cả chế độ" : "All modes"}</option>{LAB_MODES.map(mode => <option value={mode} key={mode}>{labModeInfo(mode, language).label}</option>)}</select><select aria-label={vi ? "Lọc môn" : "Filter subject"} value={subject} onChange={e => setSubject(e.target.value)}><option value="all">{vi ? "Tất cả môn" : "All subjects"}</option><option value="physics">{vi ? "Vật lý" : "Physics"}</option><option value="chemistry">{vi ? "Hóa học" : "Chemistry"}</option><option value="other">{vi ? "Khác" : "Other"}</option></select><select aria-label={vi ? "Sắp xếp Lab" : "Sort Labs"} value={sort} onChange={e => setSort(e.target.value)}><option value="updated">{vi ? "Cập nhật gần nhất" : "Recently updated"}</option><option value="title">{vi ? "Tên Lab" : "Name"}</option></select></div>
+      : ready && <><StudyFolderControls store={studyFolders} items={folderItems} area="lab" owner={owner} plan={accountPlan}/>
+      <div className="lab-library-filters"><label className="lab-library-search"><Search size={19}/><input aria-label={vi ? "Tìm Lab" : "Search Labs"} placeholder={vi ? "Tìm Lab…" : "Search Labs…"} value={query} onChange={e => setQuery(e.target.value)}/></label><select aria-label={vi ? "Lọc chế độ" : "Filter modes"} value={filter} onChange={e => setFilter(e.target.value as "all" | LabMode)}><option value="all">{vi ? "Tất cả chế độ" : "All modes"}</option>{LAB_MODES.map(mode => <option value={mode} key={mode}>{labModeInfo(mode, language).label}</option>)}</select><select aria-label={vi ? "Lọc môn" : "Filter subject"} value={subject} onChange={e => setSubject(e.target.value)}><option value="all">{vi ? "Tất cả môn" : "All subjects"}</option><option value="physics">{vi ? "Vật lý" : "Physics"}</option><option value="chemistry">{vi ? "Hóa học" : "Chemistry"}</option><option value="other">{vi ? "Khác" : "Other"}</option></select><select aria-label={vi ? "Sắp xếp Lab" : "Sort Labs"} value={sort} onChange={e => setSort(e.target.value)}><option value="updated">{vi ? "Cập nhật gần nhất" : "Recently updated"}</option><option value="title">{vi ? "Tên Lab" : "Name"}</option></select></div>
       <div className="lab-library-pagination"><span>{visible.length} {vi ? "Lab" : "Labs"}</span>
         {pageCount > 1 && <nav aria-label={vi ? "Trang thư viện Lab" : "Lab library pages"}><button type="button" className="secondary-button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{vi ? "Trang trước" : "Previous page"}</button><span aria-live="polite">{currentPage + 1} / {pageCount}</span><button type="button" className="secondary-button" disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>{vi ? "Trang sau" : "Next page"}</button></nav>}
       </div>

@@ -1,3 +1,5 @@
+import { useStudyFolders } from "../hooks/useStudyFolders";
+import { StudyFolderControls, StudyFolderMoveButton } from "./StudyFolders";
 import { WorkspaceShareButton } from "./WorkspaceShareDialog";
 import FilePicker from "./FilePicker";
 import { ActivityViewport, BackButton, PageBack, PageNavigation, useActivityFocus, useListScrollReturn } from "./PageNavigation";
@@ -83,6 +85,8 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
   const backToCards = () => { if (panel !== "review") return; listScroll.restore(); setPanel("cards"); navigation?.back(); };
   const localFlashcards = useFlashcards(owner);
   const flashcards = store ?? localFlashcards;
+  const folderItems = flashcards.decks.map(deck => ({ id: deck.id, title: deck.name, cloud: deck.source === "cloud" }));
+  const studyFolders = useStudyFolders(owner, "flashcard", folderItems.filter(item => item.cloud).map(item => item.id));
   const [panel, setPanel] = useState<"cards" | "review">("cards");
   const activityFocus = useActivityFocus(learningActive && panel === "review");
   const [studyPicker, setStudyPicker] = useState(false);
@@ -315,7 +319,11 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     try {
       if (deckDialog?.kind === "create") {
         const deck = await flashcards.createDeck(name, selectedProject?.id ?? null, selectedProject?.folderId ?? null);
-        if (deck) openDeck(deck.id);
+        if (deck) {
+          if (studyFolders.folderId) await studyFolders.moveItem(deck.id, studyFolders.folderId).catch(() =>
+            flashcards.setError(language === "vi" ? "Bộ thẻ đã lưu ngoài thư mục. Bạn có thể chuyển bộ thẻ sau." : "Deck saved at the root. You can move it to a folder."));
+          openDeck(deck.id);
+        }
       }
       else if (deckDialog?.deck) {
         await flashcards.renameDeck(deckDialog.deck, name);
@@ -430,7 +438,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
   const busyActions = flashcards.busy || aiBusy || flashcards.cardsLoading;
   const deckOpened = navigation ? showDeck || panel === "review" : !!flashcards.selectedDeck;
   const savedDeckCount = flashcards.decks.filter(deck => !!deck.savedFrom).length;
-  const visibleDecks = flashcards.decks.filter(deck => (deckFilter === "all" || !!deck.savedFrom) && deckSearchKey(deck.name).includes(deckSearchKey(deckQuery)));
+  const visibleDecks = flashcards.decks.filter(deck => studyFolders.itemFolder(deck.id) === studyFolders.folderId && (deckFilter === "all" || !!deck.savedFrom) && deckSearchKey(deck.name).includes(deckSearchKey(deckQuery)));
   const vi = language === "vi";
   const deckSearchLabel = vi ? "Tìm bộ thẻ" : "Search decks";
   return <section className={`flashcards-page ${navigation ? deckOpened ? "deck-opened" : "deck-list-view" : ""}`}>
@@ -442,6 +450,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
     {(flashcards.error || formError) && <div className="flashcards-error" role="alert"><span>{flashcards.error || formError}</span><button className="icon-button" aria-label={t("close")} onClick={() => { flashcards.setError(""); setFormError(""); }}><X size={16}/></button></div>}
     <div className="flashcards-layout">
       <aside className="flashcards-decks">
+        <StudyFolderControls store={studyFolders} items={folderItems} area="flashcard" owner={owner} plan={accountPlan}/>
         <div className="deck-library-tools">
           <div className="learning-copy-filter compact" role="group" aria-label={vi ? "Lọc bộ thẻ" : "Filter decks"}><button type="button" aria-pressed={deckFilter === "all"} onClick={() => setDeckFilter("all")}>{vi ? "Tất cả" : "All"} <small>{flashcards.decks.length}</small></button><button type="button" aria-pressed={deckFilter === "saved"} onClick={() => setDeckFilter("saved")}>{vi ? "Đã lưu" : "Saved"} <small>{savedDeckCount}</small></button></div>
           <label className="card-search"><Search size={16}/><input type="search" aria-label={deckSearchLabel} placeholder={`${deckSearchLabel}…`} value={deckQuery} onChange={event => setDeckQuery(event.target.value)}/></label>
@@ -454,6 +463,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
               {deck.savedFrom && <small className="deck-library-source">{vi ? "Đã lưu từ" : "Saved from"} {deck.savedFrom.ownerName}</small>}
               {totals ? <span className="deck-library-stats"><small>{t("cardCount", { count: totals.total })}</small><small className={totals.due > 0 ? "has-due" : ""}>{t("dueCount", { count: totals.due })}</small></span> : <small className="deck-library-source">{vi ? "— thẻ · — đến hạn" : "— cards · — due"}</small>}
             </button>
+            <StudyFolderMoveButton store={studyFolders} item={{ id: deck.id, title: deck.name }}/>
             <button type="button" className="icon-button deck-action" title={t("renameDeck")} aria-label={`${t("renameDeck")}: ${deck.name}`} onClick={() => openRenameDeck(deck)}><Pencil size={15}/></button>
           </article>;
         })}</div> : <div className="flashcards-empty-small"><BookOpen size={26}/><span>{!flashcards.decks.length ? t("noDecks") : deckFilter === "saved" && !savedDeckCount ? (vi ? "Chưa có bộ thẻ nào được lưu từ mục chia sẻ." : "No decks saved from sharing yet.") : t("noResults")}</span></div>}

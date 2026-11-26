@@ -9,7 +9,7 @@ export type Connection = {
 };
 export type ConnectionInvitation = { id: string; sender_id: string; sender_name: string; recipient_email: string | null; token_hash: string; status: string; expires_at: string; outgoing: boolean };
 export type BlockedConnection = { peer_id: string; display_name: string; blocked_at: string };
-export type DirectMessage = { id: string; sender_id: string; recipient_id: string; body: string; resource_kind: LearningKind | null; resource_id: string | null; resource_title: string | null; workspace_file_token?: string | null; created_at: string };
+export type DirectMessage = { id: string; sender_id: string; recipient_id: string; body: string; resource_kind: LearningKind | null; resource_id: string | null; resource_title: string | null; workspace_file_token?: string | null; workspace_folder_card?: boolean; created_at: string };
 
 function client() {
   if (!supabase) throw new Error("Cần cấu hình cloud để dùng kết nối.");
@@ -66,8 +66,10 @@ export async function listDirectMessages(peerId: string, before?: Pick<DirectMes
   const list = (fields: string) => client().from("direct_messages").select(fields)
     .or(`and(sender_id.eq.${ownId},recipient_id.eq.${peerId}${cursor}),and(sender_id.eq.${peerId},recipient_id.eq.${ownId}${cursor})`)
     .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50);
-  const result = await list(columns + ",workspace_file_token");
-  if (result.error?.code === "42703" || result.error?.code === "PGRST204") return checked(await list(columns)) as unknown as DirectMessage[];
+  const missingColumn = (code?: string) => code === "42703" || code === "PGRST204";
+  let result = await list(columns + ",workspace_file_token,workspace_folder_card");
+  if (missingColumn(result.error?.code)) result = await list(columns + ",workspace_file_token");
+  if (missingColumn(result.error?.code)) result = await list(columns);
   return checked(result) as unknown as DirectMessage[];
 }
 export async function sendDirectMessage(peerId: string, body: string, kind?: LearningKind, resourceId?: string) {

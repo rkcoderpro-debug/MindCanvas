@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { OpenChatContext } from "./ChatBubble";
 import { PageBack } from "./PageNavigation";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import { MusicPage } from "./MusicPlayer";
@@ -57,6 +59,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
   const navigation = useLearningNavigation(), tab = navigation.route.tab;
+  const openChat = useContext(OpenChatContext);
   const [openAiPlan, setOpenAiPlan] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
   const today = vietnamStudyDate();
@@ -107,7 +110,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
       case "tools": return <DocumentToolsPage owner={owner} documents={documents} onDocumentsChanged={onDocumentsChanged} accountPlan={accountPlan} workspace={libraryWorkspace}/>;
       case "music": return <MusicPage/>;
       case "rooms": return <Suspense fallback={<p role="status">{t("loading")}</p>}><OnlineRoomsPage key={owner ?? "guest"} owner={owner} onSignIn={onSignIn}/></Suspense>;
-      case "connections": return <ConnectionsPage owner={owner} initialPeerId={initialPeerId} onOpenShared={() => pickTab("shared")}/>;
+      case "connections": return <ConnectionsPage owner={owner} onChat={openChat} initialPeerId={initialPeerId} onOpenShared={() => pickTab("shared")}/>;
       case "classrooms": return <ClassroomsPage owner={owner} initialClassId={initialClassId} quizzes={quizzes.quizzes} onOpenOnlineRoom={roomId => {
         pickTab("rooms");
         window.history.replaceState({ ...window.history.state,mindcanvasFromClass:roomId },"",onlineRoomUrl(roomId));
