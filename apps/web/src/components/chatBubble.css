@@ -54,3 +54,5 @@
   .canvas-open-mode .chat-bubble[data-open="false"] { bottom: calc(3.9rem + env(safe-area-inset-bottom)); }
   .chat-bubble-panel { width: calc(100vw - max(.65rem, env(safe-area-inset-right)) - max(.65rem, env(safe-area-inset-left))); height: min(34rem, var(--chat-available-height, calc(100dvh - 5.25rem))); }
 }
+
+.chat-bubble[hidden] { display: none; }

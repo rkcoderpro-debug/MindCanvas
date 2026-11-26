@@ -247,3 +247,18 @@
     height: max(360px, calc(100dvh - 112px - env(safe-area-inset-bottom, 0px)));
   }
 }
+
+.document-reader-bar .reader-primary-action {
+  display: inline-flex; justify-content: center; align-items: center; width: auto;
+  padding-inline: 10px; gap: 5px; white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .document-reader-bar .reader-primary-action { width: 36px; padding-inline: 0; }
+  .reader-primary-action span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+
+.shared-document-reader { border: 1px solid var(--line); border-radius: 12px; }
+.shared-document-reader .compact-file-body pre {
+  margin: 0; padding: 12px; border-radius: 8px; max-block-size: 62dvh;
+  overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}

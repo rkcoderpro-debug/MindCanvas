@@ -3,12 +3,13 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach,afterEach,it,expect,vi } from "vitest";
 import { LanguageProvider } from "../lib/i18n";
+import { WorkspaceShareError } from "../lib/workspaceSharing";
 import WorkspaceSharedPage from "./WorkspaceSharedPage";
 import { workspaceShareToken,workspaceShareTarget,workspaceShareUrl,rememberWorkspaceShareSignIn,restoreWorkspaceShareSignIn } from "../lib/workspaceShareLinks";
-const stubs=vi.hoisted(()=>({open:vi.fn(),submit:vi.fn(),challenge:vi.fn(),verify:vi.fn(),edit:vi.fn()}));
+const stubs=vi.hoisted(()=>({open:vi.fn(),submit:vi.fn(),challenge:vi.fn(),verify:vi.fn(),edit:vi.fn(),download:vi.fn()}));
 vi.mock("../lib/workspaceSharing",async(original)=>{
   const impl=await original<typeof import("../lib/workspaceSharing")>();
-  return {...impl,shareOpen:stubs.open,shareSubmit:stubs.submit,shareChallenge:stubs.challenge,shareVerify:stubs.verify,shareEdit:stubs.edit};
+  return {...impl,shareOpen:stubs.open,shareSubmit:stubs.submit,shareChallenge:stubs.challenge,shareVerify:stubs.verify,shareEdit:stubs.edit,shareDownload:stubs.download};
 });
 const token="a".repeat(48),resource="66000000-0000-4000-8000-000000000001";
 let host:HTMLDivElement,root:ReturnType<typeof createRoot>;
@@ -18,7 +19,7 @@ beforeEach(()=>{
   sessionStorage.clear();vi.clearAllMocks();window.history.replaceState({},"","/");
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();window.history.replaceState({},"","/");});
-const button=(title:string)=>[...host.querySelectorAll("button")].find(b=>b.textContent?.trim()===title)!;
+const button=(title:string)=>[...host.querySelectorAll("button")].find(b=>b.textContent?.trim()===title || b.getAttribute("aria-label")===title)!;
 it("lets a guest submit a public quiz without showing answers before submission",async()=>{
   stubs.open.mockResolvedValue({state:"ok",kind:"quiz",id:resource,title:"Abacus",role:"viewer",data:{questions:[{id:"a",prompt:"2+2?",options:["4","3","7","11"]}],description:"",revision:"r"}});
   stubs.submit.mockResolvedValue({score:1,total:1,answers:[{correct:0,explanation:"Answer explanation"}]});
@@ -37,6 +38,7 @@ it("lets a guest submit a public quiz without showing answers before submission"
 it("asks for sign-in and withholds edit controls even on a public editor link",async()=>{
   stubs.open.mockResolvedValue({state:"ok",kind:"file",id:resource,title:"lecture.cpp",role:"viewer",signInToEdit:true,data:{size:123,revision:"r"}});
   const login=vi.fn();
+  stubs.download.mockResolvedValue(new Blob(["text"], { type: "text/plain" }));
   await act(async()=>root.render(<LanguageProvider><WorkspaceSharedPage token={token} signedIn={false} onSignIn={login}/></LanguageProvider>));
   expect(button("Tải xuống")).toBeTruthy();
   expect(host.querySelector("input[type=file]")).toBeNull();
@@ -60,7 +62,8 @@ it("returns OAuth to the same scoped link without putting its token in the query
   rememberWorkspaceShareSignIn();
   window.history.replaceState({},"","/");
   restoreWorkspaceShareSignIn();
-  expect(window.location.search).toBe("");
+  expect(window.location.search).toBe("?view=shared");
+  expect(window.location.search).not.toContain(token);
   expect(workspaceShareToken()).toBe(token);
   expect(workspaceShareTarget()).toEqual({kind:"file",id:resource});
 });
@@ -86,4 +89,15 @@ it("opens nested study folders and runs a Lab from the scoped share link", async
   await act(async () => button("Cho phép tải thư viện và chạy").click());
   expect(host.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
   expect(host.querySelector("iframe")?.getAttribute("srcdoc")).toContain("Vector example");
+});
+it("offers retry without loading document bytes if the sharing service denies access", async () => {
+  stubs.open.mockRejectedValueOnce(new WorkspaceShareError("SHARE_NOT_FOUND", 404));
+  stubs.open.mockResolvedValueOnce({ state: "sign-in", audience: "friend" });
+  const login = vi.fn();
+  await act(async () => root.render(<LanguageProvider><WorkspaceSharedPage token={token} signedIn={false} onSignIn={login}/></LanguageProvider>));
+  expect(host.querySelector("h1")?.textContent).toBe("Không mở được nội dung chia sẻ");
+  expect(stubs.download).not.toHaveBeenCalled();
+  await act(async () => button("Thử lại").click());
+  expect(host.querySelector("h1")?.textContent).toBe("Đăng nhập để mở tài liệu");
+  expect(stubs.download).not.toHaveBeenCalled();
 });

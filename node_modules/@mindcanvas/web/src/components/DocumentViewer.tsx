@@ -18,7 +18,7 @@ type Stroke = AnnotationStroke;
 type AnnotationMode = AnnotationTool | "eraser";
 type ActiveStroke = Stroke & { page: number };
 
-type Props = { source: Source; owner?: string | null; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; reader?: { actions: ReaderAction[]; caption?: string }; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
+type Props = { source: Source; owner?: string | null; embedded?: boolean; dedicated?: boolean; enableGuide?: boolean; readOnly?: boolean; reader?: { actions: ReaderAction[]; caption?: string }; onClose?: () => void; onReady?: (detail: ViewerReadyDetail) => void };
 
 function bytesFromDataUrl(dataUrl: string): Uint8Array {
   const raw = dataUrl.split(",", 2)[1] ?? "";
@@ -97,7 +97,7 @@ function OfficeViewer({ source, onReady }: { source: Source; onReady?: () => voi
   return <div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc tài liệu…</p>" }}/>;
 }
 
-export default function DocumentViewer({ source, owner = null, embedded = false, dedicated = false, enableGuide = true, reader, onClose, onReady }: Props) {
+export default function DocumentViewer({ source, owner = null, embedded = false, dedicated = false, enableGuide = true, readOnly = false, reader, onClose, onReady }: Props) {
   const { t, language } = useLanguage();
   const kind = kindFor(source);
   const viewerSessionId = useMemo(() => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`, [source.dataUrl, source.id]);
@@ -144,7 +144,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   const pdfBytes = useMemo(() => kind === "pdf" ? bytesFromDataUrl(source.dataUrl) : null, [kind, source.dataUrl]);
   strokesRef.current = strokes;
   const effectiveAnnotationMode = heldAnnotationMode ?? annotationMode;
-  const annotationActive = (fullscreen || dedicated) && (drawing || heldAnnotationMode !== null);
+  const annotationActive = !readOnly && (fullscreen || dedicated) && (drawing || heldAnnotationMode !== null);
 
   useEffect(() => {
     if (kind !== "pdf" || !pdfBytes) return;
@@ -416,6 +416,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
       if (event.code === "Space") { event.preventDefault(); spaceHeldRef.current = true; setSpaceHeld(true); return; }
+      if (readOnly) return;
       if (!(event.ctrlKey || event.metaKey) || event.altKey) {
         const key = event.key.toLowerCase();
         if (!event.repeat && (key === "e" || key === "h")) {
@@ -451,7 +452,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
     window.addEventListener("keyup", handleKeyUp, true);
     window.addEventListener("blur", handleBlur);
     return () => { window.removeEventListener("keydown", handleKeyDown, true); window.removeEventListener("keyup", handleKeyUp, true); window.removeEventListener("blur", handleBlur); handleBlur(); };
-  }, [fullscreen]);
+  }, [fullscreen, readOnly]);
   const exportPdf = async () => {
     if (!pdfBytes) return;
     try {
@@ -523,18 +524,18 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   const pencilLabel = fullscreen || dedicated ? t("drawOnPdf") : t("pdfDrawFullscreenOnly");
   const readerActions: ReaderAction[] = [
     ...(reader?.actions ?? []),
-    ...(kind === "pdf" ? [{ id: "export-pdf", label: t("exportAnnotatedPdf"), icon: Download, run: () => void exportPdf(), disabled: loading || !pdf }]
+    ...(kind === "pdf" && !readOnly ? [{ id: "export-pdf", label: t("exportAnnotatedPdf"), icon: Download, run: () => void exportPdf(), disabled: loading || !pdf }]
       : kind === "html" && !reader?.actions.some(action => action.id === "download") ? [{ id: "download", label: t("downloadOriginal"), icon: Download, href: source.dataUrl, download: source.name }] : []),
   ];
   return (
     <section ref={viewer} className={`document-viewer ${reader ? "document-reader" : ""} ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`} data-document-id={source.id} data-document-kind={kind} data-viewer-session-id={viewerSessionId} aria-label={`${t("documentViewer")} ${source.name}`}>
       {reader ? <DocumentReaderBar title={source.name} kind={kind} caption={reader.caption} actions={readerActions}>
-        {kind === "pdf" && <>{zoomControls}<button type="button" className="reader-icon document-draw-toggle"
+        {kind === "pdf" && <>{zoomControls}{!readOnly && <button type="button" className="reader-icon document-draw-toggle"
           aria-label={pencilLabel} title={pencilLabel} aria-pressed={drawing && (fullscreen || dedicated)}
           onClick={() => {
             if (!fullscreen && !dedicated) { setDrawing(true); void toggleFullscreen(); }
             else setDrawing(value => !value);
-          }}><PenLine size={17}/></button></>}
+          }}><PenLine size={17}/></button>}</>}
         {fullscreenControl}
       </DocumentReaderBar> :
       <header className="document-viewer-header">

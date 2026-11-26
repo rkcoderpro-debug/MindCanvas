@@ -20,9 +20,13 @@ export function writeCanvasUrl(id: string | null, mode: "push" | "replace" = "pu
   if (id && !CANVAS_ID.test(id)) return;
   const url = new URL(window.location.href);
   if (canvasIdFromUrl(url) === id && !(id && url.searchParams.has("learn"))) return;
-  if (id) { url.searchParams.set("canvas", id); url.searchParams.delete("learn"); url.searchParams.delete("file"); }
+  const fromShared = id && url.searchParams.get("view") === "shared";
+  if (id) {
+    url.searchParams.set("canvas", id);
+    for (const param of ["learn", "file", "view", "type", "item"]) url.searchParams.delete(param);
+  }
   else url.searchParams.delete("canvas");
-  window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
+  window.history[mode === "push" ? "pushState" : "replaceState"](fromShared ? { mindcanvasCanvasFromShared: true } : null, "", url);
 }
 
 export function rememberCanvasForSignIn() {

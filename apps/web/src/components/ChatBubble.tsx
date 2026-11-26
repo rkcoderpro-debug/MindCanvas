@@ -1,14 +1,17 @@
 import { createContext, useEffect, useId, useRef, useState } from "react";
 import { MessageCircle, Minus } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
+import type { SharedLearningTarget } from "../lib/workspaceShareLinks";
 import ConnectionsPage from "./ConnectionsPage";
 import "./chatBubble.css";
 
 export type ChatRequest = { peerId: string; version: number };
 export const OpenChatContext = createContext<((peerId: string) => void) | undefined>(undefined);
 
-export default function ChatBubble({ owner, request, onOpenShared }: {
-  owner: string; request: ChatRequest | null; onOpenShared: () => void;
+export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, suspended = false }: {
+  owner: string; request: ChatRequest | null; onOpenShared: (item?: SharedLearningTarget) => void;
+  onOpenLink?: (token: string) => void;
+  suspended?: boolean;
 }) {
   const { language } = useLanguage();
   const vi = language === "vi";
@@ -54,7 +57,7 @@ export default function ChatBubble({ owner, request, onOpenShared }: {
     requestAnimationFrame(() => toggle.current?.focus({ preventScroll: true }));
   };
 
-  return <div className="chat-bubble" ref={dock} data-open={open} onKeyDown={event => {
+  return <div className="chat-bubble" ref={dock} data-open={open} hidden={suspended} inert={suspended} onKeyDown={event => {
     if (event.key === "Escape" && open && !event.defaultPrevented && !event.nativeEvent.isComposing) {
       event.preventDefault();
       event.stopPropagation();
@@ -67,8 +70,8 @@ export default function ChatBubble({ owner, request, onOpenShared }: {
         <button type="button" className="icon-button" onClick={close} title={vi ? "Thu nhỏ" : "Minimize"}
           aria-label={vi ? "Thu nhỏ tin nhắn" : "Minimize messages"}><Minus size={19}/></button>
       </header>
-      <ConnectionsPage owner={owner} compact visible={open} onUnread={setUnread} onMinimize={close}
-        initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenShared={() => { close(); onOpenShared(); }}/>
+      <ConnectionsPage owner={owner} compact visible={open && !suspended} onUnread={setUnread} onMinimize={close}
+        initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenLink={onOpenLink} onOpenShared={item => { if (!item) close(); onOpenShared(item); }}/>
     </section>
     <button type="button" className="chat-bubble-toggle" ref={toggle} title={label}
       aria-expanded={open} aria-controls={panelId}

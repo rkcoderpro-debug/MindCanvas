@@ -1,0 +1,152 @@
+{
+  "version": "6.8.6",
+  "baseVersion": "6.8.5",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.6.md",
+      "bytes": 1346,
+      "sha256": "ef6feb3b89da1ab90e9e4a61c0ca14480446f8c7edbd93217eb6580c00b504c3"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "9a2ba29f4fbf12f7ecbf8c23fd56c90762aba9697f904a9c1192491bf40b7620"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "56554a16e180ca7e9da1769967b78f7f71dfef1ef2976f677cae502de1d93ab3"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 54019,
+      "sha256": "7e59c1157c2c3f0484a6599ac8e036d7c7c9ab05683924cdef83eae8a8c5c6d8"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 76202,
+      "sha256": "46d41697bd40b85ba8c97916d86a0dda18bdb68135535061d502436fd3d5213e"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 4062,
+      "sha256": "966109a375a18bb9a06f6db89f0d0fcca8080b5f6aff58cd2da5c928b366e77f"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 9520,
+      "sha256": "6d104b22d171a7e9741713f9817e8d61148dae528832deec2aa53febd5db6124"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 27399,
+      "sha256": "0579914baf5558e7aa9c421f8bd18bb92712ac1c1d31f3bdab7542695136fb0b"
+    },
+    {
+      "path": "apps/web/src/components/DocumentReaderBar.tsx",
+      "bytes": 3495,
+      "sha256": "d97619311db220baaf37017ca086b096f1cf8a78218256f8ea90e0f2028065d5"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "bytes": 39835,
+      "sha256": "7c6279b8f3c4a79aa311f39119316ffcf6db2631b4152be7299645dcabbfbcf6"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32714,
+      "sha256": "89dbfbdd3293124aa4af3a9b15a04b74acb7c8085569a320f068db99dd12013f"
+    },
+    {
+      "path": "apps/web/src/components/SharedDocumentReader.tsx",
+      "bytes": 4130,
+      "sha256": "7c2bb70975836810dc9ffa81235b138f867af4694deb02e864cbfecf30f337d1"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 26500,
+      "sha256": "112c51bbc19c4a68427712f881228b06ccf6d376af4af46a3a122e9cb9892904"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFilePreview.tsx",
+      "bytes": 6347,
+      "sha256": "3e07f67173e4d89e23456c19bd11710886d4dba7b3d1993d0c2e990e65f8a0b8"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.test.tsx",
+      "bytes": 7498,
+      "sha256": "b74c23ed3440b36d8e18350994f9a771c182a187c4fa7779fa18d06ed2ff921b"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 22577,
+      "sha256": "cca6c57fbd3e5b68324856c1e1f3c9e38bf322bf90f4af0050b7dc84e233764e"
+    },
+    {
+      "path": "apps/web/src/components/chatBubble.css",
+      "bytes": 6801,
+      "sha256": "9eee1c451c59264b802c280531bf2f5fb9ec37f73a3e304bb854d6937fca3577"
+    },
+    {
+      "path": "apps/web/src/components/workspaceSharing.css",
+      "bytes": 5965,
+      "sha256": "d26ef87c69501e5e76e302070cc8d9b502c884f1e3ca576c4d2f0e2f7f92c854"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 15908,
+      "sha256": "989533bc890c44843815eb0b76a0921f5c616e5f30467c1502c7e6c4edd8e623"
+    },
+    {
+      "path": "apps/web/src/hooks/useCanvasLinks.ts",
+      "bytes": 4161,
+      "sha256": "bc53924dbc88e4ee2bcec4cdc68ada889dd937386e69538f65dbd5456d0c5a11"
+    },
+    {
+      "path": "apps/web/src/hooks/useSharedRoute.ts",
+      "bytes": 3307,
+      "sha256": "557405b793bc2f48c2a1e57b2b119db15a55386dcae42fc83aa36eaac67986e3"
+    },
+    {
+      "path": "apps/web/src/lib/canvasLinks.ts",
+      "bytes": 2498,
+      "sha256": "01993c2911d99b0948019827aa36588e23a4adb9d03556e012daae2a81c33e54"
+    },
+    {
+      "path": "apps/web/src/lib/documentPreview.ts",
+      "bytes": 700,
+      "sha256": "3822bb38f202f3af2789d8666d60325c5b0d1850f014fb8255e21aef5cc21c65"
+    },
+    {
+      "path": "apps/web/src/lib/learningNavigation.tsx",
+      "bytes": 9953,
+      "sha256": "e3cd67bda1c8874c63934daf515d2ca2c46f9f83cc4b7c2e092284aabe1150b2"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceShareLinks.ts",
+      "bytes": 4520,
+      "sha256": "c820ec765055535ec71842cdddcc907289118cf7de042508de0a0ae0abcbb4d6"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceSharing.ts",
+      "bytes": 7924,
+      "sha256": "7461e12c570f34a666f38840c8082140d59c7a85e0bec85122684c2e9fdce689"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 526420,
+      "sha256": "0178d049d28c9743cc5b09751a6dd5da5771c02c598ebd775151f53640b8b972"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "ac55896cd21acf5059f1cfaa4559d09b4512c38f621f52c4269984bc41fe2eee"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "407297aa83de709b339257671d3220d152bad435cb96b8352570d6e5f7b75ed5"
+    }
+  ]
+}

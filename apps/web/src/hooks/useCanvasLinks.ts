@@ -12,6 +12,7 @@ type Options = {
   open: (project: Project) => Promise<unknown>;
   home: () => Promise<unknown>;
   resetView: (canvas: boolean) => void;
+  skipPopstate?: (url: string) => boolean;
 };
 type Route = { id: string | null; started: boolean };
 
@@ -41,7 +42,7 @@ export function useCanvasLinks(options: Options) {
     const onPop = () => {
       const next = window.location.href, profileOnly = isProfileOnlyTransition(previousUrl, next);
       previousUrl = next;
-      if (!profileOnly) schedule(canvasIdFromUrl());
+      if (!profileOnly && !latest.current.skipPopstate?.(next)) schedule(canvasIdFromUrl());
     };
     window.addEventListener(PROFILE_ROUTE_EVENT, onProfileRoute);
     window.addEventListener("popstate", onPop);

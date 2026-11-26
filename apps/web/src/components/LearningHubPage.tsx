@@ -51,11 +51,11 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void; libraryWorkspace?: LibraryWorkspace; inboxWorkspace?: InboxWorkspace };
+type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void; libraryWorkspace?: LibraryWorkspace; inboxWorkspace?: InboxWorkspace; onOpenInbox?: () => void };
 export default function LearningHubPage(props: LearningHubProps) {
   return <LearningNavigationProvider key={props.owner ?? "guest"} owner={props.owner} initialTab={props.initialTab}><LearningSpace {...props}/></LearningNavigationProvider>;
 }
-function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn, libraryWorkspace, inboxWorkspace }: LearningHubProps) {
+function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn, libraryWorkspace, inboxWorkspace, onOpenInbox }: LearningHubProps) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
@@ -96,6 +96,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
   };
 
   const pickTab = (id: HubTab) => {
+    if (id === "shared" && onOpenInbox) { onOpenInbox(); return; }
     navigation.go(id);
     emitGuideAction(`learning:tab:${id}`);
     if (id === "tools") window.dispatchEvent(new CustomEvent(GUIDE_REQUEST_EVENT, { detail: { guideId: "document-tools" } }));

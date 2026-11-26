@@ -74,7 +74,8 @@ it("opens a received Workspace file directly from the chat card", async () => {
   const link = host.querySelector<HTMLAnchorElement>("a.connections-resource")!;
   expect(link.textContent).toContain("Công thức.html");
   expect(link.hash).toBe(`#share=${token}`);
-  expect(link.target).toBe("_blank");
+  expect(link.target).toBe("");
+  expect(link.search).toBe("?view=shared");
   expect(host.querySelector(".connections-messages")?.textContent).not.toContain(token);
   expect(onOpenShared).not.toHaveBeenCalled();
 });
@@ -105,4 +106,37 @@ it("opens the matching conversation when a message notification arrives", async 
   await act(async () => root.render(<ChatBubble owner="me" request={{ peerId: "peer-2", version: 1 }} onOpenShared={onOpenShared}/>));
   expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(false);
   expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn thứ hai");
+});
+
+it("keeps the thread, its scroll position, and the draft when returning from a chat attachment", async () => {
+  const token = "de".repeat(24);
+  vi.mocked(listDirectMessages).mockResolvedValue([{
+    id: "document-card", sender_id: "peer-1", recipient_id: "me", body: "",
+    resource_kind: "document", resource_id: "file-1", resource_title: "Bài tập.pdf",
+    workspace_file_token: token, created_at: "2026-10-08T00:00:00Z",
+  }]);
+  const onOpenLink = vi.fn();
+  const render = (suspended: boolean) => root.render(<ChatBubble owner="me" request={null} onOpenShared={onOpenShared}
+    onOpenLink={onOpenLink} suspended={suspended}/>);
+  await act(async () => render(false));
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-toggle")!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".connections-person")!.click());
+  const input = host.querySelector<HTMLTextAreaElement>(".connections-composer textarea")!;
+  const messages = host.querySelector<HTMLElement>(".connections-messages")!;
+  const card = host.querySelector<HTMLAnchorElement>(".connections-resource")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, "Nháp đang viết");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    messages.scrollTop = 135;
+    card.click();
+  });
+  expect(onOpenLink).toHaveBeenCalledWith(token);
+  await act(async () => render(true));
+  expect(host.querySelector(".chat-bubble")?.hasAttribute("hidden")).toBe(true);
+  messages.scrollTop = 0;
+  await act(async () => render(false));
+  expect(messages.scrollTop).toBe(135);
+  expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn học");
+  expect(input.value).toBe("Nháp đang viết");
+  expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(false);
 });

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { FileText, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 
-export type ReaderAction = { id: string; label: string; icon: LucideIcon; danger?: boolean; disabled?: boolean } &
+export type ReaderAction = { id: string; label: string; icon: LucideIcon; danger?: boolean; disabled?: boolean; prominent?: boolean } &
   ({ run: () => void } | { href: string; download: string });
 
 function ReaderActionMenu({ actions }: { actions: ReaderAction[] }) {
@@ -37,12 +37,18 @@ function ReaderActionMenu({ actions }: { actions: ReaderAction[] }) {
 export default function DocumentReaderBar({ title, kind, caption, children, actions = [] }: {
   title: string; kind?: string; caption?: string; children?: ReactNode; actions?: ReaderAction[];
 }) {
+  const prominent = actions.filter(action => action.prominent && "run" in action);
+  const more = actions.filter(action => !prominent.includes(action));
   return <header className="document-reader-bar">
     <div className="document-reader-identity">
       <span className="document-reader-icon" aria-hidden="true"><FileText size={18}/></span>
       <div><div className="document-reader-title"><h2 title={title} tabIndex={-1}>{title}</h2>{kind && <span>{kind.toUpperCase()}</span>}</div>
         {caption && <small title={caption}>{caption}</small>}</div>
     </div>
-    <div className="document-reader-controls">{children}{actions.length > 0 && <ReaderActionMenu actions={actions}/>}</div>
+    <div className="document-reader-controls">{children}
+      {prominent.map(action => "run" in action && <button key={action.id} type="button" className="reader-icon reader-primary-action"
+        title={action.label} disabled={action.disabled} onClick={action.run}><action.icon size={17} aria-hidden="true"/><span>{action.label}</span></button>)}
+      {more.length > 0 && <ReaderActionMenu actions={more}/>}
+    </div>
   </header>;
 }

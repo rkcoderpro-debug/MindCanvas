@@ -47,3 +47,28 @@
 @media (max-width: 480px) {
   .workspace-share-friend-form { grid-template-columns:minmax(0,1fr); }
 }
+
+.workspace-share-view.in-workspace { width: 100%; min-width: 0; min-height: 0; margin: 0; padding: clamp(12px, 2vw, 24px) 0; }
+.workspace-share-view.in-workspace .workspace-share-main-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+.workspace-share-view.in-workspace .workspace-share-main-heading h1 { font-size: clamp(1.32rem, 2.6vw, 2rem); }
+.workspace-share-view.in-workspace .workspace-share-main-heading > :first-child { min-width: 0; }
+.workspace-share-view .workspace-share-crumbs button { max-width: 100%; overflow-wrap: anywhere; }
+.shared-document-reader { min-width: 0; }
+@media (max-width: 720px) {
+  .workspace-share-view.in-workspace .workspace-share-main-heading { display: flex; }
+  .workspace-share-view.in-workspace .workspace-share-main-heading > :first-child { flex-basis: 100%; }
+}
+
+.workspace-share-crumbs > span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.workspace-share-crumbs > span > svg { flex: none; color: var(--muted); }
+.workspace-share-crumbs [aria-current] { overflow-wrap: anywhere; }
+.workspace-shared-items li { padding: 0; }
+.workspace-shared-items li > button:first-child { width: 100%; padding: 9px 12px; gap: 10px; }
+.workspace-shared-items li > button:hover { background: var(--hover); border-radius: 8px; }
+.workspace-shared-items li > button > span { flex: 1; min-width: 0; color: var(--text); font-weight: 650; }
+.workspace-shared-items li > button small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; }

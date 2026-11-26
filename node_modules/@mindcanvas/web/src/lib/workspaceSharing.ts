@@ -56,8 +56,8 @@ export async function shareVerify(token:string,code:string){
   const {proof}=await request("/verify",{body:{token,code}});
   storeShareProof(token,proof);
 }
-export const shareDownload=(token:string,item:Pick<ShareItem,"kind"|"id">):Promise<Blob>=>
-  request("/download",{body:targetBody(token,item),token,asBlob:true});
+export const shareDownload=(token:string,item:Pick<ShareItem,"kind"|"id">,signal?:AbortSignal):Promise<Blob>=>
+  request("/download",{body:targetBody(token,item),token,asBlob:true,signal});
 export const shareCanvasAsset=(token:string,id:string,digest:string,signal?:AbortSignal):Promise<Blob>=>
   request("/asset",{body:{token,kind:"canvas",id,digest},token,asBlob:true,signal});
 export const shareEdit=(token:string,item:Pick<ShareItem,"kind"|"id">,op:"rename"|"mkdir"|"quiz"|"card",payload:unknown)=>

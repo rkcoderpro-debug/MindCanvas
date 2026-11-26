@@ -1,13 +1,12 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, BookOpen, Download, File, FileText, Folder, Link2, LogIn, Pencil, RefreshCw, Upload } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowLeft, BookOpen, ChevronRight, File, FileText, Folder, Link2, LogIn, Pencil, RefreshCw, Upload } from "lucide-react";
 import type { BoardState } from "@mindcanvas/shared";
 import { useLanguage } from "../lib/i18n";
 import { unpackCloudCanvas } from "../lib/canvasCloudMedia";
 import { parseBoard } from "../lib/board";
-import { documentKindFor, fileToDataUrl, type UploadedDocument } from "../lib/documentStore";
-import { downloadWorkspaceBlob } from "../lib/workspaceFiles";
 import { shareCanvasAsset, shareChallenge, shareDownload, shareEdit, shareErrorText, shareOpen, shareSaveCanvas, shareSubmit, shareUpload, shareVerify, type ShareItem, type ShareView, type SharedCard } from "../lib/workspaceSharing";
-import { workspaceShareTarget,workspaceShareUrl } from "../lib/workspaceShareLinks";
+import { sharedInboxUrl, SHARED_ROUTE_EVENT, workspaceShareTarget,workspaceShareUrl } from "../lib/workspaceShareLinks";
+import SharedDocumentReader from "./SharedDocumentReader";
 import FlashcardReview from "./FlashcardReview";
 import QuizRunner, { QuizResult } from "./QuizRunner";
 import FormulaText from "./FormulaText";
@@ -16,7 +15,6 @@ import "./workspaceSharing.css";
 
 const CanvasBoard = lazy(()=>import("./CanvasBoard"));
 const A4CanvasEditor = lazy(()=>import("./A4CanvasEditor"));
-const DocumentViewer = lazy(()=>import("./DocumentViewer"));
 const LabViewer = lazy(()=>import("./LabViewer"));
 type Resource=Extract<ShareView,{state:"ok"}>;
 type StateByKind<K extends Resource["kind"]>=Extract<Resource,{kind:K}>;
@@ -26,16 +24,25 @@ const noop=()=>{};
 const fileIcons={folder:Folder,learning_folder:Folder,file:File,canvas:FileText,quiz:FileText,flashcard:BookOpen,lab:FileText};
 const typeName=(tr:Tr,kind:ShareItem["kind"])=>({folder:tr("Thư mục","Folder"),file:tr("Tài liệu","File"),canvas:"Canvas",quiz:"Quiz",flashcard:"Flashcard",learning_folder:tr("Thư mục học liệu","Study folder"),lab:"Lab"})[kind];
 
-export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}:{token:string;signedIn:boolean;onSignIn:()=>void;loginError?:string}){
+function shareTrail(): ShareItem[] {
+  const target = workspaceShareTarget();
+  if (!target) return [];
+  const saved = window.history.state?.mindcanvasSharedTrail as ShareItem[] | undefined;
+  return saved?.at(-1)?.id === target.id && saved?.at(-1)?.kind === target.kind
+    ? saved : [{ ...target, title: "…" }];
+}
+
+export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError,inWorkspace=false}:{token:string;signedIn:boolean;onSignIn:()=>void;loginError?:string;inWorkspace?:boolean}){
   const {language,t}=useLanguage(),vi=language==="vi",tr:Tr=(v,e)=>vi?v:e;
-  const [trail,setTrail]=useState<ShareItem[]>(()=>{
-    const target=workspaceShareTarget();return target?[{...target,title:"…"}]:[];
-  });
+  const [trail,setTrail]=useState(shareTrail);
   useEffect(()=>{
-    const sync=()=>{const target=workspaceShareTarget(); setTrail(items=>!target?[]:
-      items.at(-1)?.id===target.id?items:[{...target,title:"…"}]);};
+    const sync = () => setTrail(shareTrail());
     window.addEventListener("popstate",sync);
-    return()=>window.removeEventListener("popstate",sync);
+    window.addEventListener("hashchange",sync);
+    return () => {
+      window.removeEventListener("popstate",sync);
+      window.removeEventListener("hashchange",sync);
+    };
   },[]);
   const [state,setState]=useState<ShareView|null>(null),[loading,setLoading]=useState(true),[sequence,setSequence]=useState(0);
   const [error,setError]=useState(""),[pending,setPending]=useState(false),[sent,setSent]=useState(false),[code,setCode]=useState("");
@@ -55,23 +62,38 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}
     lock.current=true;setPending(true);setError("");
     void Promise.resolve().then(fn).then(()=>{if(refresh)reload();}).catch(err=>setError(shareErrorText(err,vi))).finally(()=>{lock.current=false;setPending(false);});
   };
-  const move=(items:ShareItem[])=>{
-    if (pending || (items.at(-1)?.id===target?.id && items.at(-1)?.kind===target?.kind)) return;
-    setState(null);setTrail(items);
-    const next=workspaceShareUrl(token,items.at(-1));
-    if(next!==window.location.href)window.history.pushState({},"",next);
+  const move = (items: ShareItem[], closer = false) => {
+    if (pending || (items.at(-1)?.id === target?.id && items.at(-1)?.kind === target?.kind)) return;
+    const depth = Number(window.history.state?.mindcanvasSharedFolderDepth) || 0;
+    const steps = trail.length - items.length;
+    if (closer && steps > 0 && steps <= depth) {
+      window.history.go(-steps);
+      return;
+    }
+    const next = workspaceShareUrl(token, items.at(-1));
+    setState(null);
+    setTrail(items);
+    const state = { ...window.history.state, mindcanvasSharedTrail: items,
+      mindcanvasSharedFolderDepth: closer ? 0 : depth + 1 };
+    window.history[closer ? "replaceState" : "pushState"](state, "", next);
+    window.dispatchEvent(new Event(SHARED_ROUTE_EVENT));
   };
-  const navigate=(item:ShareItem)=>move([...trail,item]);
+  const navigate = (item: ShareItem) => move([...trail.map((entry, index) =>
+    index === trail.length - 1 && state?.state === "ok" ? { ...entry, title: state.title } : entry), item]);
   const editable=!!(signedIn && state?.state==="ok" && ["owner","editor"].includes(state.role));
   const ctx:Context={token,editable,tr,pending,act,loadItem:navigate};
   const login=<button type="button" className="primary-button" onClick={onSignIn}><LogIn size={16}/>{tr("Đăng nhập để chỉnh sửa","Sign in to edit")}</button>;
-  return <main className="workspace-share-view">
-    <div className="workspace-share-top"><a href={window.location.pathname}><ArrowLeft size={16}/> MindCanvas</a><Link2 size={15}/>{tr("Nội dung chia sẻ","Shared content")}
-      {signedIn && <a href={`${window.location.pathname}?learn=shared`}>{t("sharedWithMe")}</a>}
-    </div>
+  const Container = inWorkspace ? "section" : "main";
+  return <Container className={`workspace-share-view${inWorkspace ? " in-workspace" : ""}`} aria-label={tr("Nội dung chia sẻ", "Shared content")}>
+    {!inWorkspace && <div className="workspace-share-top"><a href={window.location.pathname}><ArrowLeft size={16}/> MindCanvas</a><Link2 size={15}/>{tr("Nội dung chia sẻ","Shared content")}
+      {signedIn && <a href={sharedInboxUrl().href}>{t("sharedWithMe")}</a>}
+    </div>}
     {trail.length>0 && <nav className="workspace-share-crumbs" aria-label={tr("Đường dẫn","Path")}>
-      <button type="button" disabled={pending} onClick={()=>move([])}>{tr("Mục được chia sẻ","Shared item")}</button>
-      {trail.map((item,index)=><span key={item.id}> › {index===trail.length-1?(state?.state==="ok"?state.title:item.title):<button type="button" disabled={pending} onClick={()=>move(trail.slice(0,index+1))}>{item.title}</button>}</span>)}
+      <button type="button" disabled={pending} onClick={()=>move([], true)}>{tr("Mục được chia sẻ","Shared item")}</button>
+      {trail.map((item,index)=><span key={item.id}><ChevronRight size={14} aria-hidden="true"/>
+        {index===trail.length-1 ? <span aria-current="page">{state?.state==="ok" ? state.title : item.title}</span>
+          : <button type="button" disabled={pending} onClick={()=>move(trail.slice(0,index+1), true)}>{item.title}</button>}
+      </span>)}
     </nav>}
     {loading ? <p role="status">{t("loading")}</p>:state?.state==="verify"?<section className="workspace-share-block">
       <h1>{tr("Xác minh email để xem","Verify your email to view")}</h1>
@@ -108,15 +130,20 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}
       {state.kind==="canvas"&&<SharedCanvas key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="quiz"&&<SharedQuiz key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="flashcard"&&<SharedFlashcards key={state.id} item={state} ctx={ctx}/>}
-    </>:<h1>{tr("Không mở được nội dung chia sẻ","Could not open shared content")}</h1>}
+    </>:<div className="workspace-share-block"><h1>{tr("Không mở được nội dung chia sẻ","Could not open shared content")}</h1>
+      <button type="button" className="secondary-button" onClick={reload}><RefreshCw size={16}/>{t("retry")}</button>
+    </div>}
     {pending && <p role="status">{t("loading")}</p>}
     {(error||loginError) && <p className="form-error" role="alert">{error||loginError}</p>}
-  </main>;
+  </Container>;
 }
 
 function SharedItems({items,ctx}:{items:ShareItem[];ctx:Context}){
   return items.length ? <ul className="workspace-shared-items">{items.map(item=>{
-    const Icon=fileIcons[item.kind];return <li key={item.kind+item.id}><button type="button" disabled={ctx.pending} onClick={()=>ctx.loadItem(item)}><Icon size={16}/>{item.title}</button><small>{typeName(ctx.tr,item.kind)}</small></li>;
+    const Icon = fileIcons[item.kind];
+    return <li key={item.kind + item.id}><button type="button" aria-label={item.title} disabled={ctx.pending} onClick={() => ctx.loadItem(item)}>
+      <Icon size={18} aria-hidden="true"/><span>{item.title}<small>{typeName(ctx.tr,item.kind)}</small></span><ChevronRight size={15} aria-hidden="true"/>
+    </button></li>;
   })}</ul>:<p>{ctx.tr("Chưa có nội dung.","No items here.")}</p>;
 }
 function Rename({item,ctx,op="rename"}:{item:Resource;ctx:Context;op?:"rename"|"mkdir"}){
@@ -137,17 +164,9 @@ function SharedFolder({item,ctx}:{item:StateByKind<"folder">;ctx:Context}){
 }
 function SharedFile({item,ctx}:{item:StateByKind<"file">;ctx:Context}){
   const {token,tr,act}=ctx;
-  const [preview,setPreview]=useState<UploadedDocument|null>(null);
-  const previewKind=documentKindFor(item.title);
+  const load = useCallback((signal?: AbortSignal) => shareDownload(token, { kind: "file", id: item.id }, signal), [token, item.id]);
   return <>
-    <div className="actions">
-      <button type="button" className="primary-button" disabled={ctx.pending} onClick={()=>act(async()=>downloadWorkspaceBlob(await shareDownload(token,item),item.title))}><Download size={16}/>{tr("Tải xuống","Download")}</button>
-      {previewKind&&previewKind!=="html"&&<button type="button" className="secondary-button" disabled={ctx.pending} onClick={()=>act(async()=>{
-        const blob=await shareDownload(token,item);
-        setPreview({id:item.id,owner:"guest",folderId:null,kind:previewKind,name:item.title,size:blob.size,mimeType:blob.type,dataUrl:await fileToDataUrl(blob),updatedAt:new Date().toISOString()});
-      })}>{tr("Xem tài liệu","Preview file")}</button>}
-    </div>
-    {preview&&<Suspense fallback={<p role="status">{tr("Đang mở…","Opening…")}</p>}><DocumentViewer source={preview}/></Suspense>}
+    <SharedDocumentReader id={item.id} name={item.title} load={load}/>
     {ctx.editable&&<><Rename item={item} ctx={ctx}/>
       <label className="workspace-share-block">{tr("Tải lên bản thay thế · tối đa 40 MB","Replace file · up to 40 MB")}<input type="file" disabled={ctx.pending} onChange={e=>{
         const file=e.target.files?.[0];e.target.value="";

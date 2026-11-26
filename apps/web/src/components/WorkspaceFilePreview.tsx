@@ -6,13 +6,11 @@ import DocumentReaderBar, { type ReaderAction } from "./DocumentReaderBar";
 import Dialog from "./Dialog";
 import { WorkspaceShareSettings } from "./WorkspaceShareDialog";
 import { documentKindFor, fileToDataUrl } from "../lib/documentStore";
+import { isPlainTextDocument, readTextDocumentPreview } from "../lib/documentPreview";
 import { workspaceFilePermalink } from "../lib/folderLinks";
 import { useLanguage } from "../lib/i18n";
 import { copyTextWithFallback } from "../lib/share";
 import { downloadWorkspaceBlob, readWorkspaceFile, type WorkspaceFile } from "../lib/workspaceFiles";
-
-const textLimit = 256 * 1024;
-const isPlainText = (name: string) => /\.(txt|md|csv|tsv|c|cc|cpp|cxx|h|hh|hpp|s|asm|mips|java|py|js|ts|json|sql|log)$/i.test(name);
 
 type Props = {
   owner: string | null;
@@ -29,7 +27,7 @@ export default function WorkspaceFilePreview({ owner, accountPlan, file, onFolde
   const { language, t } = useLanguage();
   const label = (vi: string, en: string) => language === "vi" ? vi : en;
   const kind = documentKindFor(file.name);
-  const plain = !kind && isPlainText(file.name);
+  const plain = !kind && isPlainTextDocument(file.name);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -45,10 +43,7 @@ export default function WorkspaceFilePreview({ owner, accountPlan, file, onFolde
       try {
         const blob = await readWorkspaceFile(owner, file.id);
         if (!alive) return;
-        const result = kind ? { dataUrl: await fileToDataUrl(blob) } : {
-          text: await blob.slice(0, textLimit).text(),
-          truncated: blob.size > textLimit,
-        };
+        const result = kind ? { dataUrl: await fileToDataUrl(blob) } : await readTextDocumentPreview(blob);
         if (alive) setPreview(result);
       } catch { if (alive) setPreview({ failed: true }); }
     })();

@@ -17,8 +17,8 @@ export function learningUrl(tab: HubTab | null) {
   if (tab !== "rooms") { url.searchParams.delete("room"); url.searchParams.delete("room_invite"); url.searchParams.delete("room_code"); }
   return `${url.pathname}${url.search}${url.hash}`;
 }
-export function enterLearningSpace(tab: HubTab = "overview") {
-  window.history.pushState({}, "", learningUrl(tab));
+export function enterLearningSpace(tab: HubTab = "overview", mode: "push" | "replace" = "push") {
+  window.history[mode === "replace" ? "replaceState" : "pushState"]({}, "", learningUrl(tab));
   window.dispatchEvent(new CustomEvent(LEARNING_HOME_EVENT, { detail: tab }));
 }
 export function leaveLearningSpace() {
@@ -154,8 +154,8 @@ export function LearningToolScope({ tab, active, children }: { tab: HubTab; acti
   return <ToolContext.Provider value={{ tab, active }}><div className="learning-tool-page" data-learning-tool={tab} hidden={!active} inert={!active}>{children}</div></ToolContext.Provider>;
 }
 const VisibleContext = createContext(true);
-export function LearningVisibility({ active, children }: { active: boolean; children: ReactNode }) {
-  return <VisibleContext.Provider value={active}><div hidden={!active} inert={!active}>{children}</div></VisibleContext.Provider>;
+export function LearningVisibility({ active, children, className }: { active: boolean; children: ReactNode; className?: string }) {
+  return <VisibleContext.Provider value={active}><div className={className} hidden={!active} inert={!active}>{children}</div></VisibleContext.Provider>;
 }
 export function useLearningActive() {
   const tool = useContext(ToolContext), visible = useContext(VisibleContext);

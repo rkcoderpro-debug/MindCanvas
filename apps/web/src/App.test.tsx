@@ -424,10 +424,56 @@ describe("Workspace UI", () => {
     await act(async () => host.querySelector<HTMLButtonElement>('.nav-list button[title="Được chia sẻ với tôi"]')!.click());
     await waitForUI(() => expect(host.querySelector(".shared-learning h2")?.textContent).toBe("Được chia sẻ với tôi"));
     const workspaceInbox = host.querySelector(".shared-learning")!.textContent;
+    expect(window.location.search).toBe("?view=shared");
     expect(host.querySelector(".workspace-home")).toBeNull();
     await act(async () => host.querySelector<HTMLButtonElement>(".nav-learning")!.click());
     await act(async () => host.querySelector<HTMLButtonElement>('.learning-secondary-groups [data-guide-tab="shared"]')!.click());
-    await waitForUI(() => expect(host.querySelector('[data-learning-tool="shared"] .shared-learning')?.textContent).toBe(workspaceInbox));
+    await waitForUI(() => expect(host.querySelector(".shared-learning")?.textContent).toBe(workspaceInbox));
+    expect(window.location.search).toBe("?view=shared");
+    await act(async () => window.history.back());
+    await waitForUI(() => expect(host.querySelector(".learning-space-heading")).toBeTruthy());
+    await act(async () => window.history.forward());
+    await waitForUI(() => expect(host.querySelector(".shared-learning")?.textContent).toBe(workspaceInbox));
+  });
+
+  it("restores the Inbox from a bookmarked legacy Learning Hub URL", async () => {
+    window.history.replaceState({}, "", "/?learn=shared");
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.querySelector(".main-area .shared-learning")).toBeTruthy());
+    expect(window.location.search).toBe("?view=shared");
+  });
+
+  it("reads JSON from an old shared folder link inside Workspace and returns through folder history", async () => {
+    const token = "a1".repeat(24);
+    const folder = "11111111-1111-4111-8111-111111111111";
+    const child = "22222222-2222-4222-8222-222222222222";
+    const title = "quiz-rates.json";
+    const json = '{"label":"<b>quiz</b>"}';
+    const fetchShare = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+      if (String(url).endsWith("/download")) return new Response(json, { headers: { "Content-Type": "application/json" } });
+      const request = JSON.parse(String(options?.body));
+      return Response.json(request.id === child
+        ? { state: "ok", role: "viewer", kind: "file", id: child, title, data: { size: json.length, revision: "r" } }
+        : { state: "ok", role: "viewer", kind: "folder", id: folder, title: "Học liệu", data: [{ id: child, kind: "file", title }] });
+    });
+    window.history.replaceState({}, "", `/#share=${token}`);
+    await act(async () => root.render(<App/>));
+    await waitForUI(() => expect(host.querySelector(".main-area .workspace-share-view.in-workspace h1")?.textContent).toBe("Học liệu"));
+    expect(window.location.search).toBe("?view=shared");
+    const item = host.querySelector<HTMLButtonElement>(".workspace-shared-items button")!;
+    await act(async () => item.click());
+    await waitForUI(() => expect(host.querySelector(".shared-document-reader pre")?.textContent).toBe(json));
+    expect(host.querySelector(".shared-document-reader pre b")).toBeNull();
+    expect(host.querySelector(".shared-document-reader .reader-primary-action")?.textContent).toBe("Tải xuống");
+    expect(new URLSearchParams(window.location.hash.slice(1)).get("id")).toBe(child);
+    expect(fetchShare.mock.calls.some(([url, options]) =>
+      String(url).endsWith("/download") && JSON.parse(String(options?.body)).id === child)).toBe(true);
+    await act(async () => window.history.back());
+    await waitForUI(() => expect(host.querySelector(".workspace-shared-items button")?.getAttribute("aria-label")).toBe(title));
+    await act(async () => host.querySelector<HTMLButtonElement>(".topbar .shell-back")!.click());
+    await waitForUI(() => expect(host.querySelector(".workspace-share-view")).toBeNull());
+    expect(window.location.search).toBe("?view=shared");
+    expect(window.location.hash).toBe("");
   });
   it("restores the workspace and learning home when traversing their entry history", async () => {
     await import("./components/LearningHubPage"); await act(async () => root.render(<App/>));

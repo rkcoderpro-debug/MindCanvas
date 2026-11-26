@@ -10,7 +10,8 @@ import { useLanguage } from "../lib/i18n";
 import { mergeInboxItems, normalizeIncomingShares, normalizePendingInvites, normalizeCopySources,
   normalizeReceivedLinks, withInboxTimeout, type InboxKind, type InboxWorkspace } from "../lib/sharedInbox";
 import { shareReceived, shareErrorText, type ShareReceived } from "../lib/workspaceSharing";
-import { workspaceShareUrl } from "../lib/workspaceShareLinks";
+import { openShareInSameTab, sharedLearningUrl, workspaceShareUrl, type SharedLearningTarget } from "../lib/workspaceShareLinks";
+import SharedDocumentReader from "./SharedDocumentReader";
 import {
   acceptPendingLearningInvite,
   finishSharedQuiz,
@@ -43,6 +44,11 @@ export type SharedLearningProps = {
   workspace?: InboxWorkspace;
   onSaved?: (kind: LearningKind) => void;
   onSignIn?: () => void;
+  onOpenLink?: (token: string) => void;
+  onOpenItem?: (item: SharedLearningTarget) => void;
+  requested?: SharedLearningTarget;
+  onBack?: () => void;
+  backLabel?: string;
 };
 
 const kindLabels = { all: "Tất cả", quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu", canvas: "Project", folder: "Thư mục" } as const;
@@ -51,7 +57,7 @@ const openLabels: Record<InboxKind, string> = {
   quiz: "Làm Quiz", flashcard: "Ôn Flashcard", lab: "Chạy Lab", document: "Xem tài liệu", canvas: "Mở project", folder: "Mở thư mục",
 };
 
-export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn }: SharedLearningProps) {
+export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn, onOpenLink, onOpenItem, requested, onBack, backLabel }: SharedLearningProps) {
   const { t } = useLanguage();
   const [items, setItems] = useState<IncomingLearningShare[]>([]);
   const [links, setLinks] = useState<ShareReceived[]>([]);
@@ -82,6 +88,7 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
   const listRequest = useRef(0);
   const openRequest = useRef(0);
   const ratingLock = useRef(false);
+  const triedRequest = useRef(false);
   const includeWorkspace = !!workspace;
   const learningActive = useLearningActive();
 
@@ -122,7 +129,7 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
     setItems([]); setLinks([]); setPending([]); setSavedCopies([]); setActive(null);
     setContent(null); setCards([]); setProgress([]); setQuiz(null); setQuizResult(null);
     setAnswers([]); setQuizFeedback({}); setError(""); setNotice("");
-    setListLoaded(false); setListError(""); setListLoading(false); setOpening(false);
+    setListLoaded(false); setListError(""); setListLoading(false); setOpening(false); triedRequest.current = false;
     return () => { ++listRequest.current; ++openRequest.current; };
   }, [reload]);
   useEffect(() => {
@@ -148,7 +155,7 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
     setNotice("");
   };
 
-  const open = async (item: IncomingLearningShare) => {
+  const open = useCallback(async (item: IncomingLearningShare) => {
     const request = ++openRequest.current;
     setError(""); resetDetail(); setActive(null);
     if (item.status !== "active") { setError(item.status === "paused" ? "Chủ học liệu đã hạ gói; quyền chia sẻ tạm dừng." : "Học liệu gốc đã bị xóa."); return; }
@@ -166,7 +173,15 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
       setContent(next); setActive(item);
     } catch (e) { if (request === openRequest.current) { setError(sharedLearningErrorMessage(e, "open")); reload(); } }
     finally { if (request === openRequest.current) setOpening(false); }
-  };
+  }, [reload]);
+
+  useEffect(() => {
+    if (!requested || !listLoaded || listLoading || triedRequest.current) return;
+    triedRequest.current = true;
+    const item = items.find(row => row.kind === requested.kind && row.resource_id === requested.id);
+    if (item) void open(item);
+    else setError("Bạn không có quyền truy cập hoặc học liệu không còn khả dụng.");
+  }, [requested, listLoaded, listLoading, items, open]);
 
   const start = async () => {
     if (!active) return;
@@ -236,18 +251,11 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
     } finally { setBusy(false); }
   };
 
-  const downloadOriginal = async (id: string) => {
-    setBusy(true); setError("");
-    try {
-      const { blob, name } = await downloadSharedDocument(id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = name.replace(/[\\/:*?"<>|]/g, "_");
-      document.body.append(anchor); anchor.click(); anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (cause) { setError(sharedLearningErrorMessage(cause, "open")); }
-    finally { setBusy(false); }
-  };
+  const documentId = active?.kind === "document" ? active.resource_id : null;
+  const readDocument = useCallback(async () => {
+    if (!documentId) throw new Error("Missing document");
+    return (await downloadSharedDocument(documentId)).blob;
+  }, [documentId]);
 
   const duplicate = async (project: InboxWorkspace["projects"][number]) => {
     if (!workspace || busy) return;
@@ -269,14 +277,16 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
   const activityFocus = useActivityFocus(learningActive && fits);
   if (!owner) return <section className="shared-learning"><h2>Được chia sẻ với tôi</h2><p>Đăng nhập để xem nội dung được chia sẻ với tài khoản của bạn.</p>{onSignIn && <button className="primary-button" onClick={onSignIn}>Đăng nhập</button>}</section>;
 
+  const retry = () => { triedRequest.current = false; setError(""); refreshAll(); };
   return <section className="shared-learning">
-    <header className="shared-learning-header"><div><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tìm lại nội dung nhận qua tin nhắn, lời mời và link chia sẻ đã mở khi đăng nhập.</p></div><button className="secondary-button" disabled={listLoading} onClick={refreshAll}><RefreshCw size={15}/>Làm mới</button></header>
-    {listError && <div role="alert" className="shared-inbox-error"><p>{listError}</p><button className="secondary-button" disabled={listLoading} onClick={refreshAll}>Thử lại</button></div>}
+    {!requested && <header className="shared-learning-header"><div><h2>Được chia sẻ với tôi</h2><p className="shared-learning-subtitle">Tìm lại nội dung nhận qua tin nhắn, lời mời và link chia sẻ đã mở khi đăng nhập.</p></div><button className="secondary-button" disabled={listLoading} onClick={refreshAll}><RefreshCw size={15}/>Làm mới</button></header>}
+    {listError && <div role="alert" className="shared-inbox-error"><p>{listError}</p><button className="secondary-button" disabled={listLoading} onClick={retry}>Thử lại</button></div>}
     {(listLoading || workspace?.loading) && <p role="status">Đang tải nội dung chia sẻ…</p>}{opening && <p role="status">Đang mở học liệu…</p>}
-    {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status" className="lab-notice">{notice}</p>}
+    {error && <div role="alert" className="form-error"><p>{error}</p>{requested && !active && <button
+      className="secondary-button" type="button" disabled={listLoading} onClick={retry}>{t("retry")}</button>}</div>}{notice && <p role="status" className="lab-notice">{notice}</p>}
     {active ? <ActivityViewport inline={!fits} ref={activityFocus} className={fits && activity !== "activity-shared"
       ? `activity-screen ${activity}` : `shared-learning-detail${fits ? " activity-screen activity-shared" : ""}`}>
-      <PageNavigation quickActions back={<BackButton className="shared-back-button" onClick={() => { setActive(null); resetDetail(); reload(); listScroll.restore(); }}>Học liệu chia sẻ</BackButton>} title={active.title} context={<><span>Chia sẻ bởi {active.owner_name}</span>{activity === "activity-quiz" && quiz &&
+      <PageNavigation quickActions back={<BackButton className="shared-back-button" onClick={onBack ?? (() => { setActive(null); resetDetail(); reload(); listScroll.restore(); })}>{backLabel ?? "Học liệu chia sẻ"}</BackButton>} title={active.title} context={<>{active.owner_name && <span>Chia sẻ bởi {active.owner_name}</span>}{activity === "activity-quiz" && quiz &&
         <><span>{t(quizRevealMode === "instant" ? "quizRevealInstant" : "quizRevealSubmit")}</span>
           <b>{questionIndex + 1} / {quiz.questions.length}</b></>}</>} actions={active.status === "active" && <button className="secondary-button" disabled={busy || savedCopies.some(copy => copy.kind === active.kind && copy.source_id === active.resource_id)} onClick={() => void saveCopy(active)}><Save size={15}/>{savedCopies.some(copy => copy.kind === active.kind && copy.source_id === active.resource_id) ? "Đã lưu vào của tôi" : "Lưu vào của tôi"}</button>}/>
       {fits && error && (!quiz || quizResult) && <p role="alert" className="form-error">{error}</p>}
@@ -307,8 +317,8 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
         </div></div>}/> : <p>{t("noCards")}</p>)}
 
       {active.kind === "lab" && <LabViewer fitViewport key={active.resource_id} frameClassName="shared-lab-frame" html={String(content?.program_html ?? "")} title={active.title} allowExternalResources={content?.allow_external_resources === true} viewerConfig={cleanLabViewer(content?.viewer_config)}/>}
-      {active.kind === "document" && <div className="shared-document-card"><FileText size={25}/><div><strong>{String(content?.file_name ?? active.title)}</strong><p>{Number(content?.file_size_bytes) ? `${(Number(content?.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : "Tài liệu"} · Bản gốc không bị thay đổi.</p><small>Lưu bản sao để tài liệu được thêm vào thư viện Tài liệu của bạn.</small><button type="button" className="secondary-button" disabled={busy} onClick={() => void downloadOriginal(active.resource_id)}>Tải bản gốc</button></div></div>}
-    </ActivityViewport> : <>
+      {documentId && <SharedDocumentReader id={documentId} name={String(content?.file_name ?? active.title)} load={readDocument}/>}
+    </ActivityViewport> : !requested && <>
       {pending.length > 0 && <section className="shared-learning-pending"><h3>Lời mời đang chờ</h3>{pending.map(invite => <article key={invite.id}><span>{invite.kind} · Hạn {new Date(invite.expires_at).toLocaleDateString("vi-VN")}</span><button className="secondary-button" disabled={new Date(invite.expires_at) <= new Date()} onClick={() => void acceptPendingLearningInvite(invite.token_hash).then(reload).catch(e => setError(sharedLearningErrorMessage(e)))}>Nhận lời mời</button></article>)}</section>}
       <div className="shared-learning-controls">
         <div className="shared-learning-search-row">
@@ -341,8 +351,11 @@ export default function SharedLearningPage({ owner, workspace, onSaved, onSignIn
           </div>
           <span className={`shared-learning-status status-${item.status}`}>{item.status === "active" ? canEdit ? "Có thể chỉnh sửa" : "Chỉ xem" : item.status === "paused" ? "Tạm dừng" : "Đã gỡ"}</span>
           <div className="shared-learning-item-actions">
-            {openLink && link ? <a className="primary-button" href={workspaceShareUrl(link.token)}>{openLabels[item.kind]}</a>
+            {openLink && link ? <a className="primary-button" href={workspaceShareUrl(link.token)} onClick={event => openShareInSameTab(event, onOpenLink && (() => onOpenLink(link.token)))}>{openLabels[item.kind]}</a>
               : project && workspace ? <button className="primary-button" onClick={() => workspace.open(project)}>{openLabels[item.kind]}</button>
+              : learning && canSaveLearning && onOpenItem ? <a className="primary-button"
+                href={sharedLearningUrl({ kind: learning.kind, id: learning.resource_id })}
+                onClick={event => openShareInSameTab(event, () => onOpenItem({ kind: learning.kind, id: learning.resource_id }))}>{openLabels[item.kind]}</a>
               : learning && <button className="primary-button" disabled={!canSaveLearning || opening} onClick={() => { listScroll.remember(); void open(learning); }}>{openLabels[item.kind]}</button>}
             {learning && (canSaveLearning || !link) && <button className="secondary-button" disabled={!canSaveLearning || busy || saved} onClick={() => void saveCopy(learning)}><Save size={14}/>{saved ? "Đã lưu" : busy ? "Đang lưu…" : "Lưu vào của tôi"}</button>}
             {project && <button className="secondary-button" disabled={busy} onClick={() => void duplicate(project)}><Save size={14}/>Lưu bản sao</button>}

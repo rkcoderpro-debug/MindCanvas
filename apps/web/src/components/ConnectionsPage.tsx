@@ -8,7 +8,7 @@ import {
 } from "../lib/connections";
 import { ProfileAvatar } from "./ProfileAvatar";
 import { copyTextWithFallback } from "../lib/share";
-import { workspaceShareUrl } from "../lib/workspaceShareLinks";
+import { openShareInSameTab, sharedLearningUrl, sharedLearningTarget, workspaceShareUrl, type SharedLearningTarget } from "../lib/workspaceShareLinks";
 import { useLearningActive } from "../lib/learningNavigation";
 
 const resourceLabels = { quiz: "Quiz", flashcard: "Flashcard", lab: "Lab", document: "Tài liệu" };
@@ -33,10 +33,10 @@ function mergeMessages(latest: DirectMessage[], current: DirectMessage[]) {
 }
 
 export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, initialPeerVersion, compact = false,
-  visible = true, onUnread, onChat, onMinimize }: {
-  owner: string | null; onOpenShared: () => void; initialPeerId?: string; initialPeerVersion?: number;
+  visible = true, onUnread, onChat, onMinimize, onOpenLink }: {
+  owner: string | null; onOpenShared: (item?: SharedLearningTarget) => void; initialPeerId?: string; initialPeerVersion?: number;
   compact?: boolean; visible?: boolean; onUnread?: (count: number) => void; onChat?: (peerId: string) => void;
-  onMinimize?: () => void;
+  onMinimize?: () => void; onOpenLink?: (token: string) => void;
 }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [invitations, setInvitations] = useState<ConnectionInvitation[]>([]);
@@ -69,6 +69,8 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
   const listPane = useRef<HTMLElement>(null);
   const threadHeading = useRef<HTMLHeadingElement>(null);
   const scrollPane = useRef<HTMLDivElement>(null);
+  const returnScroll = useRef<number | null>(null);
+  const rememberThread = () => { returnScroll.current = scrollPane.current?.scrollTop ?? null; };
   const openPeer = useRef<string | null>(null);
   const inboxRequest = useRef(0), threadRequest = useRef(0);
   const lastSeen = useRef<string | null>(null);
@@ -135,6 +137,11 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
     adjustScroll.current = null;
     element.scrollTop = next === "bottom" ? element.scrollHeight : next.top + element.scrollHeight - next.height;
   }, [messages]);
+  useLayoutEffect(() => {
+    if (!active || !scrollPane.current || returnScroll.current === null) return;
+    scrollPane.current.scrollTop = returnScroll.current;
+    returnScroll.current = null;
+  }, [active]);
   useEffect(() => {
     onUnread?.(connections.reduce((total, person) => total + person.unread_count, 0));
   }, [connections, onUnread]);
@@ -295,7 +302,8 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
                 const day = new Date(message.created_at).toLocaleDateString("vi-VN");
                 const previous = ordered[index - 1];
                 const startsDay = !previous || new Date(previous.created_at).toLocaleDateString("vi-VN") !== day;
-                return <MessageBubble key={message.id} message={message} mine={message.sender_id === owner} date={startsDay ? day : undefined} onOpenShared={onOpenShared}/>;
+                return <MessageBubble key={message.id} message={message} mine={message.sender_id === owner} date={startsDay ? day : undefined} onOpenShared={item => { if (item) rememberThread(); onOpenShared(item); }}
+                  onOpenLink={onOpenLink && (token => { rememberThread(); onOpenLink(token); })}/>;
               })}
               {!messages.length && <p className="connections-empty" role="status">{loadingThread ? "Đang tải tin nhắn…" : "Hãy gửi tin nhắn đầu tiên hoặc chia sẻ học liệu từ thư viện."}</p>}
             </div>
@@ -323,17 +331,20 @@ function formatPreviewTime(at: string) {
     : date.toLocaleDateString("vi-VN", { day: "numeric", month: "numeric", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "2-digit" } : {}) });
 }
 
-function MessageBubble({ message, mine, date, onOpenShared }: { message: DirectMessage; mine: boolean; date?: string; onOpenShared: () => void }) {
+function MessageBubble({ message, mine, date, onOpenShared, onOpenLink }: { message: DirectMessage; mine: boolean; date?: string; onOpenShared: (item?: SharedLearningTarget) => void; onOpenLink?: (token: string) => void }) {
   const kind = message.resource_kind;
   const Icon = message.workspace_folder_card ? Folder : kind ? resourceIcons[kind] : FileText;
   const resourceLabel = kind ? resourceLabels[kind] : "";
   const title = message.resource_title || resourceLabel;
   const token = kind === "document" ? message.workspace_file_token : null;
   const fileLink = token && /^[a-f0-9]{48}$/.test(token) ? workspaceShareUrl(token) : "";
+  const learningLink = !token && !mine && kind && message.resource_id
+    ? sharedLearningUrl({ kind, id: message.resource_id }) : "";
+  const learning = learningLink && sharedLearningTarget(new URL(learningLink));
   const asset = <><span className="connections-resource-icon" aria-hidden="true"><Icon size={17}/></span>
     <span className="connections-resource-copy"><strong title={title}>{title}</strong>
       <small>{token ? (fileLink ? message.workspace_folder_card ? "Mở thư mục" : "Mở tài liệu" : "Nội dung không còn khả dụng")
-        : mine ? resourceLabel + " đã gửi" : "Mở trong mục chia sẻ"}</small></span>
+        : mine ? resourceLabel + " đã gửi" : "Mở học liệu"}</small></span>
     {(!mine || fileLink) && <ArrowUpRight className="connections-resource-arrow" size={15} aria-hidden="true"/>}
   </>;
   return <>
@@ -341,8 +352,10 @@ function MessageBubble({ message, mine, date, onOpenShared }: { message: DirectM
     <article className={`${mine ? "mine" : "theirs"}${kind && !message.body ? " connections-attachment-only" : ""}`}>
       {message.body && <p>{message.body}</p>}
       {token
-        ? (fileLink ? <a className="connections-resource" href={fileLink} target="_blank" rel="noopener noreferrer">{asset}</a> : <span className="connections-resource">{asset}</span>)
-        : kind && (mine ? <span className="connections-resource">{asset}</span> : <button type="button" className="connections-resource" onClick={onOpenShared}>{asset}</button>)}
+        ? (fileLink ? <a className="connections-resource" href={fileLink} onClick={event => openShareInSameTab(event, onOpenLink && (() => onOpenLink(token)))}>{asset}</a> : <span className="connections-resource">{asset}</span>)
+        : kind && (mine ? <span className="connections-resource">{asset}</span>
+          : learning ? <a className="connections-resource" href={learningLink} onClick={event => openShareInSameTab(event, () => onOpenShared(learning))}>{asset}</a>
+          : <button type="button" className="connections-resource" onClick={() => onOpenShared()}>{asset}</button>)}
       <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</time>
     </article>
   </>;

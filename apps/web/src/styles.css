@@ -5880,3 +5880,6 @@ dialog .file-picker label.file-picker-trigger, .file-picker label.file-picker-tr
 
 .sidebar-folder-root { color: inherit; font: inherit; padding: 4px 0; letter-spacing: inherit; text-transform: inherit; background: transparent; }
 .sidebar-folder-root:hover { color: var(--accent); text-decoration: underline; }
+
+.workspace-route-content[hidden] { display: none; }
+.workspace-route-content:not([hidden]) { display: contents; }
