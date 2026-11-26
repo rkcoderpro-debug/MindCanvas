@@ -7,6 +7,7 @@ import { Music2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Headphones, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
+import type { InboxWorkspace } from "../lib/sharedInbox";
 import type { AccountPlan } from "../lib/account";
 import { useLanguage } from "../lib/i18n";
 import { isStudyDayComplete, recommendDailyTarget, studyPlanDayFor, vietnamStudyDate, type Flashcard, type StudyPlanDay, type StudyPlanMode, type StudyPlanTask, type StudyTaskKind } from "../lib/flashcards";
@@ -50,11 +51,11 @@ function taskIcon(kind: StudyTaskKind) {
   return kind === "flashcards" ? <BookOpen size={16}/> : kind === "quiz" ? <ClipboardList size={16}/> : kind === "focus" ? <Gauge size={16}/> : <ListChecks size={16}/>;
 }
 
-type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void; libraryWorkspace?: LibraryWorkspace };
+type LearningHubProps = { owner: string | null; projects: Project[]; documents?: UploadedDocument[]; onDocumentsChanged?: () => void; accountPlan?: AccountPlan; initialTab?: HubTab; initialPeerId?: string; initialClassId?: string; onSignIn?: () => void; libraryWorkspace?: LibraryWorkspace; inboxWorkspace?: InboxWorkspace };
 export default function LearningHubPage(props: LearningHubProps) {
   return <LearningNavigationProvider key={props.owner ?? "guest"} owner={props.owner} initialTab={props.initialTab}><LearningSpace {...props}/></LearningNavigationProvider>;
 }
-function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn, libraryWorkspace }: LearningHubProps) {
+function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = () => undefined, accountPlan, initialPeerId, initialClassId, onSignIn, libraryWorkspace, inboxWorkspace }: LearningHubProps) {
   const { t, language } = useLanguage();
   const flashcards = useFlashcards(owner);
   const quizzes = useQuizzes(owner);
@@ -115,7 +116,7 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
         pickTab("rooms");
         window.history.replaceState({ ...window.history.state,mindcanvasFromClass:roomId },"",onlineRoomUrl(roomId));
       }}/>;
-      case "shared": return <SharedLearningTab owner={owner} onSaved={kind => {
+      case "shared": return <SharedLearningTab owner={owner} workspace={inboxWorkspace} onSignIn={onSignIn} onSaved={kind => {
         if (kind === "quiz") void quizzes.refresh();
         if (kind === "flashcard") void flashcards.refreshDecks();
         if (kind === "document") onDocumentsChanged();

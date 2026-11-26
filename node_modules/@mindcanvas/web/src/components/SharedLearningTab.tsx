@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
-import type { LearningKind } from "../lib/learningShare";
+import type { SharedLearningProps } from "./SharedLearningPage";
 
 export class InboxBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -10,7 +10,8 @@ export class InboxBoundary extends Component<{ children: ReactNode; fallback: Re
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
 
-export default function SharedLearningTab({ owner, onSaved }: { owner: string | null; onSaved?: (kind: LearningKind) => void }) {
+export default function SharedLearningTab(props: SharedLearningProps) {
+  const { owner } = props;
   const { language } = useLanguage();
   const [attempt, setAttempt] = useState(0);
   // React.lazy remembers a rejected load. A retry must use a new lazy type.
@@ -23,7 +24,7 @@ export default function SharedLearningTab({ owner, onSaved }: { owner: string | 
       <button className="secondary-button" onClick={() => window.location.reload()}>{vi ? "Tải lại trang" : "Reload page"}</button></div>
   </section>}>
     <Suspense fallback={<section className="shared-learning" role="status">{vi ? "Đang tải mục chia sẻ…" : "Loading shared learning…"}</section>}>
-      <Page owner={owner} onSaved={onSaved}/>
+      <Page {...props}/>
     </Suspense>
   </InboxBoundary>;
 }

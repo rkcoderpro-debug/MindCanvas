@@ -1,0 +1,107 @@
+{
+  "version": "6.8.2",
+  "baseVersion": "6.8.1",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.2.md",
+      "bytes": 911,
+      "sha256": "914d1308a5cc4d03d9ca41678d51b1811f109ae69a804599c7ebd0c69a2dc7d6"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "00199620bd9300e4516568a62e24637042eb4b005e0026e547c8ed161136e8fb"
+    },
+    {
+      "path": "apps/server/src/workspaceSharing.ts",
+      "bytes": 16259,
+      "sha256": "59d3a92f4a4f8efe9c1f5f1cc46d3f285f7e13336961f0b9fe87136e3e9fec57"
+    },
+    {
+      "path": "apps/server/tests/workspaceSharing.test.ts",
+      "bytes": 4664,
+      "sha256": "d377d6d3fab8f003abc3776c8d0b5f889d0e03da34bbbb62bab2793c1694155f"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "1eea663a82cc917911acd5ce27a89fa124eb1c2c882f7fdf27a937dc831a5ba8"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 49622,
+      "sha256": "fcbdc17581bab172bdada54082f2a2d3efd6fc0d729b4fa0a72351414348e2b1"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 72883,
+      "sha256": "f41d2e7d7f0ba3ef9f98a45566a92ded5a91fc0aa694e5e4b8fc14da56714ea1"
+    },
+    {
+      "path": "apps/web/src/components/AppSidebar.tsx",
+      "bytes": 15370,
+      "sha256": "eb9ea26501efec6654ced98d85d7c04f0c3974b5415954c49c292eb5807251d1"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32335,
+      "sha256": "e8f9044a4bc8a3e7c663ebd3bbf87893d21043fae5f5794a0f3bcf4074ebd2ee"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.recovery.test.tsx",
+      "bytes": 9839,
+      "sha256": "12644e667ded00cf926b66a02f1806ce5e761c5d10aaad5729402877a7496c29"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningPage.tsx",
+      "bytes": 27335,
+      "sha256": "47d2f3b2e2e4cafda8dbfd1eb60e6728f11f313f036b120100cf2f2408dd5bef"
+    },
+    {
+      "path": "apps/web/src/components/SharedLearningTab.tsx",
+      "bytes": 1970,
+      "sha256": "217c06dd5063cee73ed7186c4bd71425255ca749a26e85a48f00591a34d38cee"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedInbox.tsx",
+      "bytes": 48,
+      "sha256": "d5e705a47fc9a25cc679107889039f104ff4d68ddcaf749299200dd82f8bee49"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 21513,
+      "sha256": "b7770d947f0fbcb1210e210374101dbd44824e84386ec97414bb54183712a86a"
+    },
+    {
+      "path": "apps/web/src/lib/sharedInbox.ts",
+      "bytes": 5436,
+      "sha256": "2c9f7bdb0449790fcb6b7e03e87ebddc090a8a78a8b6f1b3772db2782e6cf581"
+    },
+    {
+      "path": "apps/web/src/lib/workspaceSharing.ts",
+      "bytes": 7799,
+      "sha256": "e366ae74968cd91ed6d01edee1917c36959ad78a29bc1403d45b1f7d815c418d"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "38188787b6ec8e8ee4e23853cef3f5357ff63d227ffc9e9c3cc0a8243fb913de"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "44de3c8de6ec50dc320151282b83866b47b1b13bafb4302d4b2271f71630530c"
+    },
+    {
+      "path": "supabase/migrations/0048_unified_shared_inbox.sql",
+      "bytes": 3174,
+      "sha256": "8468413e833f9291a0ba0f5a98076fefa47f7a0c4741c9c49e0530b0763e1f2e"
+    },
+    {
+      "path": "supabase/tests/workspace-sharing.pglite.mjs",
+      "bytes": 22295,
+      "sha256": "10981853db947acf61361eb34dbb6f4c52e676586ffd4944ebe1a625af42dfd9"
+    }
+  ]
+}

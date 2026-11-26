@@ -248,6 +248,36 @@ try{
   assert.equal((await open(link(11))).role,"viewer");
   assert.equal((await open(link(12),null,null,"flashcard",deck)).data[0].back,"Back");
   assert.equal((await open(link(13),null,null,"lab",lab)).data.html,"<p>Study</p>");
+
+  await db.exec("reset role");
+  await migrate("0048_unified_shared_inbox.sql");
+  await migrate("0048_unified_shared_inbox.sql");
+  const inbox=actor=>value("select ws_share_received($1) as v",[actor]);
+  const visit=(token,actor=null,kind=null,id=null)=>value("select ws_share_open($1,$2,null,$3,$4) as v",[token,actor,kind,id]);
+  await role("service_role");
+  assert.ok((await inbox(recipient)).some(row=>row.id===quizFolder && row.token===privateQuiz));
+  assert.ok((await inbox(recipient)).some(row=>row.id===quiz && row.token===link(4) && row.role==="editor"));
+  assert.deepEqual(await inbox(other),[]);
+  await visit(link(11));
+  await visit(link(11),owner);
+  await assert.rejects(visit(link(11),other,"lab",lab),/SHARE_FORBIDDEN/);
+  await assert.rejects(visit(privateQuiz,other),/SHARE_FORBIDDEN/);
+  assert.deepEqual(await inbox(owner),[]);
+  assert.deepEqual(await inbox(other),[]);
+  await visit(link(11),other,"learning_folder",quizChild);
+  await visit(link(11),other);
+  assert.deepEqual((await inbox(other)).map(row=>[row.id,row.token,row.role]),[[quizFolder,link(11),"viewer"]]);
+  assert.equal((await inbox(other))[0].title,"Quiz studies");
+  await visit(link(11),recipient);
+  await visit(link(3),recipient);
+  assert.equal((await inbox(recipient)).filter(row=>row.id===quizFolder).length,1);
+  assert.deepEqual((await inbox(recipient)).filter(row=>row.id===quiz).map(row=>row.role),["editor"]);
+  for(const actor of ["anon","authenticated"]){
+    await role(actor);
+    await assert.rejects(visit(link(11),recipient),/permission denied/);
+    await assert.rejects(inbox(recipient),/permission denied/);
+    await assert.rejects(rows("select grant_id from workspace_share_visits"),/permission denied/);
+  }
   await actorAs(owner);
   await place("quiz",quiz,null);
   await folderFriend("learning_folder",quizFolder,"remove",recipient);
@@ -256,7 +286,10 @@ try{
   await assert.rejects(open(link(11),null,null,"quiz",quiz),/SHARE_FORBIDDEN/);
   await assert.rejects(open(privateQuiz,recipient),/SHARE_FORBIDDEN/);
   await assert.rejects(open(privateWorkspace,recipient),/SHARE_FORBIDDEN/);
+  assert.equal((await inbox(recipient)).some(row=>row.token===privateWorkspace),false);
   await manage(owner,"learning_folder",quizFolder,"remove","","viewer",null);
   await assert.rejects(open(link(11)),/SHARE_FORBIDDEN/);
-  console.log("Workspace and study folder sharing SQL passed: legacy grants, nested folders, private cards, view links, revocation, and RLS.");
+  assert.deepEqual(await inbox(other),[]);
+  assert.equal((await inbox(recipient)).some(row=>row.id===quizFolder),false);
+  console.log("Workspace sharing and unified inbox SQL passed, including public visits, direct shares, revocation and RLS.");
 } finally { await db.close(); }

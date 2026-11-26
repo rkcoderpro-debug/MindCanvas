@@ -31,7 +31,7 @@ test("sharing gateway authenticates writes, streams only the authorized fixed St
       const args=JSON.parse(String(init?.body));rpc.push({url,args});
       if(url.endsWith("ws_share_mail"))return Response.json({email:"target@example.test",role:"viewer",title:"Lecture"});
       if(args.p_op==="download")return downloadAllowed ? Response.json({owner:uid,object:resource,title:"lecture.cpp",size:3}) : Response.json({message:"SHARE_FORBIDDEN"},{status:400});
-      if(url.endsWith("ws_share_read"))return Response.json({state:"ok",kind:"file",id:resource,title:"Lecture",role:"viewer"});
+      if(url.endsWith("ws_share_open"))return Response.json({state:"ok",kind:"file",id:resource,title:"Lecture",role:"viewer"});
       return Response.json({ok:true});
     }
     assert.equal(url,`https://share.unit.test/storage/v1/object/authenticated/workspace-files/${uid}/${resource}`);
@@ -46,7 +46,11 @@ test("sharing gateway authenticates writes, streams only the authorized fixed St
     "Content-Type":"application/json",...(bearer&&{Authorization:`Bearer ${bearer}`})},body:JSON.stringify(body)});
   const opened=await post("open",{token});
   assert.equal(opened.status,200);assert.equal(opened.headers.get("Cache-Control"),"private, no-store");
+  assert.equal((await opened.json()).title,"Lecture");
   assert.equal(rpc.at(-1)?.args.p_actor,null);
+  assert.equal((await post("open",{token},"verified")).status,200);
+  assert.match(rpc.at(-1)?.url??"",/\/ws_share_open$/);
+  assert.equal(rpc.at(-1)?.args.p_actor,uid);
   const change={token,kind:"file",id:resource,op:"rename",payload:{title:"new"}};
   assert.equal((await post("edit",change)).status,401);
   assert.equal((await post("edit",{...change,actor:uid},"verified")).status,400);

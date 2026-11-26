@@ -120,7 +120,7 @@ workspaceSharing.post("/manage",requireUser,route(async(req,res)=>{
 workspaceSharing.get("/received",requireUser,route(async(req,res)=>{res.json(await rpc("ws_share_received",{p_actor:req.userId}));}));
 workspaceSharing.post("/open",optionalUser,route(async(req,res)=>{
   const input=bodySchema.parse(req.body);
-  res.json(await rpc("ws_share_read",{...actors(req,input.token),p_kind:input.kind ?? null,p_id:input.id ?? null}));
+  res.json(await rpc("ws_share_open",{...actors(req,input.token),p_kind:input.kind ?? null,p_id:input.id ?? null}));
 }));
 workspaceSharing.post("/submit",optionalUser,route(async(req,res)=>{
   const input=accessSchema.extend({revision:plain(64),answers:z.array(z.number().int().min(0).max(3).nullable()).max(100)}).parse(req.body);

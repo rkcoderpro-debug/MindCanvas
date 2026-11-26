@@ -5,9 +5,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SharedLearningPage from "./SharedLearningPage";
 
 const api = vi.hoisted(() => ({ shares: vi.fn(), invites: vi.fn(), copies: vi.fn(), content: vi.fn(), start: vi.fn(), cards: vi.fn(), rate: vi.fn() }));
+const received = vi.hoisted(() => vi.fn());
 vi.mock("../lib/learningShare", async importOriginal => ({ ...await importOriginal<typeof import("../lib/learningShare")>(),
   listLearningShares: api.shares, listPendingLearningInvites: api.invites, listMyLearningCopySources: api.copies, getSharedContent: api.content,
   startSharedQuiz: api.start, getSharedCards: api.cards, rateSharedCard: api.rate,
+}));
+vi.mock("../lib/workspaceSharing", async importOriginal => ({
+  ...await importOriginal<typeof import("../lib/workspaceSharing")>(),
+  shareReceived: received,
 }));
 let host: HTMLDivElement, root: Root;
 const valid = { kind: "lab", resource_id: "lab-1", title: "Working Lab", owner_name: "Owner", updated_at: "2026-10-13T00:00:00Z", status: "active" };
@@ -16,6 +21,7 @@ beforeEach(() => {
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   api.shares.mockReset().mockResolvedValue([valid]); api.invites.mockReset().mockResolvedValue([]); api.copies.mockReset().mockResolvedValue([]);
   api.content.mockReset().mockResolvedValue({ program_html: "<p>Simulation</p>" });
+  received.mockReset().mockResolvedValue([]);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.useRealTimers(); });
 async function mount(owner = "recipient") { await act(async () => root.render(<SharedLearningPage owner={owner}/>)); }
@@ -98,4 +104,38 @@ it("handles null empty lists without crashing", async () => {
   api.shares.mockResolvedValue(null); api.invites.mockResolvedValue(null); api.copies.mockResolvedValue(null);
   await mount();
   expect(host.querySelector(".shared-learning-empty")).not.toBeNull();
+});
+
+it("combines direct shares, projects and links in one searchable list without duplicate cards", async () => {
+  const date = valid.updated_at;
+  const project = { id: "project-1", title: "Shared project", folderId: null, updatedAt: date, shared: true, accessRole: "viewer" as const };
+  const workspace = { projects: [project, { ...project, id: "personal", shared: false }], loading: false,
+    open: vi.fn(), duplicate: vi.fn(), refresh: vi.fn().mockResolvedValue(undefined) };
+  const token = "a".repeat(48);
+  received.mockResolvedValue([
+    { kind: "lab", id: valid.resource_id, title: valid.title, owner_name: "Owner", created_at: date, token, role: "viewer" },
+    { kind: "file", id: "file-1", title: "Shared PDF", owner_name: "Gia", created_at: date, token, role: "viewer" },
+    { kind: "learning_folder", id: "folder-1", title: "Shared exercises", owner_name: "Gia", created_at: date, token, role: "viewer" },
+  ]);
+  await act(async () => root.render(<SharedLearningPage owner="recipient" workspace={workspace}/>));
+  const cards = () => [...host.querySelectorAll(".shared-learning-item")].map(card => card.querySelector("h3")?.textContent);
+  expect(cards()).toEqual(["Working Lab", "Shared project", "Shared PDF", "Shared exercises"]);
+  expect(host.querySelector(".shared-learning-item a")?.getAttribute("href")).toContain(`#share=${token}`);
+  const button = (label: string) => [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === label)!;
+  await act(async () => button("Mở project").click());
+  expect(workspace.open).toHaveBeenCalledWith(project);
+  await act(async () => button("Thư mục1").click());
+  expect(cards()).toEqual(["Shared exercises"]);
+  await act(async () => button("Tất cả4").click());
+  const input = host.querySelector<HTMLInputElement>(".shared-learning-search input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "Gia");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(cards()).toEqual(["Shared PDF", "Shared exercises"]);
+  received.mockRejectedValue(new Error("Offline"));
+  await act(async () => button("Làm mới").click());
+  expect(workspace.refresh).toHaveBeenCalledOnce();
+  expect(cards()).toEqual(["Shared PDF", "Shared exercises"]);
+  expect(host.querySelector('[role="alert"]')).not.toBeNull();
 });

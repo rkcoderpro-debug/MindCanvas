@@ -6,7 +6,10 @@ export type ShareKind = "folder"|"canvas"|"file"|"quiz"|"flashcard"|"learning_fo
 export type ShareRole = "viewer"|"editor";
 export type ShareItem = {kind:ShareKind;id:string;title:string;embed?:string};
 export type ShareGrant = {email:string;role:ShareRole;token:string};
-export type ShareReceived = Omit<ShareItem,"id"> & Pick<ShareGrant,"role"|"token">;
+export type ShareReceived = ShareItem & Pick<ShareGrant,"role"|"token"> & {
+  owner_name: string | null;
+  created_at: string;
+};
 export type SharedCard = {id:string;front:string;back:string;revision:string};
 export type SharedQuestion = {id:string;prompt:string;options:string[];correctIndex?:number;explanation?:string};
 export type ShareView = {state:"verify"} | {state:"sign-in";audience?:"friend"} | ({

@@ -64,7 +64,9 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}
   const ctx:Context={token,editable,tr,pending,act,loadItem:navigate};
   const login=<button type="button" className="primary-button" onClick={onSignIn}><LogIn size={16}/>{tr("Đăng nhập để chỉnh sửa","Sign in to edit")}</button>;
   return <main className="workspace-share-view">
-    <div className="workspace-share-top"><a href={window.location.pathname}><ArrowLeft size={16}/> MindCanvas</a><Link2 size={15}/>{tr("Nội dung chia sẻ","Shared content")}</div>
+    <div className="workspace-share-top"><a href={window.location.pathname}><ArrowLeft size={16}/> MindCanvas</a><Link2 size={15}/>{tr("Nội dung chia sẻ","Shared content")}
+      {signedIn && <a href={`${window.location.pathname}?learn=shared`}>{t("sharedWithMe")}</a>}
+    </div>
     {trail.length>0 && <nav className="workspace-share-crumbs" aria-label={tr("Đường dẫn","Path")}>
       <button type="button" disabled={pending} onClick={()=>move([])}>{tr("Mục được chia sẻ","Shared item")}</button>
       {trail.map((item,index)=><span key={item.id}> › {index===trail.length-1?(state?.state==="ok"?state.title:item.title):<button type="button" disabled={pending} onClick={()=>move(trail.slice(0,index+1))}>{item.title}</button>}</span>)}
@@ -92,6 +94,7 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError}
     </section>:state?.state==="ok"?<>
       <header className="workspace-share-main-heading"><div><span className="eyebrow">{typeName(tr,state.kind)} · {editable?tr("Có thể chỉnh sửa","Can edit"):tr("Chỉ xem","View only")}</span><h1>{state.title}</h1></div>
         {state.signInToEdit && login}
+        {!signedIn && !state.signInToEdit && <button type="button" className="secondary-button" onClick={onSignIn}><LogIn size={16}/>{tr("Đăng nhập để lưu vào mục chia sẻ", "Sign in to keep this in Shared with me")}</button>}
         <button className="secondary-button" type="button" disabled={pending} onClick={reload}><RefreshCw size={16}/>{tr("Mở lại","Reload")}</button>
       </header>
       {state.kind==="folder"&&<SharedFolder key={state.id} item={state} ctx={ctx}/>}

@@ -412,6 +412,17 @@ describe("Workspace UI", () => {
     expect(window.location.search).toBe("?learn=overview");
     expect(host.querySelector(".topbar .shell-back")?.textContent).toBe("Về Workspace");
   });
+  it("opens the same sharing screen from the sidebar and Learning Hub", async () => {
+    await import("./components/LearningHubPage");
+    await act(async () => root.render(<App/>));
+    await act(async () => host.querySelector<HTMLButtonElement>('.nav-list button[title="Được chia sẻ với tôi"]')!.click());
+    await waitForUI(() => expect(host.querySelector(".shared-learning h2")?.textContent).toBe("Được chia sẻ với tôi"));
+    const workspaceInbox = host.querySelector(".shared-learning")!.textContent;
+    expect(host.querySelector(".workspace-home")).toBeNull();
+    await act(async () => host.querySelector<HTMLButtonElement>(".nav-learning")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('.learning-secondary-groups [data-guide-tab="shared"]')!.click());
+    await waitForUI(() => expect(host.querySelector('[data-learning-tool="shared"] .shared-learning')?.textContent).toBe(workspaceInbox));
+  });
   it("restores the workspace and learning home when traversing their entry history", async () => {
     await import("./components/LearningHubPage"); await act(async () => root.render(<App/>));
     await act(async () => host.querySelector<HTMLButtonElement>(".nav-learning")!.click());
