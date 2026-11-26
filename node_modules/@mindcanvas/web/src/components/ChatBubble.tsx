@@ -28,7 +28,7 @@ export default function ChatBubble({ owner, request, onOpenShared }: {
     }
   }, [request]);
   useEffect(() => {
-    if (open) heading.current?.focus({ preventScroll: true });
+    if (open) (dock.current?.querySelector<HTMLElement>(".connection-profile-heading h3") ?? heading.current)?.focus({ preventScroll: true });
   }, [open]);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -63,11 +63,11 @@ export default function ChatBubble({ owner, request, onOpenShared }: {
   }}>
     <section className="chat-bubble-panel" id={panelId} hidden={!open} aria-labelledby={`${panelId}-heading`}>
       <header>
-        <h2 id={`${panelId}-heading`} ref={heading} tabIndex={-1}>{label}</h2>
+        <h2 id={`${panelId}-heading`} ref={heading} tabIndex={-1}><MessageCircle size={18} aria-hidden="true"/>{label}</h2>
         <button type="button" className="icon-button" onClick={close} title={vi ? "Thu nhỏ" : "Minimize"}
           aria-label={vi ? "Thu nhỏ tin nhắn" : "Minimize messages"}><Minus size={19}/></button>
       </header>
-      <ConnectionsPage owner={owner} compact visible={open} onUnread={setUnread}
+      <ConnectionsPage owner={owner} compact visible={open} onUnread={setUnread} onMinimize={close}
         initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenShared={() => { close(); onOpenShared(); }}/>
     </section>
     <button type="button" className="chat-bubble-toggle" ref={toggle} title={label}

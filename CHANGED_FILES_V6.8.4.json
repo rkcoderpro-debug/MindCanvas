@@ -1,0 +1,72 @@
+{
+  "version": "6.8.4",
+  "baseVersion": "6.8.3",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.4.md",
+      "bytes": 668,
+      "sha256": "790a3e2de8d87cb1e39a735d109681dbd4a56f7e3b2aeceebebc756f130666d1"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "4bf022f0c63de3529d2e77cac04c4f06acc45f3f1d4cdcca245e558ec741f7cf"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1081,
+      "sha256": "58a884ae51accc23c18a1b68626b5df01c54f71dab0bb288b29810ed6171d2a2"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 3693,
+      "sha256": "7f7267fdffdd62ac2c26dfc8ffd26699d67a14d66c6871e31c1e29c24bd24d26"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 7441,
+      "sha256": "697065eb1e82f4bf3d70f7db85419f43180e267424e3fe9c4ec30425a787550e"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 25854,
+      "sha256": "53572601da71d027dadec0b2f6dd8d3f8a65409db1550bfa3f90f22643066f3d"
+    },
+    {
+      "path": "apps/web/src/components/QuizPage.tsx",
+      "bytes": 14747,
+      "sha256": "ab46a4bf11774d11109a436ca2454a50a4b6dc697b31dc57244486067e00ecef"
+    },
+    {
+      "path": "apps/web/src/components/StudyFolders.tsx",
+      "bytes": 7278,
+      "sha256": "4cef42a659798c5322ba3816eff9811077e00e5b57c46b04034d79755d211df5"
+    },
+    {
+      "path": "apps/web/src/components/chatBubble.css",
+      "bytes": 6758,
+      "sha256": "4b5ae933a041d82dda931117b0c05d3d4839857394bc70d6d32a1c17b3230555"
+    },
+    {
+      "path": "apps/web/src/components/studyFolders.css",
+      "bytes": 1598,
+      "sha256": "397a5ee7bfedb2c37e2dc162d74d2784e2754635a1c6555e12dbed65dd1a0666"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 525015,
+      "sha256": "c6a12d693608220a603329d0336c4426b30cef122f19395bc1cd84238d978f81"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "2ad18dac0546714cbc6d873978948cf74583254f56e1bda1c16bea7428d7741d"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "afdc8b9b1c198fc589b5ccb1264dfc44f5d49ea9c4558944d57fcc6146e67807"
+    }
+  ]
+}

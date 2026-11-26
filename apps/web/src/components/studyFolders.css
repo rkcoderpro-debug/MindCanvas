@@ -1,4 +1,5 @@
-.study-folders { display: grid; gap: .65rem; margin-block: .75rem; }
+.study-folders { display: grid; gap: .5rem; margin-block: .55rem .75rem; }
+.study-folder-heading > .secondary-button { min-height: 38px; padding-block: .4rem; }
 .study-folder-heading { display: flex; align-items: center; justify-content: space-between; gap: .65rem; flex-wrap: wrap; }
 .study-folder-heading nav { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem; min-width: 0; }
 .study-folder-heading nav > span { overflow-wrap: anywhere; }

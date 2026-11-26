@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, Copy, FileText, Folder, FlaskConical, ListChecks, MessageCircle, MoreHorizontal, RefreshCw, Search, Send, UserPlus, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, Copy, FileText, Folder, FlaskConical, ListChecks, MessageCircle, Minus, MoreHorizontal, RefreshCw, Search, Send, UserPlus, Users, X } from "lucide-react";
 import {
   blockConnection, cancelConnectionInvitation, createConnectionInvitation, listBlockedConnections, listConnectionInvitations,
   listConnections, listDirectMessages, markDirectMessagesRead, removeConnection,
@@ -33,9 +33,10 @@ function mergeMessages(latest: DirectMessage[], current: DirectMessage[]) {
 }
 
 export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, initialPeerVersion, compact = false,
-  visible = true, onUnread, onChat }: {
+  visible = true, onUnread, onChat, onMinimize }: {
   owner: string | null; onOpenShared: () => void; initialPeerId?: string; initialPeerVersion?: number;
   compact?: boolean; visible?: boolean; onUnread?: (count: number) => void; onChat?: (peerId: string) => void;
+  onMinimize?: () => void;
 }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [invitations, setInvitations] = useState<ConnectionInvitation[]>([]);
@@ -252,9 +253,10 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
         {!compact && <details className="connections-invite" open={!!link || undefined}><summary><UserPlus size={18}/>Mời kết nối</summary><p>Nhập email để lời mời hiện trong tài khoản người nhận, hoặc để trống để tạo liên kết dùng một lần.</p><form onSubmit={event => void invite(event)}><label>Email người nhận (tùy chọn)<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="banhoc@example.com"/></label><button className="primary-button" disabled={busy}>Tạo liên kết</button></form>{link && <div className="connections-link"><input ref={linkInput} aria-label="Liên kết kết nối" value={link} readOnly/><button type="button" className="secondary-button" onClick={() => void copyTextWithFallback(link,linkInput.current).then(ok => { if (!ok) setError("Hãy sao chép liên kết thủ công."); })}><Copy size={15}/>Sao chép</button></div>}<form onSubmit={event => void acceptCode(event)}><label>Nhận lời mời bằng mã hoặc liên kết<input value={token} onChange={event => setToken(event.target.value)} placeholder="Dán mã hoặc liên kết"/></label><button className="secondary-button" disabled={busy || !token.trim()}>Kết nối</button></form></details>}
         {pending.length > 0 && <section className="connections-pending"><h3>Lời mời đang chờ</h3>{pending.map(item => <article key={item.id}><span>{item.outgoing ? `Đã mời ${item.recipient_email ?? "qua liên kết"}` : `${item.sender_name} muốn kết nối`}</span><small>Hết hạn {new Date(item.expires_at).toLocaleDateString("vi-VN")}</small><div>{item.outgoing ? <button type="button" disabled={busy} onClick={() => void run(() => cancelConnectionInvitation(item.id))}><X size={14}/>Hủy</button> : <><button type="button" disabled={busy} onClick={() => void run(() => respondConnectionInvitation(item.token_hash, "accepted", true))}><Check size={14}/>Chấp nhận</button><button type="button" disabled={busy} onClick={() => void run(() => respondConnectionInvitation(item.token_hash, "declined", true))}>Từ chối</button></>}</div></article>)}</section>}
         <section className="connections-people">
-          <h3><Users size={18}/>Hội thoại <small>{connections.length}</small></h3>
+          {!compact && <h3><Users size={18}/>Hội thoại <small>{connections.length}</small></h3>}
           {connections.length > 0 && <label className="connections-search"><Search size={16}/><input type="search" aria-label="Tìm cuộc trò chuyện" placeholder="Tìm theo tên…" value={query} onChange={event => setQuery(event.target.value)}/></label>}
-          {people.map(person => <button type="button" key={person.peer_id} className={`connections-person ${peerId === person.peer_id ? "active" : ""}`} aria-current={peerId === person.peer_id ? "true" : undefined} onClick={() => void choose(person)}>
+          {people.map(person => <button type="button" key={person.peer_id} className={`connections-person ${peerId === person.peer_id ? "active" : ""}`}
+            data-unread={Number(person.unread_count) > 0} aria-current={peerId === person.peer_id ? "true" : undefined} onClick={() => void choose(person)}>
             <ProfileAvatar url={person.avatar} name={person.display_name} className="connection-profile-avatar"/>
             <span className="connection-summary"><strong>{person.display_name}</strong><span>{messagePreview(person.lastMessage)}</span></span>
             <span className="connection-metadata">
@@ -270,7 +272,7 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
         {peer ? <>
           <header>
             <button type="button" className="icon-button connections-thread-back" onClick={returnToList} aria-label="Quay lại danh sách hội thoại" title="Quay lại danh sách hội thoại"><ArrowLeft size={20}/></button>
-            <div className="connection-profile-heading"><ProfileAvatar url={peer.avatar} name={peer.display_name} className="connection-profile-avatar"/><div><h3 ref={threadHeading} tabIndex={-1}>{peer.display_name}</h3><small>Tin nhắn riêng</small></div></div>
+            <div className="connection-profile-heading"><ProfileAvatar url={peer.avatar} name={peer.display_name} className="connection-profile-avatar"/><div><h3 ref={threadHeading} tabIndex={-1}>{peer.display_name}</h3>{!compact && <small>Tin nhắn riêng</small>}</div></div>
             <details className="connections-peer-menu" key={peer.peer_id}>
               <summary aria-label="Tùy chọn hội thoại"><MoreHorizontal size={20}/><span>Tùy chọn</span></summary>
               <div className="connections-peer-actions">
@@ -279,6 +281,8 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
                 <button type="button" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setShowReport(value => !value); }}>Báo cáo</button>
               </div>
             </details>
+            {onMinimize && <button type="button" className="icon-button chat-thread-minimize" onClick={onMinimize}
+              aria-label="Thu nhỏ tin nhắn" title="Thu nhỏ tin nhắn"><Minus size={18}/></button>}
           </header>
           <div className="connections-thread">
             {showReport && <form className="connections-report" onSubmit={event => { event.preventDefault(); void run(async () => { await reportConnection(peer.peer_id, reportText); if (openPeer.current === peer.peer_id) { setReportText(""); setShowReport(false); setNotice("Đã gửi báo cáo."); } }); }}>
@@ -296,7 +300,16 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
               {!messages.length && <p className="connections-empty" role="status">{loadingThread ? "Đang tải tin nhắn…" : "Hãy gửi tin nhắn đầu tiên hoặc chia sẻ học liệu từ thư viện."}</p>}
             </div>
           </div>
-          <form className="connections-composer" onSubmit={event => void send(event)}><label className="sr-only" htmlFor={composerId}>Tin nhắn</label><textarea id={composerId} rows={2} maxLength={4000} value={body} onChange={event => { const draft = event.target.value; setDrafts(current => ({ ...current, [peer.peer_id]: draft })); }} placeholder="Viết tin nhắn…"/><button className="primary-button" disabled={busy || loadingThread || loadingOlder || !body.trim()}><Send size={17}/>Gửi</button></form>
+          <form className="connections-composer" onSubmit={event => void send(event)}>
+            <label className="sr-only" htmlFor={composerId}>Tin nhắn</label>
+            <textarea id={composerId} rows={compact ? 1 : 2} maxLength={4000} value={body} onChange={event => {
+              const draft = event.target.value;
+              setDrafts(current => ({ ...current, [peer.peer_id]: draft }));
+            }} placeholder="Viết tin nhắn…"/>
+            <button className="primary-button" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={busy || loadingThread || loadingOlder || !body.trim()}>
+              <Send size={17}/>{!compact && "Gửi"}
+            </button>
+          </form>
         </> : <div className="connections-empty"><MessageCircle size={34}/><h3>Chọn một người kết nối</h3><p>Cuộc trò chuyện riêng của hai người sẽ hiện ở đây.</p></div>}
       </section>}
     </div>
@@ -313,13 +326,19 @@ function formatPreviewTime(at: string) {
 function MessageBubble({ message, mine, date, onOpenShared }: { message: DirectMessage; mine: boolean; date?: string; onOpenShared: () => void }) {
   const kind = message.resource_kind;
   const Icon = message.workspace_folder_card ? Folder : kind ? resourceIcons[kind] : FileText;
-  const title = kind ? message.resource_title || resourceLabels[kind] : "";
+  const resourceLabel = kind ? resourceLabels[kind] : "";
+  const title = message.resource_title || resourceLabel;
   const token = kind === "document" ? message.workspace_file_token : null;
   const fileLink = token && /^[a-f0-9]{48}$/.test(token) ? workspaceShareUrl(token) : "";
-  const asset = <><Icon size={18}/><span><strong>{title}</strong><small>{token ? (fileLink ? message.workspace_folder_card ? "Mở thư mục" : "Mở tài liệu" : "Nội dung không còn khả dụng") : mine ? "Học liệu đã gửi" : "Mở trong Được chia sẻ với tôi"}</small></span>{(!mine || fileLink) && <ArrowUpRight size={16}/>}</>;
+  const asset = <><span className="connections-resource-icon" aria-hidden="true"><Icon size={17}/></span>
+    <span className="connections-resource-copy"><strong title={title}>{title}</strong>
+      <small>{token ? (fileLink ? message.workspace_folder_card ? "Mở thư mục" : "Mở tài liệu" : "Nội dung không còn khả dụng")
+        : mine ? resourceLabel + " đã gửi" : "Mở trong mục chia sẻ"}</small></span>
+    {(!mine || fileLink) && <ArrowUpRight className="connections-resource-arrow" size={15} aria-hidden="true"/>}
+  </>;
   return <>
     {date && <div className="connections-date">{date}</div>}
-    <article className={mine ? "mine" : "theirs"}>
+    <article className={`${mine ? "mine" : "theirs"}${kind && !message.body ? " connections-attachment-only" : ""}`}>
       {message.body && <p>{message.body}</p>}
       {token
         ? (fileLink ? <a className="connections-resource" href={fileLink} target="_blank" rel="noopener noreferrer">{asset}</a> : <span className="connections-resource">{asset}</span>)

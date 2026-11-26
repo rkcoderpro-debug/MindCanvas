@@ -113,14 +113,78 @@ export default function QuizPage({ owner, store, accountPlan, onQuizCompleted }:
     </ActivityViewport>;
   }
 
-  const visibleQuizzes = store.quizzes.filter(quiz => studyFolders.itemFolder(quiz.id) === studyFolders.folderId && (quizFilter === "all" || !!quiz.savedFrom));
-  const savedQuizCount = store.quizzes.filter(quiz => !!quiz.savedFrom).length;
+  const folderQuizzes = store.quizzes.filter(quiz => studyFolders.itemFolder(quiz.id) === studyFolders.folderId);
+  const visibleQuizzes = quizFilter === "all" ? folderQuizzes : folderQuizzes.filter(quiz => quiz.savedFrom);
+  const savedQuizCount = folderQuizzes.filter(quiz => quiz.savedFrom).length;
+  const vi = language === "vi";
+  const listTitle = studyFolders.folderId ? (vi ? "Quiz trong thư mục" : "Quiz in this folder")
+    : (vi ? "Quiz ngoài thư mục" : "Quiz outside folders");
 
-  return <section className="quiz-page"><header className="quiz-heading"><div><span className="eyebrow">QUIZ STUDIO</span><h2>{t("quiz")}</h2><p>{t("quizHint")}</p></div><button className="primary-button" onClick={() => setDialog(true)}><FileUp size={17}/>{t("createQuiz")}</button></header><StudyFolderControls store={studyFolders} items={folderItems} area="quiz" owner={owner} plan={accountPlan}/><div className="learning-copy-filter" aria-label="Lọc Quiz"><button aria-pressed={quizFilter === "all"} onClick={() => setQuizFilter("all")}>Tất cả <small>{store.quizzes.length}</small></button><button aria-pressed={quizFilter === "saved"} onClick={() => setQuizFilter("saved")}>Đã lưu <small>{savedQuizCount}</small></button></div>{store.error && <div className="flashcards-error" role="alert"><span>{store.error}</span><button className="icon-button" onClick={() => store.setError("")}><X size={15}/></button></div>}{store.loading ? <p>{t("loading")}</p> : !store.quizzes.length ? <div className="quiz-empty"><ClipboardList size={44}/><h3>{t("noQuizzes")}</h3><p>{t("noQuizzesHint")}</p></div> : <><section className="quiz-mode-panel"><div><strong>{t("quizHowToStudy")}</strong><small>{launchMode === "review" ? t("quizReviewModeHint") : t("quizModesHint")}</small></div><label>{t("quizMode")}<select value={launchMode} onChange={event => { const next = event.target.value as QuizMode; setLaunchMode(next); setLaunchReveal(next === "learn" || next === "review" ? "instant" : "submit"); }}><option value="learn">{t("quizModeLearn")}</option><option value="practice">{t("quizModePractice")}</option><option value="exam">{t("quizModeExam")}</option><option value="review">{t("quizModeReview")}</option></select></label><label>{t("quizOrder")}<select value={launchOrder} onChange={event => setLaunchOrder(event.target.value as QuizOrder)}><option value="sequential">{t("quizOrderSequential")}</option><option value="random">{t("quizOrderRandom")}</option></select></label><label>{t("quizRevealWhen")}<select value={launchReveal} onChange={event => setLaunchReveal(event.target.value as AnswerReveal)}><option value="instant">{t("quizRevealInstant")}</option><option value="submit">{t("quizRevealSubmit")}</option></select></label></section><div className="quiz-list">{visibleQuizzes.map(quiz => { const attempts = store.attempts.filter(attempt => attempt.quizId === quiz.id); const best = attempts.reduce((value, attempt) => Math.max(value, attempt.total ? Math.round(attempt.score / attempt.total * 100) : 0), 0); return <article className="quiz-test-card" key={quiz.id}><div className="quiz-card-icon"><ClipboardList size={22}/></div><div className="quiz-card-copy"><h3>{quiz.title}</h3><p>{quiz.description || t("quizQuickHint")}</p><small>{quiz.questions.length} {t("quizQuestions").toLocaleLowerCase()} · {attempts.length} {t("quizAttempts").toLocaleLowerCase()}{best ? ` · ${t("bestScore")}: ${best}%` : ""}</small>{quiz.savedFrom && <small className="learning-copy-provenance">Bản lưu từ {quiz.savedFrom.ownerName} · {quiz.savedFrom.title}</small>}</div><div className="quiz-card-actions"><StudyFolderMoveButton store={studyFolders} item={quiz}/><WorkspaceShareButton item={{kind:"quiz",id:quiz.id,title:quiz.title}} friends={{plan:accountPlan}} available={!!owner&&quiz.source==="cloud"} compact/><button className="primary-button" onClick={() => startQuiz(quiz)}><Play size={16}/>{launchMode === "review" ? t("reviewQuiz") : t("startQuiz")}</button><button className="icon-button danger" aria-label={`${t("deleteQuiz")}: ${quiz.title}`} onClick={() => void store.removeQuiz(quiz)}><Trash2 size={16}/></button></div></article>; })}{!visibleQuizzes.length && <p className="learning-copy-empty">{quizFilter === "saved" ? "Chưa có Quiz nào được lưu từ mục chia sẻ." : t("noQuizzesHint")}</p>}</div></>}<QuizCreateDialog key={`${owner ?? "guest"}:${studioSession}`} open={dialog} owner={owner} store={store} accountPlan={accountPlan} onClose={() => setDialog(false)} onCreated={id => {
-    setDialog(false);
-    setStudioSession(value => value + 1);
-    if (id && studyFolders.folderId) void studyFolders.moveItem(id, studyFolders.folderId).catch(() =>
-      store.setError(language === "vi" ? "Quiz đã lưu ngoài thư mục. Bạn có thể chuyển Quiz sau." : "Quiz saved at the root. You can move it to a folder."));
-  }}/></section>;
+  return <section className="quiz-page">
+    <header className="quiz-heading">
+      <div><h2>{t("quiz")}</h2><p>{t("quizHint")}</p></div>
+      <button className="primary-button" onClick={() => setDialog(true)}><FileUp size={17}/>{t("createQuiz")}</button>
+    </header>
+    <StudyFolderControls store={studyFolders} items={folderItems} area="quiz" owner={owner} plan={accountPlan}/>
+    <section className="quiz-library" aria-labelledby="quiz-library-heading">
+      <div className="quiz-library-heading">
+        <h3 id="quiz-library-heading">{listTitle}</h3>
+        <div className="learning-copy-filter" aria-label={vi ? "Lọc Quiz" : "Filter quizzes"}>
+          <button aria-pressed={quizFilter === "all"} onClick={() => setQuizFilter("all")}>{vi ? "Tất cả" : "All"} <small>{folderQuizzes.length}</small></button>
+          <button aria-pressed={quizFilter === "saved"} onClick={() => setQuizFilter("saved")}>{vi ? "Đã lưu" : "Saved"} <small>{savedQuizCount}</small></button>
+        </div>
+      </div>
+      {store.error && <div className="flashcards-error" role="alert">
+        <span>{store.error}</span><button className="icon-button" aria-label={t("close")} onClick={() => store.setError("")}><X size={15}/></button>
+      </div>}
+      {store.loading ? <p role="status">{t("loading")}</p> : !visibleQuizzes.length ? <div className="quiz-empty">
+        <ClipboardList size={34}/>
+        <h3>{quizFilter === "saved" ? (vi ? "Chưa có Quiz đã lưu ở đây" : "No saved quizzes here") : t("noQuizzes")}</h3>
+        {quizFilter === "all" && <p>{t("noQuizzesHint")}</p>}
+      </div> : <>
+        <section className="quiz-mode-panel">
+          <div><strong>{t("quizHowToStudy")}</strong><small>{launchMode === "review" ? t("quizReviewModeHint") : t("quizModesHint")}</small></div>
+          <label>{t("quizMode")}<select value={launchMode} onChange={event => {
+            const next = event.target.value as QuizMode;
+            setLaunchMode(next);
+            setLaunchReveal(next === "learn" || next === "review" ? "instant" : "submit");
+          }}>
+            <option value="learn">{t("quizModeLearn")}</option><option value="practice">{t("quizModePractice")}</option>
+            <option value="exam">{t("quizModeExam")}</option><option value="review">{t("quizModeReview")}</option>
+          </select></label>
+          <label>{t("quizOrder")}<select value={launchOrder} onChange={event => setLaunchOrder(event.target.value as QuizOrder)}>
+            <option value="sequential">{t("quizOrderSequential")}</option><option value="random">{t("quizOrderRandom")}</option>
+          </select></label>
+          <label>{t("quizRevealWhen")}<select value={launchReveal} onChange={event => setLaunchReveal(event.target.value as AnswerReveal)}>
+            <option value="instant">{t("quizRevealInstant")}</option><option value="submit">{t("quizRevealSubmit")}</option>
+          </select></label>
+        </section>
+        <div className="quiz-list">{visibleQuizzes.map(quiz => {
+          const attempts = store.attempts.filter(attempt => attempt.quizId === quiz.id);
+          const best = attempts.reduce((value, attempt) => Math.max(value, attempt.total ? Math.round(attempt.score / attempt.total * 100) : 0), 0);
+          return <article className="quiz-test-card" key={quiz.id}>
+            <div className="quiz-card-icon"><ClipboardList size={22}/></div>
+            <div className="quiz-card-copy">
+              <h3>{quiz.title}</h3><p>{quiz.description || t("quizQuickHint")}</p>
+              <small>{quiz.questions.length} {t("quizQuestions").toLocaleLowerCase()} · {attempts.length} {t("quizAttempts").toLocaleLowerCase()}{best ? ` · ${t("bestScore")}: ${best}%` : ""}</small>
+              {quiz.savedFrom && <small className="learning-copy-provenance">Bản lưu từ {quiz.savedFrom.ownerName} · {quiz.savedFrom.title}</small>}
+            </div>
+            <div className="quiz-card-actions">
+              <StudyFolderMoveButton store={studyFolders} item={quiz}/>
+              <WorkspaceShareButton item={{kind:"quiz",id:quiz.id,title:quiz.title}} friends={{plan:accountPlan}} available={!!owner && quiz.source === "cloud"} compact/>
+              <button className="primary-button" onClick={() => startQuiz(quiz)}><Play size={16}/>{launchMode === "review" ? t("reviewQuiz") : t("startQuiz")}</button>
+              <button className="icon-button danger" aria-label={`${t("deleteQuiz")}: ${quiz.title}`} onClick={() => void store.removeQuiz(quiz)}><Trash2 size={16}/></button>
+            </div>
+          </article>;
+        })}</div>
+      </>}
+    </section>
+    <QuizCreateDialog key={`${owner ?? "guest"}:${studioSession}`} open={dialog} owner={owner} store={store} accountPlan={accountPlan} onClose={() => setDialog(false)} onCreated={id => {
+      setDialog(false);
+      setStudioSession(value => value + 1);
+      if (id && studyFolders.folderId) void studyFolders.moveItem(id, studyFolders.folderId).catch(() =>
+        store.setError(vi ? "Quiz đã lưu ngoài thư mục. Bạn có thể chuyển Quiz sau." : "Quiz saved at the root. You can move it to a folder."));
+    }}/>
+  </section>;
 }
 

@@ -95,7 +95,7 @@ it("opens a folder card in the compact chat and keeps the conversation minimized
   const link = host.querySelector<HTMLAnchorElement>("a.connections-resource")!;
   expect(link.textContent).toContain("Mở thư mục");
   expect(link.hash).toBe(`#share=${token}`);
-  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-panel > header button")!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-thread-minimize")!.click());
   expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(true);
   await act(async () => launcher.click());
   expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn học");

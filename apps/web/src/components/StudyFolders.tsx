@@ -31,7 +31,7 @@ export function StudyFolderControls({ store, items, area, owner, plan }: {
   const trail = folderAncestors(store.folders, store.folderId);
   const children = store.folders.filter(folder => folder.parentId === store.folderId)
     .sort((a, b) => a.name.localeCompare(b.name, language));
-  const root = vi ? "Ngoài thư mục" : "No folder";
+  const root = vi ? "Thư mục" : "Folders";
   const addLabel = vi ? "Thêm thư mục" : "New folder";
   const renameLabel = vi ? "Đổi tên thư mục" : "Rename folder";
   const shareAvailable = !!owner && store.ready;
