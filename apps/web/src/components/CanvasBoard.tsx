@@ -238,7 +238,6 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
   const { language, t } = useLanguage();
   const vi = language === "vi";
   const { theme } = useTheme(), palette = paperSurface ? paperPalette : THEME_CANVAS_PALETTES[theme];
-  const layout = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null), frame = useRef<HTMLDivElement>(null), toolbar = useRef<HTMLDivElement>(null), toolbarTools = useRef<HTMLSpanElement>(null), gesture = useRef<Gesture | null>(null), pinch = useRef<PinchGesture | null>(null);
   const mediaInput = useRef<HTMLInputElement>(null), recorder = useRef<MediaRecorder | null>(null), recorderStream = useRef<MediaStream | null>(null), recordingChunks = useRef<Blob[]>([]);
   const touchPoints = useRef(new Map<number, Vec2>()), iosTouchActive = useRef(false), autoPanPointer = useRef<Vec2 | null>(null), autoPanFrame = useRef<number | null>(null), autoPanLastAt = useRef<number | null>(null), toolbarUserExpanded = useRef(false), connectorPulseTimer = useRef<number | null>(null);
@@ -299,7 +298,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
   const [tool, setTool] = useState<ToolMode>("select"), [editing, setEditing] = useState<Editing | null>(null), [snap, setSnap] = useState(false), [connectorSource, setConnectorSource] = useState<Selection | null>(null), [connectorPulse, setConnectorPulse] = useState<string[]>([]);
   const inspectorOpenButton = useRef<HTMLButtonElement>(null), inspectorCloseButton = useRef<HTMLButtonElement>(null);
   const inspectorFocus = useRef(false);
-  const [inspectorOpen, setInspectorOpen] = useState(() => !paperSurface && (typeof window === "undefined" || window.innerWidth > 620));
+  const [inspectorOpen, setInspectorOpen] = useState(() => !paperSurface && (typeof window === "undefined" || window.innerWidth >= 900 && window.innerHeight > 560));
   const [hintHidden, setHintHidden] = useState(() => {
     try { return localStorage.getItem("mindcanvas:canvas-hint-hidden") === "true"; } catch { return false; }
   });
@@ -422,6 +421,26 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
       }
     };
   }, [iosTouchFallback, iosOverlaySignature]);
+  useEffect(() => {
+    const element = frame.current;
+    if (!element || paperSurface || roomMode || !onViewportChange) return;
+    const measure = () => ({ width: element.clientWidth, height: element.clientHeight });
+    let previous = measure();
+    const keepCenter = () => {
+      const next = measure();
+      if (!next.width || !next.height) return;
+      const dx = (next.width - previous.width) / 2, dy = (next.height - previous.height) / 2;
+      previous = next;
+      if ((dx || dy) && !gesture.current && !pinch.current && !wheelPending.current) {
+        const current = boardRef.current;
+        onChangeRef.current({ ...current, viewport: panViewport(current.viewport, dx, dy) });
+      }
+    };
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(keepCenter) : null;
+    if (observer) observer.observe(element);
+    else window.addEventListener("resize", keepCenter);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", keepCenter); };
+  }, [board.id, Boolean(paperSurface), roomMode, Boolean(onViewportChange)]);
   useEffect(() => saveCanvasTouchSettings(touchSettings), [touchSettings]);
   useEffect(() => saveDrawingSizes(drawingSizes), [drawingSizes]);
   useEffect(() => { if (tool !== "connector") setConnectorSource(null); }, [tool]);
@@ -1548,7 +1567,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
         onMove={(sourceId, targetId) => onChange(moveLayer(board, sourceId, targetId))}
         onToggleHidden={(selection, value) => onChange(setElementFlags(board, [selection], { hidden: value }))}
         onToggleLocked={(selection, value) => onChange(setElementFlags(board, [selection], { locked: value }))}/>;
-  return <div ref={layout} className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""} ${paperSurface ? "paper-canvas" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode} data-inspector-open={inspectorOpen && !readOnly}>
+  return <div className={`editor-layout toolbar-${toolbarPosition} ${drawingTool ? "drawing-size-active" : ""} ${readOnly ? "editor-readonly" : ""} ${iosTouchFallback ? "ios-touch-fallback" : ""} ${paperSurface ? "paper-canvas" : ""}`} aria-readonly={readOnly} data-input-mode={inputMode} data-inspector-open={inspectorOpen && !readOnly}>
     <div ref={frame} className="editor-frame" onDragOver={event => { if (!roomMode && [...event.dataTransfer.types].includes("Files")) event.preventDefault(); }} onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); if (!roomMode && !readOnly) addCanvasFiles([...event.dataTransfer.files]); }} onPaste={event => {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true], dialog")) return;
@@ -1780,7 +1799,7 @@ export default function CanvasBoard({ roomMode = false, paperSurface, board, onC
       <div className="inspector-heading"><h3>{t("properties")}</h3><button ref={inspectorCloseButton} type="button" className="icon-button inspector-close"
         aria-label={t("closeProperties")} title={t("closeProperties")} onClick={closeInspector}><X size={19}/></button></div>
       {backgroundProperties}{selectionProperties}{inspectorLayers}
-    </aside> : <CanvasInspector layout={layout} open={inspectorOpen} onClose={closeInspector} closeButton={inspectorCloseButton}
+    </aside> : <CanvasInspector open={inspectorOpen} onClose={closeInspector} closeButton={inspectorCloseButton}
       selection={selectionProperties} background={backgroundProperties} layers={inspectorLayers}/>)}
     {aiSelectionKey && <AiSelectionPanel key={aiSelectionKey} visible={aiOpen} sourceText={selectedStudyText} canUse={canUseAi} mindMapScope={selectedMindMapScope} sourceRevision={aiOpen ? selectionRevision(selectedStudyText, selectedMindMapScope) : aiSelectionKey} onClose={() => setAiOpen(false)} onApply={applyAi}/>} 
     {mindMapLayoutOpen && <Dialog title={t("arrangeMapSmart")} onClose={() => setMindMapLayoutOpen(false)}><form onSubmit={event => { event.preventDefault(); applyMindMapLayout(); }}>

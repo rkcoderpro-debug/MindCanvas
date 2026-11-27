@@ -1,0 +1,97 @@
+{
+  "version": "6.8.7",
+  "baseVersion": "6.8.6",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "4ac076c3819a68a0ece7ab8e8470602fef846fb9c8f07b2950519da6a9d6392e"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1141,
+      "sha256": "2278fdbf86ddf2edda3a285cdb3e23780c05f0cf0de75b8388c01a6e6c8f6682"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 4284,
+      "sha256": "ead31a4aed370424bcf824b578ad97038cfed40ce86bde2b5c0ea4fb13397df2"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 17719,
+      "sha256": "a3d1a0efdd308785324ef9abb47f6d5bef73cf9191f0fe912db9b12260e60274"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 76234,
+      "sha256": "dac9595361434aa8bd2c3d395f88325d89aabc9d781228082f034752c3100a8c"
+    },
+    {
+      "path": "apps/web/src/components/A4CanvasEditor.tsx",
+      "bytes": 23488,
+      "sha256": "c684772aa54ada6784a162a4b5aa0b1a4b2f1666f45692865752bb3ac8ef5a45"
+    },
+    {
+      "path": "apps/web/src/components/AppSidebar.tsx",
+      "bytes": 16111,
+      "sha256": "6137f7e5604ff267d26358c1561454093b99b742d015f1cbe03786c2dcb18bca"
+    },
+    {
+      "path": "apps/web/src/components/CanvasBoard.tsx",
+      "bytes": 172709,
+      "sha256": "5c59ebe0982446745b7ab6078ddde6e900dfb8afa229f81e71131b3d29e6ee09"
+    },
+    {
+      "path": "apps/web/src/components/CanvasInspector.tsx",
+      "bytes": 5608,
+      "sha256": "ac48f323fb9a9ddfde4e2a9d490c2d56dfb9f234f77a7389de6e4cab044e3643"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 3437,
+      "sha256": "34b15a97ffca8dd14f52713f9eba08e062ee271402ad52b433ced6fe275fde6d"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "bytes": 2905,
+      "sha256": "069e734aa09953533a25b9242b2a47979bc9016a4a6b55c832063cc189c71b59"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "bytes": 41680,
+      "sha256": "e1f3a9ce9fb5da1af37dc610d9147e44cf1236a9b669262b22470210c7150568"
+    },
+    {
+      "path": "apps/web/src/lib/visualViewport.ts",
+      "bytes": 1325,
+      "sha256": "ba8c54e7ddf78d57dfee7b675e43adc064fd4309b1513a149f82990adb0fb577"
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "bytes": 811,
+      "sha256": "c345cd6d39183cd7a57fef2a33626be1293078cc2ea7db284be6d6e815b1f96d"
+    },
+    {
+      "path": "apps/web/src/responsiveLayout.css",
+      "bytes": 11740,
+      "sha256": "8ea3dafde7be4eb930122f660619ae0e0c51aa85fbd6b42faabe5db938284f3f"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "fb6b57f23851dd0d0e1ee544efa115af26f0d2aa39ff93bd4f46d4c7656e9159"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "04c6b429ef196382f1af26269bc6be8384d87b7234f643cb2e12fb9f78934c20"
+    },
+    {
+      "path": "RELEASE_V6.8.7.md",
+      "bytes": 3413,
+      "sha256": "944c9be7a482fc9578766cb1a2955afb47e5fcec5f4684384f633b8f121bed8a"
+    }
+  ]
+}

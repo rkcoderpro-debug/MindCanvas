@@ -10,6 +10,7 @@ import "./styles.css";
 import "./studioPolish.css";
 import "./musicPolish.css";
 import "./documentReader.css";
+import "./responsiveLayout.css";
 
 restoreOnlineRoomSignIn();
 restoreFolderSignIn();

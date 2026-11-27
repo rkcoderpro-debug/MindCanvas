@@ -1,6 +1,7 @@
 import { useLearningActive } from "../lib/learningNavigation";
 import { useEffect, useId, useRef, type PointerEvent, type ReactNode } from "react";
 import { Minus, X } from "lucide-react";
+import { observeVisualViewport } from "../lib/visualViewport";
 import { useLanguage } from "../lib/i18n";
 
 export default function Dialog({ title, children, onClose, onMinimize, dismissible = true, workspace = false, className, toolbar, footer }: {
@@ -15,7 +16,12 @@ export default function Dialog({ title, children, onClose, onMinimize, dismissib
     if (!learningActive || !dialog) return;
     const previous = document.activeElement as HTMLElement | null;
     dialog.showModal();
-    return () => { dialog.close(); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+    const stopObserving = observeVisualViewport(dialog);
+    return () => {
+      stopObserving();
+      dialog.close();
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
   }, [learningActive]);
   function outside(event: PointerEvent<HTMLDialogElement>) {
     if (event.target !== event.currentTarget) return false;

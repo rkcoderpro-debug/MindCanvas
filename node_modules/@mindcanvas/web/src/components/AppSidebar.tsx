@@ -4,7 +4,7 @@ import type { WorkspaceFile } from "../lib/workspaceFiles";
 import type { Project, ProjectFolder } from "../lib/projectStore";
 import type { Theme } from "../lib/theme";
 import { useLanguage } from "../lib/i18n";
-import { SIDEBAR_MIN_WIDTH, sidebarDensityFor } from "../lib/sidebarLayout";
+import { SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, sidebarDensityFor } from "../lib/sidebarLayout";
 import SidebarAppearanceControls from "./SidebarAppearanceControls";
 import { emitGuideAction } from "../lib/featureGuides";
 import { APP_VERSION_LABEL } from "../lib/appVersion";
@@ -42,9 +42,10 @@ type Props = {
   onToggleCollapsed: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onResetWidth: () => void;
+  onResizeWidth: (width: number) => void;
 };
 
-export default function AppSidebar({ projects, folders, files, activeFileId, onOpenFile, onBrowseFiles, boardOpen, recent, filter, sidebarCollapsed, sidebarWidth, language, selectedTheme, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, canUsePremiumTheme = false, onLockedTheme, onSettings, onToggleCollapsed, onResizeStart, onResetWidth }: Props) {
+export default function AppSidebar({ projects, folders, files, activeFileId, onOpenFile, onBrowseFiles, boardOpen, recent, filter, sidebarCollapsed, sidebarWidth, language, selectedTheme, onHome, onOpenView, onOpenFolder, onOpenProject, onDropProject, onNewFolder, onFolderAction, onManageFolders, onLanguageChange, onThemeChange, canUsePremiumTheme = false, onLockedTheme, onSettings, onToggleCollapsed, onResizeStart, onResetWidth, onResizeWidth }: Props) {
   const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -93,7 +94,8 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
     </div>;
   });
   // A saved desktop width must not consume the content area on a smaller window.
-  const effectiveWidth = Math.min(sidebarWidth, Math.max(SIDEBAR_MIN_WIDTH, Math.floor(viewportWidth * .28)));
+  const sidebarLimit = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.floor(viewportWidth * .28)));
+  const effectiveWidth = Math.min(sidebarWidth, sidebarLimit);
   const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : effectiveWidth}px` } as CSSProperties;
   const density = sidebarDensityFor(effectiveWidth, sidebarCollapsed);
 
@@ -179,7 +181,18 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
       <SidebarAppearanceControls collapsed={sidebarCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange} canUsePremium={canUsePremiumTheme} onLockedTheme={onLockedTheme}/>
         <button title={t("settings")} onClick={() => { closeMobile(); onSettings(); }}><Settings2 size={17}/><span className="nav-label">{t("settings")}</span></button>
       </div>
-      <div className="sidebar-resize-handle" role="separator" aria-orientation="vertical" aria-label={t("resizeSidebar")} title={`${t("resizeSidebar")} · ${t("resetSidebarWidth")}`} onPointerDown={onResizeStart} onDoubleClick={onResetWidth}/>
+      <div className="sidebar-resize-handle" role="separator" aria-orientation="vertical" tabIndex={sidebarCollapsed || isMobile ? -1 : 0}
+        aria-valuemin={SIDEBAR_MIN_WIDTH} aria-valuemax={sidebarLimit} aria-valuenow={effectiveWidth}
+        onKeyDown={event => {
+          const widths: Record<string, number | undefined> = {
+            ArrowLeft: effectiveWidth - 16, ArrowRight: effectiveWidth + 16, Home: SIDEBAR_MIN_WIDTH, End: sidebarLimit,
+          };
+          const next = widths[event.key];
+          if (next === undefined) return;
+          event.preventDefault();
+          onResizeWidth(Math.max(SIDEBAR_MIN_WIDTH, Math.min(sidebarLimit, next)));
+        }}
+        aria-label={t("resizeSidebar")} title={`${t("resizeSidebar")} · ${t("resetSidebarWidth")}`} onPointerDown={onResizeStart} onDoubleClick={onResetWidth}/>
     </aside>
     {isMobile && <nav className="mobile-compact-nav" aria-label={t("workspace")}>
       <button className={!boardOpen && !recent && !filter ? "active" : ""} onClick={goHome}><LayoutGrid size={20}/><span>{t("workspace")}</span></button>

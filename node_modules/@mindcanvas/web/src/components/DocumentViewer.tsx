@@ -119,8 +119,14 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   const [color, setColor] = useState("#2563eb");
   const [width, setWidth] = useState(3);
   const [eraserSize, setEraserSize] = useState(20);
-  const [pdfZoom, setPdfZoom] = useState(1);
-  const [pdfZoomOrigin, setPdfZoomOrigin] = useState<Point>({ x: 0, y: 0 });
+  const [manualPdfZoom, setPdfZoom] = useState(1);
+  const [fitWidth, setFitWidth] = useState(Boolean(reader));
+  const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const [pdfBodyWidth, setPdfBodyWidth] = useState(0);
+  const fittedPdf = fitWidth && pageSize.width > 0 && pdfBodyWidth > 0;
+  const pdfZoom = fittedPdf ? Math.min(1, pdfBodyWidth / pageSize.width) : manualPdfZoom;
+  const [zoomOrigin, setPdfZoomOrigin] = useState<Point>({ x: 0, y: 0 });
+  const pdfZoomOrigin = fittedPdf ? { x: 0, y: 0 } : zoomOrigin;
   const [strokes, setStrokes] = useState<Record<number, Stroke[]>>({});
   const [historyRevision, setHistoryRevision] = useState(0);
   const pageCanvas = useRef<HTMLCanvasElement>(null);
@@ -149,7 +155,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   useEffect(() => {
     if (kind !== "pdf" || !pdfBytes) return;
     let alive = true;
-    setLoading(true); setError(""); setPage(1); setPdf(null); setPageCount(0); setPdfZoom(1); setPdfZoomOrigin({ x: 0, y: 0 });
+    setLoading(true); setError(""); setPage(1); setPdf(null); setPageCount(0); setPageSize({ width: 0, height: 0 }); setFitWidth(Boolean(reader)); setPdfZoom(1); setPdfZoomOrigin({ x: 0, y: 0 });
     strokesRef.current = {}; setStrokes({}); historyPast.current = []; historyFuture.current = []; setHistoryRevision(value => value + 1);
     currentStroke.current = null; activeEraser.current = null; eraserCursor.current = null;
     annotationPointer.current = null;
@@ -164,14 +170,31 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       return module.getDocument({ data: pdfBytes.slice() }).promise.then((document) => { if (alive) { setPdf(document); setPageCount(document.numPages); onReady?.({ sessionId: viewerSessionId, documentId: source.id, kind }); } });
     }).catch((cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : "Không thể mở PDF."); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [kind, pdfBytes, source.id, viewerSessionId]);
+  }, [kind, pdfBytes, source.id, viewerSessionId, Boolean(reader)]);
+
+  useEffect(() => {
+    const body = pdfBody.current;
+    if (kind !== "pdf" || !body) return;
+    const measure = () => {
+      const style = getComputedStyle(body);
+      const width = body.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      if (width > 0) setPdfBodyWidth(width);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    if (observer) observer.observe(body);
+    else window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
+  }, [kind, Boolean(reader)]);
 
   useEffect(() => {
     if (loading || !pdf || kind !== "pdf" || !pageCanvas.current || !annotationCanvas.current) return;
     let alive = true;
     void pdf.getPage(page).then(async (pdfPage: any) => {
+      if (!alive || !pageCanvas.current || !annotationCanvas.current) return;
       const viewport = pdfPage.getViewport({ scale: 1.35 });
-      const canvas = pageCanvas.current!; const overlay = annotationCanvas.current!;
+      setPageSize({ width: viewport.width, height: viewport.height });
+      const canvas = pageCanvas.current; const overlay = annotationCanvas.current;
       const ratio = window.devicePixelRatio || 1;
       canvas.width = viewport.width * ratio; canvas.height = viewport.height * ratio;
       canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
@@ -355,7 +378,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       const rect = shell.getBoundingClientRect();
       const origin = { x: pdfZoomOrigin.x + (event.clientX - rect.left - pdfZoomOrigin.x) / Math.max(.01, pdfZoom), y: pdfZoomOrigin.y + (event.clientY - rect.top - pdfZoomOrigin.y) / Math.max(.01, pdfZoom) };
       pdfZoomGesture.current = { pointerId: event.pointerId, startY: event.clientY, startZoom: pdfZoom, origin };
-      setPdfZoomOrigin(origin);
+      setPdfZoom(pdfZoom); setFitWidth(false); setPdfZoomOrigin(origin);
       body.setPointerCapture?.(event.pointerId);
       event.preventDefault();
       return;
@@ -372,7 +395,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
     const panGesture = pdfPanGesture.current;
     if (!body) return;
     if (zoomGesture?.pointerId === event.pointerId) {
-      const nextZoom = Math.min(4, Math.max(.5, zoomGesture.startZoom * Math.exp((zoomGesture.startY - event.clientY) * .004)));
+      const nextZoom = Math.min(4, Math.max(.2, zoomGesture.startZoom * Math.exp((zoomGesture.startY - event.clientY) * .004)));
       setPdfZoom(nextZoom);
       event.preventDefault();
       return;
@@ -395,8 +418,8 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
     const rect = shell.getBoundingClientRect();
     const currentZoom = Math.max(.01, pdfZoom);
     const origin = { x: pdfZoomOrigin.x + (clientX - rect.left - pdfZoomOrigin.x) / currentZoom, y: pdfZoomOrigin.y + (clientY - rect.top - pdfZoomOrigin.y) / currentZoom };
-    setPdfZoomOrigin(origin);
-    setPdfZoom(Math.min(4, Math.max(.5, nextZoom)));
+    setFitWidth(false); setPdfZoomOrigin(origin);
+    setPdfZoom(Math.min(4, Math.max(.2, nextZoom)));
   };
   const zoomPdfAtCenter = (factor: number) => {
     const body = pdfBody.current;
@@ -485,8 +508,9 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
 
   const zoomControls = (
     <div className="document-pdf-zoom-control" role="group" aria-label={language === "vi" ? "Thu phóng PDF" : "PDF zoom"}>
-      <button type="button" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomPdfAtCenter(.8)} disabled={pdfZoom <= .5}><Minus size={14}/></button>
-      <span>{Math.round(pdfZoom * 100)}%</span>
+      <button type="button" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomPdfAtCenter(.8)} disabled={pdfZoom <= .2}><Minus size={14}/></button>
+      {reader ? <button type="button" className="pdf-fit-width" title={t("docxFitWidth")} aria-label={t("docxFitWidth")}
+        aria-pressed={fitWidth} onClick={() => setFitWidth(true)}>{Math.round(pdfZoom * 100)}%</button> : <span>{Math.round(pdfZoom * 100)}%</span>}
       <button type="button" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomPdfAtCenter(1.25)} disabled={pdfZoom >= 4}><Plus size={14}/></button>
     </div>
   );
@@ -577,8 +601,9 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
           {error && <div className="document-error">{error}</div>}
           {!loading && !error && (
             <>
-              <div ref={pdfPageShell} className="pdf-page-shell">
-                <div className="pdf-page-stack" style={{ transform: `scale(${pdfZoom})`, transformOrigin: `${pdfZoomOrigin.x}px ${pdfZoomOrigin.y}px` }}>
+              <div ref={pdfPageShell} className="pdf-page-shell" data-fit={fittedPdf || undefined}
+                style={fittedPdf ? { width: pageSize.width * pdfZoom, height: pageSize.height * pdfZoom } : undefined}>
+                <div className="pdf-page-stack" style={{ ...(fittedPdf && { width: pageSize.width, height: pageSize.height }), transform: `scale(${pdfZoom})`, transformOrigin: `${pdfZoomOrigin.x}px ${pdfZoomOrigin.y}px` }}>
                 <canvas ref={pageCanvas} />
                 <canvas ref={annotationCanvas} className={`pdf-annotation-canvas annotation-${effectiveAnnotationMode} ${annotationActive ? "annotation-active" : "annotation-inactive"}`} style={{ pointerEvents: annotationActive ? "auto" : "none" }} onPointerDown={beginStroke} onPointerMove={moveStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { eraserCursor.current = null; redraw(page); }} />
                 </div>

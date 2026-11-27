@@ -2,6 +2,7 @@ import { createContext, useEffect, useId, useRef, useState } from "react";
 import { MessageCircle, Minus } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import type { SharedLearningTarget } from "../lib/workspaceShareLinks";
+import { observeVisualViewport } from "../lib/visualViewport";
 import ConnectionsPage from "./ConnectionsPage";
 import "./chatBubble.css";
 
@@ -34,23 +35,8 @@ export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, s
     if (open) (dock.current?.querySelector<HTMLElement>(".connection-profile-heading h3") ?? heading.current)?.focus({ preventScroll: true });
   }, [open]);
   useEffect(() => {
-    const viewport = window.visualViewport;
-    const element = dock.current;
-    if (!open || !viewport || !element) return;
-    const adjust = () => {
-      element.style.setProperty("--chat-keyboard-offset", `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`);
-      element.style.setProperty("--chat-available-height", `${Math.max(140, viewport.height - 26)}px`);
-    };
-    adjust();
-    viewport.addEventListener("resize", adjust);
-    viewport.addEventListener("scroll", adjust);
-    return () => {
-      viewport.removeEventListener("resize", adjust);
-      viewport.removeEventListener("scroll", adjust);
-      element.style.removeProperty("--chat-keyboard-offset");
-      element.style.removeProperty("--chat-available-height");
-    };
-  }, [open]);
+    if (open && !suspended && dock.current) return observeVisualViewport(dock.current);
+  }, [open, suspended]);
 
   const close = () => {
     setOpen(false);

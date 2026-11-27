@@ -26,6 +26,7 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
   const landing = useRef<{ pageId: string; top: number } | null>(null);
   const [focusedPage, setFocusedPage] = useState<string | null>(null);
   const [size, setSize] = useState({ width: 760, height: 600 });
+  const resizedPaper = useRef<{ width: number; scale: number } | null>(null);
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [zoom, setZoom] = useState<number | null>(null);
   const [typing, setTyping] = useState(true);
@@ -89,6 +90,18 @@ export default function A4CanvasEditor({ board, onChange, onDraftChange, readOnl
     el.addEventListener("wheel", scrollPaper, { passive: false });
     return () => el.removeEventListener("wheel", scrollPaper);
   }, []);
+
+  useLayoutEffect(() => {
+    const el = container.current;
+    const previous = resizedPaper.current;
+    resizedPaper.current = { width: size.width, scale };
+    if (!el || !previous || previous.width === size.width || previous.scale === scale || jump !== null) return;
+    // Auto-fit changes paper coordinates. Preserve the line at the top of the reader.
+    const savedTop = position.top;
+    el.scrollTop = savedTop < INSET ? savedTop : INSET + (savedTop - INSET) * scale / previous.scale;
+    if (landing.current) landing.current = { ...landing.current, top: el.scrollTop };
+    setPosition({ left: el.scrollLeft, top: el.scrollTop });
+  }, [size.width, scale, jump]);
 
   useLayoutEffect(() => {
     if (jump === null || !container.current) return;

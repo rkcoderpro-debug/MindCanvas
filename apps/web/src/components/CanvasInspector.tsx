@@ -20,7 +20,6 @@ function readWidth() {
 }
 
 type InspectorProps = {
-  layout: RefObject<HTMLDivElement | null>;
   closeButton: RefObject<HTMLButtonElement | null>;
   open: boolean;
   onClose: () => void;
@@ -29,14 +28,16 @@ type InspectorProps = {
   layers: ReactNode;
 };
 
-export default function CanvasInspector({ layout, closeButton, open, onClose, selection, background, layers }: InspectorProps) {
+export default function CanvasInspector({ closeButton, open, onClose, selection, background, layers }: InspectorProps) {
   const { language, t } = useLanguage();
   const vi = language === "vi";
   const [section, setSection] = useState<(typeof sections)[number]>("selection");
   const [preferred, setPreferred] = useState(readWidth);
   const [available, setAvailable] = useState(() => typeof window === "undefined" ? overlayThreshold : window.innerWidth);
+  const panel = useRef<HTMLElement>(null);
   const drag = useRef<{ id: number; startX: number; width: number; next: number } | null>(null);
   const overlay = available < overlayThreshold;
+  useLayoutEffect(() => { if (overlay) drag.current = null; }, [overlay]);
   const limit = Math.max(minWidth, Math.min(maxWidth, available - canvasMinimum));
   const clampWidth = (value: number) => Math.min(limit, Math.max(minWidth, Math.round(value)));
   const width = clampWidth(preferred);
@@ -46,7 +47,7 @@ export default function CanvasInspector({ layout, closeButton, open, onClose, se
   const resizeLabel = vi ? "Đổi chiều rộng bảng Thuộc tính" : "Resize the Properties panel";
 
   useLayoutEffect(() => {
-    const element = layout.current;
+    const element = panel.current?.parentElement;
     if (!element) return;
     const measure = () => {
       if (element.clientWidth > 0) setAvailable(element.clientWidth);
@@ -59,7 +60,7 @@ export default function CanvasInspector({ layout, closeButton, open, onClose, se
       observer?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [layout]);
+  }, []);
 
   const saveWidth = (next: number) => {
     setPreferred(next);
@@ -72,7 +73,7 @@ export default function CanvasInspector({ layout, closeButton, open, onClose, se
     saveWidth(active.next);
   };
 
-  return <aside className={`inspector canvas-inspector ${open ? "is-open" : "is-closed"}`} aria-label={t("properties")}
+  return <aside ref={panel} className={`inspector canvas-inspector ${open ? "is-open" : "is-closed"}`} aria-label={t("properties")}
     data-overlay={overlay} style={{ width: overlay ? undefined : width, flexBasis: overlay ? undefined : width }}>
     {!overlay && <div className="canvas-inspector-resize" role="separator" aria-orientation="vertical"
       aria-label={resizeLabel} title={resizeLabel} tabIndex={0} aria-valuemin={minWidth} aria-valuemax={limit} aria-valuenow={width}
