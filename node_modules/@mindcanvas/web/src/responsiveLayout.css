@@ -183,8 +183,87 @@ dialog.dialog[data-viewport-adjusted][open] {
   .command-dialog :is(.command-search kbd, .command-footer) { display: none; }
 }
 
-.quiz-studio-footer-actions { flex-wrap: wrap; }
+/* Authoring dialogs use one scrolling form until both panes can stay usable. */
+.dialog:is(.quiz-studio-dialog, .lab-editor-dialog) { container: study-editor / inline-size; }
+:is(.quiz-studio-dialog, .lab-editor-dialog) > .dialog-scroll { scroll-padding-block: 12px; }
+.quiz-studio-panes { grid-template-columns: minmax(0, 1fr); }
+.quiz-studio-panes > .quiz-studio-pane { min-inline-size: 0; }
 .quiz-studio-footer-actions > * { min-inline-size: 0; }
+.lab-editor-tabs, .lab-mode-grid, .lab-editor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lab-editor-dialog > .lab-editor-footer .lab-actions { flex: 0 1 auto; min-inline-size: 0; justify-content: flex-end; }
+.lab-editor-dialog > .lab-editor-footer button { min-inline-size: 0; }
+
+@media (min-height: 360px) and (min-width: 760px) {
+  .dialog.quiz-studio-ai_manual:not([data-viewport-adjusted]) { height: min(88dvh, 900px); }
+  @container study-editor (min-width: 720px) {
+    .quiz-studio-ai_manual:not([data-viewport-adjusted]) > .dialog-scroll { display: flex; flex-direction: column; overflow: hidden; }
+    .quiz-studio-ai_manual:not([data-viewport-adjusted]) .quiz-studio-panes { grid-template-columns: minmax(0, 4fr) minmax(0, 6fr); flex: 1; min-block-size: 0; }
+    .quiz-studio-ai_manual:not([data-viewport-adjusted]) .quiz-studio-pane { min-block-size: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  }
+}
+
+@container study-editor (max-width: 480px) {
+  .lab-mode-grid, .lab-editor-fields, .quiz-option-editor { grid-template-columns: minmax(0, 1fr); }
+  .quiz-studio-footer-actions { inline-size: 100%; }
+  .quiz-studio-footer-actions > button { flex: 0 1 auto; justify-content: center; }
+  .lab-editor-tabs button, .quiz-studio-tabs button { gap: 4px; }
+  .lab-editor-tabs button svg, .lab-editor-footer button svg, .quiz-studio-footer-actions svg { flex: none; }
+}
+
+@media (max-height: 420px) {
+  :is(.quiz-studio-dialog, .lab-editor-dialog) > .dialog-titlebar { padding-block: 2px; }
+  :is(.quiz-studio-dialog, .lab-editor-dialog) > .dialog-scroll { padding-block: 6px; }
+  :is(.quiz-studio-dialog, .lab-editor-dialog) > footer { padding-block: 4px; }
+}
+
+/* Let actions scroll below the form when the keyboard leaves little height. */
+.dialog:is(.quiz-studio-dialog, .lab-editor-dialog)[data-viewport-adjusted][open] {
+  display: block;
+  height: auto;
+  overflow: auto;
+  scroll-padding-block: 52px 8px;
+}
+.dialog:is(.quiz-studio-dialog, .lab-editor-dialog)[data-viewport-adjusted] > .dialog-titlebar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  padding-block: 2px;
+}
+.dialog:is(.quiz-studio-dialog, .lab-editor-dialog)[data-viewport-adjusted] > .dialog-scroll { overflow: visible; }
+
+@media (pointer: coarse), (max-width: 620px) {
+  :is(.quiz-studio-dialog, .lab-editor-dialog) :is(button, summary, .file-picker-trigger),
+  .studio-page :is(.note-checks label, .studio-workflow summary, .file-picker-trigger, .note-result-toolbar button),
+  .document-creator-home :is(.note-visual-options button, .created-document-list .icon-button) { min-block-size: 44px; }
+  .quiz-studio-editor .quiz-preview-question-header .icon-button { min-inline-size: 44px; }
+  .dialog.lab-editor-dialog .lab-editor :is(input:not([type=checkbox], [type=file]), select, textarea),
+  .studio-page .studio-workflow :is(input:not([type=checkbox], [type=radio], [type=file]), select, textarea) { font-size: 16px; }
+}
+
+.document-creator-home { container: document-creator / inline-size; }
+@container document-creator (max-width: 580px) {
+  .document-type-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .document-type-cards > button {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: start;
+    gap: 4px 12px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+  .document-type-icon { grid-row: 1 / span 4; inline-size: 42px; block-size: 42px; border-radius: 12px; }
+  .document-type-icon svg { inline-size: 22px; block-size: 22px; }
+  .document-type-cards :is(h2, p, button > strong) { grid-column: 2; margin: 0; }
+  .document-type-cards h2 { font-size: 17px; }
+  .document-type-tags { grid-column: 2; }
+  .created-library-controls .document-search { flex: 1 1 100%; }
+}
+
+@container mc-studio (max-width: 480px) {
+  .studio-page .note-result-toolbar .actions { inline-size: 100%; }
+  .studio-page .note-result-toolbar .actions > button { flex: 1 1 125px; justify-content: center; min-inline-size: 0; }
+  .studio-page .studio-manual-flow fieldset > .actions > span { min-inline-size: 0; overflow-wrap: anywhere; }
+}
 
 .chat-bubble[data-open="true"] {
   --chat-panel-height: min(33rem, calc(var(--visible-height, 100dvh) - max(.65rem, env(safe-area-inset-top)) - var(--chat-gap-bottom)));
@@ -230,7 +309,6 @@ dialog.dialog[data-viewport-adjusted][open] {
 .document-reader-controls { max-inline-size: 100%; flex-wrap: wrap; margin-inline-start: auto; justify-content: flex-end; }
 .docx-viewer-toolbar, .lab-player-toolbar { flex-wrap: wrap; }
 .docx-viewer-toolbar > *, .lab-player-toolbar > * { min-inline-size: 0; }
-.document-reader .office-sheet-viewer { overflow: auto; }
 
 @media (max-width: 620px) {
   .app-shell > .main-area { scroll-padding-block-end: calc(66px + env(safe-area-inset-bottom)); }

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Minus, Plus, RefreshCw } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Minus, MoveHorizontal, Plus, RefreshCw } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { DOCX_FRAME_HTML, renderDocxView } from "../lib/docxView";
 
@@ -20,7 +20,17 @@ export default function DocxViewer({ dataUrl, onReady }: { dataUrl: string; onRe
   const [viewportWidth, setViewportWidth] = useState(0);
   const [fit, setFit] = useState(true);
   const [manualZoom, setManualZoom] = useState(1);
+  const readingPosition = useRef({ top: 0, left: 0 });
+  const renderedZoom = useRef<number | null>(null);
   const zoom = fit ? Math.min(2, Math.max(.1, (viewportWidth - 24) / dimensions.width || 1)) : manualZoom;
+
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    if (!element || loading || error || renderedZoom.current === zoom) return;
+    renderedZoom.current = zoom;
+    element.scrollTop = readingPosition.current.top * zoom;
+    element.scrollLeft = readingPosition.current.left * zoom;
+  }, [error, loading, zoom]);
 
   useEffect(() => {
     const element = viewport.current;
@@ -39,6 +49,8 @@ export default function DocxViewer({ dataUrl, onReady }: { dataUrl: string; onRe
     const stage = document.createElement("div");
     const styles = document.createElement("div");
     document.body.append(styles, stage);
+    readingPosition.current = { top: 0, left: 0 };
+    renderedZoom.current = null;
     pages.current = []; setCount(0); setPage(1); setLoading(true); setError(false); setOversized(false); setFit(true);
     viewport.current?.scrollTo?.({ top: 0, left: 0 });
     void (async () => {
@@ -62,7 +74,8 @@ export default function DocxViewer({ dataUrl, onReady }: { dataUrl: string; onRe
   const scrollToPage = (next: number) => {
     const bounded = Math.min(count, Math.max(1, next));
     setPage(bounded);
-    viewport.current?.scrollTo?.({ top: (pages.current[bounded - 1]?.offsetTop ?? 0) * zoom, behavior: "auto" });
+    readingPosition.current.top = pages.current[bounded - 1]?.offsetTop ?? 0;
+    if (viewport.current) viewport.current.scrollTop = readingPosition.current.top * zoom;
   };
   const zoomBy = (factor: number) => { setManualZoom(Math.min(3, Math.max(.1, zoom * factor))); setFit(false); };
 
@@ -77,13 +90,16 @@ export default function DocxViewer({ dataUrl, onReady }: { dataUrl: string; onRe
         <button type="button" aria-label={t("zoomOut")} disabled={loading || error || zoom <= .1} onClick={() => zoomBy(.8)}><Minus size={15}/></button>
         <span>{Math.round(zoom * 100)}%</span>
         <button type="button" aria-label={t("zoomIn")} disabled={loading || error || zoom >= 3} onClick={() => zoomBy(1.25)}><Plus size={15}/></button>
-        <button type="button" aria-pressed={fit} disabled={loading || error} onClick={() => setFit(true)}>{t("docxFitWidth")}</button>
+        <button type="button" className="docx-fit-width" aria-label={t("docxFitWidth")} title={t("docxFitWidth")} aria-pressed={fit} disabled={loading || error} onClick={() => setFit(true)}><MoveHorizontal size={16} aria-hidden="true"/><span>{t("docxFitWidth")}</span></button>
         <button type="button" disabled={loading || error} onClick={() => { setManualZoom(1); setFit(false); }}>100%</button>
       </div>
     </div>
     {oversized && <p className="docx-layout-notice" role="status">{t("docxLayoutNotice")}</p>}
-    <div ref={viewport} className="docx-document-viewport" onScroll={() => {
-      const position = (viewport.current?.scrollTop ?? 0) / zoom + 40;
+    <div ref={viewport} className="docx-document-viewport" onScroll={event => {
+      if (loading || error) return;
+      const element = event.currentTarget;
+      readingPosition.current = { top: element.scrollTop / zoom, left: element.scrollLeft / zoom };
+      const position = readingPosition.current.top + 40;
       let current = 1;
       pages.current.forEach((item, index) => { if (item.offsetTop <= position) current = index + 1; });
       setPage(current);

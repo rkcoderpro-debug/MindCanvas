@@ -92,7 +92,7 @@ function OfficeViewer({ source, onReady }: { source: Source; onReady?: () => voi
     return () => { alive = false; };
   }, [source.dataUrl, source.kind]);
   if (error) return <div className="document-error"><FileText size={30}/><p>{error}</p></div>;
-  if (source.kind === "xlsx") return <div className="office-sheet-viewer"><div className="office-sheet-tabs">{sheets.map((name, index) => <button key={name} className={sheet === index ? "active" : ""} onClick={() => { setSheet(index); void (async () => { const XLSX = await import("xlsx"); const workbook = XLSX.read(bytesFromDataUrl(source.dataUrl), { type: "array" }); setHtml(sanitizeOfficeHtml(XLSX.utils.sheet_to_html(workbook.Sheets[name]))); })(); }}>{name}</button>)}</div><div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc bảng tính…</p>" }}/></div>;
+  if (source.kind === "xlsx") return <div className="office-sheet-viewer"><div className="office-sheet-tabs">{sheets.map((name, index) => <button key={name} type="button" aria-pressed={sheet === index} className={sheet === index ? "active" : ""} onClick={() => { setSheet(index); void (async () => { const XLSX = await import("xlsx"); const workbook = XLSX.read(bytesFromDataUrl(source.dataUrl), { type: "array" }); setHtml(sanitizeOfficeHtml(XLSX.utils.sheet_to_html(workbook.Sheets[name]))); })(); }}>{name}</button>)}</div><div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc bảng tính…</p>" }}/></div>;
   if (source.kind === "pptx") return <div className="pptx-viewer">{slides.length ? <div className="pptx-slide"><div dangerouslySetInnerHTML={{ __html: slides[sheet] }}/></div> : <p>Đang đọc bản trình chiếu…</p>}<div className="document-pager"><button disabled={sheet <= 0} onClick={() => setSheet(value => value - 1)}><ChevronLeft size={16}/></button><span>{slides.length ? `${sheet + 1} / ${slides.length}` : "…"}</span><button disabled={sheet >= slides.length - 1} onClick={() => setSheet(value => value + 1)}><ChevronRight size={16}/></button></div></div>;
   return <div className="office-html" dangerouslySetInnerHTML={{ __html: html || "<p>Đang đọc tài liệu…</p>" }}/>;
 }
@@ -493,7 +493,20 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       emitGuideAction("pdf:export", { documentId: source.id, viewerSessionId, kind });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể xuất PDF mới."); }
   };
-  const toggleFullscreen = async () => { if (!viewer.current) return; try { if (document.fullscreenElement === viewer.current) await document.exitFullscreen(); else await viewer.current.requestFullscreen(); } catch { setFullscreen(value => !value); } };
+  const toggleFullscreen = async () => {
+    const element = viewer.current;
+    if (!element) return;
+    if (document.fullscreenElement === element) {
+      await document.exitFullscreen().catch(() => {});
+      return;
+    }
+    if (fullscreen) {
+      setFullscreen(false);
+      return;
+    }
+    try { await element.requestFullscreen(); }
+    catch { setFullscreen(true); }
+  };
   useEffect(() => { const sync = () => setFullscreen(document.fullscreenElement === viewer.current); document.addEventListener("fullscreenchange", sync); return () => document.removeEventListener("fullscreenchange", sync); }, []);
 
 
@@ -596,7 +609,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       </div>}
       {kind === "pdf" ? (
           <div className={reader ? "document-reader-pdf" : "document-legacy-pdf"}>
-          <div ref={pdfBody} className={`document-pdf-body ${spaceHeld ? "pdf-hand-active" : ""}`} onWheel={zoomPdfWheel} onPointerDown={beginPdfPointer} onPointerMove={movePdfPointer} onPointerUp={finishPdfPointer} onPointerCancel={finishPdfPointer} style={{ touchAction: fullscreen ? "none" : "auto" }}>
+          <div ref={pdfBody} className={`document-pdf-body ${spaceHeld ? "pdf-hand-active" : ""}`} onWheel={zoomPdfWheel} onPointerDown={beginPdfPointer} onPointerMove={movePdfPointer} onPointerUp={finishPdfPointer} onPointerCancel={finishPdfPointer} style={{ touchAction: annotationActive ? "none" : "auto" }}>
           {loading && <div className="document-loading">Đang render PDF…</div>}
           {error && <div className="document-error">{error}</div>}
           {!loading && !error && (

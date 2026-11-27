@@ -9,7 +9,7 @@ import DocumentReaderBar, { type ReaderAction } from "./DocumentReaderBar";
 const DocumentViewer = lazy(() => import("./DocumentViewer"));
 type Preview = { dataUrl: string; mimeType: string } | Awaited<ReturnType<typeof readTextDocumentPreview>> | { failed: true };
 
-export default function SharedDocumentReader({ id, name, load }: { id: string; name: string; load: (signal?: AbortSignal) => Promise<Blob> }) {
+export default function SharedDocumentReader({ id, name, load, extraActions = [] }: { id: string; name: string; load: (signal?: AbortSignal) => Promise<Blob>; extraActions?: ReaderAction[] }) {
   const { language, t } = useLanguage();
   const tr = (vi: string, en: string) => language === "vi" ? vi : en;
   const detected = documentKindFor(name);
@@ -45,6 +45,7 @@ export default function SharedDocumentReader({ id, name, load }: { id: string; n
   const downloadLabel = tr("Tải xuống", "Download");
   const actions: ReaderAction[] = [
     { id: "download", label: downloading ? t("loading") : downloadLabel, icon: Download, prominent: true, disabled: downloading, run: () => void download() },
+    ...extraActions,
   ];
 
   return <div className="workspace-file-preview compact-file-preview shared-document-reader">

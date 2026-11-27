@@ -1044,7 +1044,7 @@ export const GUIDE_DEFINITIONS: GuideDefinition[] = [
           "Click Check and run to open the sandbox preview. Unsafe external resources are reported before execution.",
       },
       {
-        target: ".lab-footer-actions .primary-button",
+        target: ".lab-editor-footer .primary-button",
         completion: {
           type: "action",
           actions: [

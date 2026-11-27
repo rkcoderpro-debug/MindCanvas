@@ -7,6 +7,7 @@ import { parseBoard } from "../lib/board";
 import { shareCanvasAsset, shareChallenge, shareDownload, shareEdit, shareErrorText, shareOpen, shareSaveCanvas, shareSubmit, shareUpload, shareVerify, type ShareItem, type ShareView, type SharedCard } from "../lib/workspaceSharing";
 import { sharedInboxUrl, SHARED_ROUTE_EVENT, workspaceShareTarget,workspaceShareUrl } from "../lib/workspaceShareLinks";
 import SharedDocumentReader from "./SharedDocumentReader";
+import type { ReaderAction } from "./DocumentReaderBar";
 import FlashcardReview from "./FlashcardReview";
 import QuizRunner, { QuizResult } from "./QuizRunner";
 import FormulaText from "./FormulaText";
@@ -83,8 +84,17 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError,
   const editable=!!(signedIn && state?.state==="ok" && ["owner","editor"].includes(state.role));
   const ctx:Context={token,editable,tr,pending,act,loadItem:navigate};
   const login=<button type="button" className="primary-button" onClick={onSignIn}><LogIn size={16}/>{tr("Đăng nhập để chỉnh sửa","Sign in to edit")}</button>;
+  const fileInWorkspace = inWorkspace && state?.state === "ok" && state.kind === "file";
+  const fileActions: ReaderAction[] = fileInWorkspace ? [
+    { id: "reload", label: tr("Mở lại", "Reload"), icon: RefreshCw, disabled: pending, run: reload },
+    ...(state.signInToEdit || !signedIn ? [{
+      id: "sign-in", label: state.signInToEdit ? tr("Đăng nhập để chỉnh sửa", "Sign in to edit")
+        : tr("Đăng nhập để lưu vào mục chia sẻ", "Sign in to keep this in Shared with me"),
+      icon: LogIn, run: onSignIn,
+    }] : []),
+  ] : [];
   const Container = inWorkspace ? "section" : "main";
-  return <Container className={`workspace-share-view${inWorkspace ? " in-workspace" : ""}`} aria-label={tr("Nội dung chia sẻ", "Shared content")}>
+  return <Container className={`workspace-share-view${inWorkspace ? " in-workspace" : ""}`} data-shared-file={fileInWorkspace || undefined} aria-label={tr("Nội dung chia sẻ", "Shared content")}>
     {!inWorkspace && <div className="workspace-share-top"><a href={window.location.pathname}><ArrowLeft size={16}/> MindCanvas</a><Link2 size={15}/>{tr("Nội dung chia sẻ","Shared content")}
       {signedIn && <a href={sharedInboxUrl().href}>{t("sharedWithMe")}</a>}
     </div>}
@@ -116,17 +126,17 @@ export default function WorkspaceSharedPage({token,signedIn,onSignIn,loginError,
         {login}
       </>}
     </section>:state?.state==="ok"?<>
-      <header className="workspace-share-main-heading"><div><span className="eyebrow">{typeName(tr,state.kind)} · {editable?tr("Có thể chỉnh sửa","Can edit"):tr("Chỉ xem","View only")}</span><h1>{state.title}</h1></div>
+      {fileInWorkspace ? <h1 className="sr-only">{state.title}</h1> : <header className="workspace-share-main-heading"><div><span className="eyebrow">{typeName(tr,state.kind)} · {editable?tr("Có thể chỉnh sửa","Can edit"):tr("Chỉ xem","View only")}</span><h1>{state.title}</h1></div>
         {state.signInToEdit && login}
         {!signedIn && !state.signInToEdit && <button type="button" className="secondary-button" onClick={onSignIn}><LogIn size={16}/>{tr("Đăng nhập để lưu vào mục chia sẻ", "Sign in to keep this in Shared with me")}</button>}
         <button className="secondary-button" type="button" disabled={pending} onClick={reload}><RefreshCw size={16}/>{tr("Mở lại","Reload")}</button>
-      </header>
+      </header>}
       {state.kind==="folder"&&<SharedFolder key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="learning_folder" && <SharedItems items={state.data} ctx={ctx}/>}
       {state.kind==="lab" && <Suspense fallback={<p role="status">{t("loading")}</p>}><LabViewer
         key={state.id} html={state.data.html} title={state.title} allowExternalResources={state.data.allowExternalResources}
         viewerConfig={cleanLabViewer(state.data.viewerConfig)}/></Suspense>}
-      {state.kind==="file"&&<SharedFile key={state.id} item={state} ctx={ctx}/>}
+      {state.kind==="file"&&<SharedFile key={state.id} item={state} ctx={ctx} actions={fileActions}/>}
       {state.kind==="canvas"&&<SharedCanvas key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="quiz"&&<SharedQuiz key={state.id} item={state} ctx={ctx}/>}
       {state.kind==="flashcard"&&<SharedFlashcards key={state.id} item={state} ctx={ctx}/>}
@@ -162,11 +172,11 @@ function SharedFolder({item,ctx}:{item:StateByKind<"folder">;ctx:Context}){
       }}/></label></>}
   </>;
 }
-function SharedFile({item,ctx}:{item:StateByKind<"file">;ctx:Context}){
+function SharedFile({item,ctx,actions}:{item:StateByKind<"file">;ctx:Context;actions:ReaderAction[]}){
   const {token,tr,act}=ctx;
   const load = useCallback((signal?: AbortSignal) => shareDownload(token, { kind: "file", id: item.id }, signal), [token, item.id]);
   return <>
-    <SharedDocumentReader id={item.id} name={item.title} load={load}/>
+    <SharedDocumentReader id={item.id} name={item.title} load={load} extraActions={actions}/>
     {ctx.editable&&<><Rename item={item} ctx={ctx}/>
       <label className="workspace-share-block">{tr("Tải lên bản thay thế · tối đa 40 MB","Replace file · up to 40 MB")}<input type="file" disabled={ctx.pending} onChange={e=>{
         const file=e.target.files?.[0];e.target.value="";

@@ -4,8 +4,8 @@ import { Minus, X } from "lucide-react";
 import { observeVisualViewport } from "../lib/visualViewport";
 import { useLanguage } from "../lib/i18n";
 
-export default function Dialog({ title, children, onClose, onMinimize, dismissible = true, workspace = false, className, toolbar, footer, initialFocus }: {
-  title: string; children: ReactNode; onClose: () => void; onMinimize?: () => void; dismissible?: boolean; workspace?: boolean; className?: string; toolbar?: ReactNode; footer?: ReactNode; initialFocus?: RefObject<HTMLElement | null>;
+export default function Dialog({ title, children, onClose, onMinimize, dismissible = true, workspace = false, className, toolbar, footer, initialFocus, followFocusedField = false }: {
+  title: string; children: ReactNode; onClose: () => void; onMinimize?: () => void; dismissible?: boolean; workspace?: boolean; className?: string; toolbar?: ReactNode; footer?: ReactNode; initialFocus?: RefObject<HTMLElement | null>; followFocusedField?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null), id = useId();
   const outsidePointer = useRef<{ id: number; x: number; y: number } | null>(null);
@@ -18,12 +18,33 @@ export default function Dialog({ title, children, onClose, onMinimize, dismissib
     dialog.showModal();
     initialFocus?.current?.focus({ preventScroll: true });
     const stopObserving = observeVisualViewport(dialog);
+    const viewport = window.visualViewport;
+    let frame: number | undefined;
+    const keepFieldInView = () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        const field = document.activeElement;
+        if (field instanceof HTMLElement && dialog.contains(field) && field.matches("textarea, select, input:not([type=file], [type=checkbox], [type=radio])")) {
+          field.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        }
+      });
+    };
+    if (followFocusedField) {
+      viewport?.addEventListener("resize", keepFieldInView);
+      window.addEventListener("resize", keepFieldInView);
+    }
     return () => {
+      if (followFocusedField) {
+        viewport?.removeEventListener("resize", keepFieldInView);
+        window.removeEventListener("resize", keepFieldInView);
+        if (frame !== undefined) window.cancelAnimationFrame(frame);
+      }
       stopObserving();
       dialog.close();
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [initialFocus, learningActive]);
+  }, [followFocusedField, initialFocus, learningActive]);
   function outside(event: PointerEvent<HTMLDialogElement>) {
     if (event.target !== event.currentTarget) return false;
     const rect = event.currentTarget.getBoundingClientRect();

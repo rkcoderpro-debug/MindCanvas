@@ -12,6 +12,7 @@ import Dialog from "../../src/components/Dialog";
 import DocumentViewer from "../../src/components/DocumentViewer";
 import { blankBoard } from "../../src/lib/board";
 import { newA4Layout, newA4Page } from "../../src/lib/a4Canvas";
+import { saveDocument } from "../../src/lib/documentStore";
 import { addFolder, cacheProject, waitForProjectCache, upsertFlashcardDeck, upsertFlashcard } from "../../src/lib/projectStore";
 import { createDeck, createFlashcard } from "../../src/lib/flashcards";
 import { finishGuide, GUIDE_DEFINITIONS } from "../../src/lib/featureGuides";
@@ -104,6 +105,39 @@ function TopbarFixture() {
   </div>;
 }
 
+async function samplePdf() {
+  const pdf = await PDFDocument.create();
+  for (let page = 1; page <= 2; page++) pdf.addPage([595, 842]).drawText("MindCanvas QA page " + page, { x: 36, y: 760 });
+  return pdf.saveAsBase64({ dataUri: true });
+}
+
+async function seedDocuments() {
+  if (localStorage.getItem("mindcanvas:responsive-documents")) return;
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file("_rels/.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  const pages = [1, 2, 3].map(page => (page === 1 ? "" : '<w:p><w:r><w:br w:type="page"/></w:r></w:p>') +
+    Array.from({ length: 18 }, (_, row) => '<w:p><w:r><w:t>Sample page ' + page + ', line ' + row + '</w:t></w:r></w:p>').join("")).join("");
+  zip.file("word/document.xml", '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + pages +
+    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440"/></w:sectPr></w:body></w:document>');
+  const xlsx = await import("xlsx");
+  const book = xlsx.utils.book_new();
+  for (const sheet of ["Sheet One", "Sheet Two"]) {
+    const cellValues = Array.from({ length: 36 }, (_, row) => Array.from({ length: 14 }, (_, column) => sheet + " row " + row + " col " + column));
+    xlsx.utils.book_append_sheet(book, xlsx.utils.aoa_to_sheet(cellValues), sheet);
+  }
+  const wordMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const sheetMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const docs = [
+    { kind: "pdf", mimeType: "application/pdf", dataUrl: await samplePdf() },
+    { kind: "docx", mimeType: wordMime, dataUrl: "data:" + wordMime + ";base64," + await zip.generateAsync({ type: "base64" }) },
+    { kind: "xlsx", mimeType: sheetMime, dataUrl: "data:" + sheetMime + ";base64," + xlsx.write(book, { type: "base64", bookType: "xlsx" }) },
+  ] as const;
+  for (const doc of docs) await saveDocument(null, { ...doc, name: longName + "." + doc.kind, size: doc.dataUrl.length, folderId: null });
+  localStorage.setItem("mindcanvas:responsive-documents", "1");
+}
+
 async function main() {
   const root = createRoot(document.getElementById("root")!);
   if (location.pathname === "/qa/topbar") {
@@ -115,9 +149,7 @@ async function main() {
     return;
   }
   if (location.pathname === "/qa/pdf") {
-    const pdf = await PDFDocument.create();
-    for (let i = 1; i <= 2; i++) pdf.addPage([595, 842]).drawText("MindCanvas QA page " + i, { x: 36, y: 760 });
-    const dataUrl = await pdf.saveAsBase64({ dataUri: true });
+    const dataUrl = await samplePdf();
     root.render(<LanguageProvider><main className="app-shell"><div className="main-area">
       <DocumentViewer source={{ name: longName + ".pdf", kind: "pdf", mimeType: "application/pdf", dataUrl }} readOnly reader={{ actions: [] }}/>
     </div></main></LanguageProvider>);
@@ -152,6 +184,7 @@ async function main() {
     for (const guide of GUIDE_DEFINITIONS) finishGuide(null, guide.id, "skipped");
     localStorage.setItem("mindcanvas:responsive-seeded", "1");
   }
+  await seedDocuments();
   root.render(location.pathname === "/qa/navigation" ? <NavigationFixture/> : <App/>);
 }
 void main();

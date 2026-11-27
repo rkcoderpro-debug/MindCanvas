@@ -121,7 +121,7 @@
   flex-direction: column;
   flex-shrink: 0;
   gap: 8px;
-  height: max(400px, calc(100dvh - 108px));
+  height: max(180px, var(--reader-available-height, calc(100dvh - 108px)));
   padding: 0 0 8px;
 }
 .document-reading-view .document-tool-workspace, .workspace-file-preview.compact-file-preview, .compact-file-reader, .document-viewer.document-reader {
@@ -138,7 +138,7 @@
   border-radius: 0;
 }
 .workspace-file-preview.compact-file-preview { padding: 0; overflow: hidden; }
-.workspace-direct-document .workspace-file-preview.compact-file-preview { margin-top: 0; height: max(400px, calc(100dvh - 112px)); }
+.workspace-direct-document .workspace-file-preview.compact-file-preview { margin-top: 0; height: max(180px, var(--reader-available-height, calc(100dvh - 112px))); }
 .workspace-home.workspace-direct-document { padding-block: 0; }
 .workspace-direct-document .compact-file-preview > .document-viewer.document-reader:not(.is-fullscreen) { height: auto; }
 .compact-file-preview > .document-viewer.document-reader[data-document-kind="html"] { min-height: 0; }
@@ -178,17 +178,17 @@
 .document-reader-controls .document-pdf-zoom-control { border-color: var(--line); box-shadow: none; background: var(--soft); }
 .document-reader-controls .document-pdf-zoom-control button { color: var(--text); }
 .document-reader-controls .document-pdf-zoom-control button:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
-.reader-more { position: relative; }
+.reader-more { flex: none; }
 .reader-more-panel {
-  position: absolute; inset-inline-end: 0; top: calc(100% + 5px); z-index: 3;
-  width: min(240px, calc(100vw - 40px)); max-height: min(330px, 64dvh); overflow: auto; padding: 5px;
+  position: absolute; inset-inline-end: 6px; inset-block-start: var(--reader-menu-top, calc(100% + 4px)); z-index: 3;
+  width: min(240px, calc(100% - 12px)); max-height: min(330px, var(--reader-menu-height, 60dvh)); overflow: auto; overscroll-behavior: contain; padding: 5px;
   border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised);
   box-shadow: 0 10px 28px color-mix(in srgb, var(--text) 17%, transparent);
 }
 .reader-more-panel :is(button, a) {
   display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 7px 8px;
   border: 0; border-radius: 6px; background: transparent; color: var(--text); text-decoration: none;
-  text-align: start; font: inherit; font-size: 12px;
+  text-align: start; font: inherit; font-size: 12px; overflow-wrap: anywhere;
 }
 .reader-more-panel svg { flex: none; color: var(--accent); }
 .reader-more-panel :is(button:not(:disabled), a):hover { background: var(--accent-soft); color: var(--accent); }
@@ -228,37 +228,85 @@
 .compact-file-body.has-text { display: flex; flex-direction: column; }
 .compact-file-body.has-text pre { flex: 1; min-height: 0; max-block-size: none; color: var(--text); background: var(--surface-raised); }
 
-@media (max-width: 730px) {
+@container page-content (max-width: 680px) {
   .document-search-area { flex-wrap: wrap; }
   .document-search-area .tool-document-search { flex-basis: 100%; }
   .document-browse-scope { width: 100%; }
   .document-browse-scope .folder-tree-picker { flex: 1; width: auto; }
 }
-@media (max-width: 520px) {
+@container page-content (max-width: 520px) {
   .document-browse-header { flex-wrap: wrap; gap: 10px; }
   .document-browse-files .document-library-list > button { gap: 6px; grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .document-browse-files time { display: none; }
   .document-browse-files .document-browse-type { grid-column: 3; }
   .document-browse-files .document-library-list > button > svg { grid-column: 4; }
-  .document-reader[data-document-kind="pdf"] .document-reader-bar { flex-wrap: wrap; }
-  .document-reader[data-document-kind="pdf"] .document-reader-controls { margin-inline-start: auto; justify-content: flex-end; }
-  .document-reader[data-document-kind="pdf"] .document-reader-identity { flex: 1 1 100%; }
-  .document-tools-page.document-reading-view, .workspace-direct-document .workspace-file-preview.compact-file-preview {
-    height: max(360px, calc(100dvh - 112px - env(safe-area-inset-bottom, 0px)));
-  }
 }
 
 .document-reader-bar .reader-primary-action {
   display: inline-flex; justify-content: center; align-items: center; width: auto;
   padding-inline: 10px; gap: 5px; white-space: nowrap;
 }
-@media (max-width: 520px) {
+@container file-reader (max-width: 460px) {
   .document-reader-bar .reader-primary-action { width: 36px; padding-inline: 0; }
   .reader-primary-action span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 
 .shared-document-reader { border: 1px solid var(--line); border-radius: 12px; }
+.shared-document-reader[data-reader-fitted] { height: max(180px, var(--reader-available-height)); overflow: hidden; }
+.shared-document-reader[data-reader-fitted] .compact-file-body pre { max-block-size: none; }
 .shared-document-reader .compact-file-body pre {
   margin: 0; padding: 12px; border-radius: 8px; max-block-size: 62dvh;
   overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+:is(.document-viewer.document-reader, .compact-file-reader) { container: file-reader / inline-size; }
+.document-reader .office-sheet-viewer { grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.document-reader .office-sheet-tabs > button { flex: none; }
+.document-reader :is(.office-html, .pptx-slide, .document-pdf-body) { min-inline-size: 0; overscroll-behavior: contain; }
+.docx-fit-width { gap: 5px; }
+.docx-fit-width svg { display: none; }
+
+@container file-reader (max-width: 460px) {
+  .document-reader-bar { min-block-size: auto; gap: 4px 6px; }
+  .document-reader-identity { flex-basis: 100%; }
+  .document-reader[data-document-kind="pdf"] .document-reader-controls { margin-inline-start: 0; justify-content: flex-start; gap: 2px; }
+  .document-reader-icon { width: 27px; height: 27px; }
+  .docx-fit-width svg { display: block; }
+  .docx-fit-width span { display: none; }
+  .docx-viewer-toolbar, .docx-zoom-control { gap: 4px; }
+}
+@container file-reader (max-width: 315px) {
+  .document-reader-annotation .document-width input { width: 56px; }
+  .document-reader-annotation .document-export-pdf { margin-inline-start: 0; }
+}
+@media (pointer: coarse), (max-width: 620px) {
+  .document-reader-bar .reader-icon, .document-reader-footer button,
+  .document-reader-controls .document-pdf-zoom-control button, .reader-more-panel :is(button, a),
+  .document-reader :is(.docx-viewer-toolbar button, .office-sheet-tabs button, .pptx-viewer .document-pager button) {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+}
+@media (max-height: 450px) {
+  .document-tools-page.document-reading-view[data-reader-fitted] { padding-block-end: 0; }
+  .document-reader-bar { padding-block: 3px; }
+  .document-reader-identity small { display: none; }
+  .document-reader-footer { padding-block: 0; }
+  .document-reader-footer .document-pager { padding-block: 0; }
+  .document-reader .docx-viewer-toolbar { gap: 4px; padding-block: 3px; }
+  .document-reader .office-sheet-tabs { padding-block: 3px; }
+}
+
+.app-shell:has([data-reader-fitted]) .pet-companion { visibility: hidden; pointer-events: none; }
+
+@media (max-width: 480px) and (max-height: 450px) {
+  .main-area:has([data-reader-fitted]) > .topbar:not(.canvas-desktop-topbar) :is(.focus-mode-toggle, .page-help-trigger, .topbar-trial-button, .topbar-plan-button),
+  .main-area:has([data-reader-fitted]) > .topbar:not(.canvas-desktop-topbar) > .actions > .icon-button:not(.command-trigger) {
+    display: none;
+  }
+}
+
+.workspace-share-view.in-workspace[data-shared-file] { padding-block-end: 0; }
+.workspace-share-view[data-shared-file] .workspace-share-crumbs span[aria-current] {
+  max-inline-size: min(36ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }

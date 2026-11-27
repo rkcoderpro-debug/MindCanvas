@@ -1,0 +1,112 @@
+{
+  "version": "6.8.12",
+  "baseVersion": "6.8.10",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "fe1d962596532ca7d97155986b6076f6534a279d83ddb1e55ac034e806d4d2fa"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "1e9e8856dd4a0baafc8ebd9f8538ca8e9bc2636eeb0e3c0b27b83fa3f5a64855"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 46606,
+      "sha256": "a286cfebcf88acc8fdc5408e577e71d1f3966be003eafa79fa68eedfd06cd3e5"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 11085,
+      "sha256": "c064a649cc8eda4ba7d79106de96f4813e5ca1e7c52ff6ff0c6150a67ebee05d"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "bytes": 4095,
+      "sha256": "fdfa62a1f251a439bcb21ffab493be1062c4f396b7c9019348381ffcdbc97f0d"
+    },
+    {
+      "path": "apps/web/src/components/DocumentCreatorPage.tsx",
+      "bytes": 12295,
+      "sha256": "fa901a6fdd1018525943fd159dd00b31ea99ecd9ff65056ffdecca6caa096d62"
+    },
+    {
+      "path": "apps/web/src/components/DocumentReaderBar.tsx",
+      "bytes": 6849,
+      "sha256": "429bc946d2231019f6a896889622295f4dc46a4c9aabf36dfe8e292c31b0220e"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "bytes": 41862,
+      "sha256": "b89297987b3da498ec41a1a5b0e37eb35404982a4a5931aff29cab20ddea06e0"
+    },
+    {
+      "path": "apps/web/src/components/DocxViewer.tsx",
+      "bytes": 6886,
+      "sha256": "2f4a318070d0a775a3bf291a4d7e6a94659b84665cce8a2b8ce171124b5d5b99"
+    },
+    {
+      "path": "apps/web/src/components/FlashcardsPage.tsx",
+      "bytes": 59225,
+      "sha256": "a9b81a0d00ea13b1692b0a19d80c5472257d823d119515c782bc1446124b3e89"
+    },
+    {
+      "path": "apps/web/src/components/LabEditorDialog.tsx",
+      "bytes": 18375,
+      "sha256": "704e872f624634cfb33755e28fdc53d97c448bf4f85084e6587265e32022c233"
+    },
+    {
+      "path": "apps/web/src/components/QuizCreateDialog.tsx",
+      "bytes": 18194,
+      "sha256": "327e4f06b9bfb2aa1c157a7cf644924631d5b4a05faf8fe92d0a3ba7589f1f27"
+    },
+    {
+      "path": "apps/web/src/components/SharedDocumentReader.tsx",
+      "bytes": 4202,
+      "sha256": "9095933592f939df78220bd337bf4afb39652c5c06eb1805615280047fb01a43"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceSharedPage.tsx",
+      "bytes": 23402,
+      "sha256": "507082788b113a5f3e8a7b61e1bb60aeece8d23ff050150e420cc9cb3bd2f2a2"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 18623,
+      "sha256": "b0a4986a044b6cede88608bb8525b035ee82fb215bc0b75a36d8b85367fa54c0"
+    },
+    {
+      "path": "apps/web/src/lib/featureGuides.ts",
+      "bytes": 64041,
+      "sha256": "087ddd8482b2afc97c85c046d1cad78f629f2eec20455c9506ef3d4143a477bc"
+    },
+    {
+      "path": "apps/web/src/responsiveLayout.css",
+      "bytes": 23295,
+      "sha256": "d1e32345c3070eb1386a1e768b34d1f9a87bd81c3903f0b34d92314b66200b30"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 523173,
+      "sha256": "57df23d09f3a9da0a6c5ab4c46d81a4358e6b743fafcba4c3cedaad3417d3cde"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "348ad2d060e206a3e2f1fe499f8f6ce876aede206a3e4c8bc88979ba36a42dca"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "0262215ceefca489e1196f313b5b14c9362ab2a0c2aefc04643c002796c10e35"
+    },
+    {
+      "path": "RELEASE_V6.8.12.md",
+      "bytes": 1177,
+      "sha256": "9f868fbbf569a50567c9b630730c525f26934455799433f4b2f435788a9e36dd"
+    }
+  ]
+}

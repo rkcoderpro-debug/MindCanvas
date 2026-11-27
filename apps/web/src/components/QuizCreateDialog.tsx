@@ -210,7 +210,7 @@ export default function QuizCreateDialog({ owner, store, accountPlan, open = tru
 
   if (!open) return null;
 
-  return <Dialog workspace className={`quiz-studio-dialog quiz-studio-${mode}`} title={t("createQuiz")} onClose={close} dismissible={!busy || !!generation.current}
+  return <Dialog workspace followFocusedField className={`quiz-studio-dialog quiz-studio-${mode}`} title={t("createQuiz")} onClose={close} dismissible={!busy || !!generation.current}
     toolbar={<div className="quiz-studio-toolbar">
       <div className="ai-mode-switch quiz-studio-tabs" role="tablist" aria-label={t("aiMode")} onKeyDown={event => {
         const current = canUseTabs.findIndex(tab => tab.id === mode);

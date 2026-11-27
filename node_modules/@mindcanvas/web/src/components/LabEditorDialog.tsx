@@ -25,6 +25,12 @@ export default function LabEditorDialog({ owner, initial, onClose, onSave }: { o
   const [restored, setRestored] = useState(false), [ready, setReady] = useState(false);
   const initialSnapshot = useRef(JSON.stringify(initial ?? emptyLabEditor())), saveLock = useRef(false), draftWrites = useRef(Promise.resolve());
   const restoreRef = useRef<LabProject | null>(null);
+  const previewRegion = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!preview || !previewRegion.current) return;
+    previewRegion.current.focus({ preventScroll: true });
+    previewRegion.current.scrollIntoView?.({ block: "start" });
+  }, [preview]);
   const dirty = JSON.stringify(draft) !== initialSnapshot.current;
   const update = <K extends keyof LabProject>(key: K, value: LabProject[K]) => setDraft(old => ({ ...old, [key]: value }));
   useEffect(() => {
@@ -92,7 +98,7 @@ export default function LabEditorDialog({ owner, initial, onClose, onSave }: { o
     finally { saveLock.current = false; setBusy(false); }
   }
   const mode = draft.mode ?? "freeform", info = labModeInfo(mode, language);
-  return <Dialog workspace title={initial ? (vi ? "Chỉnh sửa Lab" : "Edit Lab") : (vi ? "Thêm Lab" : "Add Lab")} onClose={close} dismissible={!busy} footer={<footer className="lab-editor-footer lab-footer-actions"><button className="secondary-button" disabled={busy} onClick={close}>{vi ? "Hủy" : "Cancel"}</button><div className="lab-actions"><button className="secondary-button" disabled={busy} onClick={() => { if (checkHtml()) { setPreview({ ...draft }); emitGuideAction("lab:run"); } }}><Play size={16}/>{vi ? "Xem thử" : "Preview"}</button><button className="primary-button" disabled={busy} onClick={() => void save()}><Save size={17}/>{busy ? (vi ? "Đang lưu…" : "Saving…") : (vi ? "Lưu Lab" : "Save Lab")}</button></div></footer>}>
+  return <Dialog workspace followFocusedField className="lab-editor-dialog" title={initial ? (vi ? "Chỉnh sửa Lab" : "Edit Lab") : (vi ? "Thêm Lab" : "Add Lab")} onClose={close} dismissible={!busy} footer={<footer className="lab-editor-footer"><button className="secondary-button" disabled={busy} onClick={close}>{vi ? "Hủy" : "Cancel"}</button><div className="lab-actions"><button className="secondary-button" disabled={busy} onClick={() => { if (checkHtml()) { setPreview({ ...draft }); emitGuideAction("lab:run"); } }}><Play size={16}/>{vi ? "Xem thử" : "Preview"}</button><button className="primary-button" disabled={busy} onClick={() => void save()}><Save size={17}/>{busy ? (vi ? "Đang lưu…" : "Saving…") : (vi ? "Lưu Lab" : "Save Lab")}</button></div></footer>}>
     <div className="lab-editor lab-step-card">
       {restored && <div className="lab-draft-recovery"><span>{vi ? "Có bản nháp chưa lưu." : "An unsaved draft is available."}</span><button className="secondary-button" onClick={() => { if (restoreRef.current) { setDraft(restoreRef.current); setVisual(restoreRef.current.visualStyle ?? "2d"); setInputMode("paste"); } setRestored(false); }}>{vi ? "Khôi phục bản nháp" : "Restore draft"}</button><button className="secondary-button" onClick={() => setRestored(false)}>{vi ? "Bỏ qua" : "Dismiss"}</button></div>}
       <div className="lab-editor-tabs" role="tablist" aria-label={vi ? "Cách tạo Lab" : "Creation method"}><button role="tab" aria-selected={workflow === "import"} onClick={() => setWorkflow("import")}><FileUp size={18}/>{vi ? "Tôi đã có HTML" : "Import HTML"}</button><button role="tab" aria-selected={workflow === "ai"} onClick={() => { setWorkflow("ai"); if (mode === "freeform" && !draft.request) update("mode", "animation"); }}><Sparkles size={18}/>{vi ? "Tạo bằng AI" : "Create with AI"}</button></div>
@@ -115,7 +121,7 @@ export default function LabEditorDialog({ owner, initial, onClose, onSave }: { o
       </details>
       <label className="lab-cdn-option"><input type="checkbox" checked={draft.allowExternalResources} onChange={e => update("allowExternalResources", e.target.checked)}/><span>{vi ? "Cho phép thư viện CDN đã được phê duyệt" : "Allow approved CDN libraries"}<small>{vi ? "Cần Internet. Các kết nối API và quyền đọc dữ liệu MindCanvas vẫn bị chặn." : "Internet required. API calls and access to MindCanvas data remain blocked."}</small></span></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {preview && <LabViewer html={preview.programHtml} title={preview.title || "Preview"} allowExternalResources={preview.allowExternalResources} viewerConfig={preview.viewerConfig} onThumbnail={(image, manual) => setDraft(old => old.programHtml === preview.programHtml && (!old.thumbnail || manual) ? { ...old, thumbnail: image } : old)}/>}
+      {preview && <section className="lab-editor-preview" ref={previewRegion} tabIndex={-1} aria-label={vi ? "Xem thử Lab" : "Lab preview"}><LabViewer html={preview.programHtml} title={preview.title || "Preview"} allowExternalResources={preview.allowExternalResources} viewerConfig={preview.viewerConfig} onThumbnail={(image, manual) => setDraft(old => old.programHtml === preview.programHtml && (!old.thumbnail || manual) ? { ...old, thumbnail: image } : old)}/></section>}
     </div>
   </Dialog>;
 }

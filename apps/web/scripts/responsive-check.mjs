@@ -184,7 +184,9 @@ try {
     }),
   ];
   const allSizes = [[280,720],[320,568],[360,640],[390,844],[430,932],[512,768],[620,620],[621,620],[640,480],[768,1024],[844,390],[900,360],[1024,600],[1180,820],[1366,768],[1920,1080],[3440,1440]];
-  const sizes = process.argv.includes("--interactions-only") ? []
+  const authoringOnly = process.argv.includes("--authoring-only");
+  const readerOnly = process.argv.includes("--reader-only");
+  const sizes = authoringOnly || readerOnly || process.argv.includes("--interactions-only") ? []
     : process.argv.includes("--quick") ? [[320,568],[844,390]] : allSizes;
   const failures = [];
   let passed = 0;
@@ -202,9 +204,251 @@ try {
   console.log("Route and layout checks: " + passed + "/" + (sizes.length * screens.length));
   assert.equal(failures.length, 0, "Responsive route overflow or load failures");
   if (!process.argv.includes("--layout-only")) {
-    await checkTopbar();
-    await checkNavigationDock();
-    await checkInteractions();
+    if (!authoringOnly && !readerOnly) {
+      await checkTopbar();
+      await checkNavigationDock();
+      await checkInteractions();
+    }
+    if (!readerOnly) await checkAuthoring();
+    if (!authoringOnly) await checkReaders();
+  }
+
+  async function checkReaders() {
+    const openFile = async (kind, ready, touch) => {
+      const row = ".document-library-list > button[data-document-kind=" + kind + "]";
+      await open("/?folders=library", row);
+      await click(row, touch);
+      await wait(dom(ready) + "?.getClientRects().length", kind + " reader is ready", 8000);
+    };
+    const readerFits = async (selector, label) => {
+      const check = (body) => {
+        const reader = body.closest(".document-reader, .shared-document-reader");
+        const bounds = body.getBoundingClientRect(), frame = reader.getBoundingClientRect();
+        const nav = document.querySelector(".mobile-compact-nav")?.getBoundingClientRect();
+        return reader.scrollWidth <= reader.clientWidth + 1 && bounds.height >= 85 && frame.top >= 0
+          && frame.bottom <= (nav?.height ? nav.top : innerHeight) + 1 && frame.left >= 0 && frame.right <= innerWidth;
+      };
+      try { await wait("(" + check + ")(" + dom(selector) + ")", label); }
+      catch (error) {
+        const dimensions = body => {
+          const nodes = [body, body.closest(".document-reader, .shared-document-reader"), ...[".document-reader-bar",".document-reader-identity",".document-reader-controls",".document-pdf-zoom-control",".document-reader-footer",".document-pager",".document-reader-pdf",".document-tool-workspace",".document-reader-annotation"].map(name => document.querySelector(name)), body.closest("[data-reader-fitted]"), document.querySelector(".main-area"), document.querySelector(".topbar"), document.querySelector(".mobile-compact-nav")];
+          return nodes.map(node => {
+            if (!node) return null;
+            const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+            return [node.className, box.left, box.top, box.right, box.bottom, node.scrollWidth, node.clientWidth, style.getPropertyValue("--reader-available-height"), style.paddingBottom];
+          });
+        };
+        const measured = await evaluate("(" + dimensions + ")(" + dom(selector) + ")");
+        throw new Error(label + ": " + JSON.stringify(measured), { cause: error });
+      }
+    };
+
+    for (const [width, height] of [[320, 340], [390, 844], [820, 390]]) {
+      const touch = width <= 480;
+      await resize(width, height, touch, width === 390 ? 3 : 1);
+      await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+      await openFile("pdf", ".pdf-page-shell[data-fit]", touch);
+      await readerFits(".document-pdf-body", "PDF reading area at " + width);
+      const toggle = await click(".reader-more-toggle", touch);
+      if (touch) assert(toggle.width >= 44 && toggle.height >= 44);
+      const menuFits = (panel) => {
+        const menu = panel.getBoundingClientRect(), frame = panel.closest(".document-reader").getBoundingClientRect();
+        return menu.height >= 50 && menu.top >= frame.top && menu.bottom <= frame.bottom && menu.right <= frame.right;
+      };
+      await wait("(" + menuFits + ")(" + dom(".reader-more-panel") + ")", "PDF menu stays in the reader at " + width);
+      await page("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await page("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await wait("!" + dom(".reader-more-panel"));
+      await click(".document-reader-footer button:last-of-type", touch);
+      await wait(dom(".document-reader-footer") + ".textContent.includes('2 / 2')");
+      await checkWidth("PDF Workspace at " + width);
+    }
+
+    await resize(390, 780, true);
+    await page("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    await open("/qa/pdf", ".pdf-page-shell[data-fit]");
+    await evaluate(dom(".document-viewer") + ".requestFullscreen = async () => { throw new Error('Unavailable'); }");
+    await click(".document-fullscreen-toggle", true);
+    await wait(dom(".document-reader.is-fullscreen") + "?.getClientRects().length");
+    await click(".document-fullscreen-toggle", true);
+    await wait("!" + dom(".document-reader.is-fullscreen"));
+    await click(".document-fullscreen-toggle", true);
+    await wait(dom(".document-reader.is-fullscreen") + "?.getClientRects().length");
+    assert.equal(await evaluate("getComputedStyle(" + dom(".document-pdf-body") + ").touchAction"), "auto");
+    const pdfBounds = await evaluate("(() => {const b=" + dom(".document-pdf-body") + ".getBoundingClientRect();return [b.left + b.width/2,b.top + b.height*.7];})()");
+    const [x, y] = pdfBounds;
+    for (let step = 0; step < 2; step++) await click(".document-reader-controls .document-pdf-zoom-control button:last-child", true);
+    await wait(dom(".document-pdf-body") + ".scrollHeight > " + dom(".document-pdf-body") + ".clientHeight + 32");
+    await evaluate(dom(".document-pdf-body") + ".scrollTop = 0");
+    await page("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    for (const distance of [40, 85, 135]) await page("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - distance }] });
+    await page("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await wait(dom(".document-pdf-body") + ".scrollTop > 20", "fullscreen read-only PDF scrolls by touch");
+    await page("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await page("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await wait("!" + dom(".document-reader.is-fullscreen"));
+
+    await resize(820, 480, false);
+    await page("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
+    await openFile("docx", ".docx-page-control button:last-child:not(:disabled)", false);
+    await click(".docx-page-control button:last-child");
+    await wait(dom(".docx-page-control span") + ".textContent.includes('2 / 3')");
+    await resize(390, 680, true);
+    await readerFits(".docx-document-viewport", "DOCX after resize");
+    await wait(dom(".docx-page-control span") + ".textContent.includes('2 / 3')", "Word keeps the current page on resize");
+    assert(await evaluate(dom(".docx-document-viewport") + ".scrollTop > 80"));
+
+    await resize(360, 450, true);
+    await openFile("xlsx", ".office-sheet-tabs button:last-child", true);
+    await readerFits(".office-html", "XLSX reading area");
+    await click(".office-sheet-tabs button:last-child", true);
+    await wait(dom(".office-html") + ".textContent.includes('Sheet Two')");
+    const sheetsStayVisible = () => {
+      const table = document.querySelector(".office-html"), tabs = document.querySelector(".office-sheet-tabs");
+      const before = tabs.getBoundingClientRect();
+      table.scrollLeft = 90; table.scrollTop = 80;
+      const after = tabs.getBoundingClientRect();
+      return table.scrollLeft > 0 && table.scrollTop > 0 && before.top === after.top && before.left === after.left;
+    };
+    assert(await evaluate("(" + sheetsStayVisible + ")()"), "XLSX tabs stay visible while scrolling the sheet");
+    await resize(740, 390, false);
+    await wait(dom(".office-sheet-tabs button:last-child") + ".getAttribute('aria-pressed') === 'true'");
+    await readerFits(".office-html", "XLSX after rotation");
+
+    await resize(360, 430, true);
+    await open("/?view=shared#share=" + token, ".shared-document-reader pre");
+    await readerFits(".shared-document-reader pre", "Shared text document on a short phone");
+    await click(".shared-document-reader .reader-more-toggle", true);
+    await wait(dom(".shared-document-reader .reader-more-panel button:last-of-type") + "?.getClientRects().length", "Shared file keeps reload and sign-in actions reachable");
+    console.log("PDF viewport, fullscreen touch, Word reading position, XLSX scroll, and shared document layout passed.");
+  }
+
+  async function checkAuthoring() {
+    const setKeyboard = async (visible) => {
+      const resizeVisualViewport = (opened) => {
+        const viewport = window.visualViewport;
+        if (opened) Object.defineProperties(viewport, { height: { configurable: true, value: 190 }, offsetTop: { configurable: true, value: 12 } });
+        else { delete viewport.height; delete viewport.offsetTop; }
+        viewport.dispatchEvent(new Event("resize"));
+      };
+      await evaluate("(" + resizeVisualViewport + ")(" + visible + ")");
+    };
+    const fill = async (selector, value) => {
+      await evaluate(dom(selector) + ".focus()");
+      await wait("document.activeElement === " + dom(selector));
+      await page("Input.insertText", { text: value });
+      await wait(dom(selector) + ".value === " + JSON.stringify(value));
+    };
+    const tracks = selector => "getComputedStyle(" + dom(selector) + ").gridTemplateColumns.trim().split(/\\s+/).length";
+    const checkDialogWidth = async (selector, label) => {
+      const measure = dialog => [
+        dialog.scrollWidth, dialog.clientWidth,
+        ...Array.from(dialog.querySelectorAll(".dialog-scroll, .quiz-studio-pane"), box => [box.scrollWidth, box.clientWidth]).flat(),
+      ];
+      const dimensions = await evaluate("(" + measure + ")(" + dom(selector) + ")");
+      assert(dimensions.every((width, index) => index % 2 || width <= dimensions[index + 1] + 1), label + " overflows: " + dimensions);
+    };
+    const checkFocusAboveKeyboard = async selector => {
+      const visible = (field) => {
+        const dialog = field.closest("dialog");
+        const box = dialog.getBoundingClientRect(), input = field.getBoundingClientRect();
+        const titleEnd = dialog.querySelector(".dialog-titlebar").getBoundingClientRect().bottom;
+        return document.activeElement === field && box.top >= 11 && box.bottom <= 203
+          && Math.min(box.bottom, input.bottom) - Math.max(titleEnd, input.top) >= 28;
+      };
+      await wait("(" + visible + ")(" + dom(selector) + ")", selector + " stays reachable above the keyboard");
+    };
+
+    for (const tab of ["quiz", "flashcards"]) {
+      await resize(320, 280, true);
+      await page("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+      if (tab === "quiz") {
+        await open("/?learn=quiz", ".quiz-heading .primary-button");
+        await click(".quiz-heading .primary-button", true);
+        await wait(dom("dialog[open] [id$='-tab-ai_manual']") + "?.getClientRects().length");
+        await click("dialog[open] [id$='-tab-ai_manual']", true);
+      } else {
+        await open("/?learn=flashcards", ".deck-select");
+        await click(".deck-select", true);
+        await wait(dom(".flashcards-ai-trigger") + "?.getClientRects().length");
+        await click(".flashcards-ai-trigger", true);
+      }
+
+      const dialog = "dialog.quiz-studio-ai_manual[open]";
+      const input = dialog + " .quiz-json-input";
+      const panes = dialog + " .quiz-studio-panes";
+      const draft = JSON.stringify({ title: "Nội dung " + "tên_dài_".repeat(26) });
+      await wait(dom(input) + "?.getClientRects().length");
+      await wait(tracks(panes) + " === 1", tab + " single-column form in a narrow landscape window");
+      await checkDialogWidth(dialog, tab + " at 320 × 280");
+      await fill(input, draft);
+      await setKeyboard(true);
+      await checkFocusAboveKeyboard(input);
+      await setKeyboard(false);
+      await resize(980, 620, false);
+      await wait(tracks(panes) + " === 2", tab + " columns on a wider display");
+      assert(await evaluate("(getComputedStyle(" + dom(dialog + " .quiz-studio-prompt") + ").overflowY === 'auto')"));
+      await checkDialogWidth(dialog, tab + " in two columns");
+      await setKeyboard(true);
+      await wait(tracks(panes) + " === 1", tab + " stacks while the keyboard is open");
+      await checkFocusAboveKeyboard(input);
+      assert.equal(await evaluate(dom(input) + ".value"), draft);
+      await setKeyboard(false);
+      await resize(620, 330, false);
+      await wait(tracks(panes) + " === 1", tab + " stacks in a shallow tablet window");
+      assert.equal(await evaluate(dom(input) + ".value"), draft);
+      await click(dialog + " .dialog-titlebar button");
+      await wait("!" + dom(dialog));
+    }
+
+    await resize(280, 370, true);
+    await open("/?learn=lab", ".lab-add-button:not(:disabled)");
+    await click(".lab-add-button", true);
+    const lab = "dialog.lab-editor-dialog[open]";
+    await wait(dom(lab) + "?.getClientRects().length");
+    const footer = lab + " .lab-editor-footer";
+    const footerFits = (section) => {
+      const dialog = section.closest("dialog"), frame = dialog.getBoundingClientRect(), bounds = section.getBoundingClientRect();
+      const scroll = dialog.querySelector(".dialog-scroll");
+      return Math.abs(bounds.bottom - frame.bottom) <= 2 && scroll.scrollHeight > scroll.clientHeight
+        && getComputedStyle(dialog).overflowY === "hidden" && Array.from(section.querySelectorAll("button")).every(button => button.getBoundingClientRect().height >= 44);
+    };
+    await wait("(" + footerFits + ")(" + dom(footer) + ")", "Lab actions stay at the bottom of the editor");
+    await checkDialogWidth(lab, "Lab editor at 280 × 370");
+    await click(lab + " .lab-input-switch button:last-of-type", true);
+    await wait(dom(lab + " .lab-html-code") + "?.getClientRects().length");
+    const title = "Lab responsive";
+    await fill(lab + " .lab-editor > label > input", title);
+    await fill(lab + " .lab-html-code", "<!doctype html><html><body><h1>Lab responsive</h1></body></html>");
+    await setKeyboard(true);
+    await checkFocusAboveKeyboard(lab + " .lab-html-code");
+    await setKeyboard(false);
+    await resize(820, 390, false);
+    await page("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
+    await click(footer + " .lab-actions .secondary-button");
+    const preview = lab + " .lab-editor-preview";
+    await wait("document.activeElement === " + dom(preview) + " && " + dom(preview + " iframe") + "?.getClientRects().length");
+    assert(await evaluate(dom(preview) + ".getBoundingClientRect().top < " + dom(lab + " .dialog-scroll") + ".getBoundingClientRect().bottom - 24"));
+    await click(footer + " .primary-button");
+    await wait("!" + dom(lab) + " && " + dom(".lab-library") + "?.textContent.includes(" + JSON.stringify(title) + ")");
+
+    await resize(780, 390, false);
+    await open("/?learn=exams", ".document-type-cards > button");
+    await wait(tracks(".document-type-cards") + " === 1", "Document tools stack beside a visible sidebar");
+    await checkWidth("Document creation at 780 × 390");
+    await resize(1180, 820, false);
+    await wait(tracks(".document-type-cards") + " === 2", "Document tools use two cards in a wide workspace");
+    await click(".document-type-cards > button:first-child");
+    await wait(dom(".takenote-builder .note-settings-grid") + "?.getClientRects().length");
+    await resize(320, 568, true);
+    await wait(tracks(".takenote-builder .note-settings-grid") + " === 1", "Takenote settings stack on a phone");
+    await checkWidth("Takenote on a phone");
+    await click(".topbar .shell-back", true);
+    await wait(dom(".document-creator-home:not([hidden]) .document-type-cards button") + "?.getClientRects().length");
+    await click(".document-type-cards > button:last-child", true);
+    await wait(dom(".exam-builder-page .studio-workflow") + "?.getClientRects().length", "Exam builder opens on a phone");
+    await checkWidth("Exam builder on a phone");
+    console.log("Quiz and Flashcard authoring, Lab preview and save, Takenote and Exam layout passed on compact and wide screens.");
   }
 
   async function checkTopbar() {

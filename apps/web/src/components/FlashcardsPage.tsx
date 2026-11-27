@@ -519,7 +519,7 @@ export default function FlashcardsPage({ owner, projects, accountPlan, store }: 
       <label>{t("sourcePage")}<input type="number" min="1" step="1" value={cardPage} onChange={event => setCardPage(event.target.value)} placeholder={t("optional")}/></label>
       <footer className="actions"><button type="button" className="secondary-button" disabled={flashcards.busy} onClick={() => setCardDialog(null)}>{t("cancel")}</button><button className="primary-button" disabled={flashcards.busy || !cardFront.trim() || !cardBack.trim()}>{flashcards.busy ? t("saving") : t("save")}</button></footer>
     </form></Dialog>}
-    {aiDialog && <Dialog workspace className={`quiz-studio-dialog flashcard-studio ${aiMode === "manual" ? "quiz-studio-ai_manual" : ""}`} title={t("generateFlashcards")} onClose={closeAiGenerator} dismissible={!aiBusy}
+    {aiDialog && <Dialog workspace followFocusedField className={`quiz-studio-dialog flashcard-studio ${aiMode === "manual" ? "quiz-studio-ai_manual" : ""}`} title={t("generateFlashcards")} onClose={closeAiGenerator} dismissible={!aiBusy}
       toolbar={<div className="quiz-studio-toolbar"><AiModeSwitch mode={aiMode} autoAvailable={!!owner} disabled={aiBusy} onChange={changeAiMode}/></div>}
       footer={<footer className="quiz-studio-footer">
         <div className="quiz-studio-save-status">
