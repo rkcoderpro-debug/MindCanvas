@@ -1,4 +1,4 @@
-import { createContext, useEffect, useId, useRef, useState } from "react";
+import { createContext, useId, useLayoutEffect, useRef, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import type { SharedLearningTarget } from "../lib/workspaceShareLinks";
@@ -22,26 +22,32 @@ export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, s
   const heading = useRef<HTMLHeadingElement>(null);
   const dock = useRef<HTMLDivElement>(null);
   const panelId = useId();
-  const lastRequest = useRef<ChatRequest | null>(null);
+  const lastRequest = useRef<number | undefined>(undefined);
+  const returnFocus = useRef(false);
+  const requestVersion = request?.version;
+  const visible = open && !suspended;
   const label = vi ? "Tin nhắn" : "Messages";
   const minimizeLabel = vi ? "Thu nhỏ tin nhắn" : "Minimize messages";
 
-  useEffect(() => {
-    if (request && lastRequest.current !== request) {
-      lastRequest.current = request;
-      setOpen(true);
+  useLayoutEffect(() => {
+    if (requestVersion === undefined || lastRequest.current === requestVersion) return;
+    lastRequest.current = requestVersion;
+    setOpen(true);
+  }, [requestVersion]);
+  useLayoutEffect(() => {
+    if (open && !dock.current?.hidden) {
+      (dock.current?.querySelector<HTMLElement>(".connection-profile-heading h3") ?? heading.current)?.focus({ preventScroll: true });
     }
-  }, [request]);
-  useEffect(() => {
-    if (open) (dock.current?.querySelector<HTMLElement>(".connection-profile-heading h3") ?? heading.current)?.focus({ preventScroll: true });
+    if (!open && returnFocus.current && toggle.current) toggle.current.focus({ preventScroll: true });
+    returnFocus.current = false;
   }, [open]);
-  useEffect(() => {
-    if (open && !suspended && dock.current) return observeVisualViewport(dock.current);
-  }, [open, suspended]);
+  useLayoutEffect(() => {
+    if (visible && dock.current) return observeVisualViewport(dock.current);
+  }, [visible]);
 
-  const close = () => {
+  const close = (focusLauncher = true) => {
+    returnFocus.current = focusLauncher;
     setOpen(false);
-    requestAnimationFrame(() => toggle.current?.focus({ preventScroll: true }));
   };
 
   return <div className="chat-bubble" ref={dock} data-open={open} hidden={suspended} inert={suspended} onKeyDown={event => {
@@ -51,15 +57,19 @@ export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, s
       close();
     }
   }}>
-    <section className="chat-bubble-panel" id={panelId} hidden={!open} aria-labelledby={`${panelId}-heading`}>
+    <section className="chat-bubble-panel" id={panelId} hidden={!open} inert={!open} aria-labelledby={`${panelId}-heading`}>
       <header>
         <h2 id={`${panelId}-heading`} ref={heading} tabIndex={-1}><MessageCircle size={18} aria-hidden="true"/>{label}</h2>
-        <button type="button" className="icon-button chat-bubble-close" onClick={close}
-          aria-label={minimizeLabel} title={minimizeLabel}><X size={20} aria-hidden="true"/></button>
       </header>
-      <ConnectionsPage owner={owner} compact visible={open && !suspended} onUnread={setUnread} onMinimize={close}
+      <button type="button" className="icon-button chat-bubble-close" onClick={() => close()}
+        onMouseDown={event => {
+          // Keep the keyboard from shifting the panel before the click finishes.
+          if (event.button === 0) event.preventDefault();
+        }}
+        aria-label={minimizeLabel} title={minimizeLabel}><X size={20} aria-hidden="true"/></button>
+      <ConnectionsPage owner={owner} compact visible={visible} onUnread={setUnread}
         initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenLink={onOpenLink}
-        onOpenShared={(item, trigger) => { if (!item) close(); onOpenShared(item, trigger); }}/>
+        onOpenShared={(item, trigger) => { if (!item) close(false); onOpenShared(item, trigger); }}/>
     </section>
     {!open && <button type="button" className="chat-bubble-toggle" ref={toggle} title={label}
       aria-expanded={false} aria-controls={panelId}

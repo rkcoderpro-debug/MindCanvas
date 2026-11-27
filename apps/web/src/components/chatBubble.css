@@ -14,19 +14,27 @@
   height: 3.3rem;
   display: grid;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 70%, white);
+  border: 1px solid var(--accent);
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-contrast, white);
-  box-shadow: 0 2px 6px var(--shadow);
+  box-shadow: none;
 }
-.chat-bubble :is(.chat-bubble-toggle, .chat-bubble-close, .chat-thread-minimize) { touch-action: manipulation; }
+@media (hover: hover) and (pointer: fine) {
+  .chat-bubble-toggle:hover { box-shadow: 0 4px 12px var(--shadow); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .chat-bubble-toggle { transition: translate .15s ease, box-shadow .15s ease; }
+  .chat-bubble-toggle:hover { translate: 0 -2px; }
+}
+.chat-bubble :is(.chat-bubble-toggle, .chat-bubble-close) { touch-action: manipulation; }
 .chat-bubble-toggle > span { position: absolute; top: -.32rem; right: -.35rem; min-width: 1.35rem; padding: .14rem .3rem; border: 2px solid var(--surface); border-radius: 999px; background: var(--danger); color: white; font-size: .68rem; font-weight: 700; }
 .chat-bubble-panel:not([hidden]) { display: grid; }
-.chat-bubble-panel { grid-template-rows: auto minmax(0, 1fr); width: min(24rem, calc(100vw - 2rem)); height: min(33rem, calc(100dvh - 6rem)); min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface-raised); color: var(--text); box-shadow: 0 4px 12px var(--shadow); }
-.chat-bubble[hidden], .chat-bubble-panel[hidden] { display: none !important; }
-.chat-bubble-panel > header { display: flex; align-items: center; justify-content: space-between; min-height: 3.4rem; padding: .35rem .75rem; border-bottom: 1px solid var(--line); }
-.chat-bubble-panel > header .chat-bubble-close { flex: none; width: 44px; height: 44px; }
+.chat-bubble-panel { position: relative; grid-template-rows: auto minmax(0, 1fr); width: min(24rem, calc(100vw - 2rem)); height: min(33rem, calc(100dvh - 6rem)); min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface-raised); color: var(--text); box-shadow: 0 4px 12px var(--shadow); }
+.chat-bubble[hidden], .chat-bubble-panel[hidden], .chat-bubble[data-open="true"] > .chat-bubble-toggle { display: none !important; }
+.chat-bubble-panel > header { display: flex; align-items: center; padding: .35rem .75rem; border-bottom: 1px solid var(--line); }
+.chat-bubble-panel > header, .chat-bubble .connections-conversation > header { min-height: 55px; padding-inline-end: 56px; }
+.chat-bubble-panel > .chat-bubble-close { position: absolute; z-index: 3; inset-block-start: 5px; inset-inline-end: 6px; width: 44px; height: 44px; }
 .chat-bubble-panel > header h2 { display: flex; align-items: center; gap: .55rem; margin: 0; font-size: 1rem; }
 .chat-bubble-panel > header h2 svg { color: var(--accent); }
 .chat-bubble-panel:has(.connections-layout[data-thread-open="true"]) { grid-template-rows: minmax(0, 1fr); }
@@ -43,7 +51,7 @@
 .chat-bubble .connections-layout[data-thread-open="true"] > .connections-sidebar,
 .chat-bubble .connections-layout[data-thread-open="false"] > .connections-conversation { display: none; }
 .chat-bubble .connections-conversation { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; }
-.chat-bubble .connections-conversation > header { flex-wrap: nowrap; align-items: center; gap: .35rem; min-height: 3.55rem; padding: .4rem .55rem; }
+.chat-bubble .connections-conversation > header { flex-wrap: nowrap; align-items: center; gap: .35rem; padding-block: .4rem; padding-inline-start: .55rem; }
 .chat-bubble .connections-conversation > header .connections-thread-back { display: inline-grid; place-items: center; }
 .chat-bubble .connections-conversation > header :is(.icon-button, .connections-peer-menu summary) { flex: 0 0 2.25rem; width: 2.25rem; min-height: 2.25rem; padding: 0; border: 0; border-radius: .6rem; background: transparent; }
 .chat-bubble .connections-conversation > header :is(.icon-button, .connections-peer-menu summary):hover { background: var(--accent-soft); }

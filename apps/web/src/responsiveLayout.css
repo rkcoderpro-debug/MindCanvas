@@ -314,7 +314,7 @@ dialog.dialog[data-viewport-adjusted][open] {
   }
 }
 @media (max-height: 470px), (max-width: 360px) {
-  .chat-bubble .connections-conversation > header { padding: 2px 6px; min-height: 0; }
+  .chat-bubble .connections-conversation > header { padding-block: 2px; }
   .chat-bubble .connections-composer { padding: 4px 6px; }
 }
 

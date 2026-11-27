@@ -33,10 +33,10 @@ function mergeMessages(latest: DirectMessage[], current: DirectMessage[]) {
 }
 
 export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, initialPeerVersion, compact = false,
-  visible = true, onUnread, onChat, onMinimize, onOpenLink }: {
+  visible = true, onUnread, onChat, onOpenLink }: {
   owner: string | null; onOpenShared: (item?: SharedLearningTarget, trigger?: HTMLElement) => void; initialPeerId?: string; initialPeerVersion?: number;
   compact?: boolean; visible?: boolean; onUnread?: (count: number) => void; onChat?: (peerId: string) => void;
-  onMinimize?: () => void; onOpenLink?: (token: string, trigger: HTMLElement) => void;
+  onOpenLink?: (token: string, trigger: HTMLElement) => void;
 }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [invitations, setInvitations] = useState<ConnectionInvitation[]>([]);
@@ -293,8 +293,6 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
                 <button type="button" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setShowReport(value => !value); }}>Báo cáo</button>
               </div>
             </details>
-            {onMinimize && <button type="button" className="icon-button chat-thread-minimize" onClick={onMinimize}
-              aria-label="Thu nhỏ tin nhắn" title="Thu nhỏ tin nhắn"><X size={20} aria-hidden="true"/></button>}
           </header>
           <div className="connections-thread">
             {showReport && <form className="connections-report" onSubmit={event => { event.preventDefault(); void run(async () => { await reportConnection(peer.peer_id, reportText); if (openPeer.current === peer.peer_id) { setReportText(""); setShowReport(false); setNotice("Đã gửi báo cáo."); } }); }}>

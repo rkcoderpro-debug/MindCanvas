@@ -1,0 +1,72 @@
+{
+  "version": "6.8.17",
+  "baseVersion": "6.8.16",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.17.md",
+      "bytes": 750,
+      "sha256": "3c06963dac4ed4d33a44a8e2ae3f282e7866e8acad4eaabf79732f4c573136b8"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "fbc295363fb92f76f8a6d82a6c0fd64beafa5692180fccd5bbc3e0f636b28e57"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "8c0163ea5009a4967a5dfb039418f950f2174f7866642fa5d2fc71736cdd97fd"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 64515,
+      "sha256": "442eecde4f87bc66c76625512393d8f26bb57480bd1a784c9f3d59fba280795e"
+    },
+    {
+      "path": "apps/web/scripts/responsive/apple-checks.mjs",
+      "bytes": 8798,
+      "sha256": "e827de1bb827a3bc3bba72c74c606b817e22b7c47526a27486bb3ea33e59ec8d"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 13696,
+      "sha256": "5ae02d145b88287967b03bba3c1741aa23558b73281f0c9009d05332f2524e11"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 3984,
+      "sha256": "ce641fd07fd61713b631d5ac30e0c8a3f391eea47820562c8e5034b2f8b18a0a"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 11080,
+      "sha256": "807779b14e4ddd9447401970a1eb8a527820fb7d6df5a8a05dc7f3d7bb64ad3c"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 27478,
+      "sha256": "9a488280bb3d66ccd45dc0e810000b74526094eb835231287325fb6b1969bf79"
+    },
+    {
+      "path": "apps/web/src/components/chatBubble.css",
+      "bytes": 7164,
+      "sha256": "bcdbbc623e9baf9d5b30d1dbced9f1929e9fecfe3c761193d83186abb7ad9598"
+    },
+    {
+      "path": "apps/web/src/responsiveLayout.css",
+      "bytes": 24237,
+      "sha256": "6101c87f5e5998774f68bbbbd222a30db40c1c0152b1eba9ab947eb46a00d848"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "5b85556f34d4d6a582c9173bea74eb37f9d02440b9ea98dde4cf9fdaa0c54769"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "bf99516c9feae3b649c6a327a9ad132451704fdac75c18ac2a81a7dee6e3db23"
+    }
+  ]
+}

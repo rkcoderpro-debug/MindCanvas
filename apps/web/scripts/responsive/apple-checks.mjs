@@ -42,7 +42,7 @@ export async function checkApple({ profile, resize, open, click, drag, press, ev
   await wait(visible(".chat-bubble[data-viewport-adjusted]"), "keyboard changes chat viewport");
   assert(await evaluate(`parseFloat(getComputedStyle(${dom(".connections-composer textarea")}).fontSize) >= 16`));
   assert((await bounds(".connections-composer")).bottom <= 309);
-  await click(".chat-thread-minimize");
+  await click(".chat-bubble-close");
   await wait(visible(".chat-bubble-toggle"), "chat can be closed with keyboard open");
   await evaluate(`delete visualViewport.height; delete visualViewport.offsetTop; window.dispatchEvent(new Event('pageshow'));`);
   await click(".chat-bubble-toggle");

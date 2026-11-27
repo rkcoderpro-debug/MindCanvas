@@ -38,13 +38,14 @@ const longName = "Bài ôn tập cấu trúc dữ liệu và giải thuật — 
 
 function ChatFixture() {
   const [open, setOpen] = useState(false);
+  const [request] = useState(() => new URLSearchParams(location.search).has("pending-close-race") ? { peerId: "peer", version: 1 } : null);
   return <>
     <button type="button" id="open-dialog" onClick={() => setOpen(true)}>Open test form</button>
     {open && <Dialog title={longName} workspace onClose={() => setOpen(false)}
       footer={<button id="confirm-dialog" type="button" onClick={() => setOpen(false)}>Confirm</button>}>
       {Array.from({ length: 12 }, (_, index) => <label key={index}>Input {index + 1}<input/></label>)}
     </Dialog>}
-    <ChatBubble owner="reader" request={null} onOpenShared={() => {}}/>
+    <ChatBubble owner="reader" request={request} onOpenShared={() => {}}/>
   </>;
 }
 

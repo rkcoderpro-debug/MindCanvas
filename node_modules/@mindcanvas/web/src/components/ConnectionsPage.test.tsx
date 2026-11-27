@@ -96,7 +96,7 @@ it("opens a folder card in the compact chat and keeps the conversation minimized
   const link = host.querySelector<HTMLAnchorElement>("a.connections-resource")!;
   expect(link.textContent).toContain("Mở thư mục");
   expect(link.hash).toBe(`#share=${token}`);
-  await act(async () => host.querySelector<HTMLButtonElement>(".chat-thread-minimize")!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-close")!.click());
   expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(true);
   await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-toggle")!.click());
   expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn học");
@@ -105,6 +105,29 @@ it("opens a folder card in the compact chat and keeps the conversation minimized
 it("opens the matching conversation when a message notification arrives", async () => {
   await act(async () => root.render(<ChatBubble owner="me" request={{ peerId: "peer-2", version: 1 }} onOpenShared={onOpenShared}/>));
   expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(false);
+  expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn thứ hai");
+});
+
+it("keeps chat closed when the same notification is rendered again and preserves the draft", async () => {
+  const render = (peerId: string, version: number) => root.render(<ChatBubble owner="me" request={{ peerId, version }} onOpenShared={onOpenShared}/>);
+  await act(async () => render("peer-1", 1));
+  const input = host.querySelector<HTMLTextAreaElement>(".connections-composer textarea")!;
+  await act(async () => {
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, "Bản nháp");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  });
+  expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(true);
+  expect(document.activeElement).toBe(host.querySelector(".chat-bubble-toggle"));
+  await act(async () => render("peer-1", 1));
+  expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(true);
+
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-toggle")!.click());
+  expect(host.querySelector(".chat-bubble-toggle")).toBeNull();
+  expect(input.value).toBe("Bản nháp");
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-close")!.click());
+  await act(async () => render("peer-2", 2));
   expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn thứ hai");
 });
 

@@ -53,8 +53,11 @@ const compiled = await build({
       plugin.onLoad({ filter: /^contacts$/, namespace: "fixture-contacts" }, () => ({
         resolveDir: web,
         contents: 'export * from "./src/lib/connections.ts";' +
-          'export const listConnections = async () => new URLSearchParams(location.search).has("pending-connections") ? new Promise(() => {}) : [{peer_id:"peer",display_name:"' + "A".repeat(90) +
-          '",unread_count:0,connected_at:"2026-01-01T00:00:00Z"}];' +
+          'const contacts = [{peer_id:"peer",display_name:"' + "A".repeat(90) + '",unread_count:0,connected_at:"2026-01-01T00:00:00Z"}];' +
+          'export const listConnections = async () => { const query = new URLSearchParams(location.search);' +
+          'if (query.has("pending-connections")) return new Promise(() => {});' +
+          'if (query.has("pending-close-race")) return window.qaChatContacts ??= new Promise(resolve => { window.qaReleaseChat = () => resolve(contacts); });' +
+          'return contacts; };' +
           'export const listBlockedConnections=async()=>[]; export const markDirectMessagesRead=async()=>{};' +
           'export const sendDirectMessage=async()=>{};' +
           'export const listDirectMessages = async () => [...(location.pathname === "/qa/shared-thread" ? [{id:"shared",sender_id:"peer",recipient_id:"reader",body:"",resource_kind:"document",resource_title:"MindCanvas QA.json",workspace_file_token:"' + token + '",created_at:"2026-01-02T00:00:00Z"}] : []), {id:"1",sender_id:"peer",recipient_id:"reader",body:"dòng văn bản ".repeat(location.pathname === "/qa/shared-thread" ? 160 : 25),resource_kind:null,created_at:"2026-01-01T00:00:00Z"}];',
@@ -266,6 +269,11 @@ async function runChromium() {
     const allSizes = [[280,720],[320,568],[360,640],[390,844],[430,932],[512,768],[620,620],[621,620],[640,480],[768,1024],[844,390],[900,360],[1024,600],[1180,820],[1366,768],[1920,1080],[3440,1440]];
     const authoringOnly = process.argv.includes("--authoring-only");
     const readerOnly = process.argv.includes("--reader-only");
+    if (process.argv.includes("--chat-only")) {
+      await checkChatClose();
+      await checkChatKeyboard();
+      return;
+    }
     if (process.argv.includes("--music-only")) {
       await checkMusicIsland();
       return;
@@ -299,6 +307,8 @@ async function runChromium() {
       if (!authoringOnly && !readerOnly) {
         await checkTopbar();
         await checkNavigationDock();
+        await checkChatClose();
+        await checkChatKeyboard();
         await checkLearningNavigation();
         await checkFolderLibrary();
         await checkMusicIsland();
@@ -306,6 +316,92 @@ async function runChromium() {
       }
       if (!readerOnly) await checkAuthoring();
       if (!authoringOnly) await checkReaders();
+    }
+
+    async function checkChatClose() {
+      for (const [width, height] of [[1180, 760], [390, 680], [320, 340]]) {
+        const touch = width <= 480;
+        await resize(width, height, touch);
+        await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+        await open("/qa/chat?pending-close-race&width=" + width, ".chat-bubble-close");
+        await chatOpened();
+        await wait("typeof window.qaReleaseChat === 'function'");
+        const point = await evaluate(`(() => {
+          const close = ${dom(".chat-bubble-close")};
+          const { left, top, width, height } = close.getBoundingClientRect();
+          return { x: left + width / 2, y: top + height / 2, width, height };
+        })()`);
+        const { x, y } = point;
+        assert(point.width >= 44 && point.height >= 44);
+        if (touch) await page("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+        else await page("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+        await evaluate("window.qaReleaseChat()");
+        await wait(dom('.connections-layout[data-thread-open="true"]') + "?.getClientRects().length", "thread opens as contacts finish loading");
+        if (touch) await page("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        else await page("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+        await chatClosed();
+        if (!touch) {
+          await page("Input.dispatchMouseEvent", { type: "mouseMoved", x: 8, y: 8 });
+          const shadow = `getComputedStyle(${chatLauncher}).boxShadow`;
+          await wait(`${shadow} === 'none'`, "launcher is flat away from the pointer");
+          const launcher = await evaluate(`(() => {
+            const { x, y, width, height } = ${chatLauncher}.getBoundingClientRect();
+            return { x: x + width / 2, y: y + height / 2 };
+          })()`);
+          await page("Input.dispatchMouseEvent", { type: "mouseMoved", ...launcher });
+          await wait(`${shadow} !== 'none' && getComputedStyle(${chatLauncher}).translate === '0px -2px'`, "launcher lifts and gains a shadow on hover");
+        }
+        for (let attempt = 0; attempt < 4; attempt++) {
+          await click(".chat-bubble-toggle", touch);
+          await chatOpened();
+          await click(".chat-bubble-close", touch);
+          await chatClosed();
+        }
+      }
+      console.log("Chat closes with one tap when the inbox changes into a conversation, and through repeated open/close at three sizes.");
+    }
+
+    async function checkChatKeyboard() {
+      for (const [width, height, visible, offset] of [[320, 568, 285, 0], [844, 390, 215, 16], [1180, 820, 360, 0]]) {
+        await resize(width, height);
+        await page("Emulation.setTouchEmulationEnabled", { enabled: width <= 480, maxTouchPoints: 1 });
+        await open("/qa/chat", ".chat-bubble-toggle");
+        await click(".chat-bubble-toggle");
+        await wait(dom(".connections-person") + "?.getClientRects().length");
+        await click(".connections-person");
+        await wait(dom(".connections-composer textarea") + "?.getClientRects().length");
+        await click(".connections-composer textarea");
+        await page("Input.insertText", { text: "Bản nháp còn nguyên" });
+        await evaluate("Object.defineProperties(visualViewport,{height:{configurable:true,value:" + visible +
+          "},offsetTop:{configurable:true,value:" + offset + "}});visualViewport.dispatchEvent(new Event('resize'));");
+        const bounds = await evaluate("[" + dom(".connections-composer") + ".getBoundingClientRect().bottom," +
+          dom(".chat-bubble-panel") + ".getBoundingClientRect().bottom,visualViewport.height+visualViewport.offsetTop," +
+          dom(".chat-bubble-panel") + ".getBoundingClientRect().top]");
+        if (bounds[0] > bounds[2] || bounds[1] > bounds[2] || bounds[3] < offset - 1 || bounds[1] - bounds[3] < 100) {
+          const viewport = await evaluate("(() => {const dock=document.querySelector('.chat-bubble'), style=getComputedStyle(dock); return [innerHeight,document.documentElement.clientHeight,visualViewport.scale,visualViewport.offsetTop,visualViewport.pageTop,style.bottom,style.getPropertyValue('--visible-bottom'),dock.getBoundingClientRect().bottom,scrollY];})()");
+          assert.fail("Chat outside the simulated visual viewport " + width + "×" + height + " " + bounds + " " + viewport);
+        }
+        assert.equal(await evaluate(dom(".connections-composer textarea") + ".value"), "Bản nháp còn nguyên");
+        const sendButton = await evaluate(`(() => {
+          const button = ${dom(".connections-composer .primary-button")};
+          const { x, y, width, height, bottom } = button.getBoundingClientRect();
+          return { height, bottom, hit: button.contains(document.elementFromPoint(x + width / 2, y + height / 2)) };
+        })()`);
+        assert(sendButton.hit && sendButton.height >= 44 && sendButton.bottom <= visible + offset);
+        await click(".chat-bubble-close", width <= 480);
+        await chatClosed();
+        await click(".chat-bubble-toggle", width <= 480);
+        await chatOpened();
+        assert.equal(await evaluate(dom(".connections-composer textarea") + ".value"), "Bản nháp còn nguyên");
+        await page("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+        await page("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+        await chatClosed();
+        await click("#open-dialog");
+        await wait(dom("dialog[open]") + "?.getClientRects().length");
+        assert(await evaluate(dom("dialog[open]") + ".getBoundingClientRect().bottom") <= visible + offset);
+        await click("#confirm-dialog");
+      }
+      console.log("Chat stays above the keyboard, keeps its draft and closes with the X button and Escape.");
     }
 
     async function checkFolderLibrary() {
@@ -363,6 +459,7 @@ async function runChromium() {
         await wait(`${dom(".home-heading")}?.getClientRects().length`, "Workspace opens without the music page");
         assert(await evaluate(`${collapsed} && window.qaMusicFrame === ${frame} && window.qaMusicPlayer.playing && window.qaMusicPlayer.time === 72 && ${wave} && !${dom(".music-island-details")}`));
         await click(".music-island-open", touch);
+        await wait(`${dom(".music-island.expanded")}?.getAnimations().every(animation => animation.playState !== 'running')`, "music controls finish opening");
         await click('.music-island-details button[aria-label="Tạm dừng"]', touch);
         await wait("!window.qaMusicPlayer.playing", "pause from Dynamic Island");
       }
@@ -779,12 +876,12 @@ async function runChromium() {
           const gap = await clearance(".chat-bubble-toggle");
           assert(gap >= 10, "Chat launcher clearance at " + width + ": " + gap);
           const shadow = await evaluate("getComputedStyle(" + chatLauncher + ").boxShadow");
-          assert.equal(shadow.match(/-?[\d.]+px/g)?.join(" "), "0px 2px 6px 0px", "Chat launcher should have a single compact shadow");
+          assert.equal(shadow, "none", "Chat launcher is flat on touch screens");
           await click(".chat-bubble-toggle", true);
           await chatOpened();
           await wait(dom(".connections-person") + "?.getClientRects().length");
           assert(await clearance(".chat-bubble-panel") >= 6, "Open chat overlays the navigation at " + width);
-          const closeButton = await click(".chat-bubble-panel > header button", true);
+          const closeButton = await click(".chat-bubble-close", true);
           assert(closeButton.width >= 44 && closeButton.height >= 44, "Chat close tap target is too small");
           await chatClosed();
         }
@@ -825,7 +922,7 @@ async function runChromium() {
         await click(".chat-bubble-toggle", true);
         await chatOpened();
         await wait(dom(".connections-people [role=status]") + "?.getClientRects().length");
-        await click(".chat-bubble-panel > header button", true);
+        await click(".chat-bubble-close", true);
         await chatClosed();
       }
       console.log("Mobile tools drawer and chat clearance passed at six widths. Chat closes by touch even while loading.");
@@ -869,35 +966,7 @@ async function runChromium() {
       await wait(dom(".pdf-page-shell[data-fit]") + "?.clientWidth > 400", "PDF refits after rotation", 8000);
       await checkWidth("PDF landscape");
 
-      for (const [width, height, visible, offset] of [[320, 568, 285, 0], [844, 390, 215, 16], [1180, 820, 360, 0]]) {
-        await resize(width, height);
-        await open("/qa/chat", ".chat-bubble-toggle");
-        await click(".chat-bubble-toggle");
-        await wait(dom(".connections-person") + "?.getClientRects().length");
-        await click(".connections-person");
-        await wait(dom(".connections-composer textarea") + "?.getClientRects().length");
-        await click(".connections-composer textarea");
-        await page("Input.insertText", { text: "Bản nháp còn nguyên" });
-        await evaluate("Object.defineProperties(visualViewport,{height:{configurable:true,value:" + visible +
-          "},offsetTop:{configurable:true,value:" + offset + "}});visualViewport.dispatchEvent(new Event('resize'));");
-        const bounds = await evaluate("[" + dom(".connections-composer") + ".getBoundingClientRect().bottom," +
-          dom(".chat-bubble-panel") + ".getBoundingClientRect().bottom,visualViewport.height+visualViewport.offsetTop," +
-          dom(".chat-bubble-panel") + ".getBoundingClientRect().top]");
-        if (bounds[0] > bounds[2] || bounds[1] > bounds[2] || bounds[3] < offset - 1 || bounds[1] - bounds[3] < 100) {
-          const viewport = await evaluate("(() => {const dock=document.querySelector('.chat-bubble'), style=getComputedStyle(dock); return [innerHeight,document.documentElement.clientHeight,visualViewport.scale,visualViewport.offsetTop,visualViewport.pageTop,style.bottom,style.getPropertyValue('--visible-bottom'),dock.getBoundingClientRect().bottom,scrollY];})()");
-          assert.fail("Chat outside the simulated visual viewport " + width + "×" + height + " " + bounds + " " + viewport);
-        }
-        assert.equal(await evaluate(dom(".connections-composer textarea") + ".value"), "Bản nháp còn nguyên");
-        const sendButton = await click(".connections-composer .primary-button");
-        assert(sendButton.height >= 44 && sendButton.y + sendButton.height / 2 <= visible + offset);
-        await click(".chat-thread-minimize", width <= 480);
-        await chatClosed();
-        await click("#open-dialog");
-        await wait(dom("dialog[open]") + "?.getClientRects().length");
-        assert(await evaluate(dom("dialog[open]") + ".getBoundingClientRect().bottom") <= visible + offset);
-        await click("#confirm-dialog");
-      }
-      console.log("Canvas resize and inspector, A4 page return, PDF fit and pagination, chat and dialog passed.");
+      console.log("Canvas resize and inspector, A4 page return, and PDF fit and pagination passed.");
 
       await resize(320, 568);
       await open("/?learn=quiz", ".quiz-test-card .primary-button");
