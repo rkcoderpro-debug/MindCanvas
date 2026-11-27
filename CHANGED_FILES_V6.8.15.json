@@ -1,0 +1,62 @@
+{
+  "version": "6.8.15",
+  "baseVersion": "6.8.14",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.15.md",
+      "bytes": 712,
+      "sha256": "f41d075f54670be0991a18b49774ac870985ca1a47b425cf9855ec48c8ca43e4"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "e30b777d5bc0c1d8698d3714c1b4c3289a5756d60d28a2410e7493cd10a3e00d"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "51a9eac9c94bffb6197335857eb3e062650f1a6cadd279be94ac9c842c2d5045"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 58275,
+      "sha256": "ddc14ea7101e630853c2a52852cd6bd017ac6a008c740afe7508dd574edf805c"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 13553,
+      "sha256": "e6f0c579cb756a6155068b55bb07ff7a30a14cad0769f315398ec8e1cb34543e"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.test.tsx",
+      "bytes": 8616,
+      "sha256": "0836dda409cb0ec9999951f17021bec097f17fd58cb1643df3225ac9bf9268d8"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.tsx",
+      "bytes": 32450,
+      "sha256": "d09facc60f65f6082755287087b545272773e09c1513989410634fe1119c3225"
+    },
+    {
+      "path": "apps/web/src/components/MusicYouTubeSurface.tsx",
+      "bytes": 3733,
+      "sha256": "0a1802e15f38628a0a5ef7545fb814f49d3fdb69427df2dbeb5af8317c7b715d"
+    },
+    {
+      "path": "apps/web/src/musicPolish.css",
+      "bytes": 6323,
+      "sha256": "9de5f14a5e24f2094381c23d3f443c02f441b46eabda796517f6abe7611b394c"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "24c5113a1d0b80fc4b66146b32ea90d9e1725d0fcee28a4c59a6273ee10ea49f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "e4dac50ad1dff50087ea9cc93d3cd512d82d2e6d0821258e1ffd3f04826cd1aa"
+    }
+  ]
+}

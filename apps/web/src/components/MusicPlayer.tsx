@@ -14,7 +14,9 @@ type Music = {
   tracks: MusicTrack[]; current: string | null; playing: boolean; time: number; duration: number; volume: number;
   repeat: 'off' | 'all' | 'one'; shuffle: boolean; hidden: boolean; error: string; busy: boolean;
   activeTrack: MusicTrack | null;
-  youtubeOpen: boolean; youtubeInline: boolean; youtubeNote: string; setYoutubeIslandSlot: (slot: HTMLDivElement | null) => void; setYoutubeSlot: (slot: HTMLDivElement | null) => void;
+  youtubeOpen: boolean; youtubeMinimized: boolean; youtubeVideoVisible: boolean; youtubeNote: string;
+  setYoutubeMinimized: (value: boolean) => void; setYoutubeSlot: (slot: HTMLDivElement | null) => void;
+  stopYouTube: () => void;
   analyser: AnalyserNode | null; play: (id?: string) => void; pause: () => void; next: (direction: number) => void;
   seek: (time: number) => void; setVolume: (value: number) => void; setRepeat: (value: 'off' | 'all' | 'one') => void;
   setShuffle: (value: boolean) => void; setHidden: (value: boolean) => void;
@@ -41,11 +43,11 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   const [hidden, setHidden] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [youtubeOpen, setYoutubeOpen] = useState(false), [youtubeNote, setYoutubeNote] = useState("");
+  const [youtubeMinimized, setYoutubeMinimized] = useState(false);
   const [youtubeSlot, setYoutubeSlot] = useState<HTMLDivElement | null>(null);
-  const [youtubeIslandSlot, setYoutubeIslandSlot] = useState<HTMLDivElement | null>(null);
   const [roomAudio, setRoomAudio] = useState(false);
-  const inlineRect = usePlayerSlot(youtubeSlot, 238), islandRect = usePlayerSlot(youtubeIslandSlot, 238);
-  const playerRect = roomAudio ? null : inlineRect ?? islandRect;
+  const inlineRect = usePlayerSlot(youtubeSlot, 238);
+  const playerRect = roomAudio || youtubeMinimized ? null : inlineRect;
   const [youtubeStart, setYoutubeStart] = useState(0), [youtubeAttempt, setYoutubeAttempt] = useState(0);
   const youtube = useRef<Player | null>(null), wantsPlay = useRef(false), youtubeFailed = useRef(false);
   const activeId = useRef<string | null>(null);
@@ -95,7 +97,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     youtube.current?.pauseVideo();
     youtube.current = null;
     youtubeFailed.current = false;
-    setYoutubeOpen(false); setYoutubeNote("");
+    setYoutubeOpen(false); setYoutubeMinimized(false); setYoutubeNote("");
   };
   const play = (id = current ?? tracks[0]?.id) => {
     if (roomAudio) { setError("Âm thanh phòng đang được ưu tiên. Hãy dừng nghe trong phòng để phát nhạc cá nhân."); return; }
@@ -138,7 +140,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   };
   const pause = () => { generation.current++; wantsPlay.current = false; youtube.current?.pauseVideo(); audioRef.current?.pause(); setPlaying(false); };
   useEffect(() => { if (roomAudio) pause(); }, [roomAudio]);
-  const hideYouTube = () => { pause(); dismissYouTube(); };
+  const stopYouTube = () => { dismissYouTube(); setPlaying(false); };
   const next = (direction: number) => { const id = nextMusicId(tracks.map(t => t.id), current, direction, shuffle); if (id) play(id); };
   useEffect(() => {
     const audio = audioRef.current; if (!audio) return;
@@ -179,7 +181,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   const remove = async (track: MusicTrack) => {
     try {
       await musicStore(scope, 'delete', track);
-      if (track.id === activeId.current) { hideYouTube(); selectTrack(null); }
+      if (track.id === activeId.current) { pause(); dismissYouTube(); selectTrack(null); }
       if (track.id === loadedId.current) { loadedId.current = null; audioRef.current?.pause(); audioRef.current?.removeAttribute('src'); audioRef.current?.load(); if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = ''; }
       setTracks(old => old.filter(t => t.id !== track.id));
     } catch { setError('Không xóa được bài hát. Hãy thử lại.'); }
@@ -191,7 +193,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     catch { setError('Không lưu được tên bài hát.'); }
   };
   const value: Music = { tracks, current, activeTrack, playing, time, duration, volume, repeat, shuffle, hidden, error, busy,
-    youtubeOpen, youtubeInline: Boolean(inlineRect), youtubeNote, setYoutubeSlot, setYoutubeIslandSlot, analyser, play, pause, next, add, addOnline, remove, rename, setRepeat, setShuffle, setHidden,
+    youtubeOpen, youtubeMinimized, youtubeVideoVisible: Boolean(playerRect), youtubeNote, setYoutubeSlot, setYoutubeMinimized, stopYouTube, analyser, play, pause, next, add, addOnline, remove, rename, setRepeat, setShuffle, setHidden,
     seek: value => {
       if (duration <= 0 || !Number.isFinite(value)) return;
       const seconds = Math.max(0, Math.min(duration, value));
@@ -206,7 +208,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     setDuration(Number.isFinite(length) && length > 0 ? length : 0);
     if (Number.isFinite(progress) && progress >= 0) setTime(progress);
     if (state === 1) {
-      if (document.visibilityState === "hidden") { pause(); return; }
+      if (roomAudio || document.visibilityState === "hidden") { pause(); return; }
       wantsPlay.current = false; setPlaying(true); setYoutubeNote("");
     } else if (state === 2 || state === 5) {
       setPlaying(false);
@@ -229,15 +231,14 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   };
   return <AudioPriority.Provider value={setRoomAudio}><Context.Provider value={value}>
     <OnlinePlayback track={activeTrack} playing={playing}/>
-    {youtubeEmbed && youtubeOpen && activeTrack && <MusicYouTubeSurface key={`${activeTrack.id}:${youtubeAttempt}`} rect={playerRect} insideIsland={!inlineRect && !!islandRect}
-      embedUrl={youtubeEmbed} title={activeTrack.title} start={youtubeStart} onClose={hideYouTube} onHidden={pause}
+    {youtubeEmbed && youtubeOpen && activeTrack && <MusicYouTubeSurface key={`${activeTrack.id}:${youtubeAttempt}`} rect={playerRect}
+      embedUrl={youtubeEmbed} title={activeTrack.title} start={youtubeStart} onMinimize={() => setYoutubeMinimized(true)} onTabHidden={pause}
       onReady={player => {
         if (activeId.current !== activeTrack.id || youtubeFailed.current) return;
         youtube.current = player; player.setVolume(Math.round(volume * 100)); syncYouTube(player);
         setYoutubeNote("");
-        if (wantsPlay.current && playerRect && document.visibilityState !== "hidden") player.playVideo();
+        if (wantsPlay.current && !roomAudio && document.visibilityState !== "hidden") player.playVideo();
       }}
-      onShown={() => { if (wantsPlay.current) youtube.current?.playVideo(); }}
       onUpdate={syncYouTube}
       onBlocked={() => { wantsPlay.current = false; setPlaying(false); setYoutubeNote("Bấm Phát ngay trên khung YouTube để bắt đầu."); }}
       onError={() => { youtubeFailed.current = true; wantsPlay.current = false; setPlaying(false); setYoutubeNote("Không phát được video nhúng. Bấm Phát để thử lại hoặc mở nguồn nhạc."); }}/>}
@@ -324,16 +325,19 @@ export function MusicIsland({ suppressed = false }: { suppressed?: boolean }) {
   const m = useMusic(), [expanded, setExpanded] = useState(false), [hovered, setHovered] = useState(false), root = useRef<HTMLElement>(null);
   const toggle = useRef<HTMLButtonElement>(null), details = useId();
   const track = m.activeTrack;
+  const videoWasVisible = useRef(false);
   useEffect(() => {
     if (!expanded) return;
-    const close = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node) && !(event.target instanceof Element && event.target.closest(".music-youtube-surface")) && !(m.youtubeOpen && !m.youtubeInline)) setExpanded(false); };
-    document.addEventListener('pointerdown', close); return () => document.removeEventListener('pointerdown', close);
-  }, [expanded, m.youtubeOpen, m.youtubeInline]);
+    const close = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setExpanded(false); };
+    const leavePage = () => setExpanded(false);
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('popstate', leavePage);
+    return () => { document.removeEventListener('pointerdown', close); window.removeEventListener('popstate', leavePage); };
+  }, [expanded]);
   useEffect(() => {
-    if (!m.youtubeOpen || m.youtubeInline || m.hidden || suppressed) return;
-    const frame = requestAnimationFrame(() => setExpanded(true));
-    return () => cancelAnimationFrame(frame);
-  }, [m.youtubeOpen, m.youtubeInline, m.hidden, suppressed]);
+    if (videoWasVisible.current && !m.youtubeVideoVisible) { setExpanded(false); setHovered(false); }
+    videoWasVisible.current = m.youtubeVideoVisible;
+  }, [m.youtubeVideoVisible]);
   useEffect(() => { if (m.hidden || !track) { setExpanded(false); setHovered(false); } }, [m.hidden, track?.id]);
   if (!track || m.hidden || suppressed) return null;
   const close = () => { setExpanded(false); toggle.current?.focus(); };
@@ -343,7 +347,6 @@ export function MusicIsland({ suppressed = false }: { suppressed?: boolean }) {
     onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); close(); } }}>
     <div className="music-island-summary"><button ref={toggle} type="button" className="music-island-open" aria-label={`Mở điều khiển ${track.title}`} aria-expanded={expanded} aria-controls={expanded ? details : undefined} onClick={() => setExpanded(value => !value)}><Music2 size={15} aria-hidden="true"/><ScrollingTitle title={track.title} visible={expanded || hovered}/><Visualizer/><ChevronDown size={14} aria-hidden="true"/></button></div>
     {expanded && <div className="music-island-details" id={details}>
-      {m.youtubeOpen && !m.youtubeInline && <div className="music-youtube-slot personal-youtube-slot" aria-hidden="true" ref={m.setYoutubeIslandSlot}/>}
       <div className="music-island-track"><strong>{track.title}</strong><span>{musicSourceLabel(track.source)}{track.isPlaylist ? ' · Playlist' : ''}</span></div>
       {(!track.source || track.source === "local" || isYouTube(track)) && <PlaybackProgress/>}
       <Controls/><PlaybackOptions/>
@@ -351,6 +354,7 @@ export function MusicIsland({ suppressed = false }: { suppressed?: boolean }) {
       {m.error && <small role="alert">{m.error}</small>}
       <div className="music-island-footer">
         {track.url && <a className="music-source-link" href={track.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Mở nguồn</a>}
+        {isYouTube(track) && m.youtubeOpen && <button type="button" onClick={m.stopYouTube}><X size={15}/>Dừng YouTube</button>}
         <button type="button" onClick={close}><ChevronDown size={15}/>Thu gọn</button><button type="button" onClick={() => m.setHidden(true)}><X size={15}/>Ẩn thanh</button>
       </div>
     </div>}
@@ -383,7 +387,10 @@ export function MusicPage() {
           <div><span className="eyebrow">ĐANG PHÁT</span><strong>{track?.title ?? "Chưa chọn bài"}</strong><small>{track ? `${musicSourceLabel(track.source)}${track.isPlaylist ? " · Danh sách phát" : ""}` : "Chọn bài nhạc từ danh sách phát"}</small></div>
           <label className="music-island-toggle"><input type="checkbox" checked={!m.hidden} onChange={event => m.setHidden(!event.target.checked)}/>Hiện trình phát thu nhỏ</label>
         </div>
-        {isYouTube(track) && m.youtubeOpen ? <div className="music-youtube-slot" ref={active ? m.setYoutubeSlot : undefined} aria-hidden="true"><Radio size={27}/><span>Trình phát YouTube</span></div>
+        {isYouTube(track) && m.youtubeOpen && m.youtubeMinimized ? <div className="music-youtube-collapsed">
+          <button type="button" className="secondary-button" onClick={() => m.setYoutubeMinimized(false)}>Hiện video YouTube</button>
+          <button type="button" className="text-button" onClick={m.stopYouTube}>Dừng YouTube</button>
+        </div> : isYouTube(track) && m.youtubeOpen ? <div className="music-youtube-slot" ref={active ? m.setYoutubeSlot : undefined} aria-hidden="true"><Radio size={27}/><span>Trình phát YouTube</span></div>
           : <div className="music-player-art" aria-hidden="true">{track && !localTrack ? <Radio size={36}/> : <Disc3 size={42}/>}</div>}
         {track && <div className="music-page-visual"><Visualizer wide/><small>{localTrack && m.analyser ? "Phổ âm thanh" : "Hiệu ứng phát nhạc"}</small></div>}
         {(localTrack || isYouTube(track)) && <PlaybackProgress/>}

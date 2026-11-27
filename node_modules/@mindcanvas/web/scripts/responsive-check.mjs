@@ -266,6 +266,10 @@ async function runChromium() {
     const allSizes = [[280,720],[320,568],[360,640],[390,844],[430,932],[512,768],[620,620],[621,620],[640,480],[768,1024],[844,390],[900,360],[1024,600],[1180,820],[1366,768],[1920,1080],[3440,1440]];
     const authoringOnly = process.argv.includes("--authoring-only");
     const readerOnly = process.argv.includes("--reader-only");
+    if (process.argv.includes("--music-only")) {
+      await checkMusicIsland();
+      return;
+    }
     if (process.argv.includes("--learning-navigation-only")) {
       await checkLearningNavigation();
       return;
@@ -292,10 +296,42 @@ async function runChromium() {
         await checkTopbar();
         await checkNavigationDock();
         await checkLearningNavigation();
+        await checkMusicIsland();
         await checkInteractions();
       }
       if (!readerOnly) await checkAuthoring();
       if (!authoringOnly) await checkReaders();
+    }
+
+    async function checkMusicIsland() {
+      const wave = dom('.music-island [data-playing="true"]');
+      const frame = dom(".music-youtube-frame iframe");
+      for (const [width, height] of [[1160, 770], [390, 780]]) {
+        const touch = width < 480;
+        await resize(width, height, touch);
+        await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+        const play = '.music-playlist button[aria-label="Phát Piano QA"]';
+        await open("/?learn=music&qa-music=1", play);
+        await click(play, touch);
+        await wait(`window.qaMusicPlayer.playing && !!${wave}`, "YouTube is playing on " + width);
+        await evaluate(`window.qaMusicFrame = ${frame}; window.qaMusicPlayer.time = 72`);
+        const minimize = '.music-youtube-surface button[aria-label="Thu nhỏ video YouTube"]';
+        if (!await evaluate(`${dom(minimize)}?.getClientRects().length`)) {
+          await evaluate(`${dom(".music-youtube-slot")}?.scrollIntoView({ block: 'center' })`);
+        }
+        await wait(`${dom(minimize)}?.getClientRects().length`, "inline video is visible");
+        await click(minimize, touch);
+        const collapsed = `!!${dom('.music-youtube-surface[hidden]')} && !${frame}.getClientRects().length`;
+        await wait(collapsed, "video is hidden after minimize");
+        const home = touch ? ".mobile-compact-nav button:first-child" : ".workspace-nav-row > button:first-child";
+        await click(home, touch);
+        await wait(`${dom(".home-heading")}?.getClientRects().length`, "Workspace opens without the music page");
+        assert(await evaluate(`${collapsed} && window.qaMusicFrame === ${frame} && window.qaMusicPlayer.playing && window.qaMusicPlayer.time === 72 && ${wave} && !${dom(".music-island-details")}`));
+        await click(".music-island-open", touch);
+        await click('.music-island-details button[aria-label="Tạm dừng"]', touch);
+        await wait("!window.qaMusicPlayer.playing", "pause from Dynamic Island");
+      }
+      console.log("YouTube test player keeps its time and playback with only Dynamic Island visible on Workspace at desktop and phone sizes.");
     }
 
     async function checkLearningNavigation() {

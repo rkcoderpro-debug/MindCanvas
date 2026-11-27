@@ -54,7 +54,7 @@ it('adds a link from the same control as device files and leaves playback paused
   await act(async () => root.unmount());
 });
 
-it('uses the YouTube player timeline in both controls and keeps the visible player across app views', async () => {
+it('keeps the YouTube timeline and playback when minimizing video or leaving the music page', async () => {
   type Events = ConstructorParameters<Awaited<ReturnType<typeof getYouTube>>['Player']>[1]['events'];
   let events!: Events;
   const player = {
@@ -96,13 +96,26 @@ it('uses the YouTube player timeline in both controls and keeps the visible play
     expect(player.seekTo).toHaveBeenCalledWith(80, true);
     expect(mainRange.value).toBe('80');
 
+    const pauses = player.pauseVideo.mock.calls.length;
+    await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="Thu nhỏ video YouTube"]')!.click());
+    expect(document.body.querySelector('.music-youtube-surface[hidden][inert] iframe')).toBe(frame);
+    expect(host.querySelector('.music-island-details')).toBeNull();
+    expect(player.pauseVideo).toHaveBeenCalledTimes(pauses);
+    expect(mainRange.value).toBe('80');
+    const restore = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Hiện video YouTube')!;
+    await act(async () => restore.click());
+    expect(document.body.querySelector('.music-youtube-surface:not([hidden]) iframe')).toBe(frame);
+
     await act(async () => root.render(render(false)));
-    expect(document.body.querySelector('.music-youtube-inside-island:not([hidden]) iframe')).toBe(frame);
-    expect(host.querySelector('.music-island-details .personal-youtube-slot')).toBeTruthy();
+    expect(document.body.querySelector('.music-youtube-surface[hidden] iframe')).toBe(frame);
+    expect(host.querySelector('.music-island-details')).toBeNull();
+    expect(host.querySelector('.music-island [data-playing="true"]')).toBeTruthy();
+    expect(player.pauseVideo).toHaveBeenCalledTimes(pauses);
     expect(create).toHaveBeenCalledOnce();
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-island-open')!.click());
     await act(async () => host.querySelector<HTMLButtonElement>('.music-island-details [aria-label="Tạm dừng"]')!.click());
     expect(player.pauseVideo).toHaveBeenCalled();
-    await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="Đóng trình phát YouTube"]')!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('.music-island-footer button')].find(button => button.textContent === 'Dừng YouTube')!.click());
     expect(player.destroy).toHaveBeenCalledOnce();
     expect(document.body.querySelector('.music-youtube-surface')).toBeNull();
   } finally { await act(async () => root.unmount()); host.remove(); measure.mockRestore(); }

@@ -1,36 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Minimize2 } from "lucide-react";
 import { getYouTube, type Player } from "../lib/youtubeIframe";
 
 type Props = {
-  embedUrl: string; title: string; rect: DOMRect | null; insideIsland: boolean; start: number;
+  embedUrl: string; title: string; rect: DOMRect | null; start: number;
   onReady: (player: Player) => void; onUpdate: (player: Player, state?: number) => void;
-  onBlocked: () => void; onError: () => void; onClose: () => void; onHidden: () => void; onShown: () => void;
+  onBlocked: () => void; onError: () => void; onMinimize: () => void; onTabHidden: () => void;
 };
 
-/** The iframe stays in the same DOM node. Only its position changes when the
- * inline music panel leaves view, so moving to another app page doesn't reload it. */
+/** Keep the same player instance for audio when the inline video is collapsed. */
 export default function MusicYouTubeSurface(props: Props) {
   const frameRoot = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
   latest.current = props;
-  const { rect, insideIsland } = props;
+  const { rect } = props;
   const [frameReady, setFrameReady] = useState(false);
 
-  const previouslyVisible = useRef(false);
   useEffect(() => {
-    if (rect) {
-      previouslyVisible.current = true;
-      if (!document.hidden) latest.current.onShown();
-      return;
-    }
-    if (!previouslyVisible.current) return;
-    const wait = window.setTimeout(() => { previouslyVisible.current = false; latest.current.onHidden(); }, 100);
-    return () => window.clearTimeout(wait);
-  }, [Boolean(rect)]);
-  useEffect(() => {
-    const visibility = () => { if (document.hidden) latest.current.onHidden(); };
+    const visibility = () => { if (document.hidden) latest.current.onTabHidden(); };
     document.addEventListener("visibilitychange", visibility);
     return () => document.removeEventListener("visibilitychange", visibility);
   }, []);
@@ -68,7 +56,6 @@ export default function MusicYouTubeSurface(props: Props) {
         },
         onStateChange: ({ data }) => {
           if (!alive || !ready) return;
-          if (data === 1 && (!latest.current.rect || document.hidden)) { ready.pauseVideo(); return; }
           latest.current.onUpdate(ready, data);
         },
         onAutoplayBlocked: () => { if (alive) latest.current.onBlocked(); },
@@ -86,9 +73,9 @@ export default function MusicYouTubeSurface(props: Props) {
     };
   }, [props.embedUrl]);
 
-  return createPortal(<section className={`music-youtube-surface music-youtube-inline ${insideIsland ? "music-youtube-inside-island" : ""}`}
-    aria-label="Trình phát YouTube" data-study-island-media={insideIsland || undefined} hidden={!rect} style={rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined}>
-    <header><strong title={props.title}>{props.title}</strong><button type="button" className="icon-button" aria-label="Đóng trình phát YouTube" onClick={props.onClose}><X size={17}/></button></header>
+  return createPortal(<section className="music-youtube-surface music-youtube-inline"
+    aria-label="Trình phát YouTube" hidden={!rect} inert={!rect} style={rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined}>
+    <header><strong title={props.title}>{props.title}</strong><button type="button" className="icon-button" aria-label="Thu nhỏ video YouTube" title="Thu nhỏ video" onClick={props.onMinimize}><Minimize2 size={17}/></button></header>
     <div ref={frameRoot} className="music-youtube-frame" aria-busy={!frameReady}/>
   </section>, document.body);
 }

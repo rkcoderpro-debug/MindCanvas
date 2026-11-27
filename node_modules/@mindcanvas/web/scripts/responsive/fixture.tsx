@@ -21,6 +21,7 @@ import { addFolder, cacheProject, waitForProjectCache, upsertFlashcardDeck, upse
 import { createDeck, createFlashcard } from "../../src/lib/flashcards";
 import { finishGuide, GUIDE_DEFINITIONS } from "../../src/lib/featureGuides";
 import { upsertQuizTest } from "../../src/lib/quizStore";
+import { musicStore } from "../../src/lib/musicStorage";
 import { saveStoredLab } from "../../src/lib/labStorage";
 import { emptyLabEditor } from "../../src/components/LabEditorDialog";
 import { LanguageProvider } from "../../src/lib/i18n";
@@ -160,6 +161,23 @@ async function seedDocuments() {
 
 async function main() {
   const root = createRoot(document.getElementById("root")!);
+  if (new URLSearchParams(location.search).has("qa-music")) {
+    await musicStore("guest", "put", { id: "qa-youtube", owner: "guest", title: "Piano QA", source: "youtube", url: "https://www.youtube.com/watch?v=abcdefghijk" });
+    const player = {
+      time: 0, playing: false, destroy() { this.playing = false; }, setVolume() {},
+      getDuration() { return 195; }, getCurrentTime() { return this.time; }, seekTo(value: number) { this.time = value; },
+      getPlaylist() { return undefined; }, getPlaylistIndex() { return -1; }, playVideoAt() {},
+      playVideo() {}, pauseVideo() {},
+    };
+    Object.assign(window, { qaMusicPlayer: player, YT: { Player: function (_iframe: HTMLIFrameElement, config: {
+      events: { onReady: (event: { target: typeof player }) => void; onStateChange: (event: { data: number }) => void };
+    }) {
+      player.playVideo = () => { player.playing = true; config.events.onStateChange({ data: 1 }); };
+      player.pauseVideo = () => { player.playing = false; config.events.onStateChange({ data: 2 }); };
+      queueMicrotask(() => config.events.onReady({ target: player }));
+      return player;
+    } } });
+  }
   if (location.pathname === "/qa/topbar") {
     root.render(<LanguageProvider><TopbarFixture/></LanguageProvider>);
     return;

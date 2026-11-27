@@ -94,6 +94,8 @@
   border: 1px solid var(--accent-border); border-radius: 14px;
   overflow: hidden; background: var(--surface-raised); color: var(--text);
 }
+.music-youtube-surface[hidden] { display: none; }
+.music-youtube-collapsed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .music-youtube-surface header { min-width: 0; display: flex; align-items: center; justify-content: space-between; padding-inline: 10px 3px; gap: 6px; }
 .music-youtube-surface header strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .music-youtube-surface header button { min-width: 32px; width: 32px; min-height: 32px; height: 32px; color: var(--muted); }
