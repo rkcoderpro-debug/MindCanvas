@@ -10,6 +10,10 @@ import App from "../../src/App";
 import ChatBubble from "../../src/components/ChatBubble";
 import Dialog from "../../src/components/Dialog";
 import DocumentViewer from "../../src/components/DocumentViewer";
+import WorkspaceSharedPage from "../../src/components/WorkspaceSharedPage";
+import { useSharedRoute } from "../../src/hooks/useSharedRoute";
+import { workspaceShareUrl } from "../../src/lib/workspaceShareLinks";
+import { isIOSDevice } from "../../src/lib/canvasInput";
 import { blankBoard } from "../../src/lib/board";
 import { newA4Layout, newA4Page } from "../../src/lib/a4Canvas";
 import { saveDocument } from "../../src/lib/documentStore";
@@ -20,7 +24,7 @@ import { upsertQuizTest } from "../../src/lib/quizStore";
 import { saveStoredLab } from "../../src/lib/labStorage";
 import { emptyLabEditor } from "../../src/components/LabEditorDialog";
 import { LanguageProvider } from "../../src/lib/i18n";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "../../src/styles.css";
 import "../../src/studioPolish.css";
 import "../../src/musicPolish.css";
@@ -41,6 +45,22 @@ function ChatFixture() {
     </Dialog>}
     <ChatBubble owner="reader" request={null} onOpenShared={() => {}}/>
   </>;
+}
+
+function SharedThreadFixture() {
+  const area = useRef<HTMLElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  const shared = useSharedRoute(area, backButton);
+  return <div className={`app-shell${isIOSDevice() ? " ios-device" : ""}`}>
+    <main ref={area} className="main-area">
+      {shared.detail?.token ? <>
+        <header className="topbar"><button ref={backButton} className="qa-shared-back" onClick={() => shared.back()}>Back to messages</button></header>
+        <WorkspaceSharedPage token={shared.detail.token} signedIn onSignIn={() => {}} inWorkspace/>
+      </> : <h1>Workspace</h1>}
+    </main>
+    <ChatBubble owner="reader" request={null} onOpenShared={() => {}} suspended={!!shared.detail}
+      onOpenLink={(token, trigger) => shared.open(workspaceShareUrl(token), "chat", trigger)}/>
+  </div>;
 }
 
 function NavigationFixture() {
@@ -146,6 +166,10 @@ async function main() {
   }
   if (location.pathname === "/qa/chat") {
     root.render(<LanguageProvider><ChatFixture/></LanguageProvider>);
+    return;
+  }
+  if (location.pathname === "/qa/shared-thread") {
+    root.render(<LanguageProvider><SharedThreadFixture/></LanguageProvider>);
     return;
   }
   if (location.pathname === "/qa/pdf") {

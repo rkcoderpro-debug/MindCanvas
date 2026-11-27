@@ -1,6 +1,22 @@
 /* Size the shared shell by the available window before applying page-specific layouts. */
 .app-shell { min-height: 0; }
 .app-shell > .main-area { min-height: 0; }
+.app-shell.ios-device {
+  padding-top: var(--safe-area-top);
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
+}
+@media (min-width: 481px) {
+  .app-shell.ios-device { padding-bottom: var(--safe-area-bottom); }
+}
+.app-shell.ios-device.canvas-fullscreen-mode :is(.main-area, .editor-layout) { height: 100%; }
+.ios-device :is(.connections-search input, .connections-composer textarea, .command-search input,
+  .dialog textarea, .dialog select, .dialog input:not([type=button], [type=checkbox], [type=color], [type=file], [type=radio], [type=range], [type=reset], [type=submit])) {
+  font-size: max(1rem, 16px);
+}
+.ios-device :is(.canvas-tools-sheet-backdrop, .mobile-project-sheet-backdrop) {
+  padding-inline: max(8px, var(--safe-area-left)) max(8px, var(--safe-area-right));
+}
 .sidebar-resize-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .topbar-location .page-back-button { flex-shrink: 1; }
 .topbar-account-actions { min-inline-size: 0; }
@@ -266,18 +282,21 @@ dialog.dialog[data-viewport-adjusted][open] {
 }
 
 .chat-bubble[data-open="true"] {
-  --chat-panel-height: min(33rem, calc(var(--visible-height, 100dvh) - max(.65rem, env(safe-area-inset-top)) - var(--chat-gap-bottom)));
-  right: calc(var(--visible-right, 0px) + max(.65rem, env(safe-area-inset-right)));
+  --chat-left-edge: max(var(--safe-area-left), calc(var(--visible-left, 0px) + .65rem));
+  --chat-right-edge: max(var(--safe-area-right), calc(var(--visible-right, 0px) + .65rem));
+  --chat-top-edge: max(var(--safe-area-top), calc(var(--visible-top, 0px) + .65rem));
+  --chat-panel-height: min(33rem, max(0px, calc(var(--visible-top, 0px) + var(--visible-height, 100dvh) - var(--chat-top-edge) - var(--chat-gap-bottom))));
+  right: var(--chat-right-edge);
   bottom: var(--chat-gap-bottom);
 }
 .chat-bubble[data-open="true"][data-viewport-adjusted] {
-  --chat-gap-bottom: max(24px, env(safe-area-inset-bottom));
+  --chat-gap-bottom: max(12px, calc(var(--safe-area-bottom) - var(--visible-bottom)));
   top: calc(var(--visible-top) + var(--visible-height) - var(--chat-gap-bottom) - var(--chat-panel-height));
   bottom: auto;
 }
 .chat-bubble-panel {
   grid-template-columns: minmax(0, 1fr);
-  width: min(24rem, calc(var(--visible-width, 100vw) - max(.65rem, env(safe-area-inset-left)) - max(.65rem, env(safe-area-inset-right))));
+  width: min(24rem, calc(100vw - var(--chat-left-edge) - var(--chat-right-edge)));
   height: var(--chat-panel-height, 0px);
 }
 .chat-bubble .connections-conversation { grid-template-columns: minmax(0, 1fr); }
@@ -291,7 +310,7 @@ dialog.dialog[data-viewport-adjusted][open] {
 .chat-bubble .connections-messages { overscroll-behavior: contain; }
 @media (max-width: 600px) {
   .chat-bubble[data-open="true"] .chat-bubble-panel {
-    width: calc(var(--visible-width, 100vw) - max(.65rem, env(safe-area-inset-left)) - max(.65rem, env(safe-area-inset-right)));
+    width: calc(100vw - var(--chat-left-edge) - var(--chat-right-edge));
   }
 }
 @media (max-height: 470px), (max-width: 360px) {

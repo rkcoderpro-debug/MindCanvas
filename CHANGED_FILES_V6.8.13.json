@@ -1,0 +1,97 @@
+{
+  "version": "6.8.13",
+  "baseVersion": "6.8.12",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.13.md",
+      "bytes": 1674,
+      "sha256": "c59b93e2ba4b6f1843894d9088e971265f526c05f97dfa6829fe88b642c6e80d"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "f5501f929e64edde0c3b2cb2f53e7431c8aa60906097a95abfda83485f8e37a3"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "e908a9183440599119cc9fe3dbaab4eddf4df206effc99634a5b4e263a4c06db"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 52273,
+      "sha256": "723a521dc53daf1bd285c72f4956d480dac9e2fd4129d6865219f196b86fa2c1"
+    },
+    {
+      "path": "apps/web/scripts/responsive/apple-checks.mjs",
+      "bytes": 8801,
+      "sha256": "9de565236651e428efe6c4cb50a008acd4faade6907dd038662f0c1bc83afa0f"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 12343,
+      "sha256": "93b11d11c1ecfc6ec9df4430963e11c256928d1b8f20442d8f0e982f7dc940b5"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 76286,
+      "sha256": "67d1d7f24e94cac8bceb72b7312d4dc456895a4c1ef3b4118cbc0e948b577fb1"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 3487,
+      "sha256": "b8180ea6e76f7cc44d2d403aa773589e5af611f786ec2b05bca53b223f439466"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 9579,
+      "sha256": "72a2d4083450df244dc69945817d09d56583f0a0092ce1cc23f1a001c0437af5"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 27753,
+      "sha256": "acdc463a306ac88926044367cb0740f9a810785e805e8ef34108537b7f456762"
+    },
+    {
+      "path": "apps/web/src/components/DocumentViewer.tsx",
+      "bytes": 42251,
+      "sha256": "489b695e7c2cee3edc6181144bb030577a91c32f66bc68215cec152c141bdd24"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 18746,
+      "sha256": "fa23a89e97ca869de4add279c55b16d9317e30b1d17f4492d87f8c0bdb07646f"
+    },
+    {
+      "path": "apps/web/src/hooks/useSharedRoute.ts",
+      "bytes": 3343,
+      "sha256": "48b10b7841b4c0674cbded3cd9671937210cf0d8db59db918f70b747f08fb275"
+    },
+    {
+      "path": "apps/web/src/lib/visualViewport.ts",
+      "bytes": 1487,
+      "sha256": "059c0992ccc4e3bd3977949b28f459261658755942ac424ecb55814071134d38"
+    },
+    {
+      "path": "apps/web/src/responsiveLayout.css",
+      "bytes": 24250,
+      "sha256": "d42502e8f83cac66007660cf944d6dca935d1f8c5874fefe2685e464ff4e0951"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 521438,
+      "sha256": "e24561eb36772deff0d9f648253bd3ac29098556fc129f8c842835a779b1ec9a"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "9fc0687cc3720eadb5ec6994ae7c9a1123c686a95900aaa0fab73ed79777fdc0"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "806eb3fd700f725e720efb7bc26ac4866213cb2f622fd2c6117d8711b988ae6b"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import DocxViewer from "./DocxViewer";
 import HtmlDocumentViewer from "./HtmlDocumentViewer";
 import { textFromDataUrl } from "../lib/htmlDocument";
 import DocumentReaderBar, { type ReaderAction } from "./DocumentReaderBar";
+import { downloadWorkspaceBlob } from "../lib/workspaceFiles";
 
 type Source = Pick<UploadedDocument, "name" | "mimeType" | "dataUrl" | "kind"> & Partial<Pick<UploadedDocument, "id">>;
 type ViewerReadyDetail = { sessionId: string; documentId?: string; kind: DocumentKind };
@@ -111,7 +112,8 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
   const [pdf, setPdf] = useState<any>(null);
   const [loading, setLoading] = useState(kind === "pdf");
   const [error, setError] = useState("");
-  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreenMode, setFullscreenMode] = useState<"native" | "fallback" | null>(null);
+  const fullscreen = fullscreenMode !== null;
   const [drawing, setDrawing] = useState(false);
   const [annotationMode, setAnnotationMode] = useState<AnnotationMode>("pen");
   const [heldAnnotationMode, setHeldAnnotationMode] = useState<AnnotationMode | null>(null);
@@ -438,7 +440,10 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       if (event.key === "Control" || event.key === "Meta") { ctrlHeld.current = true; return; }
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
-      if (event.code === "Space") { event.preventDefault(); spaceHeldRef.current = true; setSpaceHeld(true); return; }
+      if (event.code === "Space") {
+        if (target?.closest("button, a[href], summary, [role=button]")) return;
+        event.preventDefault(); spaceHeldRef.current = true; setSpaceHeld(true); return;
+      }
       if (readOnly) return;
       if (!(event.ctrlKey || event.metaKey) || event.altKey) {
         const key = event.key.toLowerCase();
@@ -489,7 +494,7 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
         }
       }
       const savedBytes = await pdfDocument.save();
-      const blob = new Blob([new Uint8Array(savedBytes)], { type: "application/pdf" }); const url = URL.createObjectURL(blob); const anchor = window.document.createElement("a"); anchor.href = url; anchor.download = `${source.name.replace(/\.pdf$/i, "")}-annotated.pdf`; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadWorkspaceBlob(new Blob([new Uint8Array(savedBytes)], { type: "application/pdf" }), `${source.name.replace(/\.pdf$/i, "")}-annotated.pdf`);
       emitGuideAction("pdf:export", { documentId: source.id, viewerSessionId, kind });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể xuất PDF mới."); }
   };
@@ -500,24 +505,32 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       await document.exitFullscreen().catch(() => {});
       return;
     }
-    if (fullscreen) {
-      setFullscreen(false);
+    if (fullscreenMode === "fallback") {
+      setFullscreenMode(null);
       return;
     }
-    try { await element.requestFullscreen(); }
-    catch { setFullscreen(true); }
+    try {
+      if (!element.requestFullscreen) { setFullscreenMode("fallback"); return; }
+      await element.requestFullscreen();
+    } catch { setFullscreenMode("fallback"); }
   };
-  useEffect(() => { const sync = () => setFullscreen(document.fullscreenElement === viewer.current); document.addEventListener("fullscreenchange", sync); return () => document.removeEventListener("fullscreenchange", sync); }, []);
-
+  useEffect(() => {
+    const sync = () => {
+      const native = document.fullscreenElement === viewer.current;
+      setFullscreenMode(current => native ? "native" : current === "native" ? null : current);
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
 
   useEffect(() => {
-    if (!reader || !fullscreen || document.fullscreenElement === viewer.current) return;
+    if (!reader || fullscreenMode !== "fallback") return;
     const exitFallback = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !document.querySelector("dialog[open]")) setFullscreen(false);
+      if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("dialog[open]")) setFullscreenMode(null);
     };
     window.addEventListener("keydown", exitFallback);
     return () => window.removeEventListener("keydown", exitFallback);
-  }, [Boolean(reader), fullscreen]);
+  }, [Boolean(reader), fullscreenMode]);
 
   const zoomControls = (
     <div className="document-pdf-zoom-control" role="group" aria-label={language === "vi" ? "Thu phóng PDF" : "PDF zoom"}>
@@ -565,7 +578,8 @@ export default function DocumentViewer({ source, owner = null, embedded = false,
       : kind === "html" && !reader?.actions.some(action => action.id === "download") ? [{ id: "download", label: t("downloadOriginal"), icon: Download, href: source.dataUrl, download: source.name }] : []),
   ];
   return (
-    <section ref={viewer} className={`document-viewer ${reader ? "document-reader" : ""} ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`} data-document-id={source.id} data-document-kind={kind} data-viewer-session-id={viewerSessionId} aria-label={`${t("documentViewer")} ${source.name}`}>
+    <section ref={viewer} className={`document-viewer ${reader ? "document-reader" : ""} ${embedded ? "document-viewer-embedded" : ""} ${fullscreen ? "is-fullscreen" : ""}`}
+      data-fullscreen-fallback={fullscreenMode === "fallback" || undefined} data-document-id={source.id} data-document-kind={kind} data-viewer-session-id={viewerSessionId} aria-label={`${t("documentViewer")} ${source.name}`}>
       {reader ? <DocumentReaderBar title={source.name} kind={kind} caption={reader.caption} actions={readerActions}>
         {kind === "pdf" && <>{zoomControls}{!readOnly && <button type="button" className="reader-icon document-draw-toggle"
           aria-label={pencilLabel} title={pencilLabel} aria-pressed={drawing && (fullscreen || dedicated)}

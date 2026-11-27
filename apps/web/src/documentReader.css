@@ -220,8 +220,13 @@
 }
 .document-viewer.document-reader > .pptx-viewer { grid-template-rows: minmax(0, 1fr) auto; }
 .document-reader .pptx-slide { min-height: 0; overflow: auto; align-content: safe center; }
-.document-viewer.document-reader.is-fullscreen { width: 100vw; height: 100dvh; }
-.document-viewer.document-reader.is-fullscreen:not(:fullscreen) { position: fixed; inset: 0; z-index: 1200; }
+.document-viewer.document-reader.is-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
+}
+.document-viewer.document-reader[data-fullscreen-fallback] { position: fixed; inset: 0; z-index: 1200; }
 .compact-file-body { flex: 1; min-height: 0; padding: clamp(12px, 2.5vw, 24px); background: var(--canvas); color: var(--muted); }
 .compact-file-body:not(.has-text) { display: grid; align-content: center; justify-items: center; gap: 10px; text-align: center; }
 .compact-file-body p { margin: 0 0 5px; }

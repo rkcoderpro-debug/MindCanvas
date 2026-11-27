@@ -34,9 +34,9 @@ function mergeMessages(latest: DirectMessage[], current: DirectMessage[]) {
 
 export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, initialPeerVersion, compact = false,
   visible = true, onUnread, onChat, onMinimize, onOpenLink }: {
-  owner: string | null; onOpenShared: (item?: SharedLearningTarget) => void; initialPeerId?: string; initialPeerVersion?: number;
+  owner: string | null; onOpenShared: (item?: SharedLearningTarget, trigger?: HTMLElement) => void; initialPeerId?: string; initialPeerVersion?: number;
   compact?: boolean; visible?: boolean; onUnread?: (count: number) => void; onChat?: (peerId: string) => void;
-  onMinimize?: () => void; onOpenLink?: (token: string) => void;
+  onMinimize?: () => void; onOpenLink?: (token: string, trigger: HTMLElement) => void;
 }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [invitations, setInvitations] = useState<ConnectionInvitation[]>([]);
@@ -207,7 +207,12 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
     try { await refreshConversation(person.peer_id, "open"); }
     catch (cause) { if (openPeer.current === person.peer_id) setError(cause instanceof Error ? cause.message : "Không thể tải hội thoại."); }
   }, [onChat, refreshConversation]);
-  useEffect(() => { if (peerId && active) threadHeading.current?.focus({ preventScroll: true }); }, [peerId, active]);
+  useEffect(() => {
+    const heading = threadHeading.current;
+    if (peerId && active && heading && !heading.closest(".connections-conversation")?.contains(document.activeElement)) {
+      heading.focus({ preventScroll: true });
+    }
+  }, [peerId, active]);
   const openedInitialPeer = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!initialPeerId) { openedInitialPeer.current = undefined; return; }
@@ -302,8 +307,9 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
                 const day = new Date(message.created_at).toLocaleDateString("vi-VN");
                 const previous = ordered[index - 1];
                 const startsDay = !previous || new Date(previous.created_at).toLocaleDateString("vi-VN") !== day;
-                return <MessageBubble key={message.id} message={message} mine={message.sender_id === owner} date={startsDay ? day : undefined} onOpenShared={item => { if (item) rememberThread(); onOpenShared(item); }}
-                  onOpenLink={onOpenLink && (token => { rememberThread(); onOpenLink(token); })}/>;
+                return <MessageBubble key={message.id} message={message} mine={message.sender_id === owner} date={startsDay ? day : undefined}
+                  onOpenShared={(item, trigger) => { if (item) rememberThread(); onOpenShared(item, trigger); }}
+                  onOpenLink={onOpenLink && ((token, trigger) => { rememberThread(); onOpenLink(token, trigger); })}/>;
               })}
               {!messages.length && <p className="connections-empty" role="status">{loadingThread ? "Đang tải tin nhắn…" : "Hãy gửi tin nhắn đầu tiên hoặc chia sẻ học liệu từ thư viện."}</p>}
             </div>
@@ -331,7 +337,10 @@ function formatPreviewTime(at: string) {
     : date.toLocaleDateString("vi-VN", { day: "numeric", month: "numeric", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "2-digit" } : {}) });
 }
 
-function MessageBubble({ message, mine, date, onOpenShared, onOpenLink }: { message: DirectMessage; mine: boolean; date?: string; onOpenShared: (item?: SharedLearningTarget) => void; onOpenLink?: (token: string) => void }) {
+function MessageBubble({ message, mine, date, onOpenShared, onOpenLink }: {
+  message: DirectMessage; mine: boolean; date?: string; onOpenShared: (item?: SharedLearningTarget, trigger?: HTMLElement) => void;
+  onOpenLink?: (token: string, trigger: HTMLElement) => void;
+}) {
   const kind = message.resource_kind;
   const Icon = message.workspace_folder_card ? Folder : kind ? resourceIcons[kind] : FileText;
   const resourceLabel = kind ? resourceLabels[kind] : "";
@@ -352,9 +361,9 @@ function MessageBubble({ message, mine, date, onOpenShared, onOpenLink }: { mess
     <article className={`${mine ? "mine" : "theirs"}${kind && !message.body ? " connections-attachment-only" : ""}`}>
       {message.body && <p>{message.body}</p>}
       {token
-        ? (fileLink ? <a className="connections-resource" href={fileLink} onClick={event => openShareInSameTab(event, onOpenLink && (() => onOpenLink(token)))}>{asset}</a> : <span className="connections-resource">{asset}</span>)
+        ? (fileLink ? <a className="connections-resource" href={fileLink} onClick={event => openShareInSameTab(event, onOpenLink && (() => onOpenLink(token, event.currentTarget)))}>{asset}</a> : <span className="connections-resource">{asset}</span>)
         : kind && (mine ? <span className="connections-resource">{asset}</span>
-          : learning ? <a className="connections-resource" href={learningLink} onClick={event => openShareInSameTab(event, () => onOpenShared(learning))}>{asset}</a>
+          : learning ? <a className="connections-resource" href={learningLink} onClick={event => openShareInSameTab(event, () => onOpenShared(learning, event.currentTarget))}>{asset}</a>
           : <button type="button" className="connections-resource" onClick={() => onOpenShared()}>{asset}</button>)}
       <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</time>
     </article>

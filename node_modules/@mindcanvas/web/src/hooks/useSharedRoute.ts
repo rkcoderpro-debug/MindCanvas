@@ -50,9 +50,9 @@ export function useSharedRoute(area: RefObject<HTMLElement | null>, backButton: 
     detail,
     canReturnToChat: detail?.source === "chat" && !!position.current,
     inbox,
-    open(url: string, source: Source) {
+    open(url: string, source: Source, trigger?: HTMLElement) {
       if (!detail) {
-        position.current = { url: window.location.href, top: area.current?.scrollTop ?? 0, focus: document.activeElement as HTMLElement | null };
+        position.current = { url: window.location.href, top: area.current?.scrollTop ?? 0, focus: trigger ?? (document.activeElement as HTMLElement | null) };
       }
       if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
       change(url, "pushState", { [parentKey]: source });

@@ -130,7 +130,7 @@ it("keeps the thread, its scroll position, and the draft when returning from a c
     messages.scrollTop = 135;
     card.click();
   });
-  expect(onOpenLink).toHaveBeenCalledWith(token);
+  expect(onOpenLink).toHaveBeenCalledWith(token, card);
   await act(async () => render(true));
   expect(host.querySelector(".chat-bubble")?.hasAttribute("hidden")).toBe(true);
   messages.scrollTop = 0;

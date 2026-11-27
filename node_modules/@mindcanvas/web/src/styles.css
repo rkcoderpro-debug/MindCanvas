@@ -3145,49 +3145,11 @@ body,
   .learning-hub-nav { scroll-behavior: auto; }
 }
 
-/* V4.5.6: iOS-only viewport and safe-area corrections. Android and desktop
-   keep the existing mobile/desktop layout rules. */
-@media (max-width: 620px) {
-  .ios-device .canvas-open-mode .main-area {
-    padding-bottom: calc(8px + env(safe-area-inset-bottom));
-  }
-  .ios-device .mobile-canvas-header {
-    min-height: calc(56px + env(safe-area-inset-top));
-    padding-top: max(8px, env(safe-area-inset-top));
-  }
-  .ios-device .canvas-open-mode .editor-layout {
-    height: clamp(380px, calc(100svh - 156px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 760px);
-  }
-  .ios-device .mobile-project-sheet,
-  .ios-device .canvas-tools-sheet {
-    max-height: min(82svh, 720px);
-    padding-bottom: calc(14px + env(safe-area-inset-bottom));
-  }
-  .ios-device .mobile-project-sheet-backdrop,
-  .ios-device .canvas-tools-sheet-backdrop {
-    padding-bottom: calc(8px + env(safe-area-inset-bottom));
-  }
-}
-
 @media (max-width: 390px) {
   .ios-device .mobile-canvas-header { grid-template-columns: 42px minmax(0, 1fr) 38px 42px; gap: 2px; }
   .ios-device .mobile-project-sheet-grid,
   .ios-device .canvas-tools-sheet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ios-device .mobile-canvas-title strong { font-size: 13px; }
-}
-
-@media (max-width: 480px) {
-  /* The compact four-item navigation is fixed to the viewport. Keep the
-     reserved bottom space from the shared mobile rules on small iPhones. */
-  .ios-device .canvas-open-mode .main-area { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
-  .ios-device .canvas-open-mode.canvas-fullscreen-mode .main-area { padding-bottom: 0 !important; }
-  .ios-device .canvas-tools-sheet-backdrop { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
-}
-
-@media (orientation: landscape) and (max-height: 600px) and (max-width: 620px) {
-  .ios-device .canvas-open-mode .editor-layout { height: calc(100svh - 72px); min-height: 320px; }
-  .ios-device .mobile-project-sheet,
-  .ios-device .canvas-tools-sheet { max-height: calc(100svh - 16px); }
 }
 
 /* V4.5.8: phone families up to 480 CSS px (including iPhone Pro Max),

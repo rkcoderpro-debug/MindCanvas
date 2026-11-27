@@ -10,8 +10,8 @@ export type ChatRequest = { peerId: string; version: number };
 export const OpenChatContext = createContext<((peerId: string) => void) | undefined>(undefined);
 
 export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, suspended = false }: {
-  owner: string; request: ChatRequest | null; onOpenShared: (item?: SharedLearningTarget) => void;
-  onOpenLink?: (token: string) => void;
+  owner: string; request: ChatRequest | null; onOpenShared: (item?: SharedLearningTarget, trigger?: HTMLElement) => void;
+  onOpenLink?: (token: string, trigger: HTMLElement) => void;
   suspended?: boolean;
 }) {
   const { language } = useLanguage();
@@ -58,7 +58,8 @@ export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, s
           aria-label={minimizeLabel} title={minimizeLabel}><X size={20} aria-hidden="true"/></button>
       </header>
       <ConnectionsPage owner={owner} compact visible={open && !suspended} onUnread={setUnread} onMinimize={close}
-        initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenLink={onOpenLink} onOpenShared={item => { if (!item) close(); onOpenShared(item); }}/>
+        initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenLink={onOpenLink}
+        onOpenShared={(item, trigger) => { if (!item) close(); onOpenShared(item, trigger); }}/>
     </section>
     {!open && <button type="button" className="chat-bubble-toggle" ref={toggle} title={label}
       aria-expanded={false} aria-controls={panelId}

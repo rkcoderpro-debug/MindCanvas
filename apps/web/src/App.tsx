@@ -485,8 +485,8 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const openChat = (peerId: string) => {
     if (user) setChatRequest(current => ({ owner: user.id, peerId, version: (current?.version ?? 0) + 1 }));
   };
-  const openChatShared = (item?: SharedLearningTarget) => {
-    if (item) shared.open(sharedLearningUrl(item), "chat");
+  const openChatShared = (item?: SharedLearningTarget, trigger?: HTMLElement) => {
+    if (item) shared.open(sharedLearningUrl(item), "chat", trigger);
     else openInbox();
   };
   const openNotification = (item: ActivityNotification) => {
@@ -747,7 +747,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
       <OnlineRoomSessionHost owner={user?.id ?? null}/>
       <PetCompanion inline={filter === "__learning" || filter === "__flashcards" || filter === "__lab"} visible={petVisible && !sharedDetail} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
       </main>
-    {user && <ChatBubble key={user.id} owner={user.id} request={chatRequest?.owner === user.id ? chatRequest : null} onOpenShared={openChatShared} onOpenLink={token => shared.open(workspaceShareUrl(token), "chat")} suspended={!!sharedDetail}/>}
+    {user && <ChatBubble key={user.id} owner={user.id} request={chatRequest?.owner === user.id ? chatRequest : null} onOpenShared={openChatShared} onOpenLink={(token, trigger) => shared.open(workspaceShareUrl(token), "chat", trigger)} suspended={!!sharedDetail}/>}
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>
     <PersonalMusicIsland/>
