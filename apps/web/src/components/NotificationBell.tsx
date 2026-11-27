@@ -8,6 +8,7 @@ import { markDirectMessagesRead } from "../lib/connections";
 import { useSystemAnnouncements } from "../hooks/useSystemAnnouncements";
 import { useLanguage } from "../lib/i18n";
 import { useBackgroundRead } from "../hooks/useBackgroundRead";
+import TopbarPopover from "./TopbarPopover";
 
 export default function NotificationBell({ owner, onNavigate }: { owner: string | null; onNavigate: (item: ActivityNotification) => void }) {
   const { language, t } = useLanguage();
@@ -21,6 +22,7 @@ export default function NotificationBell({ owner, onNavigate }: { owner: string 
   const [busy, setBusy] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
   const [loadError, setLoadError] = useState(false);
   const locallyRead = useRef(new Map<string, string>());
   const handled = useRef(new Set<string>());
@@ -34,8 +36,11 @@ export default function NotificationBell({ owner, onNavigate }: { owner: string 
   }, () => setLoadError(true), 45_000);
   useEffect(() => {
     if (!open) return;
-    const onPointer = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); } };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!root.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus({ preventScroll: true }); } };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
@@ -84,16 +89,16 @@ export default function NotificationBell({ owner, onNavigate }: { owner: string 
       setOpen(value => !value);
       if (!open) { void refresh(); void system.refresh(); }
     }}><Bell size={19}/>{unread > 0 && <span aria-hidden="true">{unread > 99 ? "99+" : unread}</span>}</button>
-    {open && <section id="notification-panel" className="notification-panel" aria-label={label}>
+    {open && <TopbarPopover anchor={trigger} panelRef={panel} id="notification-panel" className="notification-panel" aria-label={label}>
       <header><h2>{label}</h2><div>
         <button type="button" className="icon-button" aria-label={vi ? "Tải lại thông báo" : "Refresh notifications"} disabled={activityTab ? loading : system.loading} onClick={() => void (activityTab ? refresh(true) : system.refresh(true))}><RefreshCw size={16}/></button>
-        <button type="button" className="icon-button" aria-label={vi ? "Đóng thông báo" : "Close notifications"} onClick={() => { setOpen(false); trigger.current?.focus(); }}><X size={17}/></button>
+        <button type="button" className="icon-button" aria-label={vi ? "Đóng thông báo" : "Close notifications"} onClick={() => { setOpen(false); trigger.current?.focus({ preventScroll: true }); }}><X size={17}/></button>
       </div></header>
       <div className="phase-one-tabs notification-tabs" role="tablist" aria-label={label} onKeyDown={event => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
         const next = event.key === "Home" ? "activity" : event.key === "End" ? "system" : activityTab ? "system" : "activity";
-        changeTab(next); root.current?.querySelector<HTMLButtonElement>(`#notification-tab-${next}`)?.focus();
+        changeTab(next); panel.current?.querySelector<HTMLButtonElement>(`#notification-tab-${next}`)?.focus();
       }}>
         <button type="button" id="notification-tab-activity" role="tab" tabIndex={activityTab ? 0 : -1} aria-controls="notification-tab-content" aria-selected={activityTab} onClick={() => changeTab("activity")}>{label}{countChip(activityUnread)}</button>
         <button type="button" id="notification-tab-system" role="tab" tabIndex={activityTab ? -1 : 0} aria-controls="notification-tab-content" aria-selected={!activityTab} onClick={() => changeTab("system")}><Megaphone size={15}/>{vi ? "Tin nhắn hệ thống" : "System messages"}{countChip(system.unreadCount)}</button>
@@ -125,6 +130,6 @@ export default function NotificationBell({ owner, onNavigate }: { owner: string 
           {system.hasMore && <div className="notification-more"><button type="button" className="secondary-button" disabled={system.loadingMore} onClick={() => void system.loadMore()}>{system.loadingMore ? t("loading") : vi ? "Xem tin cũ hơn" : "Show older messages"}</button></div>}
         </>}
       </div>
-    </section>}
+    </TopbarPopover>}
   </div>;
 }

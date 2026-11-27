@@ -30,6 +30,23 @@ const compiled = await build({
         assets.set(url, ["text/javascript", await readFile(resolved)]);
         return { contents: "export default " + JSON.stringify(url) };
       });
+      plugin.onResolve({ filter: /\/lib\/(activityNotifications|systemAnnouncements)$/ }, ({ path }) => ({
+        path: path.split("/").at(-1), namespace: "fixture-notifications",
+      }));
+      plugin.onLoad({ filter: /.*/, namespace: "fixture-notifications" }, ({ path }) => {
+        const created = "2026-01-01T00:00:00Z";
+        const title = "Thông báo " + "tên_tệp_dài_".repeat(40);
+        const activity = Array.from({ length: 12 }, (_, index) => ({
+          kind: "message", source_id: "message-" + index, actor_id: "peer", title, preview: "Nội dung".repeat(20),
+          target: "connections", target_id: "peer", created_at: created, read_at: null,
+        }));
+        const broadcast = { id: "notice", title, body: "Chi tiết ".repeat(45), published_at: created, read_at: null };
+        const exports = path === "activityNotifications"
+          ? 'export const listActivityNotifications = async () => ' + JSON.stringify(activity) + ';export const markActivityNotificationRead = async () => {};'
+          : 'export const listSystemAnnouncements = async () => (' + JSON.stringify({ items: [broadcast], unreadCount: 1, hasMore: false }) +
+            ');export const markSystemAnnouncementRead = async () => "2026-01-01";';
+        return { resolveDir: web, contents: 'export * from "./src/lib/' + path + '.ts";' + exports };
+      });
       plugin.onResolve({ filter: /\/lib\/connections$/ }, () => ({ path: "contacts", namespace: "fixture-contacts" }));
       plugin.onLoad({ filter: /^contacts$/, namespace: "fixture-contacts" }, () => ({
         resolveDir: web,
@@ -107,8 +124,8 @@ try {
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
     return result.result.value;
   };
-  const wait = async (expression, label = expression) => {
-    const until = Date.now() + 4000;
+  const wait = async (expression, label = expression, timeout = 4000) => {
+    const until = Date.now() + timeout;
     do {
       if (await evaluate(expression)) return;
       await delay(35);
@@ -120,7 +137,7 @@ try {
     await page("Page.navigate", { url: origin + path });
     const location = new URL(origin + path);
     await wait("location.pathname === " + JSON.stringify(location.pathname) + " && location.search === " +
-      JSON.stringify(location.search) + " && " + dom(selector) + "?.getClientRects().length", path + " " + selector);
+      JSON.stringify(location.search) + " && " + dom(selector) + "?.getClientRects().length", path + " " + selector, 8000);
   };
   const resize = (width, height, mobile = width <= 480, dpr = 1) =>
     page("Emulation.setDeviceMetricsOverride", { width, height, mobile, deviceScaleFactor: dpr });
@@ -185,8 +202,99 @@ try {
   console.log("Route and layout checks: " + passed + "/" + (sizes.length * screens.length));
   assert.equal(failures.length, 0, "Responsive route overflow or load failures");
   if (!process.argv.includes("--layout-only")) {
+    await checkTopbar();
     await checkNavigationDock();
     await checkInteractions();
+  }
+
+  async function checkTopbar() {
+    const closeWithEscape = async () => {
+      for (const type of ["keyDown", "keyUp"]) {
+        await page("Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      }
+    };
+    const checkPanel = async (selector, label) => {
+      const dimensions = (panel) => {
+        const bounds = panel.getBoundingClientRect();
+        const bar = document.querySelector(".topbar").getBoundingClientRect();
+        const viewport = visualViewport;
+        const nav = document.querySelector(".mobile-compact-nav")?.getBoundingClientRect();
+        const left = Math.max(viewport.offsetLeft, bar.left);
+        const right = Math.min(viewport.offsetLeft + viewport.width, bar.right);
+        const end = Math.min(viewport.offsetTop + viewport.height, nav?.height ? nav.top : Infinity);
+        return {
+          panel: [bounds.left, bounds.top, bounds.right, bounds.bottom], visible: [left, viewport.offsetTop, right, end],
+          fits: bounds.left >= left && bounds.right <= right && bounds.top >= viewport.offsetTop && bounds.bottom <= end,
+          scrollsWithoutOverflow: panel.scrollWidth <= panel.clientWidth + 1,
+        };
+      };
+      const measure = "(" + dimensions + ")(" + dom(selector) + ")";
+      await wait(measure + ".fits && " + measure + ".scrollsWithoutOverflow", label);
+    };
+
+    const actions = () => {
+      const bar = document.querySelector(".topbar");
+      const frame = bar.getBoundingClientRect();
+      return [...bar.querySelectorAll("button")].map(button => {
+        const r = button.getBoundingClientRect();
+        return [button.getAttribute("aria-label") ?? button.className, r.width, r.height, r.left - frame.left, frame.right - r.right];
+      });
+    };
+    for (const [width, height] of [[280,370],[390,844],[512,320],[650,390],[820,480],[1180,820]]) {
+      const touch = width <= 512 || width === 820;
+      await resize(width, height, width <= 480, width === 390 ? 3 : 1);
+      await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+      await open("/qa/topbar" + (width === 390 || width === 650 ? "?pinned" : ""), ".notification-trigger");
+      const geometry = await evaluate("(" + actions + ")()");
+      assert(geometry.every(([, w, h, l, r]) => w > 0 && h > 0 && l >= -1 && r >= -1), width + " topbar actions: " + JSON.stringify(geometry));
+      if (touch) assert(geometry.every(([, w, h]) => w >= 44 && h >= 44), "Small touch target at " + width);
+      await click(".notification-trigger", touch);
+      await wait(dom(".notification-item-link") + "?.getClientRects().length");
+      await checkPanel(".notification-panel", width + " notification");
+      assert(await evaluate(dom(".notification-list") + ".scrollHeight > " + dom(".notification-list") + ".clientHeight"));
+      await click("#notification-tab-system", touch);
+      await wait(dom("#notification-tab-system[aria-selected=true]") + "?.getClientRects().length");
+      await click(".notification-item-link", touch);
+      await wait(dom(".announcement-body") + "?.getClientRects().length");
+      await checkPanel(".notification-panel", width + " expanded notice");
+      if (touch) await click(".notification-panel > header button:last-child", true);
+      else await closeWithEscape();
+      await wait("!" + dom(".notification-panel") + " && document.activeElement === " + dom(".notification-trigger"));
+      await click(".topbar-profile-button", touch);
+      await wait(dom(".topbar-profile-menu") + "?.getClientRects().length");
+      await checkPanel(".topbar-profile-menu", width + " account menu");
+      await click(".topbar-profile-menu button:first-of-type", touch);
+      await wait("!" + dom(".topbar-profile-menu") + " && " + dom("#qa-topbar-selection") + ".value === 'profile'");
+    }
+
+    await resize(650, 390, false);
+    await open("/qa/topbar?pinned", ".notification-trigger");
+    await click(".notification-trigger");
+    await wait(dom(".notification-item-link") + "?.getClientRects().length");
+    await resize(320, 360, true);
+    await wait("innerWidth === 320 && " + dom(".mobile-compact-nav") + "?.getClientRects().length");
+    await checkPanel(".notification-panel", "notification after resize");
+    await click(".notification-item-link", true);
+    await wait("!" + dom(".notification-panel") + " && " + dom("#qa-topbar-selection") + ".value === 'message-0'");
+    for (const [width, height] of [[320,568], [390,844], [844,390]]) {
+      await resize(width, height);
+      await open("/?learn=overview", ".learning-space-heading");
+      await click(".topbar .command-trigger", width <= 480);
+      await wait("document.activeElement === " + dom(".command-dialog[open] .command-search input"));
+      await page("Input.insertText", { text: "quiz" });
+      await wait(dom(".command-results [data-guide-tab=quiz]") + "?.getClientRects().length && " + dom(".command-search input") + ".value === 'quiz'");
+      await evaluate("Object.defineProperties(visualViewport,{height:{configurable:true,value:200},offsetTop:{configurable:true,value:12}});visualViewport.dispatchEvent(new Event('resize'));");
+      const dimensions = () => {
+        const dialog = document.querySelector(".command-dialog"), input = dialog.querySelector("input");
+        const results = dialog.querySelector(".command-results"), box = dialog.getBoundingClientRect();
+        return { fits: box.top >= 12 && box.bottom <= 212, input: input.value, results: results.clientHeight };
+      };
+      const search = await evaluate("(" + dimensions + ")()");
+      assert(search.fits && search.input === "quiz" && search.results >= 50, width + " search with keyboard: " + JSON.stringify(search));
+      await click(".command-results [data-guide-tab=quiz]", width <= 480);
+      await wait("!" + dom(".command-dialog[open]") + " && new URLSearchParams(location.search).get('learn') === 'quiz'");
+    }
+    console.log("Topbar, notifications, account and quick search passed on compact phones, tablets and shallow desktop windows.");
   }
 
   async function checkNavigationDock() {
@@ -294,7 +402,7 @@ try {
     await click(".document-reader-footer button:last-child");
     await wait(dom(".document-reader-footer") + ".textContent.includes('2 / 2')");
     await resize(844, 390, false);
-    await wait(dom(".pdf-page-shell[data-fit]") + "?.clientWidth > 400");
+    await wait(dom(".pdf-page-shell[data-fit]") + "?.clientWidth > 400", "PDF refits after rotation", 8000);
     await checkWidth("PDF landscape");
 
     for (const [width, height, visible, offset] of [[320, 568, 285, 0], [844, 390, 215, 16], [1180, 820, 360, 0]]) {

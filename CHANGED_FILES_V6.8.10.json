@@ -1,0 +1,77 @@
+{
+  "version": "6.8.10",
+  "baseVersion": "6.8.9",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "9a1300353eeaac9cb0ef622b330a7627204d8f2db671220d9c99d8b5b4154ee2"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "e4f4afd4195110388c887c4b867d2b99a9bb5877dcbb6075dbfd36f17965fcbf"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 30604,
+      "sha256": "2e41ce1bda6699ba02ddd243427aa6efc14371db1b56d98a86e11f5f285737a4"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 8454,
+      "sha256": "be66394faa9f073d1c24ee34a71104905c925d778175597f572137b178016839"
+    },
+    {
+      "path": "apps/web/src/components/CommandPalette.tsx",
+      "bytes": 5125,
+      "sha256": "5385825c73010772768c34523f6dbb19172062d30239b3fcd29490817a5b8d70"
+    },
+    {
+      "path": "apps/web/src/components/Dialog.tsx",
+      "bytes": 3054,
+      "sha256": "d4d18e1a33fbe553f84edc8b7463b2ad86446c7f59e9ef491fc31517c7df9f87"
+    },
+    {
+      "path": "apps/web/src/components/NotificationBell.tsx",
+      "bytes": 10866,
+      "sha256": "547fdaf5ac03d37125abac5d88d5c1dc98040cced6bac536a504fb7087a57f4a"
+    },
+    {
+      "path": "apps/web/src/components/TopbarPopover.tsx",
+      "bytes": 2888,
+      "sha256": "76f7a23bacd71ad27cbdd053af0d39f329b6d2dd290adf10e122f1f15778a2ce"
+    },
+    {
+      "path": "apps/web/src/components/TopbarProfile.tsx",
+      "bytes": 3425,
+      "sha256": "825bd97967a1c943a950286bf0fac60cf6bb99aa6af8c0e3af2700f88a678c9b"
+    },
+    {
+      "path": "apps/web/src/responsiveLayout.css",
+      "bytes": 18894,
+      "sha256": "c687d61f293d805f243cdf4d79bccca1fa84dfc2b228307e91bd4d6335152f64"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 524657,
+      "sha256": "1d13c7210c1896140756a8a27e7c1682fb5c336b14df38dc37d2e13e83eb1a02"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "fac80a5b6f67c2d2220c10259667e699280b0a8a7e919fe69deb5a6f8866f596"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "9c2b89dc32f137ee6c7dc20fcc7e5a18fb3f074861fb9f37adb0099fbdc06984"
+    },
+    {
+      "path": "RELEASE_V6.8.10.md",
+      "bytes": 892,
+      "sha256": "c0b2b519d877da70f756f45119b99e4faa53247cfde34a79ac37f5bf307a777b"
+    }
+  ]
+}

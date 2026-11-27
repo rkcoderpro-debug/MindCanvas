@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, LogIn, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { ProfileAvatar } from "./ProfileAvatar";
 import { safeAvatarFallback } from "../lib/accountProfile";
 import { useLanguage } from "../lib/i18n";
+import TopbarPopover from "./TopbarPopover";
 
 type Props = {
   user: User | null;
@@ -21,15 +22,21 @@ export default function TopbarProfile({ user, accountName, customAvatarUrl, onPr
   const { language, t } = useLanguage();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const menuId = useId();
   const avatarUrl = customAvatarUrl || safeAvatarFallback(typeof user?.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null);
 
   useEffect(() => {
     if (!open) return;
     const pointerDown = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!root.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
     };
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus({ preventScroll: true });
     };
     document.addEventListener("pointerdown", pointerDown);
     document.addEventListener("keydown", keydown);
@@ -45,16 +52,16 @@ export default function TopbarProfile({ user, accountName, customAvatarUrl, onPr
   };
 
   return <div ref={root} className="topbar-profile">
-    <button type="button" className="topbar-profile-button" aria-label={t("account")} aria-expanded={open} title={t("account")} onClick={() => setOpen(value => !value)}>
+    <button ref={trigger} type="button" className="topbar-profile-button" aria-label={t("account")} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined} title={t("account")} onClick={() => setOpen(value => !value)}>
       <ProfileAvatar url={avatarUrl} name={accountName} className="topbar-avatar"/>
       <span className="topbar-profile-copy"><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></span>
       <ChevronDown size={15} aria-hidden="true"/>
     </button>
-    {open && <div className="topbar-profile-menu" role="menu">
+    {open && <TopbarPopover anchor={trigger} panelRef={panel} id={menuId} className="topbar-profile-menu" role="menu" aria-label={t("account")}>
       <div className="topbar-profile-details"><strong>{accountName}</strong><small>{user?.email ?? t("local")}</small></div>
       {user && onProfile && <button type="button" role="menuitem" onClick={() => { setOpen(false); onProfile(); }}><UserRound size={16}/><span>{language === "vi" ? "Hồ sơ cá nhân" : "Personal profile"}</span></button>}
       {isAdmin && onAdmin && <button type="button" role="menuitem" onClick={() => { setOpen(false); onAdmin(); }}><ShieldCheck size={16}/><span>{t("adminDashboard")}</span></button>}
       <button type="button" role="menuitem" disabled={working || (!user && !canSignIn)} onClick={authenticate}>{user ? <LogOut size={16}/> : <LogIn size={16}/>}<span>{user ? t("logout") : t("login")}</span></button>
-    </div>}
+    </TopbarPopover>}
   </div>;
 }

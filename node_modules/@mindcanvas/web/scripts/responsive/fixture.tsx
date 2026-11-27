@@ -1,6 +1,11 @@
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { PDFDocument } from "pdf-lib";
+import type { User } from "@supabase/supabase-js";
+import { CircleHelp, Crown, Focus, Gift, RefreshCw, Search } from "lucide-react";
+import NotificationBell from "../../src/components/NotificationBell";
+import TopbarProfile from "../../src/components/TopbarProfile";
+import { BackButton } from "../../src/components/PageNavigation";
 import App from "../../src/App";
 import ChatBubble from "../../src/components/ChatBubble";
 import Dialog from "../../src/components/Dialog";
@@ -9,6 +14,7 @@ import { blankBoard } from "../../src/lib/board";
 import { newA4Layout, newA4Page } from "../../src/lib/a4Canvas";
 import { addFolder, cacheProject, waitForProjectCache, upsertFlashcardDeck, upsertFlashcard } from "../../src/lib/projectStore";
 import { createDeck, createFlashcard } from "../../src/lib/flashcards";
+import { finishGuide, GUIDE_DEFINITIONS } from "../../src/lib/featureGuides";
 import { upsertQuizTest } from "../../src/lib/quizStore";
 import { saveStoredLab } from "../../src/lib/labStorage";
 import { emptyLabEditor } from "../../src/components/LabEditorDialog";
@@ -56,8 +62,54 @@ function NavigationFixture() {
   )}</>;
 }
 
+const accountName = "Người dùng " + "TênDài".repeat(24);
+const profileUser: User = {
+  id: "reader", aud: "authenticated", email: "ten-dai".repeat(19) + "@example.com",
+  app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z",
+};
+
+function TopbarFixture() {
+  const [selected, setSelected] = useState("");
+  const [mobile, setMobile] = useState(() => matchMedia("(max-width: 620px)").matches);
+  useEffect(() => {
+    const query = matchMedia("(max-width: 620px)");
+    const update = () => setMobile(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return <div className="app-shell web-background-active">
+    <div className="qa-topbar-desktop-rail" aria-hidden="true"/>
+    <main className="main-area" data-topbar-pinned={new URLSearchParams(location.search).has("pinned")}>
+      <header className="topbar">
+        <div className="topbar-location"><BackButton className="shell-back" onClick={() => setSelected("back")}>{longName}</BackButton></div>
+        <div className="actions">
+          <button className="icon-button command-trigger" aria-label="Tìm nhanh"><Search size={18}/></button>
+          <button className="icon-button focus-mode-toggle" aria-label="Tập trung"><Focus size={18}/></button>
+          <button className="icon-button" aria-label="Làm mới"><RefreshCw size={18}/></button>
+          <NotificationBell owner={profileUser.id} onNavigate={item => setSelected(item.source_id)}/>
+          <button className="icon-button page-help-trigger" aria-label="Trợ giúp"><CircleHelp size={19}/></button>
+          <div className="topbar-account-actions">
+            <button className="topbar-trial-button" aria-label="Dùng thử Plus"><Gift size={15}/><span>3 ngày Plus</span></button>
+            <button className="topbar-plan-button" aria-label="Gói hiện tại"><Crown size={15}/><span>Free</span></button>
+            <TopbarProfile user={profileUser} accountName={accountName} working={false} canSignIn
+              onProfile={() => setSelected("profile")} onAuth={() => setSelected("auth")}/>
+          </div>
+        </div>
+      </header>
+      <output id="qa-topbar-selection">{selected}</output>
+      <div style={{ flex: "0 0 1000px" }} aria-hidden="true"/>
+    </main>
+    {mobile && <nav className="mobile-compact-nav" aria-label="Workspace">{["Workspace", "Canvas", "Học tập", "Thêm"].map(label => <button key={label}>{label}</button>)}</nav>}
+    <style>{'.qa-topbar-desktop-rail { flex: 0 0 210px; } @media (max-width: 620px) { .qa-topbar-desktop-rail { flex-basis: 80px; } } @media (max-width: 480px) { .qa-topbar-desktop-rail { display: none; } }'}</style>
+  </div>;
+}
+
 async function main() {
   const root = createRoot(document.getElementById("root")!);
+  if (location.pathname === "/qa/topbar") {
+    root.render(<LanguageProvider><TopbarFixture/></LanguageProvider>);
+    return;
+  }
   if (location.pathname === "/qa/chat") {
     root.render(<LanguageProvider><ChatFixture/></LanguageProvider>);
     return;
@@ -97,6 +149,7 @@ async function main() {
     });
     await saveStoredLab(null, { ...emptyLabEditor(), title: longName,
       programHtml: "<html><body><p>Offline lab</p></body></html>" });
+    for (const guide of GUIDE_DEFINITIONS) finishGuide(null, guide.id, "skipped");
     localStorage.setItem("mindcanvas:responsive-seeded", "1");
   }
   root.render(location.pathname === "/qa/navigation" ? <NavigationFixture/> : <App/>);

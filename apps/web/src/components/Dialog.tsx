@@ -1,11 +1,11 @@
 import { useLearningActive } from "../lib/learningNavigation";
-import { useEffect, useId, useRef, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { Minus, X } from "lucide-react";
 import { observeVisualViewport } from "../lib/visualViewport";
 import { useLanguage } from "../lib/i18n";
 
-export default function Dialog({ title, children, onClose, onMinimize, dismissible = true, workspace = false, className, toolbar, footer }: {
-  title: string; children: ReactNode; onClose: () => void; onMinimize?: () => void; dismissible?: boolean; workspace?: boolean; className?: string; toolbar?: ReactNode; footer?: ReactNode;
+export default function Dialog({ title, children, onClose, onMinimize, dismissible = true, workspace = false, className, toolbar, footer, initialFocus }: {
+  title: string; children: ReactNode; onClose: () => void; onMinimize?: () => void; dismissible?: boolean; workspace?: boolean; className?: string; toolbar?: ReactNode; footer?: ReactNode; initialFocus?: RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDialogElement>(null), id = useId();
   const outsidePointer = useRef<{ id: number; x: number; y: number } | null>(null);
@@ -16,13 +16,14 @@ export default function Dialog({ title, children, onClose, onMinimize, dismissib
     if (!learningActive || !dialog) return;
     const previous = document.activeElement as HTMLElement | null;
     dialog.showModal();
+    initialFocus?.current?.focus({ preventScroll: true });
     const stopObserving = observeVisualViewport(dialog);
     return () => {
       stopObserving();
       dialog.close();
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [learningActive]);
+  }, [initialFocus, learningActive]);
   function outside(event: PointerEvent<HTMLDialogElement>) {
     if (event.target !== event.currentTarget) return false;
     const rect = event.currentTarget.getBoundingClientRect();

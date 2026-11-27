@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FilePlus2, FileText, Search, Settings2, Upload } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import { useLanguage } from "../lib/i18n";
@@ -23,6 +23,7 @@ export default function CommandPalette({ projects, onClose, onOpenProject, onCre
 }) {
   const { t, language } = useLanguage();
   const [query, setQuery] = useState("");
+  const search = useRef<HTMLInputElement>(null);
   const normalized = normalizeQuickSearch(query);
   const [cursor, setCursor] = useState(0);
   const learning = learningCommands(t, language);
@@ -40,8 +41,8 @@ export default function CommandPalette({ projects, onClose, onOpenProject, onCre
   const visibleProjects = useMemo(() => projects.filter(project => !project.deletedAt && (!normalized || searchableProject(project).includes(normalized))).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12), [projects, normalized]);
   const run = (action: () => void) => { onClose(); emitGuideAction("ai:action"); action(); };
   const count = visibleActions.length + visibleProjects.length;
-  return <Dialog title={t("commandPalette")} onClose={onClose}>
-    <label className="command-search"><Search size={19}/><input autoFocus aria-label={t("commandSearch")} placeholder={t("commandSearch")} value={query} onChange={event => { setQuery(event.target.value); setCursor(0); if (event.target.value.trim()) emitGuideAction("ai:search"); }} onKeyDown={event => {
+  return <Dialog className="command-dialog" title={t("commandPalette")} onClose={onClose} initialFocus={search}>
+    <label className="command-search"><Search size={19}/><input ref={search} aria-label={t("commandSearch")} placeholder={t("commandSearch")} value={query} onChange={event => { setQuery(event.target.value); setCursor(0); if (event.target.value.trim()) emitGuideAction("ai:search"); }} onKeyDown={event => {
       if (!count || event.nativeEvent.isComposing) return;
       if (event.key === "Enter") {
         event.preventDefault();
