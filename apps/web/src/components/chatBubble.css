@@ -1,5 +1,36 @@
-.chat-bubble { position: fixed; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 118; display: grid; justify-items: end; gap: .65rem; }
-.chat-bubble-toggle { position: relative; width: 3.3rem; height: 3.3rem; display: grid; place-items: center; border: 1px solid var(--accent-border); border-radius: 50%; background: var(--accent); color: var(--on-accent, white); box-shadow: 0 7px 21px var(--shadow); }
+.chat-bubble {
+  --chat-gap-bottom: max(1rem, env(safe-area-inset-bottom));
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: var(--chat-gap-bottom);
+  z-index: 118;
+  display: grid;
+  justify-items: end;
+  gap: .65rem;
+}
+.chat-bubble-toggle {
+  position: relative;
+  width: 3.3rem;
+  height: 3.3rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, white);
+  border-radius: 50%;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--accent) 87%, white), var(--accent) 65%, color-mix(in srgb, var(--accent) 86%, #101a35));
+  color: var(--accent-contrast, white);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 37%, transparent), 0 3px 7px var(--shadow-strong), inset 0 1px 0 rgb(255 255 255 / 25%);
+  transition: box-shadow .16s ease, transform .16s ease;
+}
+@media (hover: hover) {
+  .chat-bubble-toggle:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 43%, transparent), 0 4px 8px var(--shadow-strong), inset 0 1px 0 rgb(255 255 255 / 25%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble-toggle { transition: none; }
+  .chat-bubble-toggle:hover { transform: none; }
+}
 .chat-bubble-toggle > span { position: absolute; top: -.32rem; right: -.35rem; min-width: 1.35rem; padding: .14rem .3rem; border: 2px solid var(--surface); border-radius: 999px; background: var(--danger); color: white; font-size: .68rem; font-weight: 700; }
 .chat-bubble-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(24rem, calc(100vw - 2rem)); height: min(33rem, calc(100dvh - 6rem)); min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface-raised); color: var(--text); box-shadow: 0 12px 38px var(--shadow); }
 .chat-bubble-panel[hidden], .chat-bubble[data-open="true"] > .chat-bubble-toggle { display: none; }
@@ -50,9 +81,7 @@
 .connections-contacts .connections-layout { grid-template-columns: minmax(0, 38rem); }
 .chat-bubble-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 600px) {
-  .chat-bubble { right: max(.65rem, env(safe-area-inset-right)); bottom: calc(max(.7rem, env(safe-area-inset-bottom)) + var(--chat-keyboard-offset, 0px)); }
-  .canvas-open-mode .chat-bubble[data-open="false"] { bottom: calc(3.9rem + env(safe-area-inset-bottom)); }
-  .chat-bubble-panel { width: calc(100vw - max(.65rem, env(safe-area-inset-right)) - max(.65rem, env(safe-area-inset-left))); height: min(34rem, var(--chat-available-height, calc(100dvh - 5.25rem))); }
+  .chat-bubble { right: max(.85rem, env(safe-area-inset-right)); }
 }
 
 .chat-bubble[hidden] { display: none; }

@@ -1,0 +1,67 @@
+{
+  "version": "6.8.8",
+  "baseVersion": "6.8.7",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "81f7bf0bdf321617f7d62ef01ad0a1ec1afebb5cea2e2b2257b11cd65c03ee8f"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1141,
+      "sha256": "5e3523ac66def2d1756586117aa2adcdf70786ce1ada1e207ff91662438ee12e"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 21528,
+      "sha256": "c34a7fbbb493fb582bc06a477ca3885055ea9181258880639cd071da4a08a381"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 5093,
+      "sha256": "556ac645e5bed06f3b46781ff2cd3b7ee481c070f49dbd5b97dc20440ff62f19"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 76234,
+      "sha256": "f5520961872ef0fd0bbcd62f0b6281e833f57daa1e664555d43c7b518089ec5a"
+    },
+    {
+      "path": "apps/web/src/components/AppSidebar.tsx",
+      "bytes": 16392,
+      "sha256": "8445fd9f675706d485e2d85b58238a0bdf56da191d1e8dff4ba7a81533153a19"
+    },
+    {
+      "path": "apps/web/src/components/chatBubble.css",
+      "bytes": 7175,
+      "sha256": "fb71258cf166151fa3bd6a6aa368d6052b1cb72d6e6ce21540b33e43b01c9693"
+    },
+    {
+      "path": "apps/web/src/responsiveLayout.css",
+      "bytes": 14600,
+      "sha256": "dcf089857233d56f2e25b8594d61a416b0c6c5723d2f84b98f0b3ce65b38e0c4"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 525223,
+      "sha256": "237e0daa8ffd5d4e88dadbe1bd36edd330fe7613d328103ef24b12b3d1c2aa51"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "aa4b167c6f60fa5a29710312b39711bacd4149fc9aa4049bde983830d8669d11"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "d3474531a39cab9e52044ea4b842690556ad77adf5cf31c5a91527bf457ec425"
+    },
+    {
+      "path": "RELEASE_V6.8.8.md",
+      "bytes": 706,
+      "sha256": "24aa3e34d97122030ca2fff2d8a92864a6a399ec729efb1616a7adcb72e0dcf5"
+    }
+  ]
+}

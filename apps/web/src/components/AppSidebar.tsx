@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type DragEvent, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Clock3, File, FileText, Folder, FolderCog, FolderOpen, LayoutGrid, Menu, MoreHorizontal, Plus, Settings2, Sparkles, Star, Trash2, Users, X } from "lucide-react";
 import type { WorkspaceFile } from "../lib/workspaceFiles";
 import type { Project, ProjectFolder } from "../lib/projectStore";
@@ -49,6 +49,7 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
   const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  const sidebarId = useId();
   const [showSwipeHint, setShowSwipeHint] = useState(() => { try { return localStorage.getItem("mindcanvas:mobile-nav-swiped:v1") !== "true"; } catch { return true; } });
   const [expandedFolders, setExpandedFolders] = useState(() => new Set<string>());
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 620px)").matches);
@@ -96,8 +97,9 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
   // A saved desktop width must not consume the content area on a smaller window.
   const sidebarLimit = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.floor(viewportWidth * .28)));
   const effectiveWidth = Math.min(sidebarWidth, sidebarLimit);
-  const style = { "--sidebar-width": `${sidebarCollapsed ? 74 : effectiveWidth}px` } as CSSProperties;
-  const density = sidebarDensityFor(effectiveWidth, sidebarCollapsed);
+  const desktopCollapsed = !isMobile && sidebarCollapsed;
+  const style = { "--sidebar-width": `${desktopCollapsed ? 74 : effectiveWidth}px` } as CSSProperties;
+  const density = isMobile ? "comfortable" : sidebarDensityFor(effectiveWidth, desktopCollapsed);
 
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth);
@@ -136,10 +138,10 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
 
 
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile || mobileOpen) return;
     const active = navRef.current?.querySelector<HTMLElement>("button.active");
     active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [boardOpen, filter, isMobile, recent]);
+  }, [boardOpen, filter, isMobile, mobileOpen, recent]);
 
   const markNavDiscovered = () => {
     if (!showSwipeHint) return;
@@ -154,10 +156,11 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
 
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   return <>
-    <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-sidebar-density={density} style={style}>
+    <aside id={sidebarId} className={`sidebar${isMobile && mobileOpen ? " mobile-open" : ""}${desktopCollapsed ? " sidebar-collapsed" : ""}`}
+      data-sidebar-density={density} style={style}>
       <div className="sidebar-header">
       <button className="brand" onClick={goHome}><span className="brand-mark"><Sparkles size={20}/></span><span className="brand-copy"><span className="brand-name">MindCanvas</span><span className="beta">{APP_VERSION_LABEL}</span></span></button>
-        <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
+        <button className="sidebar-toggle-button icon-button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} aria-controls={isMobile ? sidebarId : undefined} onClick={toggleNavigation}>{isMobile && mobileOpen ? <X size={21}/> : <Menu size={21}/>}</button>
       </div>
       <nav ref={navRef} aria-label={t("workspace")} className="nav-list" onScroll={markNavDiscovered} onPointerDown={markNavDiscovered}>
         <div className="workspace-nav-row"><button className={!boardOpen && !recent && !filter ? "active" : ""} title={t("workspace")} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, null)} onClick={goHome}><LayoutGrid size={18}/><span className="nav-label">{t("workspace")}</span></button><button className="workspace-expand" aria-label={language === "vi" ? "Mở/đóng các mục Workspace" : "Toggle Workspace items"} aria-expanded={workspaceExpanded} onClick={() => setWorkspaceExpanded(value => !value)}>{workspaceExpanded ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}</button></div>
@@ -171,14 +174,14 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
         <button className={`nav-learning ${!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""}`} aria-current={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "page" : undefined} title={t("learningHub")} onClick={() => goView("__learning")}><BookOpen size={18}/><span className="nav-label">{t("learningHub")}</span></button>
         <button className={!boardOpen && filter === "__guides" ? "active" : ""} aria-current={!boardOpen && filter === "__guides" ? "page" : undefined} title={t("guides")} onClick={() => goView("__guides")}><CircleHelp size={18}/><span className="nav-label">{t("guides")}</span></button>
       </nav>
-      {isMobile && showSwipeHint && <div className="mobile-nav-swipe-hint" role="status">{t("swipeForMore")}</div>}
+      {isMobile && !mobileOpen && showSwipeHint && <div className="mobile-nav-swipe-hint" role="status">{t("swipeForMore")}</div>}
       <div className="section-label"><span>{t("folders")}</span><button type="button" className="icon-button" aria-label={t("newFolder")} title={t("newFolder")} onClick={() => { closeMobile(); onNewFolder(); }}><Plus size={17}/></button></div>
       <div className="folder-list" aria-label={t("folders")}>
         {renderFolders(null,0)}
         {!folders.length && <small>{t("noFolders")}</small>}
       </div>
       <div className="sidebar-bottom">
-      <SidebarAppearanceControls collapsed={sidebarCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange} canUsePremium={canUsePremiumTheme} onLockedTheme={onLockedTheme}/>
+      <SidebarAppearanceControls collapsed={desktopCollapsed} language={language} selectedTheme={selectedTheme} onLanguageChange={onLanguageChange} onThemeChange={onThemeChange} canUsePremium={canUsePremiumTheme} onLockedTheme={onLockedTheme}/>
         <button title={t("settings")} onClick={() => { closeMobile(); onSettings(); }}><Settings2 size={17}/><span className="nav-label">{t("settings")}</span></button>
       </div>
       <div className="sidebar-resize-handle" role="separator" aria-orientation="vertical" tabIndex={sidebarCollapsed || isMobile ? -1 : 0}
@@ -198,8 +201,8 @@ export default function AppSidebar({ projects, folders, files, activeFileId, onO
       <button className={!boardOpen && !recent && !filter ? "active" : ""} onClick={goHome}><LayoutGrid size={20}/><span>{t("workspace")}</span></button>
       <button className={boardOpen ? "active" : ""} onClick={() => { if (!boardOpen) goView("recent"); else closeMobile(); }}><FileText size={20}/><span>Canvas</span></button>
       <button className={!boardOpen && (filter === "__learning" || filter === "__flashcards") ? "active" : ""} onClick={() => goView("__learning")}><BookOpen size={20}/><span>{t("learningHub")}</span></button>
-      <button aria-expanded={mobileOpen} className={mobileOpen ? "active" : ""} onClick={() => setMobileOpen(value => !value)}><MoreHorizontal size={20}/><span>{t("moreTools")}</span></button>
+      <button aria-expanded={mobileOpen} aria-controls={sidebarId} className={mobileOpen ? "active" : ""} onClick={() => setMobileOpen(value => !value)}><MoreHorizontal size={20}/><span>{t("moreTools")}</span></button>
     </nav>}
-    {mobileOpen && <button className="sidebar-backdrop" aria-label={t("close")} onClick={closeMobile}/>} 
+    {isMobile && mobileOpen && <button className="sidebar-backdrop" aria-label={t("close")} onClick={closeMobile}/>}
   </>;
 }

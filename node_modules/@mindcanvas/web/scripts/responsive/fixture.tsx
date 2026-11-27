@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { PDFDocument } from "pdf-lib";
 import App from "../../src/App";
@@ -12,7 +13,7 @@ import { upsertQuizTest } from "../../src/lib/quizStore";
 import { saveStoredLab } from "../../src/lib/labStorage";
 import { emptyLabEditor } from "../../src/components/LabEditorDialog";
 import { LanguageProvider } from "../../src/lib/i18n";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "../../src/styles.css";
 import "../../src/studioPolish.css";
 import "../../src/musicPolish.css";
@@ -33,6 +34,26 @@ function ChatFixture() {
     </Dialog>}
     <ChatBubble owner="reader" request={null} onOpenShared={() => {}}/>
   </>;
+}
+
+function NavigationFixture() {
+  const [shell, setShell] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const findShell = () => {
+      const target = document.querySelector<HTMLElement>(".app-shell");
+      if (target) {
+        setShell(target);
+        observer.disconnect();
+      }
+    };
+    const observer = new MutationObserver(findShell);
+    observer.observe(document.getElementById("root")!, { childList: true, subtree: true });
+    findShell();
+    return () => observer.disconnect();
+  }, []);
+  return <><App/>{shell && createPortal(
+    <LanguageProvider><ChatBubble owner="reader" request={null} onOpenShared={() => {}}/></LanguageProvider>, shell,
+  )}</>;
 }
 
 async function main() {
@@ -78,7 +99,7 @@ async function main() {
       programHtml: "<html><body><p>Offline lab</p></body></html>" });
     localStorage.setItem("mindcanvas:responsive-seeded", "1");
   }
-  root.render(<App/>);
+  root.render(location.pathname === "/qa/navigation" ? <NavigationFixture/> : <App/>);
 }
 void main();
 

@@ -88,7 +88,6 @@ dialog.dialog[data-viewport-adjusted][open] {
 .quiz-studio-footer-actions > * { min-inline-size: 0; }
 
 .chat-bubble[data-open="true"] {
-  --chat-gap-bottom: max(.65rem, env(safe-area-inset-bottom));
   --chat-panel-height: min(33rem, calc(var(--visible-height, 100dvh) - max(.65rem, env(safe-area-inset-top)) - var(--chat-gap-bottom)));
   right: calc(var(--visible-right, 0px) + max(.65rem, env(safe-area-inset-right)));
   bottom: var(--chat-gap-bottom);
@@ -140,7 +139,52 @@ dialog.dialog[data-viewport-adjusted][open] {
   .topbar > .actions { min-inline-size: 0; max-inline-size: 100%; flex-wrap: wrap; justify-content: flex-end; }
   .topbar:has(.shell-back) .topbar-location { min-inline-size: 38px; }
   .topbar .shell-back { min-block-size: 44px; }
-  .sidebar.mobile-open { max-height: min(72dvh, calc(100dvh - 76px), 620px); }
+  .app-shell .sidebar.mobile-open {
+    position: fixed;
+    z-index: 83;
+    inset: auto max(8px, env(safe-area-inset-right)) calc(var(--mobile-navigation-height, env(safe-area-inset-bottom)) + 8px) max(8px, env(safe-area-inset-left));
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: auto;
+    max-height: min(78dvh, 620px, calc(100dvh - var(--mobile-navigation-height, env(safe-area-inset-bottom)) - env(safe-area-inset-top) - 16px));
+    overflow: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block-start: 52px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface-raised);
+    box-shadow: 0 24px 70px var(--shadow-strong);
+  }
+  .sidebar.mobile-open > .sidebar-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding-block: 4px;
+    background: var(--surface-raised);
+  }
+  .sidebar.mobile-open > .nav-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+    padding: 0;
+    scroll-snap-type: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .sidebar.mobile-open .nav-list button { justify-content: flex-start; }
+  .sidebar.mobile-open .nav-list .nav-learning { margin-top: 0; }
+  .sidebar.mobile-open .nav-list .workspace-expand { flex-basis: 44px; justify-content: center; }
+  .sidebar.mobile-open .workspace-tree-branch > .folder-row { grid-template-columns: 40px minmax(0, 1fr) 40px; }
+  .sidebar.mobile-open .workspace-tree-branch > .folder-row > button { min-height: 44px; }
+  .sidebar.mobile-open .workspace-tree-branch > .folder-row .folder-open { justify-content: flex-start; }
+  .sidebar.mobile-open .workspace-tree-branch > .folder-row :is(.folder-expand-toggle, .folder-more) { width: 100%; }
+  .sidebar.mobile-open .folder-more { margin-inline: 0; opacity: 1; }
+  .sidebar.mobile-open > .folder-list { flex: none; min-height: 0; max-height: none; overflow: visible; }
+  .sidebar.mobile-open > .sidebar-bottom { grid-template-columns: minmax(0, 1fr); }
+  .sidebar-backdrop { z-index: 81; }
+  .app-shell:has(> .sidebar.mobile-open) .chat-bubble { z-index: 80; }
   .mobile-compact-nav > button { min-inline-size: 0; min-block-size: 44px; }
   .canvas-open-mode .main-area:not(.share-open-mode) { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   .canvas-open-mode.canvas-fullscreen-mode .main-area:not(.share-open-mode) { padding-bottom: 0; }
@@ -149,6 +193,24 @@ dialog.dialog[data-viewport-adjusted][open] {
   .study-folder-open, .lab-library-actions > :is(button, details > summary),
   .quiz-card-actions .primary-button { min-block-size: 44px; }
   .editor-layout > .canvas-inspector[data-overlay="true"] { bottom: 7px; }
+}
+
+@media (max-width: 480px) {
+  .app-shell:not(.canvas-fullscreen-mode) {
+    --mobile-navigation-height: calc(var(--mobile-navigation-base-height, 60px) + env(safe-area-inset-bottom));
+  }
+  .app-shell:not(.canvas-fullscreen-mode) > .main-area {
+    scroll-padding-block-end: calc(var(--mobile-navigation-height) + 8px);
+  }
+  .app-shell:not(.canvas-fullscreen-mode, .canvas-open-mode) > .main-area {
+    padding-bottom: calc(var(--mobile-navigation-height) + 8px);
+  }
+  .app-shell:not(.canvas-fullscreen-mode) .chat-bubble:not([data-viewport-adjusted]) {
+    --chat-gap-bottom: calc(var(--mobile-navigation-height) + 12px);
+  }
+}
+@media (max-width: 480px) and (max-height: 480px) {
+  .app-shell { --mobile-navigation-base-height: 56px; }
 }
 
 @media (max-height: 600px) {
@@ -169,6 +231,12 @@ dialog.dialog[data-viewport-adjusted][open] {
   .lab-player.lab-player-fit { min-height: 0; }
 }
 
+@media (max-height: 480px) {
+  .canvas-open-mode .main-area .a4-workspace:not(.a4-fullscreen) {
+    max-height: max(20rem, calc(100dvh - 6rem));
+  }
+}
+
 @media (min-width: 621px) and (max-height: 560px) {
   .canvas-open-mode .canvas-editor-heading { margin-block: 4px; }
   .canvas-open-mode .main-area { padding-bottom: 5px; }
@@ -182,7 +250,6 @@ dialog.dialog[data-viewport-adjusted][open] {
   .canvas-open-mode .mobile-canvas-header { min-height: 48px; padding-block: 1px; }
   .canvas-open-mode .mobile-canvas-header > button { min-height: 44px; }
   .canvas-open-mode .main-area:not(.share-open-mode) { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
-  .mobile-compact-nav { min-height: 48px; }
   .canvas-tools-sheet, .mobile-project-sheet { max-height: calc(100dvh - 64px); }
   .canvas-open-mode .editor-layout { margin-top: 4px; min-height: 0; }
 }

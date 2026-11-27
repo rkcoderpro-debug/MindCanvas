@@ -745,9 +745,9 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
             onSaved={kind => { if (kind === "document") refreshDocuments(); }}/>}
       </Suspense>}
       <OnlineRoomSessionHost owner={user?.id ?? null}/>
-    {user && <ChatBubble key={user.id} owner={user.id} request={chatRequest?.owner === user.id ? chatRequest : null} onOpenShared={openChatShared} onOpenLink={token => shared.open(workspaceShareUrl(token), "chat")} suspended={!!sharedDetail}/>}
       <PetCompanion inline={filter === "__learning" || filter === "__flashcards" || filter === "__lab"} visible={petVisible && !sharedDetail} owner={user?.id ?? null} active={Boolean(ws.board || filter === "__learning" || filter === "__flashcards" || filter === "__lab")} activityType={filter === "__flashcards" ? "flashcard" : filter === "__lab" ? "lab" : filter === "__learning" ? "quiz" : "workspace"}/>
       </main>
+    {user && <ChatBubble key={user.id} owner={user.id} request={chatRequest?.owner === user.id ? chatRequest : null} onOpenShared={openChatShared} onOpenLink={token => shared.open(workspaceShareUrl(token), "chat")} suspended={!!sharedDetail}/>}
     <input ref={fileInput} hidden type="file" accept=".json,.mindcanvas" onChange={e => void importFile(e.target.files?.[0])}/>
     <FloatingTimer visible={timerVisible}/>
     <PersonalMusicIsland/>

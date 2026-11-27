@@ -47,7 +47,7 @@ const compiled = await build({
 for (const output of compiled.outputFiles) {
   const path = output.path.split(/[\\/]/).at(-1);
   const css = path.endsWith(".css");
-  assets.set("/" + path, [css ? "text/css" : "text/javascript", css ? output.text.replace(/^@import[^;]+;\r?\n?/gm, "") : output.contents]);
+  assets.set("/" + path, [css ? "text/css" : "text/javascript", css ? output.text.replace(/^@import[^\r\n]*\r?\n/gm, "") : output.contents]);
 }
 const html = '<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="/app.css"><div id="root"></div><script src="/app.js"></script></html>';
 const profileRoot = await realpath(tmpdir());
@@ -175,7 +175,67 @@ try {
   }
   console.log("Route and layout checks: " + passed + "/" + (sizes.length * screens.length));
   assert.equal(failures.length, 0, "Responsive route overflow or load failures");
-  if (!process.argv.includes("--layout-only")) await checkInteractions();
+  if (!process.argv.includes("--layout-only")) {
+    await checkNavigationDock();
+    await checkInteractions();
+  }
+
+  async function checkNavigationDock() {
+    await resize(1024, 768, false);
+    await open("/qa/navigation?learn=overview", ".chat-bubble-toggle");
+    await click(".sidebar-toggle-button");
+    await wait(dom(".sidebar.sidebar-collapsed") + "?.getClientRects().length");
+
+    for (const [width, height] of [[280, 620], [320, 430], [390, 844], [480, 480], [481, 700], [620, 660]]) {
+      await resize(width, height);
+      const bottomBar = width <= 480;
+      const more = bottomBar ? ".mobile-compact-nav > button:last-child" : ".sidebar-toggle-button";
+      await wait(dom(more) + "?.getClientRects().length && !document.querySelector('.sidebar.sidebar-collapsed')");
+      if (bottomBar) {
+        await evaluate("(() => { const content = document.querySelector('.main-area'); content.style.backdropFilter = 'blur(8px)'; content.scrollTop = content.scrollHeight; })()");
+        const clearance = selector => evaluate("document.querySelector('.mobile-compact-nav').getBoundingClientRect().top - " +
+          dom(selector) + ".getBoundingClientRect().bottom");
+        const gap = await clearance(".chat-bubble-toggle");
+        assert(gap >= 10, "Chat launcher clearance at " + width + ": " + gap);
+        assert(await evaluate("getComputedStyle(document.querySelector('.chat-bubble-toggle')).boxShadow.includes('inset')"));
+        await click(".chat-bubble-toggle");
+        await wait(dom(".chat-bubble-panel:not([hidden])") + "?.getClientRects().length");
+        assert(await clearance(".chat-bubble-panel") >= 6, "Open chat overlays the navigation at " + width);
+        await click(".chat-bubble-panel > header button");
+      }
+      await click(more);
+      await wait(dom(".sidebar.mobile-open .folder-row") + "?.getClientRects().length");
+      const drawer = await evaluate(`(() => {
+        const sheet = document.querySelector(".sidebar.mobile-open");
+        const menu = sheet.querySelector(".nav-list");
+        const rows = [...menu.children].map(row => row.getBoundingClientRect());
+        const folder = sheet.querySelector(".folder-row");
+        const arrow = folder.querySelector(".folder-expand-toggle").getBoundingClientRect();
+        const icon = folder.querySelector(".folder-open svg").getBoundingClientRect();
+        const actions = folder.querySelector(".folder-more");
+        return {
+          fits: sheet.scrollWidth <= sheet.clientWidth + 1 && sheet.getBoundingClientRect().bottom <= innerHeight,
+          menuFits: menu.scrollWidth <= menu.clientWidth + 1 && getComputedStyle(menu).maskImage === "none",
+          fullWidth: menu.clientWidth >= sheet.clientWidth - 24,
+          stacked: rows.slice(1).every((row, index) => row.top >= rows[index].bottom - 1),
+          aligned: icon.left >= arrow.right && icon.left <= arrow.right + 14,
+          actionsVisible: getComputedStyle(actions).opacity === "1" && actions.getBoundingClientRect().width >= 36,
+        };
+      })()`);
+      assert(Object.values(drawer).every(Boolean), "Mobile drawer at " + width + ": " + JSON.stringify(drawer));
+      await click(".sidebar.mobile-open .folder-expand-toggle");
+      await wait(dom(".sidebar.mobile-open .workspace-tree-children .folder-open") + "?.getClientRects().length");
+      await click(".sidebar.mobile-open .folder-expand-toggle");
+      await click(".sidebar.mobile-open .sidebar-toggle-button");
+      await wait("!document.querySelector('.sidebar.mobile-open')");
+      await checkWidth("Navigation after closing drawer at " + width);
+    }
+    await resize(1024, 768, false);
+    await wait(dom(".sidebar.sidebar-collapsed") + "?.getClientRects().length");
+    await click(".sidebar-toggle-button");
+    await wait("!document.querySelector('.sidebar.sidebar-collapsed')");
+    console.log("Mobile tools drawer and chat clearance passed at six widths.");
+  }
 
   async function checkInteractions() {
 
@@ -199,8 +259,8 @@ try {
 
     await resize(390, 844);
     await open("/?canvas=22222222-2222-4222-8222-222222222222", ".a4-page-actions select");
-    await evaluate("(() => {const s=document.querySelector('.a4-page-actions select');s.value='1';s.dispatchEvent(new Event('change',{bubbles:true}));})()");
-    await wait(dom(".a4-page-actions select") + ".value === '1'");
+    await click(".a4-page-actions > button:nth-of-type(2)");
+    await wait(dom(".a4-page-actions select") + ".value === '1' && " + dom(".a4-scroll") + ".scrollTop > 100");
     await resize(844, 390, false);
     await delay(220);
     assert.equal(await evaluate(dom(".a4-page-actions select") + ".value"), "1", "A4 current page lost on resize");
