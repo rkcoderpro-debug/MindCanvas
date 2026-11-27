@@ -15,8 +15,15 @@
 .workspace-child-folders button svg { flex: none; }
 .workspace-child-folders button > span { flex: 1; overflow: hidden; text-align: start; white-space: nowrap; text-overflow: ellipsis; }
 .workspace-file-box { padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.workspace-folder-columns { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 14px; }
+@container page-content (min-width: 780px) {
+  .workspace-folder-columns { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
 .workspace-file-box header, .workspace-file-search { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
-.workspace-file-search .search-field { min-width: 0; width: min(205px,100%); }
+.workspace-library-box .manager-documents { padding: 6px 9px; min-height: 38px; }
+.workspace-library-box .workspace-file-search { margin-top: 10px; flex-wrap: nowrap; }
+.workspace-file-search .search-field { flex: 1; min-width: 0; }
+.workspace-file-search > .icon-button { flex: none; }
 .workspace-file-box p, .workspace-file-box small { color: var(--muted); }
 .workspace-file-list { margin-top: 10px; }
 .workspace-file-list li { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid var(--line); }
@@ -24,6 +31,12 @@
 .workspace-file-name { flex: 1; min-width: 0; display: grid; }
 .workspace-file-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .workspace-file-actions { display: flex; gap: 2px; flex: none; }
+.workspace-document-list .workspace-file-open strong { white-space: normal; overflow-wrap: anywhere; }
+.workspace-document-list .workspace-file-open small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container page-content (max-width: 500px) {
+  .workspace-document-list li:has(.workspace-file-actions) { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 9px; }
+  .workspace-document-list .workspace-file-actions { grid-column: 2; justify-self: end; }
+}
 .workspace-file-danger:hover { color: var(--danger); }
 .workspace-file-status { margin-block: 0; overflow-wrap: anywhere; }
 .workspace-file-box .form-error { color: var(--danger); }
@@ -109,5 +122,4 @@
 .document-tool-workspace .workspace-file-preview > .document-viewer { flex: 1; }
 .workspace-file-preview > .document-viewer[data-document-kind="html"] { min-height: min(430px, 65dvh); }
 .workspace-direct-document .workspace-file-preview > .document-viewer { height: max(490px, calc(100dvh - 220px)); }
-.workspace-folder-tools .manager-documents { margin-top: 0; padding-top: 8px !important; }
 .workspace-direct-document .workspace-file-preview { margin-top: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }

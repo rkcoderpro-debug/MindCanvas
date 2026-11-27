@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { addFolder, cacheProject, fetchFolders, waitForProjectCache } from "./lib/projectStore";
 import { addWorkspaceFile, moveWorkspaceFile } from "./lib/workspaceFiles";
+import { saveDocument } from "./lib/documentStore";
 import { workspaceFilePermalink } from "./lib/folderLinks";
 import { blankBoard } from "./lib/board";
 import { openProfileRoute } from "./lib/profileNavigation";
@@ -122,6 +123,40 @@ describe("Workspace UI", () => {
     expect(host.querySelector(".document-library-list")?.textContent).toContain("lab.pcapng");
     await act(async () => window.history.back());
     await waitForUI(() => expect(host.querySelector('.document-library-crumbs [aria-current="page"]')?.textContent).toBe(child.name));
+  });
+
+  it("opens documents from the folder manager and sorts the complete library", async () => {
+    const folder = await addFolder(null, "Học liệu");
+    await addWorkspaceFile(null, folder.id, new NodeFile(["Read me"], "Z - Workspace.txt") as unknown as File);
+    const notes = await saveDocument(null, { name: "A - Thiết bị.html", kind: "html", mimeType: "text/html", size: 12, folderId: null,
+      dataUrl: "data:text/html,%3Cmain%3ENotes%3C%2Fmain%3E", updatedAt: "2025-01-01T00:00:00.000Z" });
+    window.history.replaceState({}, "", "/?folders=all");
+    await act(async () => root.render(<App/>));
+    const column = () => host.querySelector(".workspace-folder-columns .workspace-library-box");
+    const deviceFile = () => column()?.querySelector<HTMLButtonElement>(`[data-manager-document="${notes.id}"]`);
+    await waitForUI(() => {
+      expect(column()?.textContent).toContain("Z - Workspace.txt");
+      expect(deviceFile()).toBeTruthy();
+      expect(host.querySelector(".workspace-folder-columns > .folder-project-list")).toBeTruthy();
+    });
+    await act(async () => deviceFile()!.click());
+    await waitForUI(() => expect(host.querySelector(".document-reader-title h2")?.textContent).toBe(notes.name));
+    expect(window.location.search).toBe("?folders=all");
+    await act(async () => host.querySelector<HTMLButtonElement>(".topbar .shell-back")!.click());
+    await waitForUI(() => expect(document.activeElement).toBe(deviceFile()));
+
+    await act(async () => column()!.querySelector<HTMLButtonElement>(".manager-documents")!.click());
+    const names = () => Array.from(host.querySelectorAll(".document-library-list button strong"), item => item.textContent);
+    await waitForUI(() => expect(names()).toEqual(["Z - Workspace.txt", notes.name]));
+    expect(host.querySelector(".document-browse-list-heading h3")?.textContent).toBe("Tài liệu mới thêm");
+    const sort = host.querySelector<HTMLSelectElement>(".document-browse-sort select")!;
+    await act(async () => { sort.value = "name"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(names()).toEqual([notes.name, "Z - Workspace.txt"]);
+    await act(async () => host.querySelector<HTMLButtonElement>(".document-library-list button")!.click());
+    await waitForUI(() => expect(host.querySelector(".document-reader-title h2")?.textContent).toBe(notes.name));
+    await act(async () => host.querySelector<HTMLButtonElement>(".topbar .shell-back")!.click());
+    expect(host.querySelector<HTMLSelectElement>(".document-browse-sort select")?.value).toBe("name");
+    expect(names()).toEqual([notes.name, "Z - Workspace.txt"]);
   });
 
   it("shares a project from its folder menu and moves it to Trash only after confirmation", async () => {

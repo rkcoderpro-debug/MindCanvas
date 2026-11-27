@@ -515,7 +515,11 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   };
   const openFolder = (id: string) => goToFolder(id);
   const manageFolders = () => goToFolder(FOLDER_ROOT);
-  const openDocumentLibrary = (scope: string | null) => { goToFolder(FOLDER_LIBRARY, "push", scope); emitGuideAction("documents:library"); };
+  const openDocumentLibrary = (scope: string | null) => {
+    if (mainArea.current) mainArea.current.scrollTop = 0;
+    goToFolder(FOLDER_LIBRARY, "push", scope);
+    emitGuideAction("documents:library");
+  };
   const closeWorkspaceFile = () => {
     if (activeFileId && window.history.state?.mindcanvasFileEntry === activeFileId) window.history.back();
     else goToFolder(selectedFolder?.id ?? FOLDER_ROOT,"replace");
@@ -632,7 +636,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   const libraryWorkspace = { repository: workspaceFiles, folders: ws.folders, openFolder: (id: string | null) => goToFolder(id ?? FOLDER_ROOT) };
   const workspaceFolderArea = (current: ProjectFolder | null) => <div className="workspace-folder-browser">
     <WorkspaceFolderArea key={current?.id ?? FOLDER_ROOT} owner={user?.id ?? null} accountPlan={accountPlan} current={current} folders={ws.folders}
-      repository={workspaceFiles} onOpenFile={openWorkspaceFile}
+      repository={workspaceFiles} onOpenFile={openWorkspaceFile} documents={documents} onDocumentsChanged={refreshDocuments}
       onFolder={openFolder} onRoot={manageFolders} onNewFolder={() => askName("folder",current?.id ?? null)}
       onNewProject={() => askName("project")} onImportProject={() => fileInput.current?.click()} onLibrary={() => openDocumentLibrary(current?.id ?? null)}
       projectList={<FolderProjectList folderId={current?.id ?? null} projects={ws.projects} folders={ws.folders} loading={ws.loading}

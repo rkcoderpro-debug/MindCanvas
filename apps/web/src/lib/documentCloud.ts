@@ -27,17 +27,22 @@ async function clientFor(owner: string) {
 export async function listOwnedCloudDocuments(owner: string | null): Promise<CloudDocumentDescriptor[]> {
   if (!owner) return [];
   const client = await clientFor(owner);
-  const { data, error } = await client.from("documents")
-    .select("id,file_name,file_size_bytes,created_at")
-    .eq("user_id", owner).order("created_at", { ascending: false }).limit(500)
-    .abortSignal(requestTimeoutSignal(20000));
-  if (error) throw error;
-  return (data ?? []).flatMap(row => {
-    const kind = documentKindFor(row.file_name);
-    if (!kind) return [];
-    return [{ id: row.id, name: row.file_name, mimeType: MIME_BY_EXTENSION[kind], kind,
-      size: Number(row.file_size_bytes) || 0, updatedAt: row.created_at }];
-  });
+  const files: CloudDocumentDescriptor[] = [];
+  const pageSize = 200;
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await client.from("documents")
+      .select("id,file_name,file_size_bytes,created_at")
+      .eq("user_id", owner).order("created_at", { ascending: false }).order("id")
+      .range(start, start + pageSize - 1).abortSignal(requestTimeoutSignal(20000));
+    if (error) throw error;
+    const rows = data ?? [];
+    for (const row of rows) {
+      const kind = documentKindFor(row.file_name);
+      if (kind) files.push({ id: row.id, name: row.file_name, mimeType: MIME_BY_EXTENSION[kind], kind,
+        size: Number(row.file_size_bytes) || 0, updatedAt: row.created_at });
+    }
+    if (rows.length < pageSize) return files;
+  }
 }
 
 /** Hydrate a cloud document only when the learner opens it, avoiding a bulk

@@ -1,0 +1,82 @@
+{
+  "version": "6.8.16",
+  "baseVersion": "6.8.15",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.16.md",
+      "bytes": 719,
+      "sha256": "6343020f73023597626c92a879ff0a36a1784fbbb7f4c123932579a56e5a85b1"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "2ec5b152ccb0f49aba41f81eefba9aee3d209ab7249fff1d9ad1f6dc0d988096"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "1ae31633a67c0080edd95b7b3333afc25500f160cf30c6ae8860612185e748ac"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 60380,
+      "sha256": "1aaa7dabb59f276b5927d0a1649d631f052aa05ebcd444717c93dbd3c8b9d9e8"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "bytes": 56758,
+      "sha256": "4ce538f9b6f66b3b0e4878f7422ad7a270aa9252d021cf2b3a9da83566334aff"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 76549,
+      "sha256": "d0f82141726729448f94c25fc7d1633bb45280a0f2b5dec9b14471668eaa4f8c"
+    },
+    {
+      "path": "apps/web/src/components/DocumentToolsPage.tsx",
+      "bytes": 27324,
+      "sha256": "ee10b82475d9f3c6dcd5b746476d5a53cf262c57b6facdd00b6befb666db49c8"
+    },
+    {
+      "path": "apps/web/src/components/WorkspaceFolderArea.tsx",
+      "bytes": 18316,
+      "sha256": "5a4b2637839c283b4159ab3624b9779e7774ae97ed29e6b1029e3879e47fb421"
+    },
+    {
+      "path": "apps/web/src/components/workspaceFolders.css",
+      "bytes": 9079,
+      "sha256": "2185f7293d973e77a2488454a510d7d894b2d9899fc7cda5a0c4126b3a3ff33f"
+    },
+    {
+      "path": "apps/web/src/documentReader.css",
+      "bytes": 19242,
+      "sha256": "e68881d50ba4ec1938e396d47f9b37aac7584cbbc4ac2deed7ffcb96803fd44d"
+    },
+    {
+      "path": "apps/web/src/hooks/useDocumentLibrary.ts",
+      "bytes": 2243,
+      "sha256": "5fd4415aba99300846bf346e21a5307c996a736d51a78cd5d64e52211cc81d55"
+    },
+    {
+      "path": "apps/web/src/lib/documentCloud.ts",
+      "bytes": 3426,
+      "sha256": "ce65ee51c8621b171f484ce158683968f5e472dcb404bcb008101477736234e2"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 522142,
+      "sha256": "37db6b2f59d203a5a79062884202fe42e949bd015e925c38cdd3440e40ca404d"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "f8c676d61ca68017bd9a867c4f50f5d97599d64c81d67342e21b8221d20855e6"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "6c0f5c2da3940b2bae9b171be6c0d7c857589ab4fffbf0c843cc3c0f3483dcd1"
+    }
+  ]
+}

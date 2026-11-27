@@ -1,16 +1,16 @@
 import FolderTreePicker, { folderAncestors } from "./FolderTreePicker";
 import { PageBack } from "./PageNavigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Download, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LibraryBig, Search, Share2, Trash2, Upload } from "lucide-react";
+import { ArrowDownUp, ChevronRight, Download, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LibraryBig, Search, Share2, Trash2, Upload } from "lucide-react";
 import DocumentViewer from "./DocumentViewer";
 import WorkspaceFilePreview from "./WorkspaceFilePreview";
 import Dialog from "./Dialog";
 import { validateHtmlDocument, textFromDataUrl } from "../lib/htmlDocument";
 import { useLearningTool } from "../lib/learningNavigation";
 import { deleteDocument, documentKindFor, fileToDataUrl, MAX_DOCUMENT_BYTES, saveDocument, DOCUMENT_ACCEPT, type DocumentKind, type UploadedDocument } from "../lib/documentStore";
-import { downloadOwnedCloudDocument, listOwnedCloudDocuments, type CloudDocumentDescriptor } from "../lib/documentCloud";
+import { downloadOwnedCloudDocument } from "../lib/documentCloud";
 import { saveDocumentToStorage } from "../lib/supabase";
-import { listMyLearningCopySources, type LearningCopySource } from "../lib/learningShare";
+import { useDocumentLibrary } from "../hooks/useDocumentLibrary";
 import type { AccountPlan } from "../lib/account";
 import { emitGuideAction } from "../lib/featureGuides";
 import { buildDocxPackage } from "../lib/docxModel";
@@ -30,8 +30,9 @@ export type LibraryWorkspace = {
   openFolder: (id: string | null) => void;
 };
 
-type Props = { owner: string | null; documents: UploadedDocument[]; onDocumentsChanged: () => void; accountPlan?: AccountPlan; onBack?: () => void; workspace?: LibraryWorkspace; fromWorkspace?: boolean };
+type Props = { owner: string | null; documents: UploadedDocument[]; onDocumentsChanged: () => void; accountPlan?: AccountPlan; onBack?: () => void; workspace?: LibraryWorkspace; fromWorkspace?: boolean; initialDocument?: { file: UploadedDocument; cloud: boolean } };
 type ToolTab = "all" | DocumentKind;
+type DocumentSort = "newest" | "oldest" | "name" | "name-desc" | "size";
 
 /** Backward-compatible test/API name retained for existing callers. */
 export async function buildDocx(html: string) {
@@ -57,18 +58,19 @@ function documentIcon(kind: DocumentKind | null) {
  * Existing stored documents are untouched and DocumentViewer remains the one
  * viewer/annotation surface for every supported file type.
  */
-export default function DocumentToolsPage({ owner, documents, onDocumentsChanged, accountPlan, onBack, workspace, fromWorkspace }: Props) {
+export default function DocumentToolsPage({ owner, documents, onDocumentsChanged, accountPlan, onBack, workspace, fromWorkspace, initialDocument }: Props) {
   const { language, t } = useLanguage();
   const label = (vi: string, en: string) => language === "vi" ? vi : en;
   const [tab, setTab] = useState<ToolTab>("all");
+  const [sort, setSort] = useState<DocumentSort>("newest");
   const navigation = useLearningTool();
-  const [selected, setSelected] = useState<UploadedDocument | null>(null);
+  const [selected, setSelected] = useState<UploadedDocument | null>(initialDocument?.file ?? null);
   const [workspaceSelection, setWorkspaceSelection] = useState<string | null>(null);
   const [localScope, setLocalScope] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [cloudFiles, setCloudFiles] = useState<CloudDocumentDescriptor[]>([]);
-  const [savedSources, setSavedSources] = useState<LearningCopySource[]>([]);
+  const catalog = useDocumentLibrary(owner, documents, !initialDocument);
+  const { setCloudFiles } = catalog;
   const [syncingSelected, setSyncingSelected] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -94,27 +96,6 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
   const allLocations = label("Tất cả vị trí", "All locations");
   const workspaceRoot = label("Workspace · Ngoài thư mục", "Workspace · No folder");
   const fromFolder = (file: WorkspaceFile) => folders.some(folder => folder.id === file.folderId) ? file.folderId : null;
-  useEffect(() => {
-    let alive = true;
-    if (!owner) { setCloudFiles([]); setSavedSources([]); return () => { alive = false; }; }
-    void Promise.all([listOwnedCloudDocuments(owner), listMyLearningCopySources().catch(() => [])])
-      .then(([cloud, sources]) => { if (alive) { setCloudFiles(cloud); setSavedSources(sources); } })
-      .catch(cause => { if (alive) setError(cause instanceof Error ? cause.message : "Không thể đọc thư viện tài liệu cloud."); });
-    return () => { alive = false; };
-  }, [owner]);
-
-  const libraryFiles = useMemo(() => {
-    const provenance = new Map(savedSources.filter(item => item.kind === "document").map(item => [item.copy_id, { title: item.source_title, ownerName: item.owner_name }]));
-    const local = documents.map(file => ({ ...file, savedFrom: file.savedFrom ?? provenance.get(file.id) }));
-    const localIds = new Set(local.map(file => file.id));
-    const cloudOnly: UploadedDocument[] = cloudFiles.filter(file => !localIds.has(file.id)).map(file => ({
-      ...file, owner: owner ?? "guest", dataUrl: "", folderId: null, savedFrom: provenance.get(file.id),
-    }));
-    return [...local, ...cloudOnly]
-      .filter(file => (tab === "all" || file.kind === tab) && (!normalizedQuery || file.name.toLocaleLowerCase().includes(normalizedQuery)))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }, [cloudFiles, documents, normalizedQuery, owner, savedSources, tab]);
-
   const clearPreview = () => { setWorkspaceSelection(null); setSelected(null); setSharing(false); setCopyTarget(null); };
   const showDocument = (file: UploadedDocument) => {
     const show = () => { setWorkspaceSelection(null); setSelected(file); };
@@ -128,6 +109,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     else show();
   };
   const closeDocument = () => {
+    if (initialDocument) { onBack?.(); return; }
     clearPreview(); navigation?.back();
     if (fromWorkspace) emitGuideAction("documents:back");
   };
@@ -137,8 +119,9 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     if (workspace?.onScope) workspace.onScope(value); else setLocalScope(value);
   };
   useEffect(() => {
+    if (initialDocument) return;
     setWorkspaceSelection(null); setSelected(null); setSharing(false); setCopyTarget(null);
-  }, [scope]);
+  }, [scope, initialDocument]);
   const openDocument = async (file: UploadedDocument) => {
     setError(""); setNotice("");
     if (file.dataUrl) { showDocument(file); return; }
@@ -209,11 +192,23 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     return file.ready && (!scope || (fromFolder(file) ?? FOLDER_ROOT) === scope) && (tab === "all" || kind === tab) &&
       (!normalizedQuery || file.name.toLocaleLowerCase().includes(normalizedQuery));
   });
-  const legacyItems = scope ? libraryFiles.filter(file => file.folderId === scope) : libraryFiles;
+  const legacyItems = catalog.files.filter(file => (!scope || (file.folderId ?? FOLDER_ROOT) === scope) &&
+    (tab === "all" || file.kind === tab) && (!normalizedQuery || file.name.toLocaleLowerCase().includes(normalizedQuery)));
+  const collator = useMemo(() => new Intl.Collator(language, { numeric: true, sensitivity: "base" }), [language]);
   const listing = [
     ...folderItems.map(file => ({ source: "workspace" as const, file, kind: documentKindFor(file.name), date: file.createdAt })),
     ...legacyItems.map(file => ({ source: "library" as const, file, kind: file.kind, date: file.updatedAt })),
-  ].sort((a, b) => b.date.localeCompare(a.date));
+  ].sort((a, b) => {
+    const newest = (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0);
+    const name = collator.compare(a.file.name, b.file.name);
+    switch (sort) {
+      case "oldest": return -newest || name;
+      case "name": return name || newest;
+      case "name-desc": return -name || newest;
+      case "size": return b.file.size - a.file.size || newest || name;
+      default: return newest || name;
+    }
+  });
   const hasPreview = !!(selected || selectedFile);
   useLayoutEffect(() => {
     const element = root.current;
@@ -253,7 +248,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
     } catch { setCopyError(true); }
     finally { setCopying(false); }
   };
-  const selectedIsCloud = selected && cloudFiles.some(row => row.id === selected.id);
+  const selectedIsCloud = selected && (initialDocument?.cloud || catalog.cloudIds.has(selected.id));
   const readerActions: ReaderAction[] = selected ? [
     { id: "download", label: label("Tải tệp gốc", "Download original"), icon: Download, href: selected.dataUrl, download: selected.name },
     ...(owner ? [selectedIsCloud
@@ -271,7 +266,7 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
 
   return <section ref={root} className={"document-tools-page " + (hasPreview ? "document-reading-view" : "document-browse-view")}>
     {hasPreview ? <>
-      <PageBack className="reader-back" onBack={closeDocument}>{currentFolder?.name ?? label("Danh sách tài liệu", "Document list")}</PageBack>
+      <PageBack className="reader-back" onBack={closeDocument}>{initialDocument ? t("manageFolders") : currentFolder?.name ?? label("Danh sách tài liệu", "Document list")}</PageBack>
       <div className="document-reader-notices">
         {error && <p className="form-error" role="alert">{error}</p>}
         {notice && <p className="lab-notice" role="status">{notice}</p>}
@@ -316,7 +311,15 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
               {filterTabs.map(({ id, label: name }) => <button key={id} type="button" aria-pressed={tab === id} className={tab === id ? "active" : ""} data-tool-tab={id}
                 onClick={() => { setTab(id); emitGuideAction("tools:filter:" + id); }}>{id === "all" ? label("Tất cả", "All") : name}</button>)}
             </div>
-            <small className="document-browse-count">{listing.length} {label("tài liệu", listing.length === 1 ? "document" : "documents")}</small>
+            <label className="document-browse-sort"><ArrowDownUp size={16} aria-hidden="true"/>
+              <select aria-label={label("Sắp xếp tài liệu", "Sort documents")} value={sort} onChange={event => setSort(event.target.value as DocumentSort)}>
+                <option value="newest">{label("Mới thêm", "Recently added")}</option>
+                <option value="oldest">{label("Cũ nhất", "Oldest first")}</option>
+                <option value="name">{label("Tên A–Z", "Name A–Z")}</option>
+                <option value="name-desc">{label("Tên Z–A", "Name Z–A")}</option>
+                <option value="size">{label("Dung lượng lớn nhất", "Largest first")}</option>
+              </select>
+            </label>
           </div>
         </div>
         {workspace && (scope || childFolders.length > 0) && <section className="document-library-folders">
@@ -338,13 +341,17 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
           {scope && !scopeExists && <p className="form-error" role="alert">{label("Không mở được thư mục đã chọn.", "The selected folder could not be opened.")}</p>}
           {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="lab-notice" role="status">{notice}</p>}
           {workspace?.repository.error != null && <div className="form-error" role="alert">{label("Chưa tải được tài liệu Workspace.", "Could not load Workspace files.")} <button type="button" className="secondary-button" onClick={workspace.repository.refresh}>{t("retry")}</button></div>}
+          {catalog.error != null && <div className="form-error" role="alert">{label("Chưa tải được tài liệu Cloud.", "Could not load Cloud documents.")} <button type="button" className="secondary-button" onClick={catalog.refresh}>{t("retry")}</button></div>}
         </div>
         <div className="document-tool-list document-browse-files" aria-label={label("Tài liệu trong thư viện", "Library documents")}>
+          <div className="document-browse-list-heading"><h3>{!noMatches && sort === "newest" ? label("Tài liệu mới thêm", "Recently added") : label("Tài liệu", "Documents")}</h3>
+            <small className="document-browse-count">{listing.length} {label("tài liệu", listing.length === 1 ? "document" : "documents")}</small>
+          </div>
           <div className="document-library-list">
             {listing.map(entry => {
               const { file, kind } = entry, Icon = documentIcon(kind);
               const location = entry.source === "workspace" ? folderAncestors(folders, entry.file.folderId).map(folder => folder.name).join(" › ") || "Workspace"
-                : entry.file.savedFrom ? label("Từ ", "From ") + entry.file.savedFrom.ownerName : cloudFiles.some(row => row.id === file.id) ? "Cloud" : label("Thiết bị", "Device");
+                : entry.file.savedFrom ? label("Từ ", "From ") + entry.file.savedFrom.ownerName : catalog.cloudIds.has(file.id) ? "Cloud" : label("Thiết bị", "Device");
               const date = new Date(entry.date);
               return <button key={entry.source + ":" + file.id} type="button" data-document-id={file.id} data-document-kind={kind ?? "file"} title={file.name}
                 disabled={uploading} onClick={() => {
@@ -360,8 +367,8 @@ export default function DocumentToolsPage({ owner, documents, onDocumentsChanged
               </button>;
             })}
           </div>
-          {workspace?.repository.loading && <p role="status" className="field-hint document-library-empty">{t("loading")}</p>}
-          {!listing.length && !workspace?.repository.loading && <div className="document-browse-empty">
+          {(workspace?.repository.loading || catalog.loading) && <p role="status" className="field-hint document-library-empty">{t("loading")}</p>}
+          {!listing.length && !workspace?.repository.loading && !catalog.loading && <div className="document-browse-empty">
             <FileText size={30} aria-hidden="true"/><h3>{noMatches ? label("Không có tài liệu phù hợp", "No matching documents")
               : scope ? label("Vị trí này chưa có tài liệu", "No documents in this location") : label("Thư viện chưa có tài liệu", "No documents yet")}</h3>
             <p>{noMatches ? label("Thử đổi bộ lọc hoặc nhập tên khác.", "Try a different filter or search term.")

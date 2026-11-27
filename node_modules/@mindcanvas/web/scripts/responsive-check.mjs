@@ -274,6 +274,10 @@ async function runChromium() {
       await checkLearningNavigation();
       return;
     }
+    if (process.argv.includes("--folder-library-only")) {
+      await checkFolderLibrary();
+      return;
+    }
     const sizes = authoringOnly || readerOnly || process.argv.includes("--interactions-only") ? []
       : process.argv.includes("--quick") ? [[320,568],[844,390]] : allSizes;
     const failures = [];
@@ -296,11 +300,42 @@ async function runChromium() {
         await checkTopbar();
         await checkNavigationDock();
         await checkLearningNavigation();
+        await checkFolderLibrary();
         await checkMusicIsland();
         await checkInteractions();
       }
       if (!readerOnly) await checkAuthoring();
       if (!authoringOnly) await checkReaders();
+    }
+
+    async function checkFolderLibrary() {
+      for (const [width, height, sideBySide] of [[1440, 850, true], [768, 820, false], [390, 740, false]]) {
+        const touch = width < 480;
+        await resize(width, height, touch);
+        await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+        const row = '.workspace-library-box button[data-manager-document]';
+        await open("/?folders=all", row);
+        const layout = await evaluate(`(() => {
+          const library = ${dom(".workspace-library-box")}.getBoundingClientRect();
+          const projects = ${dom(".folder-project-list")}.getBoundingClientRect();
+          return { beside: projects.left > library.left && Math.abs(library.top - projects.top) < 2,
+            below: projects.top >= library.bottom && Math.abs(library.left - projects.left) < 2 };
+        })()`);
+        assert(sideBySide ? layout.beside : layout.below, `Unexpected folder panel layout at ${width}: ${JSON.stringify(layout)}`);
+        await checkWidth("Embedded library " + width);
+        if (width !== 768) {
+          await click(row, touch);
+          await wait(`${dom(".document-reader-title h2")}?.getClientRects().length`, "document opens in manager", 8000);
+          assert(await evaluate("location.search === '?folders=all'"));
+          await click(".topbar .shell-back", touch);
+          await wait(`${dom(row)}?.getClientRects().length`, "manager returns to list");
+        }
+        await click(".workspace-library-box .manager-documents", touch);
+        await wait(`${dom(".document-library-list button")}?.getClientRects().length`, "full library opens", 8000);
+        assert.equal(await evaluate(`${dom(".document-browse-sort select")}.value`), "newest");
+        await checkWidth("Full library " + width);
+      }
+      console.log("Folder manager and full library passed at 1440, 768 and 390px, including direct reading and return to the list.");
     }
 
     async function checkMusicIsland() {

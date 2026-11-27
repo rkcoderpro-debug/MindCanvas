@@ -47,6 +47,11 @@
 }
 .document-browse-filters-end .document-tools-tabs button:is(:hover, .active) { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border); }
 .document-browse-count { color: var(--muted); font-size: 11px; }
+.document-browse-sort { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+.document-browse-sort svg { flex: none; }
+.document-browse-sort select { min-width: 0; min-height: 38px; padding: 4px 8px; font-size: 13px; }
+.document-browse-list-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; padding: 12px var(--library-gutter) 3px; }
+.document-browse-list-heading h3 { margin: 0; font-size: 14px; }
 
 .document-library-folders {
   display: grid;

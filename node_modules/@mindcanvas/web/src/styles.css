@@ -3777,7 +3777,6 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 @media (max-width:620px) { .sidebar.mobile-open .folder-list { max-height:none; min-height:90px; } .lab-footer-actions { bottom:calc(60px + env(safe-area-inset-bottom)); } }
 
 /* v5.5 document library and canvas viewers */
-.manager-documents { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px !important; }
 .manager-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .manager-local-storage-note { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .document-library-controls { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
