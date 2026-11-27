@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, Copy, FileText, Folder, FlaskConical, ListChecks, MessageCircle, Minus, MoreHorizontal, RefreshCw, Search, Send, UserPlus, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, Copy, FileText, Folder, FlaskConical, ListChecks, MessageCircle, MoreHorizontal, RefreshCw, Search, Send, UserPlus, Users, X } from "lucide-react";
 import {
   blockConnection, cancelConnectionInvitation, createConnectionInvitation, listBlockedConnections, listConnectionInvitations,
   listConnections, listDirectMessages, markDirectMessagesRead, removeConnection,
@@ -289,7 +289,7 @@ export default function ConnectionsPage({ owner, onOpenShared, initialPeerId, in
               </div>
             </details>
             {onMinimize && <button type="button" className="icon-button chat-thread-minimize" onClick={onMinimize}
-              aria-label="Thu nhỏ tin nhắn" title="Thu nhỏ tin nhắn"><Minus size={18}/></button>}
+              aria-label="Thu nhỏ tin nhắn" title="Thu nhỏ tin nhắn"><X size={20} aria-hidden="true"/></button>}
           </header>
           <div className="connections-thread">
             {showReport && <form className="connections-report" onSubmit={event => { event.preventDefault(); void run(async () => { await reportConnection(peer.peer_id, reportText); if (openPeer.current === peer.peer_id) { setReportText(""); setShowReport(false); setNotice("Đã gửi báo cáo."); } }); }}>

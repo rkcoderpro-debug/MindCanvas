@@ -1,5 +1,5 @@
 import { createContext, useEffect, useId, useRef, useState } from "react";
-import { MessageCircle, Minus } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import type { SharedLearningTarget } from "../lib/workspaceShareLinks";
 import { observeVisualViewport } from "../lib/visualViewport";
@@ -24,6 +24,7 @@ export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, s
   const panelId = useId();
   const lastRequest = useRef<ChatRequest | null>(null);
   const label = vi ? "Tin nhắn" : "Messages";
+  const minimizeLabel = vi ? "Thu nhỏ tin nhắn" : "Minimize messages";
 
   useEffect(() => {
     if (request && lastRequest.current !== request) {
@@ -53,18 +54,18 @@ export default function ChatBubble({ owner, request, onOpenShared, onOpenLink, s
     <section className="chat-bubble-panel" id={panelId} hidden={!open} aria-labelledby={`${panelId}-heading`}>
       <header>
         <h2 id={`${panelId}-heading`} ref={heading} tabIndex={-1}><MessageCircle size={18} aria-hidden="true"/>{label}</h2>
-        <button type="button" className="icon-button" onClick={close} title={vi ? "Thu nhỏ" : "Minimize"}
-          aria-label={vi ? "Thu nhỏ tin nhắn" : "Minimize messages"}><Minus size={19}/></button>
+        <button type="button" className="icon-button chat-bubble-close" onClick={close}
+          aria-label={minimizeLabel} title={minimizeLabel}><X size={20} aria-hidden="true"/></button>
       </header>
       <ConnectionsPage owner={owner} compact visible={open && !suspended} onUnread={setUnread} onMinimize={close}
         initialPeerId={request?.peerId} initialPeerVersion={request?.version} onOpenLink={onOpenLink} onOpenShared={item => { if (!item) close(); onOpenShared(item); }}/>
     </section>
-    <button type="button" className="chat-bubble-toggle" ref={toggle} title={label}
-      aria-expanded={open} aria-controls={panelId}
+    {!open && <button type="button" className="chat-bubble-toggle" ref={toggle} title={label}
+      aria-expanded={false} aria-controls={panelId}
       aria-label={unread ? `${label} · ${unread} ${vi ? "tin chưa đọc" : "unread"}` : label}
-      onClick={() => open ? close() : setOpen(true)}>
+      onClick={() => setOpen(true)}>
       <MessageCircle size={25}/>
       {unread > 0 && <span aria-hidden="true">{unread > 99 ? "99+" : unread}</span>}
-    </button>
+    </button>}
   </div>;
 }

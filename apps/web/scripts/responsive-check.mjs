@@ -34,7 +34,7 @@ const compiled = await build({
       plugin.onLoad({ filter: /^contacts$/, namespace: "fixture-contacts" }, () => ({
         resolveDir: web,
         contents: 'export * from "./src/lib/connections.ts";' +
-          'export const listConnections = async () => [{peer_id:"peer",display_name:"' + "A".repeat(90) +
+          'export const listConnections = async () => new URLSearchParams(location.search).has("pending-connections") ? new Promise(() => {}) : [{peer_id:"peer",display_name:"' + "A".repeat(90) +
           '",unread_count:0,connected_at:"2026-01-01T00:00:00Z"}];' +
           'export const listBlockedConnections=async()=>[]; export const markDirectMessagesRead=async()=>{};' +
           'export const sendDirectMessage=async()=>{};' +
@@ -124,7 +124,7 @@ try {
   };
   const resize = (width, height, mobile = width <= 480, dpr = 1) =>
     page("Emulation.setDeviceMetricsOverride", { width, height, mobile, deviceScaleFactor: dpr });
-  const click = async selector => {
+  const click = async (selector, touch = false) => {
     const position = "(() => {const e = " + dom(selector) +
       "; if (!e) return null; const b=e.getBoundingClientRect(); const x=b.x+b.width/2,y=b.y+b.height/2; const target=document.elementFromPoint(x,y);return {x,y,hit:e.contains(target),coveredBy:target?.closest('[class]')?.getAttribute('class'),width:b.width,height:b.height};})()";
     let point;
@@ -135,11 +135,20 @@ try {
       await delay(40);
     }
     assert(point?.hit, JSON.stringify({ selector, point }));
-    for (const type of ["mousePressed", "mouseReleased"]) {
-      await page("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, button: "left", clickCount: 1 });
+    if (touch) {
+      await page("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: point.x, y: point.y }] });
+      await page("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } else {
+      for (const type of ["mousePressed", "mouseReleased"]) {
+        await page("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, button: "left", clickCount: 1 });
+      }
     }
     return point;
   };
+  const chatPanel = dom(".chat-bubble-panel");
+  const chatLauncher = dom(".chat-bubble-toggle");
+  const chatOpened = () => wait(chatPanel + "?.getClientRects().length > 0 && !" + chatLauncher + "?.getClientRects().length", "Only the chat panel should be visible");
+  const chatClosed = () => wait(chatLauncher + "?.getClientRects().length > 0 && !" + chatPanel + "?.getClientRects().length", "Only the chat launcher should be visible");
   const checkWidth = async label => {
     const dimensions = await evaluate("(() => {const main=document.querySelector('.main-area');return [document.documentElement.scrollWidth,innerWidth,main?.scrollWidth,main?.clientWidth];})()");
     if (dimensions[0] <= dimensions[1] + 1 && (!dimensions[3] || dimensions[2] <= dimensions[3] + 1)) return;
@@ -197,11 +206,15 @@ try {
           dom(selector) + ".getBoundingClientRect().bottom");
         const gap = await clearance(".chat-bubble-toggle");
         assert(gap >= 10, "Chat launcher clearance at " + width + ": " + gap);
-        assert(await evaluate("getComputedStyle(document.querySelector('.chat-bubble-toggle')).boxShadow.includes('inset')"));
-        await click(".chat-bubble-toggle");
-        await wait(dom(".chat-bubble-panel:not([hidden])") + "?.getClientRects().length");
+        const shadow = await evaluate("getComputedStyle(" + chatLauncher + ").boxShadow");
+        assert.equal(shadow.match(/-?[\d.]+px/g)?.join(" "), "0px 2px 6px 0px", "Chat launcher should have a single compact shadow");
+        await click(".chat-bubble-toggle", true);
+        await chatOpened();
+        await wait(dom(".connections-person") + "?.getClientRects().length");
         assert(await clearance(".chat-bubble-panel") >= 6, "Open chat overlays the navigation at " + width);
-        await click(".chat-bubble-panel > header button");
+        const closeButton = await click(".chat-bubble-panel > header button", true);
+        assert(closeButton.width >= 44 && closeButton.height >= 44, "Chat close tap target is too small");
+        await chatClosed();
       }
       await click(more);
       await wait(dom(".sidebar.mobile-open .folder-row") + "?.getClientRects().length");
@@ -234,7 +247,16 @@ try {
     await wait(dom(".sidebar.sidebar-collapsed") + "?.getClientRects().length");
     await click(".sidebar-toggle-button");
     await wait("!document.querySelector('.sidebar.sidebar-collapsed')");
-    console.log("Mobile tools drawer and chat clearance passed at six widths.");
+    await resize(390, 844);
+    await open("/qa/chat?pending-connections", ".chat-bubble-toggle");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await click(".chat-bubble-toggle", true);
+      await chatOpened();
+      await wait(dom(".connections-people [role=status]") + "?.getClientRects().length");
+      await click(".chat-bubble-panel > header button", true);
+      await chatClosed();
+    }
+    console.log("Mobile tools drawer and chat clearance passed at six widths. Chat closes by touch even while loading.");
   }
 
   async function checkInteractions() {
@@ -296,7 +318,8 @@ try {
       assert.equal(await evaluate(dom(".connections-composer textarea") + ".value"), "Bản nháp còn nguyên");
       const sendButton = await click(".connections-composer .primary-button");
       assert(sendButton.height >= 44 && sendButton.y + sendButton.height / 2 <= visible + offset);
-      await click(".chat-thread-minimize");
+      await click(".chat-thread-minimize", width <= 480);
+      await chatClosed();
       await click("#open-dialog");
       await wait(dom("dialog[open]") + "?.getClientRects().length");
       assert(await evaluate(dom("dialog[open]") + ".getBoundingClientRect().bottom") <= visible + offset);

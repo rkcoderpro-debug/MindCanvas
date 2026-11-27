@@ -98,7 +98,7 @@ it("opens a folder card in the compact chat and keeps the conversation minimized
   expect(link.hash).toBe(`#share=${token}`);
   await act(async () => host.querySelector<HTMLButtonElement>(".chat-thread-minimize")!.click());
   expect(host.querySelector(".chat-bubble-panel")?.hasAttribute("hidden")).toBe(true);
-  await act(async () => launcher.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".chat-bubble-toggle")!.click());
   expect(host.querySelector(".connection-profile-heading h3")?.textContent).toBe("Bạn học");
 });
 

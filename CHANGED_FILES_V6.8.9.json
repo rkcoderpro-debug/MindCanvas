@@ -1,0 +1,57 @@
+{
+  "version": "6.8.9",
+  "baseVersion": "6.8.8",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "apps/server/package.json",
+      "bytes": 848,
+      "sha256": "de053b735db90809ee85c4c3aba217e2c6a0af31caa1a37d9fe4432c5ac01f84"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1141,
+      "sha256": "4a38d272e3cb89ccccc05ccbc159a093b7874e198d04e89ec15467d71961ef90"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 23085,
+      "sha256": "45c9b2c7d6b1f9bf3541a9ac4459a209f15a4299d3389a3a3842800fa35a1f19"
+    },
+    {
+      "path": "apps/web/src/components/chatBubble.css",
+      "bytes": 6684,
+      "sha256": "7501fd6d5c4e082d4ee55edb311780486db09d19d6bc9890bdc739bd7171e3dc"
+    },
+    {
+      "path": "apps/web/src/components/ChatBubble.tsx",
+      "bytes": 3414,
+      "sha256": "e5d812d049ae4a5ac1c87d0b402ad6cf4fb50ae005c48e2f08a669c0cf5ad480"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.test.tsx",
+      "bytes": 9573,
+      "sha256": "2851c27419f6c5a7eeeecc8fe4f9856361f47370b300574984d81e7d5d6a6a93"
+    },
+    {
+      "path": "apps/web/src/components/ConnectionsPage.tsx",
+      "bytes": 27407,
+      "sha256": "66d7e263f720326334a1a8022fa89e3a58d2e19f6f8c9b5b4a8d0dada2afbd0b"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188549,
+      "sha256": "0fdbd66530e1555dac5fd183d92027aa6a9eaaa66f8e15bb8e19ec09274e0297"
+    },
+    {
+      "path": "package.json",
+      "bytes": 707,
+      "sha256": "835c4f5ebf863a022dbd5d535faddfa82ab9609bcd92858cdee04fe5341b37f6"
+    },
+    {
+      "path": "RELEASE_V6.8.9.md",
+      "bytes": 541,
+      "sha256": "88ff8b0d4c45282d704e725967d1e6f9eebadad289e98226819f9c8d28498fde"
+    }
+  ]
+}
