@@ -463,6 +463,7 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
   };
   const openInbox = (replace = false) => {
     shared.inbox(replace);
+    if (mainArea.current) mainArea.current.scrollTop = 0;
     setActiveFileId(null);
     setNotificationDestination(null);
     setMobileProjectMenuOpen(false);
@@ -477,8 +478,10 @@ function Workspace({ user, authError, onClearAuthError }: { user: User | null; a
     if (view === "__shared") { openInbox(); return; }
     const fromShared = shared.leave();
     canvasLinks.leaveUnopenedLink(); setActiveFileId(null); writeFolderRoute(null,"replace");
-    if (view === "__learning" || view === "__flashcards" || view === "__lab") enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview", fromShared ? "replace" : "push");
-    else leaveLearningSpace();
+    if (view === "__learning" || view === "__flashcards" || view === "__lab") {
+      if (mainArea.current) mainArea.current.scrollTop = 0;
+      enterLearningSpace(view === "__lab" ? "lab" : view === "__flashcards" ? "flashcards" : "overview", fromShared ? "replace" : "push");
+    } else leaveLearningSpace();
     void ws.home(); setNotificationDestination(null);
     setFilter(view === "recent" ? null : view); setRecent(view === "recent");
   };

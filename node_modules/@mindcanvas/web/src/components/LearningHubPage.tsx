@@ -4,7 +4,7 @@ import { PageBack } from "./PageNavigation";
 import type { ContentLanguage } from "../../../../packages/shared/src/contentLanguage.js";
 import { MusicPage } from "./MusicPlayer";
 import { Music2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { BarChart3, Beaker, BookOpen, CalendarDays, Check, CheckCircle2, ArrowRight, ClipboardList, FileText, Flame, Gauge, GraduationCap, Headphones, Layers3, ListChecks, Plus, Sparkles, Trophy, Users, WandSparkles } from "lucide-react";
 import type { Project } from "../lib/projectStore";
 import type { InboxWorkspace } from "../lib/sharedInbox";
@@ -64,11 +64,13 @@ function LearningSpace({ owner, projects, documents = [], onDocumentsChanged = (
   const [openAiPlan, setOpenAiPlan] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
   const today = vietnamStudyDate();
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || root.closest("[hidden]")) return;
+    const area = root.closest<HTMLElement>(".main-area");
+    if (area) area.scrollTop = 0;
     const frame = window.requestAnimationFrame(() => {
-      const root = rootRef.current;
-      if (!root || document.querySelector("dialog[open]")) return;
-      root.scrollIntoView?.({ block: "start" });
+      if (root.closest("[hidden]") || document.querySelector("dialog[open]")) return;
       const scope = tab === "overview" ? root : root.querySelector(`[data-learning-tool="${tab}"]`);
       const heading = scope?.querySelector<HTMLElement>("h1,h2");
       heading?.setAttribute("tabindex", "-1"); heading?.focus({ preventScroll: true });

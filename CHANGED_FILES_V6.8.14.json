@@ -1,0 +1,52 @@
+{
+  "version": "6.8.14",
+  "baseVersion": "6.8.13",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.14.md",
+      "bytes": 497,
+      "sha256": "e56140d1992d5af6190fce09932f09916b012b60d068e0d3e44a0d2461ef4167"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "59292f7759cb392dfca1e8a4547511df5b5199da97b0fb98b2c77a9b27e8bfea"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "39db93fa65fc705985bdb9a7a9f474e49798c8f6fcde8339c39b4ba810cd22bd"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 55965,
+      "sha256": "55961ec3219d6af54e02afb05225b188dbbc1ccff0775b58f832b4de5b3b03b9"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 76417,
+      "sha256": "5ae1aff7eefcb230024bfa46d01cae5e16431b492e08ab1f7b61da5bc2e89bb6"
+    },
+    {
+      "path": "apps/web/src/components/LearningHubPage.tsx",
+      "bytes": 32850,
+      "sha256": "ca39c224fe58e09cb17838f719fc87d686b209da6b813d7f2f3140211cb775bf"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 522249,
+      "sha256": "fe6fc5ae441a4c688db25a9aa49c55cdafcf8e96a6a70a10140015dd234017dc"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "16c338e1f90d3c40172ece94dee877f65e230ca5ba878d032bfbea32480991f8"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "9d6b8b3e7eb368482a4ca9c888881de7a9fca05858b9ea79581eb792a5a0f267"
+    }
+  ]
+}

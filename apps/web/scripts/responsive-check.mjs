@@ -266,6 +266,10 @@ async function runChromium() {
     const allSizes = [[280,720],[320,568],[360,640],[390,844],[430,932],[512,768],[620,620],[621,620],[640,480],[768,1024],[844,390],[900,360],[1024,600],[1180,820],[1366,768],[1920,1080],[3440,1440]];
     const authoringOnly = process.argv.includes("--authoring-only");
     const readerOnly = process.argv.includes("--reader-only");
+    if (process.argv.includes("--learning-navigation-only")) {
+      await checkLearningNavigation();
+      return;
+    }
     const sizes = authoringOnly || readerOnly || process.argv.includes("--interactions-only") ? []
       : process.argv.includes("--quick") ? [[320,568],[844,390]] : allSizes;
     const failures = [];
@@ -287,10 +291,75 @@ async function runChromium() {
       if (!authoringOnly && !readerOnly) {
         await checkTopbar();
         await checkNavigationDock();
+        await checkLearningNavigation();
         await checkInteractions();
       }
       if (!readerOnly) await checkAuthoring();
       if (!authoringOnly) await checkReaders();
+    }
+
+    async function checkLearningNavigation() {
+      const main = dom(".main-area");
+      const back = dom(".topbar .shell-back");
+      const assertTop = async label => {
+        await delay(240);
+        const state = await evaluate(`(() => {
+          const main = ${main}, button = ${back};
+          if (!button) return { top: main.scrollTop, back: false };
+          const box = button.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          return { top: main.scrollTop, back: box.top >= 0 && button.contains(hit) };
+        })()`);
+        assert(state.top <= 1 && state.back, `${label}: ${JSON.stringify(state)}`);
+      };
+      const viewports = [
+        [1100, 540, ["quiz", "flashcards", "exams", "lab", "tools", "plan", "progress", "music", "connections", "classrooms", "rooms"]],
+        [390, 660, ["quiz", "lab", "tools"]],
+      ];
+      for (const [width, height, tools] of viewports) {
+        const touch = width <= 480;
+        await resize(width, height, touch);
+        await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+        await open("/", ".home-heading");
+        const enter = touch ? ".mobile-compact-nav > button:nth-child(3)" : ".nav-learning";
+        await click(enter, touch);
+        await wait(dom(".learning-space-heading h1") + "?.getClientRects().length");
+        await assertTop(`Learning Hub at ${width}px`);
+        await evaluate(`${main}.scrollTop = 160`);
+        assert(await evaluate(`${main}.scrollTop > 60`), "Learning Hub remains scrollable");
+        await click(enter, touch);
+        await assertTop(`Reopening Learning Hub at ${width}px`);
+        for (const tool of tools) {
+          await click(`.learning-space-home-content [data-guide-tab="${tool}"]`, touch);
+          await wait(dom(`[data-learning-tool="${tool}"]:not([hidden])`) + "?.getClientRects().length", tool);
+          await assertTop(`${tool} at ${width}px`);
+          await click(".topbar .shell-back", touch);
+          await wait(dom(".learning-space-heading h1") + "?.getClientRects().length");
+          await assertTop(`Back from ${tool} at ${width}px`);
+        }
+        await click('.learning-space-home-content [data-guide-tab="shared"]', touch);
+        await wait(dom(".shared-learning") + "?.getClientRects().length");
+        await assertTop(`Shared with me at ${width}px`);
+      }
+
+      await resize(1100, 540, false);
+      await page("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
+      const scrollbar = theme => evaluate(`(() => {
+        document.documentElement.dataset.theme = '${theme}';
+        const main = ${main};
+        return {
+          thumb: getComputedStyle(main, '::-webkit-scrollbar-thumb').backgroundColor,
+          sizing: getComputedStyle(main).scrollbarWidth,
+          width: getComputedStyle(main, '::-webkit-scrollbar').width,
+          arrow: getComputedStyle(main, '::-webkit-scrollbar-button').display,
+        };
+      })()`);
+      const sunset = await scrollbar("sunset"), ocean = await scrollbar("ocean");
+      assert(sunset.thumb !== ocean.thumb, "Scrollbar thumb follows the theme");
+      assert.equal(ocean.sizing, "auto", "Desktop uses the custom scrollbar dimensions");
+      assert.equal(ocean.width, "6px");
+      assert.equal(ocean.arrow, "none");
+      console.log("Learning Hub entry and tool back buttons stay visible on desktop and phone. Scrollbar changes with the theme.");
     }
 
     async function checkReaders() {

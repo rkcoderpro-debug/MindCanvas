@@ -292,6 +292,23 @@
   --project-meta-border: color-mix(in srgb, var(--theme-gradient-start) 34%, var(--line));
 }
 * { box-sizing: border-box; }
+:root { --scrollbar-thumb: color-mix(in srgb, var(--accent) 36%, var(--accent-border)); }
+:where(*) { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+
+@media (forced-colors: none) {
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--scrollbar-thumb); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  ::-webkit-scrollbar-button { display: none; }
+
+  @supports selector(::-webkit-scrollbar) {
+    @media (any-pointer: fine) {
+      /* Let the page scrollbar use the rounded six-pixel track on desktop. */
+      :root, .main-area { scrollbar-color: auto; scrollbar-width: auto; }
+    }
+  }
+}
 body { margin: 0; min-height: 100dvh; color: var(--text); background: var(--app-bg); transition: color var(--motion-normal) ease, background-color var(--motion-normal) ease; }
 ::selection { color: var(--accent-contrast); background: var(--accent); }
 button, input, select, textarea { font: inherit; }
