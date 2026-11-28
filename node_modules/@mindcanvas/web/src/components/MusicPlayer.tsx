@@ -4,6 +4,7 @@ import { Music2, Pause, Play, SkipBack, SkipForward, X, ChevronDown, Trash2, Lin
 import { musicStore, nextMusicId, parseMusicLink, musicSourceLabel, readMusicPosition, saveMusicPosition, type MusicPosition, type MusicTrack } from '../lib/musicStorage';
 import MusicYouTubeSurface from "./MusicYouTubeSurface";
 import type { Player } from "../lib/youtubeIframe";
+import { getYouTubeMusicTitle } from "../lib/youtubeMusicTitle";
 import { usePlayerSlot } from "./usePlayerSlot";
 import { useLearningActive } from "../lib/learningNavigation";
 import MusicLinkPlayback, { type LinkControls } from "./MusicLinkPlayback";
@@ -13,13 +14,13 @@ const isYouTube = (track: MusicTrack | null) => track?.source === "youtube" || t
 type Music = {
   tracks: MusicTrack[]; current: string | null; playing: boolean; time: number; duration: number; volume: number;
   repeat: 'off' | 'all' | 'one'; shuffle: boolean; hidden: boolean; error: string; busy: boolean;
-  activeTrack: MusicTrack | null;
+  activeTrack: MusicTrack | null; nowPlayingTitle: string;
   youtubeOpen: boolean; youtubeMinimized: boolean; youtubeVideoVisible: boolean; youtubeNote: string;
   setYoutubeMinimized: (value: boolean) => void; setPlayerSlot: (slot: HTMLDivElement | null) => void;
   linkOpen: boolean; pending: boolean; stop: () => void; play: (id?: string) => void; pause: () => void; next: (direction: number) => void;
   seek: (time: number) => void; setVolume: (value: number) => void; setRepeat: (value: 'off' | 'all' | 'one') => void;
   setShuffle: (value: boolean) => void; setHidden: (value: boolean) => void;
-  add: (files: File[]) => Promise<boolean>; addOnline: (url: string, title?: string) => Promise<boolean>; remove: (track: MusicTrack) => Promise<void>; rename: (track: MusicTrack, title: string) => Promise<void>;
+  add: (files: File[]) => Promise<boolean>; addOnline: (url: string, title?: string, playNow?: boolean) => Promise<boolean>; remove: (track: MusicTrack) => Promise<void>; rename: (track: MusicTrack, title: string) => Promise<void>;
 };
 const Context = createContext<Music | null>(null);
 const AudioPriority = createContext<((active: boolean) => void) | null>(null);
@@ -48,6 +49,22 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
   const [playerSlot, setPlayerSlot] = useState<HTMLDivElement | null>(null);
   const [roomAudio, setRoomAudio] = useState(false);
   const activeTrack = tracks.find(track => track.id === current) ?? null;
+  const youtubeSelection = isYouTube(activeTrack) && activeTrack?.url ? parseMusicLink(activeTrack.url) : null;
+  const isActivePlaylist = youtubeSelection?.isPlaylist ?? activeTrack?.isPlaylist;
+  const [youtubeVideoId, setYoutubeVideoId] = useState<string>();
+  const [youtubeTitle, setYoutubeTitle] = useState<{ id: string; title: string }>();
+  const namedVideoId = youtubeSelection?.isPlaylist
+    ? youtubeVideoId ?? youtubeSelection.youtubeVideoId
+    : activeTrack?.title === youtubeSelection?.title ? youtubeSelection?.youtubeVideoId : undefined;
+  const nowPlayingTitle = namedVideoId && youtubeTitle?.id === namedVideoId ? youtubeTitle.title : activeTrack?.title ?? "";
+  useEffect(() => {
+    if (!namedVideoId) return;
+    let subscribed = true;
+    void getYouTubeMusicTitle(namedVideoId).then(title => {
+      if (subscribed && title) setYoutubeTitle({ id: namedVideoId, title });
+    });
+    return () => { subscribed = false; };
+  }, [namedVideoId]);
   const inlineRect = usePlayerSlot(playerSlot, isYouTube(activeTrack) ? 238 : 152);
   const playerRect = roomAudio || youtubeMinimized ? null : inlineRect;
   const [youtubeStart, setYoutubeStart] = useState(0), [youtubeAttempt, setYoutubeAttempt] = useState(0);
@@ -98,14 +115,14 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     if (!activeTrack) return;
     position.current = {
       id: activeTrack.id,
-      time: activeTrack.isPlaylist || (duration > 0 && time >= duration) ? 0 : time,
-      duration: activeTrack.isPlaylist ? 0 : duration,
+      time: isActivePlaylist || (duration > 0 && time >= duration) ? 0 : time,
+      duration: isActivePlaylist ? 0 : duration,
     };
     if (positionChangedHere.current && (!playing || Date.now() - lastSaved.current >= 4000)) {
       lastSaved.current = Date.now();
       saveMusicPosition(scope, position.current);
     }
-  }, [activeTrack, duration, playing, scope, time]);
+  }, [activeTrack, duration, isActivePlaylist, playing, scope, time]);
   useEffect(() => {
     if (!pending || !linkOpen) return;
     const timer = window.setTimeout(() => {
@@ -145,6 +162,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     wantsPlay.current = false;
     youtube.current?.pauseVideo();
     youtube.current = null;
+    setYoutubeVideoId(undefined);
     youtubeFailed.current = false;
     setYoutubeOpen(false); setYoutubeMinimized(false); setYoutubeNote("");
   };
@@ -153,9 +171,8 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     link.current = null;
     setLinkOpen(false);
   };
-  const play = (id = current ?? tracks[0]?.id) => {
+  const playTrack = (track: MusicTrack) => {
     if (roomAudio) { setError("Âm thanh phòng đang được ưu tiên. Hãy dừng nghe trong phòng để phát nhạc cá nhân."); return; }
-    const track = tracks.find(item => item.id === id); if (!track) return;
     if ((!track.source || track.source === "local") && !track.blob) { setError('Bài hát này không còn dữ liệu trên thiết bị. Hãy xóa và thêm lại.'); return; }
     if (isYouTube(track) && (!track.url || !parseMusicLink(track.url)?.embedUrl)) { setError("Liên kết YouTube không còn hợp lệ. Hãy thêm lại từ nguồn nhạc."); return; }
     positionChangedHere.current = true;
@@ -202,6 +219,10 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
       }
     });
   };
+  const play = (id = current ?? tracks[0]?.id) => {
+    const track = tracks.find(item => item.id === id);
+    if (track) playTrack(track);
+  };
   const pause = () => {
     generation.current++; wantsPlay.current = false;
     youtube.current?.pauseVideo(); link.current?.pause(); audioRef.current?.pause();
@@ -216,7 +237,19 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     setTime(0);
     if (linkOpen || youtubeOpen) setDuration(0);
   };
-  const next = (direction: number) => { const id = nextMusicId(tracks.map(t => t.id), current, direction, shuffle); if (id) play(id); };
+  const next = (direction: number) => {
+    const player = isActivePlaylist ? youtube.current : null;
+    const playlist = player?.getPlaylist();
+    const index = player?.getPlaylistIndex() ?? -1;
+    if (player && playlist?.length && index >= 0 && !youtubeFailed.current && !roomAudio) {
+      wantsPlay.current = true;
+      const nextIndex = (index + direction + playlist.length) % playlist.length;
+      player.playVideoAt(nextIndex);
+      return;
+    }
+    const id = nextMusicId(tracks.map(t => t.id), current, direction, shuffle);
+    if (id) play(id);
+  };
   useEffect(() => {
     const audio = audioRef.current; if (!audio) return;
     audio.onended = () => {
@@ -240,15 +273,20 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Không lưu được nhạc; dung lượng thiết bị có thể đã đầy.'); return false; }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   };
-  const addOnline = async (rawUrl: string, title?: string) => {
+  const addOnline = async (rawUrl: string, title?: string, playNow = false) => {
     if (lock.current) return false;
     const parsed = parseMusicLink(rawUrl);
     if (!parsed) { setError('Liên kết không được hỗ trợ. Dùng URL YouTube, YouTube Music, Spotify hoặc SoundCloud hợp lệ.'); return false; }
     lock.current = true; setBusy(true); setError('');
     try {
-      const track: MusicTrack = { id: crypto.randomUUID(), owner: scope, title: title?.trim().slice(0, 160) || parsed.title, source: parsed.source, url: parsed.url, embedUrl: parsed.embedUrl, isPlaylist: parsed.isPlaylist };
+      const detected = !title?.trim() && parsed.youtubeVideoId ? await getYouTubeMusicTitle(parsed.youtubeVideoId) : null;
+      if (!alive.current) return false;
+      const track: MusicTrack = { id: crypto.randomUUID(), owner: scope, title: title?.trim().slice(0, 160) || detected || parsed.title, source: parsed.source, url: parsed.url, embedUrl: parsed.embedUrl, isPlaylist: parsed.isPlaylist };
       await musicStore(scope, 'put', track);
-      if (alive.current) setTracks(old => [...old, track]);
+      if (alive.current) {
+        setTracks(old => [...old, track]);
+        if (playNow) playTrack(track);
+      }
       return true;
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Không lưu được liên kết nhạc.'); return false; }
     finally { lock.current = false; if (alive.current) setBusy(false); }
@@ -267,7 +305,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
     try { await musicStore(scope, 'put', next); setTracks(old => old.map(t => t.id === next.id ? next : t)); }
     catch { setError('Không lưu được tên bài hát.'); }
   };
-  const value: Music = { tracks, current, activeTrack, playing, time, duration, volume, repeat, shuffle, hidden, error, busy,
+  const value: Music = { tracks, current, activeTrack, nowPlayingTitle, playing, time, duration, volume, repeat, shuffle, hidden, error, busy,
     youtubeOpen, youtubeMinimized, youtubeVideoVisible: Boolean(playerRect), youtubeNote, setPlayerSlot, setYoutubeMinimized, linkOpen, pending, stop, play, pause, next, add, addOnline, remove, rename, setRepeat, setShuffle, setHidden,
     seek: value => {
       if (duration <= 0 || !Number.isFinite(value)) return;
@@ -281,9 +319,16 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
       }
     },
     setVolume: value => { changeVolume(value); if (audioRef.current) audioRef.current.volume = value; youtube.current?.setVolume(Math.round(value * 100)); link.current?.setVolume?.(value); } };
-  const youtubeEmbed = isYouTube(activeTrack) && activeTrack?.url ? parseMusicLink(activeTrack.url)?.embedUrl : undefined;
+  const youtubeEmbed = youtubeSelection?.embedUrl;
   const syncYouTube = (player: Player, state?: number) => {
     if (!alive.current || !activeTrack || activeTrack.id !== activeId.current || player !== youtube.current || youtubeFailed.current) return;
+    const list = isActivePlaylist ? player.getPlaylist() : undefined;
+    const index = list?.length ? player.getPlaylistIndex() : -1;
+    if (isActivePlaylist && state !== 0) {
+      const videoUrl = player.getVideoUrl?.();
+      const id = list?.[index] || (videoUrl && parseMusicLink(videoUrl)?.youtubeVideoId);
+      if (id) setYoutubeVideoId(id);
+    }
     const length = player.getDuration(), progress = player.getCurrentTime();
     setDuration(Number.isFinite(length) && length > 0 ? length : 0);
     if (Number.isFinite(progress) && progress >= 0) setTime(progress);
@@ -296,15 +341,17 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
       if (state === 2) { wantsPlay.current = false; setPending(false); }
       setPlaying(false);
     } else if (state === 0) {
-      wantsPlay.current = false; setPending(false); setPlaying(false);
-      const list = activeTrack.isPlaylist ? player.getPlaylist() : undefined;
-      const index = activeTrack.isPlaylist ? player.getPlaylistIndex() : -1;
-      if (list?.length && index >= 0 && index < list.length - 1) return; // The embed handles the next video in its own list.
+      setPending(false); setPlaying(false);
       if (repeat === "one") {
         wantsPlay.current = true;
-        if (list?.length) player.playVideoAt(0);
+        if (index >= 0) player.playVideoAt(index);
         else { player.seekTo(0, true); player.playVideo(); }
-      } else if (shuffle || repeat === "all" || tracks.findIndex(t => t.id === current) < tracks.length - 1) {
+        return;
+      }
+      // Preserve playback intent while YouTube queues the next item in the same playlist.
+      if (list?.length && index >= 0 && index < list.length - 1) return;
+      wantsPlay.current = false;
+      if (shuffle || repeat === "all" || tracks.findIndex(t => t.id === current) < tracks.length - 1) {
         const id = nextMusicId(tracks.map(t => t.id), current, 1, shuffle);
         if (id === current) {
           wantsPlay.current = true;
@@ -345,7 +392,7 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
           setError("Không kết nối được trình phát. Thử lại hoặc mở nguồn nhạc.");
         }}/> }
     {youtubeEmbed && youtubeOpen && activeTrack && <MusicYouTubeSurface key={`${activeTrack.id}:${youtubeAttempt}`} rect={playerRect}
-      embedUrl={youtubeEmbed} title={activeTrack.title} start={youtubeStart} onMinimize={() => setYoutubeMinimized(true)}
+      embedUrl={youtubeEmbed} title={nowPlayingTitle} start={youtubeStart} onMinimize={() => setYoutubeMinimized(true)}
       onReady={player => {
         if (activeId.current !== activeTrack.id || youtubeFailed.current) return;
         youtube.current = player; player.setVolume(Math.round(volume * 100)); syncYouTube(player);
@@ -354,7 +401,9 @@ export function MusicProvider({ owner, children }: { owner: string | null; child
       }}
       onUpdate={syncYouTube}
       onBlocked={() => { wantsPlay.current = false; setPending(false); setPlaying(false); setYoutubeNote("Bấm Phát ngay trên khung YouTube để bắt đầu."); }}
-      onError={() => { youtubeFailed.current = true; wantsPlay.current = false; setPending(false); setPlaying(false); setYoutubeNote("Không phát được video nhúng. Bấm Phát để thử lại hoặc mở nguồn nhạc."); }}/>}
+      onError={() => { youtubeFailed.current = true; wantsPlay.current = false; setPending(false); setPlaying(false); setYoutubeNote(isActivePlaylist
+        ? "Không phát được danh sách trong trình phát nhúng. Thử lại hoặc mở nguồn nhạc."
+        : "Không phát được video nhúng. Bấm Phát để thử lại hoặc mở nguồn nhạc."); }}/>}
     {children}
   </Context.Provider></AudioPriority.Provider>;
 }
@@ -427,7 +476,7 @@ export function MusicIsland({ suppressed = false }: { suppressed?: boolean }) {
     onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     onFocusCapture={() => setHovered(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHovered(false); }}
     onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); close(); } }}>
-    <div className="music-island-summary"><button ref={toggle} type="button" className="music-island-open" aria-label={`${expanded ? "Thu gọn điều khiển" : "Mở điều khiển"} ${track.title}`} aria-expanded={expanded} aria-controls={expanded ? details : undefined} onClick={() => setExpanded(value => !value)}><Music2 size={15} aria-hidden="true"/><ScrollingTitle title={track.title} visible={expanded || hovered}/><Visualizer/><ChevronDown size={14} aria-hidden="true"/></button></div>
+    <div className="music-island-summary"><button ref={toggle} type="button" className="music-island-open" aria-label={`${expanded ? "Thu gọn điều khiển" : "Mở điều khiển"} ${m.nowPlayingTitle}`} aria-expanded={expanded} aria-controls={expanded ? details : undefined} onClick={() => setExpanded(value => !value)}><Music2 size={15} aria-hidden="true"/><ScrollingTitle title={m.nowPlayingTitle} visible={expanded || hovered}/><Visualizer/><ChevronDown size={14} aria-hidden="true"/></button></div>
     {expanded && <div className="music-island-details" id={details}>
       <div className="music-island-source">{musicSourceLabel(track.source)}{track.isPlaylist ? ' · Danh sách phát' : ''}</div>
       <PlaybackProgress/>
@@ -456,15 +505,30 @@ export function MusicPage() {
   const [adding, setAdding] = useState(false);
   const [source, setSource] = useState<"device" | "link">("device");
   const [onlineUrl, setOnlineUrl] = useState("");
-  const [onlineTitle, setOnlineTitle] = useState("");
+  const [onlineTitle, setOnlineTitle] = useState<string | null>(null);
+  const [titlePreview, setTitlePreview] = useState<{ id: string; title: string }>();
   const addPanel = useId();
   const addButton = useRef<HTMLButtonElement>(null);
-  const parsed = onlineUrl.trim() ? parseMusicLink(onlineUrl) : null;
+  const parsed = parseMusicLink(onlineUrl);
+  const videoId = adding && source === "link" ? parsed?.youtubeVideoId : undefined;
+  const suggestedTitle = videoId && titlePreview?.id === videoId ? titlePreview.title : "";
+  useEffect(() => {
+    if (!videoId || onlineTitle !== null) return;
+    let subscribed = true;
+    const timer = window.setTimeout(() => {
+      void getYouTubeMusicTitle(videoId).then(title => {
+        if (subscribed && title) setTitlePreview({ id: videoId, title });
+      });
+    }, 300);
+    return () => { subscribed = false; window.clearTimeout(timer); };
+  }, [onlineTitle, videoId]);
   const closeAdd = () => { setAdding(false); addButton.current?.focus(); };
+  const youtubePlaylist = parsed?.isPlaylist && (parsed.source === "youtube-music" || parsed.source === "youtube");
   const addLink = async (event: FormEvent) => {
     event.preventDefault();
-    if (await m.addOnline(onlineUrl, onlineTitle)) {
-      setOnlineUrl(""); setOnlineTitle(""); closeAdd();
+    const playNow = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "play";
+    if (await m.addOnline(onlineUrl, onlineTitle ?? suggestedTitle, playNow)) {
+      setOnlineUrl(""); setOnlineTitle(null); closeAdd();
     }
   };
   const track = m.activeTrack;
@@ -475,7 +539,7 @@ export function MusicPage() {
     <div className="music-dashboard">
       <section className="music-player-card" aria-label="Đang phát">
         <div className="music-player-card-heading">
-          <div><span className="eyebrow">ĐANG PHÁT</span><strong>{track?.title ?? "Chưa chọn bài"}</strong><small>{track ? `${musicSourceLabel(track.source)}${track.isPlaylist ? " · Danh sách phát" : ""}` : "Chọn bài nhạc từ danh sách phát"}</small></div>
+          <div><span className="eyebrow">ĐANG PHÁT</span><strong>{m.nowPlayingTitle || "Chưa chọn bài"}</strong><small>{track ? `${musicSourceLabel(track.source)}${track.isPlaylist ? " · Danh sách phát" : ""}` : "Chọn bài nhạc từ danh sách phát"}</small></div>
           <label className="music-island-toggle"><input type="checkbox" checked={!m.hidden} onChange={event => m.setHidden(!event.target.checked)}/>Hiện trình phát thu nhỏ</label>
         </div>
         {isYouTube(track) && m.youtubeOpen && m.youtubeMinimized ? <div className="music-youtube-collapsed">
@@ -499,7 +563,14 @@ export function MusicPage() {
           </div>
           {source === "device"
             ? <FilePicker className="music-upload" label={m.busy ? "Đang lưu…" : "Chọn tệp nhạc"} aria-label="Thêm file nhạc" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" multiple disabled={m.busy} description="MP3, WAV, M4A, OGG, AAC, FLAC · tối đa 50 MB/bài" onChange={event => { void m.add(Array.from(event.target.files ?? [])).then(added => { if (added) closeAdd(); }); }}/>
-            : <form className="music-link-form" onSubmit={addLink}><label>Liên kết nhạc<input type="url" required value={onlineUrl} onChange={event => setOnlineUrl(event.target.value)} placeholder="YouTube, Spotify hoặc SoundCloud"/></label><label>Tên hiển thị (tùy chọn)<input value={onlineTitle} onChange={event => setOnlineTitle(event.target.value)} placeholder={parsed?.title ?? "Nhập tên bài nhạc"}/></label><button className="primary-button" disabled={m.busy || !onlineUrl.trim()}><Link2 size={16}/>{m.busy ? "Đang lưu…" : "Thêm vào danh sách"}</button></form>}
+            : <form className="music-link-form" onSubmit={addLink}>
+                <label>Liên kết nhạc<input type="url" required value={onlineUrl} onChange={event => setOnlineUrl(event.target.value)} placeholder="Dán link bài hát hoặc playlist"/></label>
+                <label>Tên hiển thị (tùy chọn)<input value={onlineTitle ?? suggestedTitle} maxLength={160} onChange={event => setOnlineTitle(event.target.value)} placeholder={parsed?.title ?? "Nhập tên bài nhạc"}/></label>
+                <div className="music-link-actions">
+                  {youtubePlaylist && <button type="submit" value="play" className="primary-button" disabled={m.busy}><Play size={16}/>Thêm và phát</button>}
+                  <button type="submit" className={youtubePlaylist ? "secondary-button" : "primary-button"} disabled={m.busy || !onlineUrl.trim()}><Link2 size={16}/>{m.busy ? "Đang lưu…" : "Thêm vào danh sách"}</button>
+                </div>
+              </form>}
           {m.error && <p className="form-error" role="alert">{m.error}</p>}
         </div>}
         {!m.tracks.length ? <div className="music-empty"><ListMusic size={26}/><strong>Danh sách phát đang trống</strong><span>Thêm nhạc từ thiết bị hoặc từ một liên kết để bắt đầu.</span></div> : <ol className="music-playlist">{m.tracks.map(track => {

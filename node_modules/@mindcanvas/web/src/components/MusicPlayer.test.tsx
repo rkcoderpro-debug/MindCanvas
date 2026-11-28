@@ -63,10 +63,12 @@ it('keeps local audio playing across navigation and restores a checkpoint withou
   } finally { await act(async () => reopened.unmount()); }
 });
 
-it('adds a link from the same control as device files and leaves playback paused', async () => {
+it('prefills and saves the linked YouTube Music title without starting playback', async () => {
   vi.mocked(musicStore).mockClear().mockResolvedValue([]);
   const audio = { volume: 0, preload: '', pause: vi.fn(), play: vi.fn() };
   vi.stubGlobal('Audio', vi.fn(function () { return audio; }));
+  const fetchTitle = vi.fn(async (_url: URL) => Response.json({ title: '  Bài hát từ YouTube Music  ' }));
+  vi.stubGlobal('fetch', fetchTitle);
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement('div'), root = createRoot(host);
   await act(async () => root.render(<MusicProvider owner="user"><MusicPage/></MusicProvider>));
@@ -77,11 +79,15 @@ it('adds a link from the same control as device files and leaves playback paused
   await act(async () => host.querySelectorAll<HTMLButtonElement>('.music-add-options button')[1].click());
   const input = host.querySelector<HTMLInputElement>('.music-link-form input[type="url"]')!;
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'https://www.youtube.com/watch?v=abcdefghijk');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'https://music.youtube.com/watch?v=abcdefghijk');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+  expect(host.querySelector<HTMLInputElement>('.music-link-form input[maxlength="160"]')?.value).toBe('Bài hát từ YouTube Music');
+  expect(fetchTitle.mock.calls[0]?.[0].searchParams.get('url')).toBe('https://www.youtube.com/watch?v=abcdefghijk');
   await act(async () => host.querySelector<HTMLFormElement>('.music-link-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(musicStore).toHaveBeenCalledWith('user', 'put', expect.objectContaining({ source: 'youtube' }));
+  expect(musicStore).toHaveBeenCalledWith('user', 'put', expect.objectContaining({ source: 'youtube-music', title: 'Bài hát từ YouTube Music' }));
+  expect(fetchTitle).toHaveBeenCalledOnce();
   expect(host.querySelectorAll('.music-playlist li')).toHaveLength(1);
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
   expect(audio.play).not.toHaveBeenCalled();
@@ -245,4 +251,89 @@ it('uses the Spotify embed state for play, buffering, timeline, and pause', asyn
     expect(playing()).toBe('false');
   } finally { await act(async () => root.unmount()); }
   expect(controller.destroy).toHaveBeenCalledOnce();
+});
+
+it('plays a pasted YouTube Music playlist and updates the displayed title when the track changes', async () => {
+  type Events = ConstructorParameters<Awaited<ReturnType<typeof getYouTube>>['Player']>[1]['events'];
+  let events!: Events;
+  let index = 0;
+  const player = {
+    playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn(), setVolume: vi.fn(), seekTo: vi.fn(),
+    getDuration: () => 120, getCurrentTime: () => 0,
+    getPlaylist: () => ['playlist_001', 'playlist_002'], getPlaylistIndex: () => index,
+    playVideoAt: vi.fn((next: number) => { index = next; events.onStateChange({ data: 1 }); }),
+  };
+  vi.stubGlobal('YT', { Player: function (_frame: HTMLIFrameElement, config: { events: Events }) { events = config.events; return player; } });
+  vi.stubGlobal('fetch', vi.fn(async (url: URL) => {
+    const video = new URL(url.searchParams.get('url')!).searchParams.get('v');
+    return Response.json({ title: video === 'playlist_001' ? 'Giai điệu thứ nhất' : 'Giai điệu thứ hai' });
+  }));
+  vi.mocked(musicStore).mockClear().mockResolvedValue([]);
+  const host = document.createElement('div'), root = createRoot(host);
+  document.body.append(host);
+  const setUrl = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  try {
+    await act(async () => root.render(<MusicProvider owner="user"><MusicIsland/><MusicPage/></MusicProvider>));
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-queue-heading button')!.click());
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('.music-add-options button')[1].click());
+    const input = host.querySelector<HTMLInputElement>('.music-link-form input[type="url"]')!;
+    await act(async () => {
+      setUrl.call(input, 'https://music.youtube.com/playlist?list=PLExamplePlaylist&si=shared');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const submit = host.querySelector<HTMLButtonElement>('.music-link-form button[value="play"]')!;
+    expect(submit).toBeTruthy();
+    await act(async () => submit.form!.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: submit })));
+    expect(musicStore).toHaveBeenCalledWith('user', 'put', expect.objectContaining({ isPlaylist: true, source: 'youtube-music' }));
+    const frame = document.body.querySelector<HTMLIFrameElement>('.music-youtube-surface iframe')!;
+    expect(frame).toBeTruthy();
+    expect(new URL(frame.src).searchParams.get('list')).toBe('PLExamplePlaylist');
+    await act(async () => { events.onReady({ target: player }); events.onStateChange({ data: 1 }); });
+    expect(player.playVideo).toHaveBeenCalledOnce();
+    expect(host.querySelector('.music-player-card-heading strong')?.textContent).toBe('Giai điệu thứ nhất');
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-island-open')!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-island-details [aria-label="Bài sau"]')!.click());
+    expect(player.playVideoAt).toHaveBeenCalledWith(1);
+    expect(host.querySelector('.music-island .music-title')?.textContent).toBe('Giai điệu thứ hai');
+    expect(document.body.querySelector('.music-youtube-surface iframe')).toBe(frame);
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-island-details [aria-label="Bài trước"]')!.click());
+    expect(player.playVideoAt).toHaveBeenLastCalledWith(0);
+    await act(async () => {
+      events.onStateChange({ data: 0 });
+      index = 1;
+      events.onStateChange({ data: 1 });
+    });
+    expect(host.querySelector('.music-island .music-title')?.textContent).toBe('Giai điệu thứ hai');
+    expect(host.querySelector('.music-island [data-playing="true"]')).toBeTruthy();
+    expect(player.pauseVideo).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it.each([
+  { manual: 'Tên tôi đặt', saved: 'Tên tôi đặt', requests: 0 },
+  { manual: '', saved: 'YouTube Music', requests: 1 },
+])('saves $saved when a custom name is present or metadata is unavailable', async ({ manual, saved, requests }) => {
+  vi.mocked(musicStore).mockClear().mockResolvedValue([]);
+  const fetchTitle = vi.fn(async () => new Response('', { status: 404 }));
+  vi.stubGlobal('fetch', fetchTitle);
+  const host = document.createElement('div'), root = createRoot(host);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  const inputValue = (selector: string, value: string) => {
+    const input = host.querySelector<HTMLInputElement>(selector)!;
+    setValue.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  try {
+    await act(async () => root.render(<MusicProvider owner="user"><MusicPage/></MusicProvider>));
+    await act(async () => host.querySelector<HTMLButtonElement>('.music-queue-heading button')!.click());
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('.music-add-options button')[1].click());
+    await act(async () => inputValue('.music-link-form input[type="url"]', 'https://music.youtube.com/watch?v=missing_123'));
+    if (manual) await act(async () => inputValue('.music-link-form input[maxlength="160"]', manual));
+    await act(async () => host.querySelector('form')!.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true })));
+    expect(musicStore).toHaveBeenCalledWith('user', 'put', expect.objectContaining({ title: saved }));
+    expect(fetchTitle).toHaveBeenCalledTimes(requests);
+  } finally { await act(async () => root.unmount()); }
 });

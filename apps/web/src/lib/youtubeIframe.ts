@@ -1,7 +1,7 @@
 export type Player = {
   destroy(): void; playVideo(): void; pauseVideo(): void; seekTo(seconds: number, allowSeekAhead: boolean): void;
   getDuration(): number; getCurrentTime(): number; setVolume(percent: number): void;
-  getPlaylist(): string[] | undefined; getPlaylistIndex(): number; playVideoAt(index: number): void;
+  getVideoUrl?(): string; getPlaylist(): string[] | undefined; getPlaylistIndex(): number; playVideoAt(index: number): void;
 };
 type PlayerEvents = { onReady: (event: { target: Player }) => void; onStateChange: (event: { data: number }) => void; onAutoplayBlocked: () => void; onError: (event: { data: number }) => void };
 type YouTube = { Player: new (iframe: HTMLIFrameElement, config: { events: PlayerEvents }) => Player };

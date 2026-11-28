@@ -11,6 +11,23 @@ describe('music playlist navigation', () => {
     expect(nextMusicId(['a','b','c'], 'b', 1, true, () => .99)).toBe('c');
     expect(nextMusicId(['a'], 'a', 1, true)).toBe('a');
   });
+  it('keeps YouTube Music playlists and removes automatically generated mixes from individual songs', () => {
+    const playlist = parseMusicLink('https://music.youtube.com/playlist?list=PLTestPlaylist&si=example');
+    expect(playlist).toMatchObject({ source: 'youtube-music', isPlaylist: true, title: 'Danh sách YouTube Music' });
+    const embed = new URL(playlist!.embedUrl!);
+    expect(embed.pathname).toBe('/embed');
+    expect(embed.searchParams.get('listType')).toBe('playlist');
+    expect(embed.searchParams.get('list')).toBe('PLTestPlaylist');
+
+    const album = parseMusicLink('https://music.youtube.com/watch?v=abcdefghijk&list=OLAK5uy_album');
+    expect(album).toMatchObject({ isPlaylist: true, youtubeVideoId: 'abcdefghijk' });
+    expect(album?.embedUrl).toContain('list=OLAK5uy_album');
+    expect(parseMusicLink('https://music.youtube.com/watch?v=abcdefghijk&list=RDCLAK5uy_curated')?.isPlaylist).toBe(true);
+    const radio = parseMusicLink('https://music.youtube.com/watch?v=abcdefghijk&list=RDAMVMabcdefghijk');
+    expect(radio).toMatchObject({ isPlaylist: false, youtubeVideoId: 'abcdefghijk' });
+    expect(radio?.embedUrl).not.toContain('list=');
+  });
+
   it('accepts supported provider links and rejects arbitrary URLs', () => {
     expect(parseMusicLink('https://youtu.be/abc123')?.embedUrl).toContain('youtube.com/embed/abc123');
     expect(parseMusicLink('https://music.youtube.com/watch?v=abc123')?.source).toBe('youtube-music');

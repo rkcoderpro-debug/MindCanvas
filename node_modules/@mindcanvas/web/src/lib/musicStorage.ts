@@ -10,7 +10,7 @@ export type MusicTrack = {
   blob?: Blob;
 };
 
-export type ParsedMusicLink = Pick<MusicTrack, "source" | "url" | "embedUrl" | "isPlaylist"> & { title: string };
+export type ParsedMusicLink = Pick<MusicTrack, "source" | "url" | "embedUrl" | "isPlaylist"> & { title: string; youtubeVideoId?: string };
 
 /**
  * Accept only provider URLs that can be embedded by the official player.
@@ -25,19 +25,27 @@ export function parseMusicLink(raw: string): ParsedMusicLink | null {
   const original = parsed.toString();
   if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com" || host === "youtu.be") {
     const source: MusicSource = host === "music.youtube.com" ? "youtube-music" : "youtube";
-    const video = host === "youtu.be"
+    const rawVideo = host === "youtu.be"
       ? parsed.pathname.split("/").filter(Boolean)[0]
-      : parsed.searchParams.get("v") || parsed.pathname.match(/^\/(?:shorts|embed)\/([^/?]+)/)?.[1];
-    const list = parsed.searchParams.get("list") || undefined;
-    // Music mixes (RD...) are not normal embeddable playlists. A watch link
-    // still has a valid standalone track even when it carries its radio mix.
-    const playlist = video && list?.startsWith("RD") ? undefined : list;
+      : parsed.searchParams.get("v") || parsed.pathname.match(/^\/(?:shorts|embed|live)\/([^/?]+)/)?.[1];
+    const video = rawVideo && /^[A-Za-z0-9_-]{1,24}$/.test(rawVideo) ? rawVideo : undefined;
+    const list = parsed.searchParams.get("list");
+    // A song link can carry an automatically generated radio mix. Keep its video
+    // playable by itself, while preserving YouTube Music's curated RDCLAK lists.
+    const radio = video && list?.startsWith("RD") && !list.startsWith("RDCLAK5uy");
+    const playlist = !radio && list && /^[A-Za-z0-9_-]{1,160}$/.test(list) ? list : undefined;
     if (!video && !playlist) return null;
     const params = new URLSearchParams({ autoplay: "0", playsinline: "1", rel: "0", enablejsapi: "1" });
-    if (playlist) params.set("list", playlist);
-    if (video) return { source, url: original, embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(video)}?${params.toString()}`, isPlaylist: Boolean(playlist), title: source === "youtube-music" ? "YouTube Music" : "YouTube" };
-    params.set("listType", "playlist");
-    return { source, url: original, embedUrl: `https://www.youtube.com/embed?${params.toString()}`, isPlaylist: true, title: source === "youtube-music" ? "YouTube Music playlist" : "YouTube playlist" };
+    if (playlist) {
+      params.set("listType", "playlist");
+      params.set("list", playlist);
+    }
+    const label = musicSourceLabel(source);
+    return {
+      source, url: original, youtubeVideoId: video, isPlaylist: Boolean(playlist),
+      embedUrl: `https://www.youtube.com/embed${video ? "/" + video : ""}?${params}`,
+      title: playlist ? `Danh sách ${label}` : label,
+    };
   }
   if (host === "open.spotify.com") {
     const match = parsed.pathname.match(/^\/(track|album|playlist|episode|show)\/([A-Za-z0-9]+)$/);

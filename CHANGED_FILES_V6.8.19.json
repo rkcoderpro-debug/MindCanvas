@@ -1,0 +1,72 @@
+{
+  "version": "6.8.19",
+  "baseVersion": "6.8.18",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.19.md",
+      "bytes": 948,
+      "sha256": "f71ec8b8e2c266e98db039a60fc76e9b33fbe9591f303d9c70d2bf4264dfca86"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "a899bb09c63efd17552929323e2477874903afb30f855240153415532170a999"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "19864844160de541dcf7e9062e5f68f70ecf22b215416f2e5967b315636f0e0a"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 68290,
+      "sha256": "f4107388776c90908c53ef3bbfbbdd4e58d7fff7f09d81556f6f4ffd2cec3cd2"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.test.tsx",
+      "bytes": 22239,
+      "sha256": "91421582e730fcaaa7c0d15781c9575584b1364c9146a3570d12a21982d5d922"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.tsx",
+      "bytes": 39994,
+      "sha256": "587bf7adcc75d29793bd6902d9015f39cf25e051d4329564e601b083658f5785"
+    },
+    {
+      "path": "apps/web/src/lib/musicStorage.test.ts",
+      "bytes": 2476,
+      "sha256": "bcfd24a1b907ffa0f06c5c12c1bc3048f41cdffb80415ed2f20771f4cf66cbd1"
+    },
+    {
+      "path": "apps/web/src/lib/musicStorage.ts",
+      "bytes": 6315,
+      "sha256": "b98dd669a45f38b58aece8e1c8b9f9d6da9516d5eeaefa85dc65da78d5b860d3"
+    },
+    {
+      "path": "apps/web/src/lib/youtubeIframe.ts",
+      "bytes": 1926,
+      "sha256": "a3ac0ebc4cf7e72c7bb220ea8be2e71bef2f9fd017daeed401b645724697aba9"
+    },
+    {
+      "path": "apps/web/src/lib/youtubeMusicTitle.ts",
+      "bytes": 1275,
+      "sha256": "f9321a8ae974aaca5dc16f3e6a9a579200c93540b412fc31284d043a9f4dfffa"
+    },
+    {
+      "path": "apps/web/src/musicPolish.css",
+      "bytes": 9161,
+      "sha256": "d31297f2c7561d936d97235abc3bb89ddffd385a478e8e6aa2fac1fbebe26b8c"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "dc505ab84993e62047fd074fdf201dd072d7b3b4d5dfeff5daf6661a3f4de09a"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "4b39489c8fb06fc74320efd753d4653d196a88682b6ddda3def30422256dd86a"
+    }
+  ]
+}

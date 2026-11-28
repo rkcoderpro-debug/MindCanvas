@@ -466,7 +466,7 @@ async function runChromium() {
           const glass = getComputedStyle(island, "::before");
           const rect = island.getBoundingClientRect();
           return getComputedStyle(title).opacity === "1" && getComputedStyle(island).backgroundColor === "rgba(0, 0, 0, 0)" &&
-            glass.backdropFilter.includes("blur(") && rect.left >= 0 && rect.right <= innerWidth;
+            glass.backdropFilter.includes("blur(7px)") && rect.left >= 0 && rect.right <= innerWidth;
         })()`));
         await click(".music-island-menu summary", touch);
         await wait(`!!${dom(".music-island-menu[open]")}`, "music options open");

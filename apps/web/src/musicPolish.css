@@ -7,7 +7,7 @@
   border: 1px solid color-mix(in srgb, var(--accent-border) 73%, transparent);
   border-radius: 999px;
   color: var(--text);
-  background: color-mix(in srgb, var(--surface-raised) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 52%, transparent);
   box-shadow: 0 4px 15px color-mix(in srgb, var(--shadow-strong) 36%, transparent);
   pointer-events: auto;
   isolation: isolate;
@@ -16,11 +16,11 @@
   .music-island { background: transparent; }
   .music-island::before {
     content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
-    background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 44%, transparent),
-      color-mix(in srgb, var(--accent-soft) 15%, transparent));
-    box-shadow: inset 0 1px 1px rgb(255 255 255 / .28);
-    -webkit-backdrop-filter: blur(16px) saturate(145%);
-    backdrop-filter: blur(16px) saturate(145%);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 18%, transparent),
+      color-mix(in srgb, var(--accent-soft) 6%, transparent));
+    box-shadow: inset 0 1px 1px rgb(255 255 255 / .18);
+    -webkit-backdrop-filter: blur(7px) saturate(120%);
+    backdrop-filter: blur(7px) saturate(120%);
   }
 }
 .music-island.peek { width: min(245px, calc(100vw - 24px)); }
@@ -34,7 +34,7 @@
 .music-island:not(.peek):not(.expanded) .music-island-open { justify-content: space-between; }
 .music-island-open > svg { flex: none; }
 .music-island-open[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
-.music-island-open:hover { background: color-mix(in srgb, var(--accent-soft) 38%, transparent); }
+.music-island-open:hover { background: color-mix(in srgb, var(--accent-soft) 16%, transparent); }
 .music-island-open:focus-visible, .music-island-menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .music-island .music-title { margin: 0; flex: none; color: var(--text); }
 .music-island .music-title.visible { margin-inline: 2px; flex: 1 1 auto; font-weight: 650; }
@@ -157,3 +157,5 @@
   .music-island::before { display: none; }
   .music-island-menu summary { color: ButtonText; }
 }
+
+.music-link-actions { display: flex; flex-wrap: wrap; gap: 8px; }
