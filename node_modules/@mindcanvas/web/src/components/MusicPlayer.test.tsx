@@ -6,27 +6,61 @@ import { MusicIsland, MusicPage, MusicProvider } from './MusicPlayer';
 import { musicStore } from '../lib/musicStorage';
 import type { getYouTube } from '../lib/youtubeIframe';
 vi.mock('../lib/musicStorage', async importOriginal => ({ ...await importOriginal<object>(), musicStore: vi.fn() }));
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-it('plays only on request, survives leaving the music tab, and stops on account unmount', async () => {
+afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('keeps local audio playing across navigation and restores a checkpoint without autoplay', async () => {
   vi.mocked(musicStore).mockResolvedValue([{ id: 'one', owner: 'user', title: 'Study', blob: new Blob(['audio']) }]);
-  const audio = { volume: 0, preload: '', src: '', onplay: null as null | (() => void), onpause: null as null | (() => void), play: vi.fn(async () => { audio.onplay?.(); }), pause: vi.fn(() => { audio.onpause?.(); }), removeAttribute: vi.fn(), load: vi.fn() };
+  const audio = {
+    volume: 0, preload: '', src: '', currentTime: 0, duration: 180,
+    onplaying: null as null | (() => void), onwaiting: null as null | (() => void),
+    onloadedmetadata: null as null | (() => void), ontimeupdate: null as null | (() => void),
+    onpause: null as null | (() => void),
+    play: vi.fn(async () => { audio.onloadedmetadata?.(); audio.onplaying?.(); }),
+    pause: vi.fn(() => { audio.onpause?.(); }), removeAttribute: vi.fn(), load: vi.fn(),
+  };
   vi.stubGlobal('Audio', vi.fn(function () { return audio; }));
-  vi.stubGlobal('AudioContext', undefined);
   vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:test'), revokeObjectURL: vi.fn() });
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement('div'), root = createRoot(host);
-  await act(async () => root.render(<MusicProvider owner="user"><MusicPage/></MusicProvider>));
+  const music = () => <MusicProvider owner="user"><MusicIsland/><MusicPage/></MusicProvider>;
+  await act(async () => root.render(music()));
   expect(audio.play).not.toHaveBeenCalled();
   await act(async () => (host.querySelector('[aria-label="Phát Study"]') as HTMLButtonElement).click());
   expect(audio.play).toHaveBeenCalledOnce();
+  const wave = () => host.querySelector('.music-island .music-wave');
+  expect(wave()?.getAttribute('data-playing')).toBe('true');
+  await act(async () => audio.onwaiting?.());
+  expect(wave()?.getAttribute('data-playing')).toBe('false');
+  await act(async () => audio.onplaying?.());
   const pauses = audio.pause.mock.calls.length;
+  await act(async () => {
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    audio.currentTime = 42; audio.ontimeupdate?.();
+  });
+  expect(audio.pause).toHaveBeenCalledTimes(pauses);
+  expect(wave()?.getAttribute('data-playing')).toBe('true');
   await act(async () => root.render(<MusicProvider owner="user"><div>Canvas</div></MusicProvider>));
   expect(audio.pause).toHaveBeenCalledTimes(pauses);
-  await act(async () => root.render(<MusicProvider owner="user"><MusicPage/></MusicProvider>));
+  await act(async () => root.render(music()));
   expect(host.querySelector('[aria-label="Tạm dừng"]')).toBeTruthy();
+  audio.currentTime = 47;
+  window.dispatchEvent(new Event('pagehide'));
+  expect(audio.pause).toHaveBeenCalledTimes(pauses);
   await act(async () => root.unmount());
   expect(audio.pause).toHaveBeenCalledTimes(pauses + 1);
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test');
+
+  audio.currentTime = 0;
+  const reopened = createRoot(host);
+  try {
+    await act(async () => reopened.render(music()));
+    expect(audio.play).toHaveBeenCalledOnce();
+    expect(wave()?.getAttribute('data-playing')).toBe('false');
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Tiếp tục Study"]')!.click());
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(audio.currentTime).toBe(47);
+    expect(wave()?.getAttribute('data-playing')).toBe('true');
+  } finally { await act(async () => reopened.unmount()); }
 });
 
 it('adds a link from the same control as device files and leaves playback paused', async () => {
@@ -57,9 +91,11 @@ it('adds a link from the same control as device files and leaves playback paused
 it('keeps the YouTube timeline and playback when minimizing video or leaving the music page', async () => {
   type Events = ConstructorParameters<Awaited<ReturnType<typeof getYouTube>>['Player']>[1]['events'];
   let events!: Events;
+  let currentTime = 31;
   const player = {
     playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn(),
-    getDuration: vi.fn(() => 195), getCurrentTime: vi.fn(() => 31), seekTo: vi.fn(), setVolume: vi.fn(),
+    getDuration: vi.fn(() => 195), getCurrentTime: vi.fn(() => currentTime),
+    seekTo: vi.fn((seconds: number) => { currentTime = seconds; }), setVolume: vi.fn(),
     getPlaylist: vi.fn(), getPlaylistIndex: vi.fn(), playVideoAt: vi.fn(),
   };
   const create = vi.fn(function (_frame: HTMLIFrameElement, config: { events: Events }) { events = config.events; return player; });
@@ -67,7 +103,8 @@ it('keeps the YouTube timeline and playback when minimizing video or leaving the
     return this.classList.contains('music-youtube-slot') ? new DOMRect(24, 75, 348, 250) : new DOMRect();
   });
   vi.stubGlobal('YT', { Player: create });
-  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
   vi.mocked(musicStore).mockResolvedValue([{ id: 'yt', owner: 'user', title: 'Piano', source: 'youtube-music', url: 'https://music.youtube.com/watch?v=abcdefghijk&list=RDAMVMabcdefghijk' }]);
   const host = document.createElement('div'), root = createRoot(host);
   document.body.append(host);
@@ -111,12 +148,101 @@ it('keeps the YouTube timeline and playback when minimizing video or leaving the
     expect(host.querySelector('.music-island-details')).toBeNull();
     expect(host.querySelector('.music-island [data-playing="true"]')).toBeTruthy();
     expect(player.pauseVideo).toHaveBeenCalledTimes(pauses);
+    await act(async () => {
+      visibility.mockReturnValue('hidden'); hidden.mockReturnValue(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+      events.onStateChange({ data: 3 });
+    });
+    expect(host.querySelector('.music-island [data-playing="false"]')).toBeTruthy();
+    await act(async () => events.onStateChange({ data: 1 }));
+    expect(host.querySelector('.music-island [data-playing="true"]')).toBeTruthy();
+    expect(player.pauseVideo).toHaveBeenCalledTimes(pauses);
     expect(create).toHaveBeenCalledOnce();
     await act(async () => host.querySelector<HTMLButtonElement>('.music-island-open')!.click());
     await act(async () => host.querySelector<HTMLButtonElement>('.music-island-details [aria-label="Tạm dừng"]')!.click());
     expect(player.pauseVideo).toHaveBeenCalled();
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('.music-island-footer button')].find(button => button.textContent === 'Dừng YouTube')!.click());
+    const started = player.playVideo.mock.calls.length;
+    await act(async () => {
+      visibility.mockReturnValue('visible'); hidden.mockReturnValue(false);
+      document.dispatchEvent(new Event('visibilitychange'));
+      host.querySelector<HTMLElement>('.music-island-menu summary')!.click();
+    });
+    expect(player.playVideo).toHaveBeenCalledTimes(started);
+    expect(host.querySelector('.music-island [data-playing="false"]')).toBeTruthy();
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('.music-island-actions button')].find(button => button.textContent === 'Dừng YouTube')!.click());
     expect(player.destroy).toHaveBeenCalledOnce();
     expect(document.body.querySelector('.music-youtube-surface')).toBeNull();
   } finally { await act(async () => root.unmount()); host.remove(); measure.mockRestore(); }
+});
+
+it('starts the linked visualizer only after SoundCloud reports playback', async () => {
+  const events = new Map<string, (status: { currentPosition: number }) => void>();
+  const player = {
+    bind: (event: string, fn: (status: { currentPosition: number }) => void) => events.set(event, fn),
+    unbind: (event: string) => events.delete(event),
+    play: vi.fn(), pause: vi.fn(), seekTo: vi.fn(), setVolume: vi.fn(),
+    getDuration: (callback: (value: number) => void) => callback(180000),
+  };
+  const ids = ["READY", "PLAY", "PAUSE", "FINISH", "PLAY_PROGRESS", "SEEK", "ERROR"];
+  vi.stubGlobal('SC', { Widget: Object.assign(() => player, { Events: Object.fromEntries(ids.map(id => [id, id])) }) });
+  vi.mocked(musicStore).mockResolvedValue([{
+    id: 'sc', owner: 'user', title: 'Study link', source: 'soundcloud', url: 'https://soundcloud.com/artist/music',
+  }]);
+  const host = document.createElement('div'), root = createRoot(host);
+  const render = (page: boolean) => <MusicProvider owner="user"><MusicIsland/>{page && <MusicPage/>}</MusicProvider>;
+  const emit = (id: string, currentPosition = 0) => events.get(id)?.({ currentPosition });
+  const playing = () => host.querySelector('.music-island .music-wave')?.getAttribute('data-playing');
+  try {
+    await act(async () => root.render(render(true)));
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Phát Study link"]')!.click());
+    await act(async () => emit('READY'));
+    expect(player.play).toHaveBeenCalledOnce();
+    expect(playing()).toBe('false');
+    await act(async () => { emit('PLAY'); emit('PLAY_PROGRESS', 31000); });
+    expect(playing()).toBe('true');
+    expect(host.querySelector<HTMLInputElement>('.music-progress input')?.value).toBe('31');
+    const frame = document.body.querySelector('.music-link-surface iframe');
+    expect(frame).toBeTruthy();
+    await act(async () => root.render(render(false)));
+    expect(document.body.querySelector('.music-link-surface iframe')).toBe(frame);
+    expect(player.pause).not.toHaveBeenCalled();
+    await act(async () => emit('PAUSE'));
+    expect(playing()).toBe('false');
+  } finally { await act(async () => root.unmount()); }
+});
+
+it('uses the Spotify embed state for play, buffering, timeline, and pause', async () => {
+  const events = new Map<string, (event: { data: {
+    position: number; duration: number; isPaused: boolean; isBuffering: boolean;
+  } }) => void>();
+  const controller = {
+    addListener: (event: string, handler: NonNullable<ReturnType<typeof events.get>>) => events.set(event, handler),
+    play: vi.fn(), pause: vi.fn(), seek: vi.fn(), destroy: vi.fn(),
+  };
+  vi.mocked(musicStore).mockResolvedValue([{
+    id: 'sp', owner: 'user', title: 'Spotify link', source: 'spotify', url: 'https://open.spotify.com/track/example123',
+  }]);
+  const host = document.createElement('div'), root = createRoot(host);
+  const playing = () => host.querySelector('.music-island .music-wave')?.getAttribute('data-playing');
+  const emit = (isPaused: boolean, isBuffering: boolean) => events.get('playback_update')?.({
+    data: { position: 32000, duration: 180000, isPaused, isBuffering },
+  });
+  try {
+    await act(async () => root.render(<MusicProvider owner="user"><MusicIsland/><MusicPage/></MusicProvider>));
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Phát Spotify link"]')!.click());
+    const sdk = window as Window & { onSpotifyIframeApiReady?: (api: unknown) => void };
+    const create = vi.fn((_host, _options, done) => done(controller));
+    await act(async () => sdk.onSpotifyIframeApiReady!({ createController: create }));
+    expect(create).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ uri: 'spotify:track:example123' }), expect.any(Function));
+    await act(async () => events.get('ready')?.({ data: { position: 0, duration: 0, isPaused: true, isBuffering: false } }));
+    expect(controller.play).toHaveBeenCalledOnce();
+    await act(async () => emit(false, true));
+    expect(playing()).toBe('false');
+    await act(async () => emit(false, false));
+    expect(playing()).toBe('true');
+    expect(host.querySelector<HTMLInputElement>('.music-progress input')?.value).toBe('32');
+    await act(async () => emit(true, false));
+    expect(playing()).toBe('false');
+  } finally { await act(async () => root.unmount()); }
+  expect(controller.destroy).toHaveBeenCalledOnce();
 });

@@ -441,7 +441,7 @@ async function runChromium() {
         const touch = width < 480;
         await resize(width, height, touch);
         await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
-        const play = '.music-playlist button[aria-label="Phát Piano QA"]';
+        const play = '.music-playlist button:is([aria-label="Phát Piano QA"],[aria-label="Tiếp tục Piano QA"])';
         await open("/?learn=music&qa-music=1", play);
         await click(play, touch);
         await wait(`window.qaMusicPlayer.playing && !!${wave}`, "YouTube is playing on " + width);
@@ -460,10 +460,50 @@ async function runChromium() {
         assert(await evaluate(`${collapsed} && window.qaMusicFrame === ${frame} && window.qaMusicPlayer.playing && window.qaMusicPlayer.time === 72 && ${wave} && !${dom(".music-island-details")}`));
         await click(".music-island-open", touch);
         await wait(`${dom(".music-island.expanded")}?.getAnimations().every(animation => animation.playState !== 'running')`, "music controls finish opening");
+        assert(await evaluate(`(() => {
+          const island = ${dom(".music-island.expanded")};
+          const title = island.querySelector(".music-title");
+          const glass = getComputedStyle(island, "::before");
+          const rect = island.getBoundingClientRect();
+          return getComputedStyle(title).opacity === "1" && getComputedStyle(island).backgroundColor === "rgba(0, 0, 0, 0)" &&
+            glass.backdropFilter.includes("blur(") && rect.left >= 0 && rect.right <= innerWidth;
+        })()`));
+        await click(".music-island-menu summary", touch);
+        await wait(`!!${dom(".music-island-menu[open]")}`, "music options open");
+        await click(".music-island-menu summary", touch);
         await click('.music-island-details button[aria-label="Tạm dừng"]', touch);
-        await wait("!window.qaMusicPlayer.playing", "pause from Dynamic Island");
+        await wait(`!window.qaMusicPlayer.playing && !${wave}`, "pause from Dynamic Island");
       }
       console.log("YouTube test player keeps its time and playback with only Dynamic Island visible on Workspace at desktop and phone sizes.");
+
+      await resize(1160, 770, false);
+      await page("Emulation.setTouchEmulationEnabled", { enabled: false });
+      const local = '.music-playlist button[aria-label="Phát Âm thanh QA"]';
+      await open("/?learn=music&qa-music=local", local);
+      await click(local, false);
+      await wait(`!!${wave}`, "native audio is playing");
+      await click(".workspace-nav-row > button:first-child", false);
+      await wait(`${dom(".home-heading")}?.getClientRects().length`, "Workspace opens while local audio plays");
+      await click(".music-island-open", false);
+      const timeline = dom('.music-island-details input[aria-label="Vị trí phát"]');
+      await wait(`Number(${timeline}?.value) >= 1`, "native audio continues after navigation");
+      const previousTime = await evaluate(`Number(${timeline}.value)`);
+      await evaluate(`(() => {
+        Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+        Object.defineProperty(document, "hidden", { value: true, configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+      })()`);
+      await wait(`Number(${timeline}?.value) > ${previousTime} + .25`, "native audio advances after a simulated background event");
+      await evaluate(`(() => {
+        delete document.visibilityState;
+        delete document.hidden;
+        document.dispatchEvent(new Event("visibilitychange"));
+      })()`);
+      await open("/?learn=music&qa-music=local", '.music-playlist button[aria-label="Tiếp tục Âm thanh QA"]');
+      assert(await evaluate(`!${wave}`));
+      await click('.music-playlist button[aria-label="Tiếp tục Âm thanh QA"]', false);
+      await wait(`!!${wave} && Number(${dom(".music-player-card .music-progress input")}?.value) >= 1`, "native audio resumes from the checkpoint");
+      console.log("Native audio advances after leaving Music and resumes from its checkpoint after a reload.");
     }
 
     async function checkLearningNavigation() {

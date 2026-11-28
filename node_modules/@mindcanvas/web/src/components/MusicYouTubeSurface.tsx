@@ -6,7 +6,7 @@ import { getYouTube, type Player } from "../lib/youtubeIframe";
 type Props = {
   embedUrl: string; title: string; rect: DOMRect | null; start: number;
   onReady: (player: Player) => void; onUpdate: (player: Player, state?: number) => void;
-  onBlocked: () => void; onError: () => void; onMinimize: () => void; onTabHidden: () => void;
+  onBlocked: () => void; onError: () => void; onMinimize: () => void;
 };
 
 /** Keep the same player instance for audio when the inline video is collapsed. */
@@ -16,12 +16,6 @@ export default function MusicYouTubeSurface(props: Props) {
   latest.current = props;
   const { rect } = props;
   const [frameReady, setFrameReady] = useState(false);
-
-  useEffect(() => {
-    const visibility = () => { if (document.hidden) latest.current.onTabHidden(); };
-    document.addEventListener("visibilitychange", visibility);
-    return () => document.removeEventListener("visibilitychange", visibility);
-  }, []);
 
   useEffect(() => {
     const root = frameRoot.current;

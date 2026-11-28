@@ -48,7 +48,7 @@ export function parseMusicLink(raw: string): ParsedMusicLink | null {
   if (host === "soundcloud.com") {
     const path = parsed.pathname.split("/").filter(Boolean);
     if (path.length < 2 || path[0] === "discover") return null;
-    const embedUrl = `https://w.soundcloud.com/player/?url=${encodeURIComponent(original)}&color=%231d6fa5&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
+    const embedUrl = `https://w.soundcloud.com/player/?url=${encodeURIComponent(original)}&color=%231d6fa5&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
     return { source: "soundcloud", url: original, embedUrl, isPlaylist: path.includes("sets"), title: path[path.length - 1].replace(/[-_]+/g, " ") || "SoundCloud" };
   }
   return null;
@@ -82,4 +82,23 @@ export function nextMusicId(ids: string[], current: string | null, direction: nu
   if (shuffle && others.length) return others[Math.floor(random() * others.length)];
   const index = current === null ? (direction >= 0 ? -1 : 0) : Math.max(0, ids.indexOf(current));
   return ids[(index + direction + ids.length) % ids.length];
+}
+
+export type MusicPosition = { id: string; time: number; duration: number };
+const positionKey = (owner: string) => `mindcanvas-music-position:${owner}`;
+
+export function readMusicPosition(owner: string): MusicPosition | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(positionKey(owner)) ?? "null") as MusicPosition | null;
+    if (!value || typeof value.id !== "string" || !Number.isFinite(value.time) ||
+      !Number.isFinite(value.duration) || value.time < 0 || value.duration < 0) return null;
+    return value;
+  } catch { return null; }
+}
+
+export function saveMusicPosition(owner: string, position: MusicPosition | null) {
+  try {
+    if (position) localStorage.setItem(positionKey(owner), JSON.stringify(position));
+    else localStorage.removeItem(positionKey(owner));
+  } catch { /* Playback still works if browser storage is unavailable. */ }
 }

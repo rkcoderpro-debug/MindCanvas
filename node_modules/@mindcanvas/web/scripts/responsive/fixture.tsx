@@ -162,7 +162,19 @@ async function seedDocuments() {
 
 async function main() {
   const root = createRoot(document.getElementById("root")!);
-  if (new URLSearchParams(location.search).has("qa-music")) {
+  const qaMusic = new URLSearchParams(location.search).get("qa-music");
+  if (qaMusic === "local") {
+    const sampleRate = 8000, sampleCount = 8 * sampleRate;
+    const audio = new ArrayBuffer(44 + sampleCount * 2), data = new DataView(audio);
+    const ascii = (offset: number, value: string) => [...value].forEach((ch, index) => data.setUint8(offset + index, ch.charCodeAt(0)));
+    ascii(0, "RIFF"); data.setUint32(4, audio.byteLength - 8, true); ascii(8, "WAVEfmt ");
+    data.setUint32(16, 16, true); data.setUint16(20, 1, true); data.setUint16(22, 1, true);
+    data.setUint32(24, sampleRate, true); data.setUint32(28, sampleRate * 2, true);
+    data.setUint16(32, 2, true); data.setUint16(34, 16, true); ascii(36, "data");
+    data.setUint32(40, audio.byteLength - 44, true);
+    for (let i = 0; i < sampleCount; i++) data.setInt16(44 + i * 2, Math.sin(i / sampleRate * 2 * Math.PI * 220) * 300, true);
+    await musicStore("guest", "put", { id: "qa-local", owner: "guest", title: "Âm thanh QA", source: "local", blob: new Blob([audio], { type: "audio/wav" }) });
+  } else if (qaMusic) {
     await musicStore("guest", "put", { id: "qa-youtube", owner: "guest", title: "Piano QA", source: "youtube", url: "https://www.youtube.com/watch?v=abcdefghijk" });
     const player = {
       time: 0, playing: false, destroy() { this.playing = false; }, setVolume() {},

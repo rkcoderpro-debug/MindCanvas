@@ -3694,13 +3694,8 @@ body:has(.music-island) .canvas-fullscreen-mode .editor-layout { top: 0; }
 .music-title.visible { width: auto; max-width: 190px; opacity: 1; margin-left: 4px; }
 .music-island.expanded .music-title.visible { max-width: 235px; }
 .music-island small { color: #b8c3d0; }
-.music-island-track { display: grid; gap: 3px; min-width: 0; }
-.music-island-track strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.music-island-track span { color: #aab6c5; font-size: 10px; }
 .music-source-link, .music-track-link { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 11px; text-decoration: none; }
 .music-source-link:hover, .music-track-link:hover { text-decoration: underline; }
-.music-online-runtime { position: fixed; left: -10000px; top: 0; width: 240px; height: 200px; overflow: hidden; opacity: .001; pointer-events: none; }
-.music-online-runtime iframe { display: block; width: 240px; height: 200px; border: 0; }
 .music-page { max-width: 1040px; gap: 18px; }
 .music-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .music-library-count { padding: 7px 11px; border: 1px solid var(--accent-border); border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-size: 11px; font-weight: 750; white-space: nowrap; }

@@ -1,0 +1,77 @@
+{
+  "version": "6.8.18",
+  "baseVersion": "6.8.17",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.18.md",
+      "bytes": 927,
+      "sha256": "2b8ad4da2c3eb1c9d391a409337dccca553b4b1d7bece64fd67c88b9ca34f90d"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "67f6fbfb32c32ec3feabc183a5c8a4c8c05b42fc6c2909e80d026d352f9f64e4"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "80f8b66276086afe9cd0799c4f860732fb59d469ceaaef78bae47b9b7886fca7"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 68286,
+      "sha256": "327152b86dabfd6c5e502a2722b9518957545fd56838600b637377cebb6ea517"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 14977,
+      "sha256": "82fcf02d3b8d25647cae4b2e6f41a800a1ccfc64489fc921f72ad434372f9903"
+    },
+    {
+      "path": "apps/web/src/components/MusicLinkPlayback.tsx",
+      "bytes": 6978,
+      "sha256": "88dd24ddbdc0847a6fb16ebfdee073979efaaaca37c3a83e41c8fbdc002caf5c"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.test.tsx",
+      "bytes": 15932,
+      "sha256": "ca3c36bb04766661b197627d3943da7d333ed6aa500aa409b9ac13b89f7aa260"
+    },
+    {
+      "path": "apps/web/src/components/MusicPlayer.tsx",
+      "bytes": 36412,
+      "sha256": "edd3ea2655401c7135ebb00f6d45be47b07a83f8d9c1f7bfb6e8d7af1136a1d5"
+    },
+    {
+      "path": "apps/web/src/components/MusicYouTubeSurface.tsx",
+      "bytes": 3525,
+      "sha256": "fa34a761e5bc4fa3ad5a953d03e98d434aeeeb353ec629213ef2b423a3096cc4"
+    },
+    {
+      "path": "apps/web/src/lib/musicStorage.ts",
+      "bytes": 6216,
+      "sha256": "4366858131ee66bcf19be92423896c33b1bb2c13f115075bdeed034fa379260d"
+    },
+    {
+      "path": "apps/web/src/musicPolish.css",
+      "bytes": 9095,
+      "sha256": "919039fdb7d797a04d3b01421f9662928cdd6f62bb166312ff25874f31793215"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 521677,
+      "sha256": "170208acf497e4a683f4c859f18c94b3488274e7df05d516ac56574049366747"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "f9bee11222abf52581cefc265ad3483ee19b1919b9f2ca51f89bc3462e99ff7f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "ef3760916b6ee2f6f5b9a5bd67d837411b8f48f5b441038b81c334559bcf6f5c"
+    }
+  ]
+}
