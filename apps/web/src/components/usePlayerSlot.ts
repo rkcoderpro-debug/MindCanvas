@@ -1,7 +1,9 @@
 import { useLayoutEffect, useState } from "react";
 
-export function usePlayerSlot(slot: HTMLElement | null, minHeight = 200) {
-  const [position, setPosition] = useState<{ slot: HTMLElement; rect: DOMRect } | null>(null);
+type PlayerSlotRect = DOMRect & { clip?: string };
+
+export function usePlayerSlot(slot: HTMLElement | null, minHeight = 200, allowClipping = false) {
+  const [position, setPosition] = useState<{ slot: HTMLElement; rect: PlayerSlotRect } | null>(null);
   useLayoutEffect(() => {
     if (!slot) { setPosition(null); return; }
     let tick = 0;
@@ -17,12 +19,15 @@ export function usePlayerSlot(slot: HTMLElement | null, minHeight = 200) {
         if (/(auto|scroll|hidden|clip)/.test(overflowX)) { left = Math.max(left, clip.left); right = Math.min(right, clip.right); }
         if (/(auto|scroll|hidden|clip)/.test(overflowY)) { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom); }
       }
-      const valid = bounds.width >= 200 && bounds.height >= minHeight &&
-        right - left >= bounds.width - 1 && bottom - top >= bounds.height - 1 &&
+      const full = right - left >= bounds.width - 1 && bottom - top >= bounds.height - 1;
+      const valid = bounds.width >= 199.5 && bounds.height >= minHeight - .5 &&
+        (full || (allowClipping && right - left >= 100 && bottom - top >= 72)) &&
         (!document.fullscreenElement || document.fullscreenElement.contains(slot));
-      setPosition(old => !valid ? null
-        : old?.slot === slot && old.rect.x === bounds.x && old.rect.y === bounds.y && old.rect.width === bounds.width && old.rect.height === bounds.height ? old
-        : { slot, rect: bounds });
+      if (!valid) { setPosition(null); return; }
+      const clip = full ? undefined : `inset(${top - bounds.top}px ${bounds.right - right}px ${bounds.bottom - bottom}px ${left - bounds.left}px round 9px)`;
+      setPosition(old => old?.slot === slot && old.rect.x === bounds.x && old.rect.y === bounds.y &&
+        old.rect.width === bounds.width && old.rect.height === bounds.height && old.rect.clip === clip ? old
+        : { slot, rect: Object.assign(bounds, { clip }) });
     };
     const queue = () => { cancelAnimationFrame(tick); tick = requestAnimationFrame(measure); };
     const size = typeof ResizeObserver === "function" ? new ResizeObserver(queue) : null;

@@ -325,6 +325,7 @@ function WorkspacePages() {
 }
 const workspacePages = () => <LanguageProvider><LearningNavigationProvider owner={owner}><WorkspacePages/></LearningNavigationProvider></LanguageProvider>;
 const island = () => document.querySelector<HTMLElement>(".room-island")!;
+const expandIsland = () => act(async () => island().querySelector<HTMLButtonElement>(".music-island-open")!.click());
 const islandButton = (name: string) => [...island().querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent === name)!;
 it("retains the joined room and its player while opening Quiz and only releases the seat on Leave", async () => {
   await act(async () => root.render(workspacePages()));
@@ -334,14 +335,17 @@ it("retains the joined room and its player while opening Quiz and only releases 
   const client = mock.join.mock.calls[0][1];
   await act(async () => button("Mở Quiz").click());
   expect(host.querySelector('[aria-label="Đáp án Quiz"]')).toBeTruthy();
-  expect(island().querySelector(".room-youtube-slot")).toBeTruthy();
+  expect(island().querySelector(".room-youtube-slot")).toBeNull();
   expect(host.querySelector("[data-test-player]")).toBe(player);
   expect(mock.leave).not.toHaveBeenCalled();
+  await expandIsland();
+  expect(island().querySelector(".room-youtube-slot")).toBeTruthy();
   await act(async () => islandButton("Quay lại phòng").click());
   expect(host.querySelector(".online-room-session")?.hasAttribute("hidden")).toBe(false);
   expect(host.querySelector("[data-test-player]")).toBe(player);
   expect(mock.join).toHaveBeenCalledTimes(1);
   await act(async () => button("Mở Quiz").click());
+  await expandIsland();
   await act(async () => islandButton("Rời phòng").click());
   expect(mock.leave).toHaveBeenCalledWith(room.id, client, true);
   expect(island()).toBeNull();

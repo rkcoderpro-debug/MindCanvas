@@ -1,0 +1,72 @@
+{
+  "version": "6.8.21",
+  "baseVersion": "6.8.20",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.21.md",
+      "bytes": 891,
+      "sha256": "08887837694f93e119bb9881361c0225ab084f3134bb87ab0e31bb4cb70a85e9"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "4e47adcb46c705172d502f68fc351ebbd4cfb1d0a315345d6cc19580e54ba30d"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "0a28f5597b5de8b03cfa89c0d59aadad53648decc1e7332c2a9529fc88436083"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 73306,
+      "sha256": "5048f7b590240d49fc9b1d87e9e69021d0faec6b87686ea93043c5132679a580"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 16467,
+      "sha256": "7f13a8cd8ab49a2506a66e688d23fa93e97bbd0c58e1fb3bd6e1ce82b913ba4c"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 54286,
+      "sha256": "592490296b33a56a1b4b11f27ba60560a903541b2fd4b8f554619c552a22fb7a"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.test.tsx",
+      "bytes": 7258,
+      "sha256": "7b25a7ffbac46eac1a973316335a4c7a6553e3c358518ef9e57157734a613f4d"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.tsx",
+      "bytes": 11165,
+      "sha256": "3dd199c5ace33a1a6009375bd61044bbd7a2461f49a528bf42b730dcdf14022f"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.test.tsx",
+      "bytes": 29969,
+      "sha256": "c0c62f53a045046f156c9e54f539afdcaf72a678be2a5fc578c09f0cc5bfee30"
+    },
+    {
+      "path": "apps/web/src/components/activityIsland.css",
+      "bytes": 5560,
+      "sha256": "aa04ecd1eb49d4aecac423fb36c73d3763358034b55cb6f3603d1ad49fbb05d0"
+    },
+    {
+      "path": "apps/web/src/components/usePlayerSlot.ts",
+      "bytes": 3100,
+      "sha256": "1434c50128a2471519dac0478c562b31d1d8d63aac20115222935991f8bd0fcf"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "4f9969e77eda2c40cd7aafe5ace19bf420dc19c3419b4775b0432060e632bff2"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "a54d7072135cca37fb36a10f77f8a008d66aeca08b606aad08c60b27a64e86a3"
+    }
+  ]
+}

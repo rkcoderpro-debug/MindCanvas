@@ -477,9 +477,35 @@ async function runChromium() {
         assert(await evaluate(`${volume}.value === "0" && ${dom(mute)}.getAttribute("aria-pressed") === "true"`));
         await click(mute, touch);
         assert(await evaluate(`${volume}.value === "0.65"`));
+        const frame = dom(".room-youtube-frame iframe");
+        const ambient = ".online-room-player-local > button:last-child";
+        await wait("window.qaRoomPlayer?.playing", "room player starts");
+        await evaluate(`window.qaRoomFrame = ${frame}; void 0`);
+        await click(ambient, touch);
+        await wait(`${dom(ambient)}.getAttribute("aria-pressed") === "true"`, "ambient enabled");
+        await evaluate(`${dom(".room-youtube-slot.in-room")}.scrollIntoView({ block: "center" }); void 0`);
+        await wait(`!!${dom(".room-ambient-light")}`, "ambient renders around the video");
+        await click(ambient, touch);
+        assert(await evaluate(`!${dom(".room-ambient-light")}`));
+
+        if (width === 1366 || width === 390) {
+          await evaluate(`(() => {
+            const main = document.querySelector(".main-area");
+            const slot = document.querySelector(".room-youtube-slot.in-room").getBoundingClientRect();
+            main.scrollTop += slot.top - main.getBoundingClientRect().top + 28;
+          })()`);
+          await wait(`!!${dom('.room-youtube-float[data-clip="true"]')}`, "partly clipped room video");
+          assert(await evaluate(`window.qaRoomPlayer.playing && !window.qaRoomPlayer.pauses && window.qaRoomFrame === ${frame}`));
+          await evaluate(`${dom(".main-area")}.scrollTop = 0; void 0`);
+          await click(".shell-back", touch);
+          await wait(`${dom(".room-island .music-island-open")}?.getAttribute("aria-expanded") === "false" && !!${dom(".room-youtube-float.is-docked")}`, "room minimizes to a collapsed island and video dock");
+          await click(".room-island .music-island-open", touch);
+          await click(".room-island .music-island-open", touch);
+          assert(await evaluate(`window.qaRoomPlayer.playing && !window.qaRoomPlayer.pauses && window.qaRoomFrame === ${frame}`));
+        }
         assert(await evaluate(`!document.querySelector('.online-room-stop-listening')`));
       }
-      console.log("Music room top gap, action wrapping and local mute passed on five desktop, tablet and phone viewports.");
+      console.log("Music room layout, mute and ambient light passed on five viewports. Partial scrolling and collapsed Island keep the same playing iframe.");
     }
 
     async function checkMusicIsland() {

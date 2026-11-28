@@ -162,15 +162,32 @@ async function seedDocuments() {
   localStorage.setItem("mindcanvas:responsive-documents", "1");
 }
 
+function MusicRoomFixture() {
+  const [foreground, setForeground] = useState(true);
+  return <main className="app-shell"><div className="main-area">
+    <header className="topbar"><ShellBack/></header>
+    <div className="workspace-route-content" style={{ minHeight: 180 }}/>
+    <OnlineMusicRoom link={{ id: "60000000-0000-4000-8000-000000000001" }} owner="host" vi foreground={foreground}
+      onBack={() => {}} onMinimize={() => setForeground(false)} onRestore={() => setForeground(true)}/>
+  </div></main>;
+}
+
 async function main() {
   const root = createRoot(document.getElementById("root")!);
   if (location.pathname === "/qa/music-room") {
-    root.render(<LanguageProvider><PageChromeProvider openQuickActions={() => {}}><main className="app-shell"><div className="main-area">
-      <header className="topbar"><ShellBack/></header>
-      <div className="workspace-route-content" style={{ minHeight: 180 }}/>
-      <OnlineMusicRoom link={{ id: "60000000-0000-4000-8000-000000000001" }} owner="host" vi
-        onBack={() => {}} onMinimize={() => {}} onRestore={() => {}}/>
-    </div></main></PageChromeProvider></LanguageProvider>);
+    const player = {
+      playing: false, starts: 0, pauses: 0,
+      getDuration: () => 195, getCurrentTime: () => 0, setVolume() {}, seekTo() {}, destroy() {},
+      playVideo() { this.playing = true; this.starts++; },
+      pauseVideo() { this.playing = false; this.pauses++; },
+    };
+    Object.assign(window, { qaRoomPlayer: player, YT: { Player: function (_iframe: HTMLIFrameElement, config: {
+      events: { onReady: (event: { target: typeof player }) => void };
+    }) {
+      queueMicrotask(() => config.events.onReady({ target: player }));
+      return player;
+    } } });
+    root.render(<LanguageProvider><PageChromeProvider openQuickActions={() => {}}><MusicRoomFixture/></PageChromeProvider></LanguageProvider>);
     return;
   }
   const qaMusic = new URLSearchParams(location.search).get("qa-music");
