@@ -428,3 +428,23 @@
 }
 .online-room-session .online-room-player-local { flex-wrap: wrap; margin-block: 4px 0; }
 body:has(.online-room-session:not([hidden]) [data-room-kind="music"]) .music-island:not(.room-island) { display: none; }
+
+.main-area:has(> .online-room-session:not([hidden]) [data-room-ambient="true"]) {
+  color-scheme: dark;
+  --text: #edf5f8;
+  --muted: #adbdc6;
+  --app-bg: #0b1218;
+  --surface: #101b24;
+  --surface-raised: #172530;
+  --soft: #182832;
+  --hover: #223642;
+  --line: #2b4652;
+  --accent: #83cbdb;
+  --accent-hover: #aae0eb;
+  --accent-soft: #203b46;
+  --accent-border: #427684;
+  --accent-contrast: #071b21;
+  --app-glow-1: #31778b28;
+  --app-glow-2: #27495030;
+  color: var(--text);
+}

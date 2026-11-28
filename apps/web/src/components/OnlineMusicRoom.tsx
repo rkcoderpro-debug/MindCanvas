@@ -249,7 +249,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const closeRoom = () => setConfirm({ action: { name: "close" }, title: label("Kết thúc phòng?", "End the room?"),
     text: isMeeting ? label("Cuộc gọi và chat sẽ dừng cho mọi người. Liên kết mời sẽ hết hiệu lực.", "The call and chat will end for everyone. The invitation link will expire.") : label("Nhạc và chat sẽ dừng cho mọi người. Liên kết mời của phòng này sẽ hết hiệu lực.", "Music and chat will stop for everyone. This room's invitation link will stop working.") });
 
-  return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide} data-room-kind={room.kind}>
+  return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide} data-room-kind={room.kind} data-room-ambient={ambient && !isMeeting && !!current || undefined}>
     {!isMeeting && !foreground && <RoomIsland name={displayedTitle || room.name} vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
       onRestore={restore} onLeave={exit} live={!reconnecting}
       status={reconnecting ? label("Đang kết nối lại…", "Reconnecting…") : roomVideoVisible && current && playback.playing

@@ -1,0 +1,57 @@
+{
+  "version": "6.8.23",
+  "baseVersion": "6.8.22",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.23.md",
+      "bytes": 594,
+      "sha256": "368e142877d9a5372e9555433c95a94af25ff44390ecc53781d1265e28ce3188"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "e4d359cd917a96294a117d8f13ae6f569dace3d93aa5db9a35a78b3a9b70bfdd"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "3cfcdce1b255e48dab4e79ef77626e13201f1f34991c836602ed194b19b63d71"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 78237,
+      "sha256": "782c70dce7f022a906d3aa827eda70131201f9fb2732ae3b1c5718c0b63f8dbb"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 52787,
+      "sha256": "a10fa88a7c9a01876e9045a04408e97cf3b898f49f03e613a0c0b11da050342a"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.tsx",
+      "bytes": 11125,
+      "sha256": "6b20fca82b736fad10ac43c3d355e7514df133cea6fa26cb0f4cd00c759fefbc"
+    },
+    {
+      "path": "apps/web/src/components/activityIsland.css",
+      "bytes": 6292,
+      "sha256": "81486002f18c0f1201d7685d99cd6d358e90469ab9aefcee9433c3b29c4c8f85"
+    },
+    {
+      "path": "apps/web/src/components/onlineRooms.css",
+      "bytes": 31391,
+      "sha256": "b0be2785339a6d47f50575a5b7a4d04b2019c0f1862bc0b35df8c3b1647f5c60"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "5f4379a327a34d9bd2f69adacb34687b7973abf62670f8a0d1ca1bfb55eef798"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "b580df583091f8b8e0dcc1ebb2bc24b886abf3b48ece1891e720f1f0509f6a10"
+    }
+  ]
+}

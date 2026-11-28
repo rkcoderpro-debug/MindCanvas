@@ -91,6 +91,16 @@ for (const output of compiled.outputFiles) {
 }
 const html = '<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="/app.css"><div id="root"></div><script src="/app.js"></script></html>';
 function fixtureResponse(url) {
+  if (url.origin === "https://www.youtube.com" && url.pathname === "/embed/abc12345678") {
+    return { status: 200, mime: "text/html", body: `<!doctype html><style>
+      body { margin: 0; height: 100vh; background: linear-gradient(90deg, #f85437 50%, #2674f6 50%); }
+      body[data-scene="blue"] { background: linear-gradient(90deg, #2674f6 50%, #f85437 50%); }
+    </style><script>
+      addEventListener("message", ({ data }) => {
+        if (data === "blue") document.body.dataset.scene = data;
+      });
+    </script>` };
+  }
   if (url.origin !== origin) return { status: 404, mime: "text/plain", body: "" };
   const data = { state: "ok", role: "viewer", kind: "file", title: "tệp-".repeat(40) + ".json",
     id: "33333333-3333-4333-8333-333333333333", data: { size: 480, revision: "qa" } };
@@ -478,17 +488,66 @@ async function runChromium() {
         await click(mute, touch);
         assert(await evaluate(`${volume}.value === "0.65"`));
         const frame = dom(".room-youtube-frame iframe");
+        const mainColor = `getComputedStyle(${dom(".main-area")}).colorScheme`;
+        const initialColor = await evaluate(mainColor);
+        const initialTheme = await evaluate("document.documentElement.dataset.theme ?? null");
         const slot = dom(".room-youtube-slot.in-room");
         const ambient = ".online-room-player-local > button:last-child";
         await evaluate(`${slot}.scrollIntoView({ block: "center" }); void 0`);
         await wait("window.qaRoomPlayer?.playing", "room player starts");
         await evaluate(`window.qaRoomFrame = ${frame}; void 0`);
         await click(ambient, touch);
-        await wait(`${dom(ambient)}.getAttribute("aria-pressed") === "true"`, "ambient enabled");
+        await wait(`${dom(ambient)}.getAttribute("aria-pressed") === "true" && ${mainColor} === "dark"`, "ambient enabled with a dark room");
+        assert.equal(await evaluate("document.documentElement.dataset.theme ?? null"), initialTheme);
         await evaluate(`${slot}.scrollIntoView({ block: "center" }); void 0`);
-        await wait(`!!${dom(".room-ambient-light")}`, "ambient renders around the video");
+        await wait(`!!${dom(".room-ambient-edges i:nth-child(4)")}`, "all four ambient edges render");
+        if (width === 1366) {
+          const readEdge = async () => {
+            const { data } = await page("Page.captureScreenshot", { format: "png" });
+            return evaluate(`(async () => {
+              const box = ${frame}.getBoundingClientRect();
+              const image = new Image();
+              image.src = "data:image/png;base64," + ${JSON.stringify(data)};
+              await image.decode();
+              const canvas = document.createElement("canvas");
+              canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+              const context = canvas.getContext("2d", { willReadFrequently: true });
+              context.drawImage(image, 0, 0);
+              const sample = (x, y) => Array.from(context.getImageData(Math.round(x), Math.round(y), 1, 1).data).slice(0, 3);
+              return {
+                video: sample(box.left + 8, box.top + box.height / 2),
+                left: sample(box.left - 8, box.top + box.height / 2),
+                right: sample(box.right + 8, box.top + box.height / 2),
+                top: sample(box.left + box.width / 4, box.top - 8),
+                bottom: sample(box.right - box.width / 4, box.bottom + 8),
+              };
+            })()`);
+          };
+          let warm;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            warm = await readEdge();
+            if (warm.video[0] > warm.video[2] + 60) break;
+          }
+          assert(warm.video[0] > warm.video[2] + 60, JSON.stringify(warm));
+          await evaluate(`${frame}.contentWindow.postMessage("blue", "https://www.youtube.com"); void 0`);
+          let cool;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            cool = await readEdge();
+            if (cool.video[2] > cool.video[0] + 60) break;
+          }
+          assert(cool.video[2] > cool.video[0] + 60, JSON.stringify(cool));
+          for (const edge of ["left", "top"]) {
+            assert(warm[edge][0] - cool[edge][0] > 12 && cool[edge][2] - warm[edge][2] > 12,
+              JSON.stringify({ edge, warm, cool }));
+          }
+          for (const edge of ["right", "bottom"]) {
+            assert(cool[edge][0] - warm[edge][0] > 12 && warm[edge][2] - cool[edge][2] > 12,
+              JSON.stringify({ edge, warm, cool }));
+          }
+        }
         await click(ambient, touch);
-        assert(await evaluate(`!${dom(".room-ambient-light")}`));
+        assert(await evaluate(`!${dom(".room-ambient-edges")}`));
+        assert.equal(await evaluate(mainColor), initialColor);
         assert(await evaluate(`!document.querySelector('.room-youtube-float.is-docked')`));
 
         if (width === 1366 || width === 390) {
@@ -523,7 +582,7 @@ async function runChromium() {
         }
         assert(await evaluate(`!document.querySelector('.online-room-stop-listening')`));
       }
-      console.log("Music room passed on five viewports. Video stays in the room or expanded Island. Collapse, full clipping and browser-tab hiding pause the same iframe.");
+      console.log("Music room passed on five viewports. All four ambient edges follow a changing iframe scene. Video stays in the room or expanded Island. Collapse, full clipping and browser-tab hiding pause the same iframe.");
     }
 
     async function checkMusicIsland() {

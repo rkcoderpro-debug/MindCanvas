@@ -164,17 +164,22 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitl
   useEffect(() => { player.current?.setVolume(Math.round(volume * 100)); }, [volume]);
 
   const ambientVideo = video ?? (currentVideo?.revision === playback.revision ? currentVideo.id : undefined);
+  const showAmbient = ambient && !compact && videoInView && !error;
   return <>
-    {ambient && slot && !compact && videoInView && createPortal(
+    {showAmbient && slot && createPortal(
       <div className="room-ambient-light" aria-hidden="true">
         {ambientVideo && /^[A-Za-z0-9_-]{11}$/.test(ambientVideo) &&
-          <img key={ambientVideo} src={`https://i.ytimg.com/vi/${ambientVideo}/mqdefault.jpg`} alt="" decoding="async" onError={event => { event.currentTarget.hidden = true; }}/>}
+          <img key={ambientVideo} src={`https://i.ytimg.com/vi/${ambientVideo}/mqdefault.jpg`} alt="" loading="lazy" decoding="async" onError={event => { event.currentTarget.hidden = true; }}/>}
       </div>, slot)}
     {createPortal(<div className={`room-youtube-float${compact ? " on-island" : ""}`}
       data-study-island-media={compact || undefined} data-clip={Boolean(rect?.clip) || undefined}
+      data-ambient={showAmbient || undefined}
       hidden={!videoInView} inert={!videoInView}
       style={rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height, clipPath: rect.clip } : undefined}>
       <div ref={wrapper} className="room-youtube-frame"/>
+      {showAmbient && <div className="room-ambient-edges" aria-hidden="true">
+        <i/><i/><i/><i/>
+      </div>}
     </div>, document.body)}
     {controlSlot && ((videoInView && blocked) || error) && createPortal(<div className="room-youtube-controls">
       {error ? <>
