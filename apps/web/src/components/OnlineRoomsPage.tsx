@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, BookOpen, DoorOpen, GraduationCap, Headphones, Lock, Plus, Radio, Search, Trash2, Users, Video } from "lucide-react";
 import Dialog from "./Dialog";
+import RoomMusicFields from "./RoomMusicFields";
 import { OnlineRoomSessionHost, OnlineRoomSessionProvider, ROOM_ROUTE_CHANGED, useRoomSession } from "./OnlineRoomSession";
 import { useLanguage } from "../lib/i18n";
 import { useLearningActive } from "../lib/learningNavigation";
 import { normalizeQuickSearch } from "../lib/learningCommands";
-import { createOnlineRoom, deleteOnlineRoom, listOnlineRooms, lookupOnlineRoomCode, roomIssue, type OnlineRoom, type RoomCreate } from "../lib/onlineRooms";
+import { createOnlineRoom, prepareRoomMusicTrack, deleteOnlineRoom, listOnlineRooms, lookupOnlineRoomCode, roomIssue, type OnlineRoom, type RoomCreate } from "../lib/onlineRooms";
 import { captureOnlineRoomInvite, onlineRoomUrl, readOnlineRoomLink, roomCodePattern, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import "./onlineRooms.css";
 
@@ -46,8 +47,13 @@ function RoomLobby({ owner, onSignIn }: Props) {
   const [removing, setRemoving] = useState(false);
   const removeBusy = useRef(false);
   const [draft, setDraft] = useState<RoomCreate | null>(null);
+  const [openingLink, setOpeningLink] = useState("");
+  const [openingTitle, setOpeningTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
+  useEffect(() => {
+    if (!draft) { setOpeningLink(""); setOpeningTitle(""); }
+  }, [Boolean(draft)]);
   const createBusy = useRef(false);
   const visible = useRef(active);
   visible.current = active;
@@ -100,7 +106,13 @@ function RoomLobby({ owner, onSignIn }: Props) {
     if (!draft?.name.trim() || createBusy.current) return;
     createBusy.current = true; setCreating(true); setFormError("");
     try {
-      const id = await createOnlineRoom(draft);
+      const needsTrack = draft.kind === "music" && Boolean(openingLink.trim());
+      const openingTrack = needsTrack ? await prepareRoomMusicTrack(openingLink, openingTitle) : null;
+      if (needsTrack && !openingTrack) {
+        setFormError(label("Dán link bài hát hoặc playlist YouTube hợp lệ.", "Paste a valid YouTube song or playlist link."));
+        return;
+      }
+      const id = await createOnlineRoom(openingTrack ? { ...draft, openingTrack } : draft);
       if (visible.current) { setDraft(null); enter(id); }
     } catch (err) { setFormError(roomIssue(err, vi)); }
     finally { createBusy.current = false; setCreating(false); }
@@ -192,6 +204,8 @@ function RoomLobby({ owner, onSignIn }: Props) {
         }}><option value="music">{label("Phòng nghe nhạc", "Music room")}</option><option value="meeting">{label("Phòng học / họp", "Study / Meeting room")}</option></select></label>
         <label>{label("Tên phòng", "Room name")}<input autoFocus required maxLength={64} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder={label("Ví dụ: Tập trung 45 phút", "For example: 45 minutes of focus")}/></label>
         <label>{label("Chủ đề", "Topic")}<input maxLength={160} value={draft.topic} onChange={event => setDraft({ ...draft, topic: event.target.value })} placeholder={label("Không bắt buộc", "Optional")}/></label>
+        {draft.kind === "music" && <RoomMusicFields vi={vi} opening link={openingLink} title={openingTitle}
+          onLink={setOpeningLink} onTitle={setOpeningTitle}/>}
         <label>{label("Kiểu hiển thị mặc định", "Default layout")}<select value={draft.layout} onChange={event => setDraft({ ...draft, layout: event.target.value as RoomCreate["layout"] })}>{draft.kind === "meeting" ? <option value="table">{label("Bàn họp nhìn từ trên", "Overhead meeting table")}</option> : <option value="classroom">{label("Lớp học Việt Nam", "Vietnamese classroom")}</option>}<option value="compact">{label("Gọn", "Compact")}</option></select></label>
         <label>{label("Ai có thể vào?", "Who can join?")}<select value={draft.visibility} onChange={event => setDraft({ ...draft, visibility: event.target.value as RoomCreate["visibility"], password: "" })}><option value="private">{label("Phòng riêng", "Private room")}</option>{canCreatePublic && <option value="public">{label("Công khai", "Public")}</option>}</select></label>
         {draft.visibility === "private" && <>

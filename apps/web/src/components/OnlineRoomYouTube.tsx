@@ -1,104 +1,168 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ExternalLink, RefreshCw, Volume2 } from "lucide-react";
 import { usePlayerSlot } from "./usePlayerSlot";
-import { ExternalLink, RefreshCw } from "lucide-react";
-import { onlinePlaybackTime, type RoomPlayback } from "../lib/onlineRooms";
-
+import { onlinePlaybackTime, youtubeRoomVideo, type RoomPlayback } from "../lib/onlineRooms";
 import { getYouTube, type Player } from "../lib/youtubeIframe";
+import { getYouTubeMusicTitle } from "../lib/youtubeMusicTitle";
 
-export default function OnlineRoomYouTube({ playback, serverNow, onEnded, vi, slot, compact, volume, controlSlot }: {
-  playback: RoomPlayback & { video_id: string }; serverNow: () => number; onEnded: (revision: number) => void; vi: boolean; slot: HTMLDivElement | null; compact: boolean; volume: number; controlSlot: HTMLElement | null;
+export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitle, vi, slot, compact, volume, controlSlot }: {
+  playback: RoomPlayback; serverNow: () => number; onEnded: (revision: number, index: number, hasNext: boolean) => void | Promise<void>;
+  onTitle?: (revision: number, title: string) => void; vi: boolean; slot: HTMLDivElement | null;
+  compact: boolean; volume: number; controlSlot: HTMLElement | null;
 }) {
   const wrapper = useRef<HTMLDivElement>(null), player = useRef<Player | null>(null);
   const rect = usePlayerSlot(slot);
-  const canPlay = useRef(false), synced = useRef(false);
-  const playable = useRef(true);
-  const latest = useRef({ playback, serverNow, onEnded, volume, rect });
-  latest.current = { playback, serverNow, onEnded, volume, rect };
+  const visible = Boolean(rect);
+  const latest = useRef({ playback, serverNow, onEnded, onTitle, volume, visible });
+  latest.current = { playback, serverNow, onEnded, onTitle, volume, visible };
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
-  const apply = useRef<() => void>(() => {});
-  const isVisible = () => Boolean(latest.current.rect) && document.visibilityState !== "hidden";
+  const apply = useRef<(activate?: boolean) => void>(() => {});
+  const video = playback.video_id, playlist = playback.playlist_id;
+  const sourceUrl = playlist ? `https://www.youtube.com/playlist?list=${encodeURIComponent(playlist)}`
+    : `https://www.youtube.com/watch?v=${encodeURIComponent(video ?? "")}`;
 
   useEffect(() => {
     const container = wrapper.current;
-    if (!container) return;
-    let alive = true, instance: Player | null = null, metadataSync = false;
-    canPlay.current = false; synced.current = false; playable.current = true;
+    if (!container || (!video && !playlist)) return;
+    let alive = true, instance: Player | null = null, failed = false, activationBlocked = false;
+    let synced = false, metadataSynced = false, observedIndex = -1, requestedIndex = -1, reportedRevision = -1;
+    let namedRevision = -1, endRetry = 0;
     setError(false); setBlocked(false);
     const iframe = document.createElement("iframe");
     iframe.id = `mindcanvas-room-player-${crypto.randomUUID()}`;
     iframe.title = vi ? "Trình phát YouTube của phòng" : "Room YouTube player";
     iframe.referrerPolicy = "strict-origin-when-cross-origin";
     iframe.allow = "autoplay; encrypted-media; fullscreen";
-    iframe.allowFullscreen = true;
-    const params = new URLSearchParams({ enablejsapi: "1", autoplay: "0", playsinline: "1", origin: window.location.origin });
-    if (playback.loop) { params.set("loop", "1"); params.set("playlist", playback.video_id); }
-    iframe.src = `https://www.youtube.com/embed/${playback.video_id}?${params}`;
+    const params = new URLSearchParams({
+      enablejsapi: "1", autoplay: "0", playsinline: "1", controls: "0", disablekb: "1", origin: window.location.origin,
+    });
+    if (playlist) { params.set("listType", "playlist"); params.set("list", playlist); }
+    else if (playback.loop && video) { params.set("loop", "1"); params.set("playlist", video); }
+    iframe.src = `https://www.youtube.com/embed${playlist ? "" : "/" + video}?${params}`;
     container.replaceChildren(iframe);
+
+    const isVisible = () => latest.current.visible && document.visibilityState !== "hidden";
+    const publishTitle = (p: Player, revision: number, index: number) => {
+      if (!playlist || index < 0 || namedRevision === revision) return;
+      const href = p.getVideoUrl?.();
+      const id = p.getPlaylist()?.[index] ?? (href && youtubeRoomVideo(href));
+      if (!id) return;
+      namedRevision = revision;
+      void getYouTubeMusicTitle(id).then(title => {
+        if (alive && title && latest.current.playback.revision === revision) latest.current.onTitle?.(revision, title);
+      });
+    };
     const syncPlayer = () => {
       const p = player.current, current = latest.current;
-      if (!p || !playable.current || !canPlay.current) return;
-      if (!isVisible()) { p.pauseVideo(); return; }
+      if (!p || failed) return;
+      if (!isVisible() || !current.playback.playing) { p.pauseVideo(); return; }
       p.setVolume(Math.round(current.volume * 100));
+      if (activationBlocked || reportedRevision === current.playback.revision) return;
+      const index = current.playback.playlist_index ?? 0;
+      if (playlist && p.getPlaylist()?.length && p.getPlaylistIndex() !== index) {
+        if (requestedIndex !== index) {
+          requestedIndex = index; synced = false; metadataSynced = false;
+          p.playVideoAt(index);
+        }
+        return;
+      }
+      if (playlist && p.getPlaylistIndex() === index) {
+        observedIndex = index;
+        publishTitle(p, current.playback.revision, index);
+      }
       const duration = p.getDuration();
       const position = onlinePlaybackTime(current.playback, current.serverNow(), duration);
-      if (Number.isFinite(position) && (!current.playback.loop || duration > 0) && Math.abs(p.getCurrentTime() - position) > (synced.current ? 2.5 : 0.8)) {
+      if ((!current.playback.loop || duration > 0) && Math.abs(p.getCurrentTime() - position) > (synced ? 2.5 : .8)) {
         p.seekTo(position, true);
       }
-      if (current.playback.loop && duration > 0) metadataSync = true;
-      synced.current = true;
-      if (current.playback.playing) p.playVideo(); else p.pauseVideo();
+      synced = true;
+      metadataSynced = duration > 0;
+      p.playVideo();
     };
-    apply.current = syncPlayer;
+    apply.current = (activate = false) => { if (activate) { activationBlocked = false; requestedIndex = -1; } syncPlayer(); };
+    // Visibility changes should not clear a browser's autoplay decision.
     document.addEventListener("visibilitychange", syncPlayer);
 
+    const reportEnd = (p: Player, revision: number, index: number) => {
+      if (reportedRevision === revision) return;
+      const items = playlist ? p.getPlaylist() : undefined;
+      if (playlist && !items?.length) return;
+      reportedRevision = revision;
+      void Promise.resolve(latest.current.onEnded(revision, index, Boolean(items && index + 1 < items.length))).catch(() => {
+        if (!alive || !isVisible() || latest.current.playback.revision !== revision) return;
+        reportedRevision = -1;
+        endRetry = window.setTimeout(() => {
+          if (alive && isVisible() && latest.current.playback.revision === revision) reportEnd(p, revision, index);
+        }, 3000);
+      });
+    };
+    const fail = () => { if (alive) { failed = true; setError(true); } };
+    const readyTimer = window.setTimeout(fail, 15000);
     void getYouTube().then(yt => {
       if (!alive) return;
       instance = new yt.Player(iframe, { events: {
         onReady: ({ target }) => {
           if (!alive) return;
-          player.current = target; canPlay.current = true; syncPlayer();
+          window.clearTimeout(readyTimer);
+          player.current = target; syncPlayer();
         },
         onStateChange: ({ data }) => {
-          if (!alive || !playable.current) return;
+          const p = player.current, current = latest.current.playback;
+          if (!alive || failed || !p) return;
+          if (!isVisible()) { if (data === 1) p.pauseVideo(); return; }
+          if (!current.playing || reportedRevision === current.revision) return;
+          const desired = current.playlist_index ?? 0;
+          const index = playlist ? p.getPlaylistIndex() : 0;
           if (data === 1) {
-            if (!isVisible()) { player.current?.pauseVideo(); return; }
-            setBlocked(false);
-            if (latest.current.playback.loop && !metadataSync && (player.current?.getDuration() ?? 0) > 0) syncPlayer();
-          } else if (data === 0 && isVisible() && latest.current.playback.playing) {
-            if (latest.current.playback.loop) {
-              metadataSync = false;
-              player.current?.seekTo(onlinePlaybackTime(latest.current.playback, latest.current.serverNow(), player.current?.getDuration()), true);
-              player.current?.playVideo();
-            } else latest.current.onEnded(latest.current.playback.revision);
+            activationBlocked = false; setBlocked(false);
+            if (playlist && index !== desired) {
+              if (index === desired + 1 && observedIndex === desired) reportEnd(p, current.revision, desired);
+              else syncPlayer();
+              return;
+            }
+            observedIndex = index;
+            requestedIndex = -1;
+            publishTitle(p, current.revision, index);
+            if (!metadataSynced && p.getDuration() > 0) syncPlayer();
+          } else if (data === 0) {
+            if (current.loop) {
+              p.seekTo(onlinePlaybackTime(current, latest.current.serverNow(), p.getDuration()), true);
+              p.playVideo();
+            } else if (!playlist || observedIndex === desired || index === desired) reportEnd(p, current.revision, desired);
+          } else if (data === 2 && !activationBlocked) {
+            // A native pause is local and doesn't change the room's clock.
+            p.playVideo();
           }
         },
-        onAutoplayBlocked: () => { if (alive && isVisible()) setBlocked(true); },
-        onError: () => { if (alive) { playable.current = false; setError(true); } },
+        onAutoplayBlocked: () => { if (alive && isVisible()) { activationBlocked = true; setBlocked(true); } },
+        onError: fail,
       } });
-    }).catch(() => { if (alive) { playable.current = false; setError(true); } });
+    }).catch(fail);
     return () => {
-      alive = false;
+      alive = false; window.clearTimeout(readyTimer); window.clearTimeout(endRetry);
       document.removeEventListener("visibilitychange", syncPlayer);
       apply.current = () => {}; player.current = null;
       try { instance?.destroy(); } catch { /* iframe already detached */ }
       container.replaceChildren();
     };
-  }, [playback.video_id, playback.loop, retry, vi]);
-  useEffect(() => { apply.current(); }, [playback.revision, !!rect]);
+  }, [video, playlist, playback.loop, retry, vi]);
+  useEffect(() => { apply.current(); }, [playback.revision, visible]);
   useEffect(() => { player.current?.setVolume(Math.round(volume * 100)); }, [volume]);
 
   return <>
     {createPortal(<div ref={wrapper} data-study-island-media={compact || undefined} className={`room-youtube-float ${compact ? "on-island" : ""}`} hidden={!rect}
       style={rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined}/>, document.body)}
-    {controlSlot && createPortal(<div className="room-youtube-controls"><div className="online-room-player-actions">
-      <button type="button" className="text-button" onClick={() => error ? setRetry(value => value + 1) : apply.current()}><RefreshCw size={14}/>{error ? (vi ? "Tải lại trình phát" : "Reload player") : (vi ? "Đồng bộ lại" : "Sync playback")}</button>
-      <a className="text-button" href={`https://www.youtube.com/watch?v=${playback.video_id}`} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{vi ? "Mở trên YouTube" : "Open on YouTube"}</a>
-    </div>
-    {blocked && !error && <p className="online-room-player-note" role="status">{vi ? "Bấm Phát ngay trên trình phát nếu trình duyệt chặn phát tự động." : "Press Play on the player if your browser blocked autoplay."}</p>}
-    {error && <p className="online-room-player-note" role="status">{vi ? "Không phát được video trong phòng. Có thể video không cho phép nhúng hoặc YouTube chưa kết nối." : "The video could not play in this room. Embedding may be disabled or YouTube is unavailable."}</p>}
-  </div>, controlSlot)}
+    {controlSlot && (blocked || error) && createPortal(<div className="room-youtube-controls">
+      {error ? <>
+        <p className="online-room-player-note" role="status">{vi ? "Không phát được trong phòng. Nguồn nhạc có thể không cho phép nhúng." : "Playback failed. The source may not allow embedding."}</p>
+        <div className="online-room-player-actions">
+          <button type="button" className="text-button" onClick={() => setRetry(value => value + 1)}><RefreshCw size={14}/>{vi ? "Thử lại" : "Retry"}</button>
+          <a className="text-button" href={sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{vi ? "Mở trên YouTube" : "Open on YouTube"}</a>
+        </div>
+      </> : <button type="button" className="secondary-button" onClick={() => apply.current(true)}><Volume2 size={15}/>{vi ? "Bật âm thanh" : "Enable audio"}</button>}
+    </div>, controlSlot)}
   </>;
 }

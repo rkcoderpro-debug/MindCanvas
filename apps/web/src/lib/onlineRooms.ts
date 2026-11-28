@@ -1,6 +1,8 @@
 import type { BoardState } from "@mindcanvas/shared";
 import { getCurrentSession, supabase } from "./supabase";
 import { signProfileAvatars } from "./accountProfile";
+import { parseMusicLink } from "./musicStorage";
+import { getYouTubeMusicTitle } from "./youtubeMusicTitle";
 
 export type RoomLayout = "classroom" | "compact" | "table";
 export type RoomReaction = "clap" | "heart" | "like";
@@ -13,9 +15,10 @@ export type OnlineRoom = {
   host_name: string; occupancy: number; capacity: number; classroom_id?: string | null; chat_locked?: boolean;
   code?: string | null; entry_mode?: "link" | "approval" | "password" | "classroom" | "open";
 };
-export type RoomPlaylistTrack = { id: string; video_id: string; title: string; status: "queued" | "pending"; requested_by: string | null; name: string };
+export type RoomMusicSource = { video_id: string | null; playlist_id?: string | null };
+export type RoomPlaylistTrack = RoomMusicSource & { id: string; title: string; status: "queued" | "pending"; requested_by: string | null; name: string };
 export type RoomAttendee = { id: string; name: string; seat: number; avatar_url?: string | null; avatar_slot?: number | null; avatar_revision?: string | null; hand_raised_at?: string | null; reaction?: RoomReaction | null; reaction_at?: string | null };
-export type RoomPlayback = { video_id: string | null; title: string | null; attribution: string | null; playing: boolean; loop: boolean; offset: number; at: string; revision: number };
+export type RoomPlayback = RoomMusicSource & { playlist_index?: number; title: string | null; attribution: string | null; playing: boolean; loop: boolean; offset: number; at: string; revision: number };
 export type RoomMessage = { id: string; author_id: string | null; name: string; body: string; created_at: string; file?: MeetingRoomFile };
 export type MeetingRoomFile = { id: string; name: string; mime: string; size: number };
 export const MEETING_FILE_LIMIT = 8 * 1024 * 1024;
@@ -32,7 +35,7 @@ export type RoomSnapshot = {
   playback: RoomPlayback; members: RoomAttendee[]; waiting: Pick<RoomAttendee, "id" | "name">[]; queue: RoomPlaylistTrack[];
 };
 export type RoomUnavailable = { state: Exclude<RoomStatus, "active"> };
-export type RoomCreate = { kind: OnlineRoom["kind"]; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; entryMode: "approval" | "password"; password?: string; suggestions: boolean };
+export type RoomCreate = { kind: OnlineRoom["kind"]; name: string; topic: string; visibility: RoomVisibility; layout: RoomLayout; entryMode: "approval" | "password"; password?: string; suggestions: boolean; openingTrack?: RoomMusicSource & { title: string } };
 
 export type RoomReportReason = "spam" | "harassment" | "inappropriate" | "other";
 
@@ -42,7 +45,8 @@ type RoomAction =
   | { name: "chat_delete"; id: string }
   | { name: "chat_lock"; locked: boolean }
   | { name: "report"; id?: string; reason: RoomReportReason; detail: string }
-  | { name: "track"; video_id: string; title: string }
+  | ({ name: "track"; title: string } & RoomMusicSource)
+  | { name: "music_ended"; revision: number; index: number; has_next: boolean }
   | { name: "track_decision"; id: string; decision: "approve" | "remove" }
   | { name: "queue_move"; id: string; direction: "up" | "down" }
   | { name: "play" | "pause" | "next"; revision: number }
@@ -84,10 +88,12 @@ const sessionArgs = (id: string, client: string) => ({ p_room: id, p_client: cli
 export const listOnlineRooms = (signal?: AbortSignal) => rpc<{ rooms: OnlineRoom[]; can_create_public: boolean }>("list_online_rooms", {}, signal);
 export const classroomOnlineRoom = (classId: string, open = false, signal?: AbortSignal) =>
   rpc<{ room: OnlineRoom | null }>("online_classroom_room",{ p_class:classId,p_open:open },signal);
-export const createOnlineRoom = (room: RoomCreate) => rpc<string>("create_online_room_v640", {
+export const createOnlineRoom = (room: RoomCreate) => rpc<string>("create_online_room_v6820", {
   p_kind: room.kind, p_name: room.name, p_topic: room.topic, p_visibility: room.visibility, p_layout: room.layout,
   p_suggestions: room.suggestions, p_mode: room.visibility === "private" ? room.entryMode : "approval",
   p_password: room.visibility === "private" && room.entryMode === "password" ? room.password ?? null : null,
+  p_video: room.openingTrack?.video_id ?? null, p_playlist: room.openingTrack?.playlist_id ?? null,
+  p_title: room.openingTrack?.title ?? null,
 });
 export const lookupOnlineRoomCode = (code: string) =>
   rpc<{ state: "found"; id: string } | { state: "not_found" | "rate" }>("lookup_online_room_code", { p_code: code });
@@ -187,6 +193,25 @@ export function youtubeRoomVideo(raw: string) {
     : ["youtube.com","music.youtube.com","m.youtube.com"].includes(host) && url.pathname === "/watch" ? url.searchParams.get("v")
     : null;
   return id && /^[0-9A-Za-z_-]{11}$/.test(id) ? id : null;
+}
+
+export function parseRoomMusicLink(raw: string) {
+  let url: URL;
+  try { url = new URL(raw.trim()); } catch { return null; }
+  if (url.username || url.password || url.port) return null;
+  const parsed = parseMusicLink(raw);
+  if (!parsed?.url || (parsed.source !== "youtube" && parsed.source !== "youtube-music")) return null;
+  const video = parsed.youtubeVideoId && /^[A-Za-z0-9_-]{11}$/.test(parsed.youtubeVideoId) ? parsed.youtubeVideoId : undefined;
+  const playlist = parsed.isPlaylist ? url.searchParams.get("list") : null;
+  if (!video && !playlist) return null;
+  return { video_id: playlist ? null : video ?? null, playlist_id: playlist, videoForTitle: video, title: parsed.title };
+}
+
+export async function prepareRoomMusicTrack(link: string, title: string) {
+  const parsed = parseRoomMusicLink(link);
+  if (!parsed) return null;
+  const name = title.trim() || (parsed.videoForTitle && await getYouTubeMusicTitle(parsed.videoForTitle)) || parsed.title;
+  return { video_id: parsed.video_id, playlist_id: parsed.playlist_id, title: name.slice(0, 96) };
 }
 
 /** Share the scheduled playback clock, not the audio/video stream. */

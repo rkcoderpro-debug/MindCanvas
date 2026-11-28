@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Pause, Play, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, Volume2, X } from "lucide-react";
+import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Headphones, Link2, Lock, Maximize2, MessageCircle, Minimize2, Music2, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, Volume2, VolumeX, X } from "lucide-react";
 import { useOnlineRoom } from "../hooks/useOnlineRoom";
-import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, deleteOnlineRoom, OnlineRoomError, roomIssue, youtubeRoomVideo, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
+import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, deleteOnlineRoom, OnlineRoomError, roomIssue, prepareRoomMusicTrack, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
 import { onlineRoomUrl, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import { copyTextWithFallback } from "../lib/share";
 import { PageBack } from "./PageNavigation";
 import { ProfileAvatar } from "./ProfileAvatar";
 import OnlineRoomYouTube from "./OnlineRoomYouTube";
+import RoomMusicFields from "./RoomMusicFields";
 import RoomBackgroundAudio from "./RoomBackgroundAudio";
 import RoomIsland from "./RoomIsland";
 import { useRoomAudioPriority } from "./MusicPlayer";
@@ -100,9 +101,10 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const [layout, setLayout] = useState<RoomLayout | null>(() => storedLayout(isMeeting));
   const [panel, setPanel] = useState<Tab>("chat");
   const [av, setAv] = useState<Map<string,string>>(new Map());
-  const [listen, setListen] = useState(() => room.official && room.music_enabled && playback.video_id === OFFICIAL_PIANO_VIDEO);
   const [background, setBackground] = useState(false);
   const [volume, setVolume] = useState(.65);
+  const [muted, setMuted] = useState(false);
+  const [trackName, setTrackName] = useState<{ revision: number; title: string }>();
   const [islandExpanded, setIslandExpanded] = useState(false);
   const [inlinePlayer, setInlinePlayer] = useState<HTMLDivElement | null>(null);
   const [miniPlayer, setMiniPlayer] = useState<HTMLDivElement | null>(null);
@@ -126,13 +128,15 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const roomLayout = layout ?? room.layout;
   const mayControl = can_manage && !room.official && room.music_enabled;
   const showQueue = room.music_enabled && !room.official;
-  const current = playback.video_id ? { ...playback, video_id: playback.video_id } : null;
+  const current = room.music_enabled && (playback.video_id || playback.playlist_id) ? playback : null;
+  const displayedTitle = trackName?.revision === playback.revision ? trackName.title : playback.title;
   const backgroundAvailable = room.official && room.music_enabled && current?.video_id === OFFICIAL_PIANO_VIDEO;
   const audioOnly = Boolean(backgroundAvailable && background);
-  const youtubeRequested = Boolean(current && listen && !audioOnly);
+  const youtubeRequested = Boolean(current && !audioOnly);
+  const localVolume = muted ? 0 : volume;
   const playerSlot = foreground ? inlinePlayer : miniPlayer;
   const actionsSlot = foreground ? inlineActions : miniActions;
-  const projectedRoomAudio = !isMeeting && listen && !!current && playback.playing && volume > 0 && (audioOnly || foreground || islandExpanded);
+  const projectedRoomAudio = !isMeeting && !!current && playback.playing && localVolume > 0 && (audioOnly || foreground || islandExpanded);
   useRoomAudioPriority(projectedRoomAudio);
   useEffect(() => {
     if (foreground) {
@@ -143,13 +147,19 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
     }
   // Choosing to collapse the player remains effective until the next change of screen.
   }, [foreground]);
-  const volumeControl = <label className="room-island-volume"><Volume2 size={15}/>{label("Âm lượng của bạn", "Your volume")}
-    <input aria-label={label("Âm lượng trong phòng", "Room volume")} type="range" min="0" max="1" step=".01" value={volume} onChange={event => setVolume(Number(event.target.value))}/></label>;
-  const sourceControl = backgroundAvailable && <button className="secondary-button" type="button" onClick={() => { setListen(true); setBackground(!audioOnly); }}>
+  const volumeControl = <>
+    <button type="button" className="secondary-button" aria-pressed={localVolume === 0}
+      onClick={() => { if (!volume) setVolume(.65); setMuted(localVolume > 0); }}>
+      {localVolume > 0 ? <Volume2 size={16}/> : <VolumeX size={16}/>}
+      {localVolume > 0 ? label("Tắt tiếng", "Mute") : label("Bật tiếng", "Unmute")}
+    </button>
+    <label className="room-island-volume">{label("Âm lượng của bạn", "Your volume")}
+      <input aria-label={label("Âm lượng trong phòng", "Room volume")} type="range" min="0" max="1" step=".01"
+        value={localVolume} onChange={event => { setVolume(Number(event.target.value)); setMuted(false); }}/>
+    </label>
+  </>;
+  const sourceControl = backgroundAvailable && <button className="secondary-button" type="button" onClick={() => setBackground(!audioOnly)}>
     <Music2 size={14}/>{audioOnly ? label("Đổi sang YouTube", "Switch to YouTube") : label("Nghe piano nền", "Play background piano")}
-  </button>;
-  const stopOrPlay = <button className="secondary-button" type="button" onClick={() => setListen(!listen)}>
-    {listen ? <Pause size={14}/> : <Play size={14}/>}{listen ? label("Dừng nghe", "Stop listening") : label("Nghe cùng phòng", "Listen with the room")}
   </button>;
   const readyTracks = queue.filter(track => track.status === "queued");
   const pendingTracks = queue.filter(track => track.status === "pending");
@@ -222,38 +232,39 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
     catch (err) { setProblem(roomIssue(err, vi)); }
     finally { operation.current = false; setBusy(false); }
   };
-  const onEnded = async (revision: number) => {
-    if (!mayControl || lastEnded.current === revision) return;
+  const onEnded = async (revision: number, index: number, hasNext: boolean) => {
+    if (lastEnded.current === revision) return;
     lastEnded.current = revision;
-    try { await action({ name: "next", revision }); }
+    try { await action({ name: "music_ended", revision, index, has_next: hasNext }); }
     catch (err) {
-      if (!(err instanceof OnlineRoomError && err.issue === "ONLINE_PLAYBACK_CHANGED")) setProblem(roomIssue(err, vi));
+      if (!(err instanceof OnlineRoomError && err.issue === "ONLINE_PLAYBACK_CHANGED")) {
+        lastEnded.current = null;
+        setProblem(roomIssue(err, vi));
+        throw err;
+      }
     }
-  };
-  const playPause = () => {
-    if (!playback.playing) setListen(true);
-    void run({ name: playback.playing ? "pause" : "play", revision: playback.revision });
   };
   const closeRoom = () => setConfirm({ action: { name: "close" }, title: label("Kết thúc phòng?", "End the room?"),
     text: isMeeting ? label("Cuộc gọi và chat sẽ dừng cho mọi người. Liên kết mời sẽ hết hiệu lực.", "The call and chat will end for everyone. The invitation link will expire.") : label("Nhạc và chat sẽ dừng cho mọi người. Liên kết mời của phòng này sẽ hết hiệu lực.", "Music and chat will stop for everyone. This room's invitation link will stop working.") });
 
-  return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide}>
-    {!isMeeting && !foreground && <RoomIsland name={room.name} vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
+  return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide} data-room-kind={room.kind}>
+    {!isMeeting && !foreground && <RoomIsland name={audioOnly ? label("Bình minh · Piano MindCanvas", "Daybreak · MindCanvas Piano") : displayedTitle || room.name} vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
       onRestore={restore} onLeave={exit} live={!reconnecting}
-      status={reconnecting ? label("Đang kết nối lại…", "Reconnecting…") : listen && current && playback.playing
+      status={reconnecting ? label("Đang kết nối lại…", "Reconnecting…") : current && playback.playing
         ? audioOnly ? label("Đang nghe piano nền", "Background piano playing") : label("YouTube · đang nghe cùng phòng", "YouTube · listening with the room")
         : label("Vẫn ở trong phòng", "Still in the room")}>
       {current && <>
-        <strong>{audioOnly ? label("Bình minh · Piano MindCanvas", "Daybreak · MindCanvas Piano") : current.title || "YouTube"}</strong>
         {youtubeRequested && <div ref={setMiniPlayer} className="room-youtube-slot"/>}
         <div ref={setMiniActions}/>
-        <div className="room-island-controls">{stopOrPlay}{sourceControl}{listen && volumeControl}</div>
+        <div className="room-island-controls">{volumeControl}{sourceControl}</div>
         {backgroundAvailable && <small>{label("Piano nền là bản khác video YouTube.", "Background piano is a separate track from the YouTube video.")}</small>}
       </>}
     </RoomIsland>}
-    {!isMeeting && current && youtubeRequested && <OnlineRoomYouTube key={current.video_id} playback={current} serverNow={serverNow}
-      onEnded={revision => void onEnded(revision)} vi={vi} slot={playerSlot} compact={!foreground} volume={volume} controlSlot={actionsSlot}/>}
-    {!isMeeting && current && listen && audioOnly && <RoomBackgroundAudio playback={current} serverNow={serverNow} volume={volume} slot={actionsSlot} vi={vi}/>}
+    {!isMeeting && current && youtubeRequested && <OnlineRoomYouTube key={current.playlist_id ?? current.video_id} playback={current} serverNow={serverNow}
+      onEnded={onEnded}
+      onTitle={(revision, title) => setTrackName(old => old?.revision === revision && old.title === title ? old : { revision, title })}
+      vi={vi} slot={playerSlot} compact={!foreground} volume={localVolume} controlSlot={actionsSlot}/>}
+    {!isMeeting && current && audioOnly && <RoomBackgroundAudio playback={current} serverNow={serverNow} volume={localVolume} slot={actionsSlot} vi={vi}/>}
     <header className="online-room-header">
       <div><span className="online-room-live-tag">{isMeeting ? <Video size={15}/> : <Radio size={15}/>} {isMeeting ? label("PHÒNG HỌC / HỌP", "STUDY / MEETING") : label("PHÒNG NGHE NHẠC", "MUSIC ROOM")}{room.visibility === "private" && <Lock size={13} aria-label={label("Phòng riêng", "Private room")}/>}</span>
         <h1 ref={heading} tabIndex={-1}>{room.name}</h1><p>{room.topic || `${label("Chủ phòng:", "Host:")} ${room.host_name}`}</p></div>
@@ -285,18 +296,14 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
         <div className="online-room-board">
           <span className="online-room-board-label">{room.music_enabled ? label("ĐANG PHÁT TRONG PHÒNG", "PLAYING IN THE ROOM") : label("GÓC YÊN LẶNG", "QUIET CORNER")}</span>
           {current ? <>
-            <strong className="online-room-track-title">{current.title || label("Video YouTube", "YouTube video")}</strong>
+            <strong className="online-room-track-title">{displayedTitle || label("Video YouTube", "YouTube video")}</strong>
             {current.attribution && <small className="online-room-credit">{current.attribution}</small>}
             {youtubeRequested ? <div ref={setInlinePlayer} className="room-youtube-slot in-room"/>
-              : <div className="online-room-board-invite"><Headphones size={31}/><p>{listen && audioOnly
-                ? label("Bình minh · Piano MindCanvas — có thể nghe khi chuyển sang làm bài.", "Daybreak · MindCanvas Piano — keeps playing while you study.")
-                : playback.playing ? label("Nghe cùng đoạn mọi người đang nghe.", "Catch up to the part everyone is listening to.") : label("Chủ phòng đang tạm dừng bài.", "The host has paused this track.")}</p>
-                {!listen && stopOrPlay}</div>}
+              : <div className="online-room-board-invite"><Headphones size={31}/><p>
+                  {label("Bình minh · Piano MindCanvas", "Daybreak · MindCanvas Piano")}</p></div>}
+            <div className="online-room-player-local room-island-controls">{volumeControl}</div>
             <div ref={setInlineActions}/>
-            <div className="online-room-player-local room-island-controls">
-              {listen && <button className="text-button online-room-stop-listening" type="button" onClick={() => setListen(false)}><X size={14}/>{label("Dừng nghe trên máy này", "Stop listening on this device")}</button>}
-              {sourceControl}{listen && volumeControl}
-            </div>
+            {sourceControl}
             {backgroundAvailable && <small className="room-audio-status">{label("Piano nền là bản khác video YouTube.", "Background piano is a separate track from the YouTube video.")}</small>}
           </> : <div className="online-room-board-invite"><BookOpen size={37}/>
             <strong>{room.music_enabled ? label("Chưa phát nhạc", "No music playing yet") : label("Cùng ngồi học nhé", "Let’s study together")}</strong>
@@ -306,9 +313,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
           </div>}
         </div>
         {mayControl && <div className="online-room-player-controls" aria-label={label("Điều khiển nhạc của chủ phòng", "Host playback controls")}>
-          <button type="button" className="secondary-button" disabled={busy || !current} onClick={playPause}>{playback.playing ? <Pause size={17}/> : <Play size={17}/>}
-            {playback.playing ? label("Tạm dừng cho cả phòng", "Pause for everyone") : label("Phát cho cả phòng", "Play for everyone")}</button>
-          <button type="button" className="secondary-button" disabled={busy || (!current && !readyTracks.length)} onClick={() => void run({ name: "next", revision: playback.revision })}><SkipForward size={17}/>{label("Bài tiếp", "Next track")}</button>
+          <button type="button" className="secondary-button" disabled={busy || !readyTracks.length} onClick={() => void run({ name: "next", revision: playback.revision })}><SkipForward size={17}/>{label("Bài tiếp", "Next track")}</button>
         </div>}
         <div className="online-room-seat-heading"><div><Armchair size={18}/><strong>{label("Chỗ ngồi", "Seats")}</strong><span>{members.length}/{room.capacity}</span></div><small>{self ? `${label("Ghế của bạn", "Your seat")}: ${self.seat}` : label("Chọn ghế trống để đổi chỗ", "Choose a vacant seat")}</small></div>
         {roomLayout === "classroom"
@@ -322,7 +327,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
           <button type="button" aria-pressed={panel === "people"} onClick={() => setPanel("people")}><Users size={15}/>{label("Mọi người", "People")}{waiting.length > 0 && <small>{waiting.length}</small>}</button>
         </div>
         {panel === "chat" && <RoomChat foreground={foreground} messages={messages} label={label} owner={owner} busy={busy} canManage={can_manage} chatLocked={!!room.chat_locked} onReport={openReport} run={run} vi={vi} upload={isMeeting ? upload : undefined} download={isMeeting ? download : undefined}/>}
-        {panel === "queue" && showQueue && <RoomQueue label={label} run={run} mayControl={mayControl} suggestions={suggestions} busy={busy} queued={readyTracks} pending={pendingTracks}/>}
+        {panel === "queue" && showQueue && <RoomQueue vi={vi} label={label} run={run} mayControl={mayControl} suggestions={suggestions} busy={busy} queued={readyTracks} pending={pendingTracks}/>}
         {panel === "people" && <div className="online-room-people">
           {waiting.length > 0 && <section><h2>{label("Đang chờ vào", "Waiting to join")}</h2><ul>{waiting.map(person => <li key={person.id}><strong>{person.name}</strong>
             <button type="button" className="icon-button" disabled={busy} aria-label={`${label("Cho vào:", "Admit:")} ${person.name}`} onClick={() => void run({ name: "admit", id: person.id })}><Check size={17}/></button>
@@ -516,35 +521,41 @@ function RoomChat({ foreground, messages, label, owner, busy, canManage, chatLoc
   </div>;
 }
 
-function RoomQueue({ label, mayControl, suggestions, queued, pending, busy, run }: {
-  label: Labels; mayControl: boolean; suggestions: boolean; queued: RoomSnapshot["queue"]; pending: RoomSnapshot["queue"]; busy: boolean; run: Run;
+function RoomQueue({ vi, label, mayControl, suggestions, queued, pending, busy, run }: {
+  vi: boolean; label: Labels; mayControl: boolean; suggestions: boolean; queued: RoomSnapshot["queue"]; pending: RoomSnapshot["queue"]; busy: boolean; run: Run;
 }) {
   const [link, setLink] = useState(""), [title, setTitle] = useState(""), [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError("");
-    const video = youtubeRoomVideo(link);
-    if (!video) { setError(label("Hãy dán liên kết video YouTube hoặc youtu.be, không dùng link danh sách phát.", "Paste a single YouTube or youtu.be video link rather than a playlist.")); return; }
-    const result = await run({ name: "track", video_id: video, title });
-    if (result?.state === "active") { setLink(""); setTitle(""); }
+    event.preventDefault();
+    if (saving || busy) return;
+    setError(""); setSaving(true);
+    try {
+      const track = await prepareRoomMusicTrack(link, title);
+      if (!track) {
+        setError(label("Dán link bài hát hoặc playlist YouTube hợp lệ.", "Paste a valid YouTube song or playlist link."));
+        return;
+      }
+      if (await run({ name: "track", ...track })) { setLink(""); setTitle(""); }
+    } finally { setSaving(false); }
   };
   return <div className="online-room-queue">
     {mayControl && <label className="online-room-check"><input type="checkbox" checked={suggestions} disabled={busy} onChange={event => void run({ name: "suggestions", enabled: event.target.checked })}/>{label("Mở đề xuất từ thành viên", "Allow suggestions")}</label>}
     {(suggestions || mayControl) && <form className="online-room-track-form" onSubmit={event => void submit(event)}>
-      <label>{label("Liên kết video YouTube", "YouTube video link")}<input type="url" maxLength={420} required value={link} onChange={event => setLink(event.target.value)} placeholder="https://youtu.be/…"/></label>
-      <label>{label("Tên bài (không bắt buộc)", "Track title (optional)")}<input maxLength={96} value={title} onChange={event => setTitle(event.target.value)}/></label>
+      <RoomMusicFields vi={vi} link={link} title={title} onLink={setLink} onTitle={setTitle}/>
       {error && <p role="alert" className="form-error">{error}</p>}
-      <button type="submit" className="primary-button" disabled={busy || !link.trim()}><Plus size={16}/>{mayControl ? label("Thêm bài", "Add track") : label("Gửi đề xuất", "Suggest track")}</button>
+      <button type="submit" className="primary-button" disabled={saving || busy || !link.trim()}><Plus size={16}/>{mayControl ? label("Thêm bài", "Add track") : label("Gửi đề xuất", "Suggest track")}</button>
     </form>}
     {!suggestions && !mayControl && <p className="online-room-muted">{label("Chỉ chủ phòng có thể thêm bài lúc này.", "Only the host can add tracks right now.")}</p>}
     <section><h2>{label("Sắp phát", "Up next")} <small>{queued.length}</small></h2>
       {!queued.length && <p className="online-room-muted">{label("Hàng đợi đang trống.", "The queue is empty.")}</p>}
-      <ol>{queued.map((track, index) => <li key={track.id}><span className="online-room-queue-rank">{index + 1}</span><div><strong>{track.title}</strong><small>{track.name}</small></div>
+      <ol>{queued.map((track, index) => <li key={track.id}><span className="online-room-queue-rank">{index + 1}</span><div><strong>{track.title}</strong><small>{track.playlist_id ? `${label("Playlist", "Playlist")} · ` : ""}{track.name}</small></div>
         {mayControl && <><button type="button" className="icon-button" disabled={busy || index === 0} aria-label={`${label("Đưa lên", "Move up")} ${track.title}`} onClick={() => void run({ name: "queue_move", id: track.id, direction: "up" })}><ArrowUp size={15}/></button>
           <button type="button" className="icon-button" disabled={busy || index === queued.length - 1} aria-label={`${label("Đưa xuống", "Move down")} ${track.title}`} onClick={() => void run({ name: "queue_move", id: track.id, direction: "down" })}><ArrowDown size={15}/></button>
           <button type="button" className="icon-button" disabled={busy} aria-label={`${label("Bỏ bài", "Remove track")} ${track.title}`} onClick={() => void run({ name: "track_decision", id: track.id, decision: "remove" })}><X size={16}/></button></>}
       </li>)}</ol>
     </section>
-    {pending.length > 0 && <section><h2>{label("Chờ duyệt", "Pending approval")}</h2><ul>{pending.map(track => <li key={track.id}><div><strong>{track.title}</strong><small>{track.name}</small></div>
+    {pending.length > 0 && <section><h2>{label("Chờ duyệt", "Pending approval")}</h2><ul>{pending.map(track => <li key={track.id}><div><strong>{track.title}</strong><small>{track.playlist_id ? `${label("Playlist", "Playlist")} · ` : ""}{track.name}</small></div>
       {mayControl && <><button type="button" className="icon-button" disabled={busy} aria-label={`${label("Duyệt", "Approve")} ${track.title}`} onClick={() => void run({ name: "track_decision", id: track.id, decision: "approve" })}><Check size={16}/></button>
         <button type="button" className="icon-button" disabled={busy} aria-label={`${label("Từ chối", "Reject")} ${track.title}`} onClick={() => void run({ name: "track_decision", id: track.id, decision: "remove" })}><X size={16}/></button></>}
     </li>)}</ul></section>}

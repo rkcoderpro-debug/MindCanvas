@@ -49,6 +49,25 @@ const compiled = await build({
             ');export const markSystemAnnouncementRead = async () => "2026-01-01";';
         return { resolveDir: web, contents: 'export * from "./src/lib/' + path + '.ts";' + exports };
       });
+      plugin.onResolve({ filter: /\/hooks\/useOnlineRoom$/ }, () => ({ path: "room", namespace: "fixture-room" }));
+      plugin.onLoad({ filter: /^room$/, namespace: "fixture-room" }, () => ({
+        resolveDir: web,
+        contents: `
+          import { useOnlineRoom as useProductionRoom } from "./src/hooks/useOnlineRoom.ts";
+          const snapshot = {
+            room: { id: "60000000-0000-4000-8000-000000000001", name: "Góc nhạc tập trung cho mọi người",
+              kind: "music", official: false, music_enabled: true, visibility: "private", host_id: "host",
+              layout: "classroom", topic: "Nhạc học chung", capacity: 20, code: "512441" },
+            can_manage: true, suggestions: true, members: [{ id: "host", seat: 1, name: "Host" }],
+            queue: [], waiting: [], playback: { playing: true, video_id: "abc12345678", title: "Piano QA",
+              loop: false, offset: 0, at: "2026-01-01T00:00:00Z", revision: 1 },
+          };
+          export function useOnlineRoom(link) {
+            if (location.pathname !== "/qa/music-room") return useProductionRoom(link);
+            return { phase: "active", snapshot, messages: [], serverNow: () => 0, act: async () => ({}), leave() {} };
+          }
+        `,
+      }));
       plugin.onResolve({ filter: /\/lib\/connections$/ }, () => ({ path: "contacts", namespace: "fixture-contacts" }));
       plugin.onLoad({ filter: /^contacts$/, namespace: "fixture-contacts" }, () => ({
         resolveDir: web,
@@ -274,6 +293,10 @@ async function runChromium() {
       await checkChatKeyboard();
       return;
     }
+    if (process.argv.includes("--room-music-only")) {
+      await checkRoomMusic();
+      return;
+    }
     if (process.argv.includes("--music-only")) {
       await checkMusicIsland();
       return;
@@ -432,6 +455,31 @@ async function runChromium() {
         await checkWidth("Full library " + width);
       }
       console.log("Folder manager and full library passed at 1440, 768 and 390px, including direct reading and return to the list.");
+    }
+
+    async function checkRoomMusic() {
+      for (const [width, height] of [[1366, 768], [768, 1024], [390, 844], [844, 390], [320, 568]]) {
+        const touch = width <= 480;
+        await resize(width, height, touch);
+        await page("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: 1 });
+        await open("/qa/music-room", ".online-room-header h1");
+        const result = await evaluate(`(() => {
+          const top = document.querySelector(".topbar").getBoundingClientRect();
+          const title = document.querySelector(".online-room-header h1").getBoundingClientRect();
+          const roomActions = document.querySelector(".online-room-actions").getBoundingClientRect();
+          const formerRoute = document.querySelector(".workspace-route-content");
+          return { gap: title.top - top.bottom, right: roomActions.right, hidden: !formerRoute.getClientRects().length };
+        })()`);
+        assert(result.hidden && result.gap < 70 && result.right <= width + 1, JSON.stringify({ width, height, result }));
+        const mute = ".online-room-player-local > button";
+        const volume = dom(".online-room-player-local input");
+        await click(mute, touch);
+        assert(await evaluate(`${volume}.value === "0" && ${dom(mute)}.getAttribute("aria-pressed") === "true"`));
+        await click(mute, touch);
+        assert(await evaluate(`${volume}.value === "0.65"`));
+        assert(await evaluate(`!document.querySelector('.online-room-stop-listening')`));
+      }
+      console.log("Music room top gap, action wrapping and local mute passed on five desktop, tablet and phone viewports.");
     }
 
     async function checkMusicIsland() {

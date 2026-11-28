@@ -1,0 +1,92 @@
+{
+  "version": "6.8.20",
+  "baseVersion": "6.8.19",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.20.md",
+      "bytes": 1135,
+      "sha256": "5a0a95185eed82a7190eceae7f3725587a3e151526f6170a9920b07a3128025f"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "0f6d56af39d24c7e7021951f1249647787bc6832192e715594e03591a7e6d2b9"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "50c0641c0dc7416c8e16ff63c5b3e2cae5e075eeb9a1579e4339808fb1944b5c"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 71360,
+      "sha256": "1f9fda3aa968bc3d9ecca1c0bd254e20334782a04c50035275322f09b4b23046"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 15698,
+      "sha256": "80d34e55ffb1edda83c410d159a442d56f77f26f00a3b890bde4d21813d1acd4"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 53574,
+      "sha256": "33dff64946c1205f25e3c7ae63f8634b1a4851b8e35747e2c37ad992b91f3449"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.test.tsx",
+      "bytes": 6301,
+      "sha256": "2bfd82dc9cf9ea750549b8098f7bb0eb9132bc79b40a084b4193a3585174d7f3"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.tsx",
+      "bytes": 9582,
+      "sha256": "6ff8c143394d8e295aa0ba7c0920fe4485d737563f7309323ba3e27d7a5a65f8"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.test.tsx",
+      "bytes": 29732,
+      "sha256": "2ee2c16a302588434de653b8add0f17d79696067c63d133622c5122c326deb26"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.tsx",
+      "bytes": 18841,
+      "sha256": "90d0db9ac913d73b59a8983f2e987b496880f77c6ae24d167527bdd869b75cb7"
+    },
+    {
+      "path": "apps/web/src/components/RoomMusicFields.tsx",
+      "bytes": 1704,
+      "sha256": "db91ab6fcc8fdcc6cfeeb7c5e22da9d1c893fe9fba69b3ad045ada7736f22071"
+    },
+    {
+      "path": "apps/web/src/components/onlineRooms.css",
+      "bytes": 30887,
+      "sha256": "a2b0de8115adcdeda0a64de0fa116c4ac6b5206b89b5f4b9fca5c36a051e0c9e"
+    },
+    {
+      "path": "apps/web/src/lib/onlineRooms.ts",
+      "bytes": 21294,
+      "sha256": "13ad2d6d7530e5645dbae1e50d121b42d282eecf2aa45122110f6d42b35c74b6"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "91d1dd788dfb8f86f2f69dd95c76ecdd9226874f4f91bd4e569c8de31877055e"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "95058153f1d4af1da6d4b264cce56cf3199d255a2848fac3c97257a9a9a063b3"
+    },
+    {
+      "path": "supabase/migrations/0049_online_room_shared_music.sql",
+      "bytes": 13990,
+      "sha256": "2487fd781609e8d9c383eef992ebf169a142f4c275c7161099dd9d92af9cb27a"
+    },
+    {
+      "path": "supabase/tests/online-music-rooms.pglite.mjs",
+      "bytes": 32055,
+      "sha256": "2ea2d3d3782be48db9b486eabcd4c0119b4192ce7d071f726d5ac1d27580adeb"
+    }
+  ]
+}

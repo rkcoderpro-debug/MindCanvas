@@ -409,3 +409,22 @@
 .online-room-card-actions .secondary-button { flex: 1; width: auto; }
 .online-room-card-actions .online-room-delete { flex: 0 0 auto; }
 .online-room-delete { color: var(--danger, #b33149); }
+
+/* The room remains mounted when minimized. Only the foreground room owns this space. */
+.main-area:has(> .online-room-session:not([hidden]) [data-room-kind="music"]) > .workspace-route-content {
+  display: none;
+}
+.online-room-session:has([data-room-kind="music"]) {
+  align-self: start;
+  padding-block-start: 2px;
+  gap: 10px;
+}
+.online-room-interior[data-room-kind="music"] .online-room-header {
+  align-items: flex-start;
+}
+.online-room-interior[data-room-kind="music"] .online-room-header .online-room-actions {
+  flex-wrap: wrap;
+  max-inline-size: 100%;
+}
+.online-room-session .online-room-player-local { flex-wrap: wrap; margin-block: 4px 0; }
+body:has(.online-room-session:not([hidden]) [data-room-kind="music"]) .music-island:not(.room-island) { display: none; }

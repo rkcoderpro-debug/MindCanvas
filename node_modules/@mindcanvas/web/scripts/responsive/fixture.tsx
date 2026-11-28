@@ -24,6 +24,8 @@ import { upsertQuizTest } from "../../src/lib/quizStore";
 import { musicStore } from "../../src/lib/musicStorage";
 import { saveStoredLab } from "../../src/lib/labStorage";
 import { emptyLabEditor } from "../../src/components/LabEditorDialog";
+import OnlineMusicRoom from "../../src/components/OnlineMusicRoom";
+import { PageChromeProvider, ShellBack } from "../../src/components/PageNavigation";
 import { LanguageProvider } from "../../src/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import "../../src/styles.css";
@@ -162,6 +164,15 @@ async function seedDocuments() {
 
 async function main() {
   const root = createRoot(document.getElementById("root")!);
+  if (location.pathname === "/qa/music-room") {
+    root.render(<LanguageProvider><PageChromeProvider openQuickActions={() => {}}><main className="app-shell"><div className="main-area">
+      <header className="topbar"><ShellBack/></header>
+      <div className="workspace-route-content" style={{ minHeight: 180 }}/>
+      <OnlineMusicRoom link={{ id: "60000000-0000-4000-8000-000000000001" }} owner="host" vi
+        onBack={() => {}} onMinimize={() => {}} onRestore={() => {}}/>
+    </div></main></PageChromeProvider></LanguageProvider>);
+    return;
+  }
   const qaMusic = new URLSearchParams(location.search).get("qa-music");
   if (qaMusic === "local") {
     const sampleRate = 8000, sampleCount = 8 * sampleRate;

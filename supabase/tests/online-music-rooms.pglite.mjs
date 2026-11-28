@@ -360,6 +360,75 @@ try {
   assert.deepEqual(await deleteRoom(approvalRoom,guest),{ kind:"music",deleted:true });
   assert.ok(!(await value("select online_room_media_purges() as value")).includes(approvalRoom));
   console.log("Room-code SQL passed: backfill, private entry, attempt limits, owner-only deletion and replacement.");
+  {
+    await unwrap();
+    await db.exec(await readFile(new URL("../migrations/0049_online_room_shared_music.sql", import.meta.url), "utf8"));
+    const playlist = "PLRoomExample";
+    const sharedPassword = "shared-room-password";
+    const createWithMusic = (video, list) => value(
+      "select create_online_room_v6820('music','Shared music','','private','compact',true,'password',$1,$2,$3,'First track') as value",
+      [sharedPassword, video, list]
+    );
+    const snapshot = (id, client) => value("select read_online_room($1,$2) as value", [id,client]);
+    const leave = (id, client) => value("select ping_online_room($1,$2,true) as value", [id,client]);
+    const actMusic = (id, client, action, params) =>
+      value("select act_online_room($1,$2,$3,$4) as value", [id,client,action,params]);
+    await user(guest);
+    await assert.rejects(createWithMusic("bad",null), /ONLINE_INPUT/);
+    const musicRoom = await createWithMusic(null,playlist);
+    await unwrap();
+    const musicCode = await value("select room_code as value from online_rooms where id=$1", [musicRoom]);
+    assert.equal(await value("select is_playing as value from online_rooms where id=$1", [musicRoom]), false);
+    await user(guest);
+    assert.equal((await joinCode(musicRoom,guestClient,null)).state,"active");
+    const initial = (await snapshot(musicRoom, guestClient)).playback;
+    assert.equal(initial.playlist_id,playlist);
+    assert.equal(initial.playlist_index,0);
+    assert.ok(initial.playing);
+    await assert.rejects(actMusic(musicRoom,guestClient,"pause",{revision:initial.revision}),/ONLINE_MUSIC_LOCKED/);
+    await actMusic(musicRoom,guestClient,"track",{playlist_id:"PLQueuedExample",title:"Up next"});
+    assert.equal((await snapshot(musicRoom, guestClient)).queue[0].playlist_id,"PLQueuedExample");
+    await user(outsider);
+    assert.equal((await joinCode(musicRoom,outsiderClient,musicCode,sharedPassword)).state,"active");
+    assert.equal((await snapshot(musicRoom,outsiderClient)).playback.revision,initial.revision);
+    await actMusic(musicRoom,outsiderClient,"music_ended",{revision:initial.revision,index:0,has_next:true});
+    const second = (await snapshot(musicRoom,outsiderClient)).playback;
+    assert.equal(second.playlist_index,1);
+    await user(guest);
+    await assert.rejects(actMusic(musicRoom,guestClient,"music_ended",{revision:initial.revision,index:0,has_next:true}),/ONLINE_PLAYBACK_CHANGED/);
+    assert.equal(await leave(musicRoom,guestClient),"left");
+    await unwrap();
+    await db.query("update online_room_members set last_seen=now()-interval '4 minutes' where room_id=$1 and user_id=$2",[musicRoom,guest]);
+    await user(outsider);
+    assert.ok((await snapshot(musicRoom,outsiderClient)).playback.playing);
+    assert.equal(await leave(musicRoom,outsiderClient),"left");
+    await unwrap();
+    assert.equal(await value("select is_playing as value from online_rooms where id=$1",[musicRoom]),false);
+    await user(guest);
+    assert.equal((await joinCode(musicRoom,guestClient,null)).state,"active");
+    const resumed = (await snapshot(musicRoom,guestClient)).playback;
+    assert.equal(resumed.playlist_index,1);
+    assert.ok(resumed.playing);
+    await unwrap();
+    await db.query("update online_room_members set lease_until=now()-interval '1 second' where room_id=$1 and user_id=$2",[musicRoom,guest]);
+    await db.query("update online_rooms set play_at=now()-interval '30 seconds',music_lease_until=now()-interval '20 seconds',play_offset=0 where id=$1",[musicRoom]);
+    await user(outsider);
+    assert.equal((await joinCode(musicRoom,outsiderClient,musicCode,sharedPassword)).state,"active");
+    const afterExpiry = (await snapshot(musicRoom,outsiderClient)).playback;
+    assert.equal(afterExpiry.playlist_index,1);
+    assert.ok(Number(afterExpiry.offset) >= 9 && Number(afterExpiry.offset) < 12);
+    await actMusic(musicRoom,outsiderClient,"music_ended",{revision:afterExpiry.revision,index:1,has_next:false});
+    assert.equal((await snapshot(musicRoom,outsiderClient)).playback.playlist_id,"PLQueuedExample");
+    await unwrap();
+    await db.query("update online_room_members set seat=null,lease_until=null,client_id=null where room_id=$1",[piano]);
+    await db.query("update online_rooms set is_playing=false,play_offset=37,music_lease_until=null where id=$1",[piano]);
+    await user(host);
+    assert.equal((await joinCode(piano,hostClient,null)).state,"active");
+    const official = (await snapshot(piano,hostClient)).playback;
+    assert.ok(official.playing);
+    assert.equal(Number(official.offset),37);
+    console.log("Shared music SQL passed: playlist creation, room revisions, duplicate end events, host departure, final departure and expired leases.");
+  }
 } finally {
   await db.close();
 }

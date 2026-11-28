@@ -44,7 +44,7 @@ vi.mock("livekit-client", async imported => {
   }
   return { ...rtc, Room: FakeRoom };
 });
-vi.mock("./OnlineRoomYouTube", () => ({ default: () => <div data-test-player/> }));
+vi.mock("./OnlineRoomYouTube", () => ({ default: ({ volume }: { volume: number }) => <div data-test-player data-volume={volume}/> }));
 const owner = "90000000-0000-4000-8000-000000000001";
 const room: OnlineRoom = {
   id: "60000000-0000-4000-8000-000000000001", kind: "music", official: true, name: "Góc nhạc tập trung", topic: "Học cùng nhau",
@@ -80,14 +80,12 @@ afterEach(async () => {
 });
 const tick = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 135)); });
 const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find(item => item.textContent?.trim() === name || item.getAttribute("aria-label") === name)!;
-it("enters an official room, keeps playback opt-in and changes the seat without tying it to a layout", async () => {
+it("enters an official room and changes the seat without tying it to a layout", async () => {
   await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
   await act(async () => button("Vào Góc nhạc tập trung").click());
   for (let n = 0; n < 8 && !host.querySelector(".online-room-seat"); n++) await tick();
   expect(host.querySelectorAll(".online-room-seat")).toHaveLength(20);
   expect(host.querySelector('[data-self="true"]')?.getAttribute("title")).toContain("Ghế 3");
-  expect(host.querySelector("[data-test-player]")).toBeNull();
-  await act(async () => button("Nghe cùng phòng").click());
   expect(host.querySelector("[data-test-player]")).toBeTruthy();
   await act(async () => button("Chuyển tới ghế 7").click());
   await tick();
@@ -115,15 +113,53 @@ it("does not open room media or join the live channel while approval is pending"
 });
 
 
-it("starts the new official piano player on entry and can stop listening locally", async () => {
+it("mutes the official piano locally without stopping the room or replacing the player", async () => {
   mock.read.mockResolvedValue({ ...fixture(), playback: { ...fixture().playback, video_id: "3Lfr3BhvkQY" } });
   await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
   await act(async () => button("Vào Góc nhạc tập trung").click());
   await tick();
-  expect(host.querySelector("[data-test-player]")).toBeTruthy();
-  await act(async () => button("Dừng nghe trên máy này").click());
-  expect(host.querySelector("[data-test-player]")).toBeNull();
-  expect(button("Nghe cùng phòng")).toBeTruthy();
+  const player = host.querySelector("[data-test-player]")!;
+  expect(player.getAttribute("data-volume")).toBe("0.65");
+  await act(async () => button("Tắt tiếng").click());
+  expect(host.querySelector("[data-test-player]")).toBe(player);
+  expect(player.getAttribute("data-volume")).toBe("0");
+  expect(mock.act).not.toHaveBeenCalled();
+  await act(async () => button("Bật tiếng").click());
+  expect(player.getAttribute("data-volume")).toBe("0.65");
+});
+
+it.each([
+  { link: "https://music.youtube.com/playlist?list=PLExampleRoom", list: "PLExampleRoom", video: null },
+  { link: "https://music.youtube.com/watch?v=5qap5aO4i8I", list: null, video: "5qap5aO4i8I" },
+  { link: "", list: null, video: null },
+  { link: "https://example.com/invalid", list: null, video: null },
+])("validates and saves opening music when creating a room ($link)", async ({ link, list, video }) => {
+  mock.create.mockResolvedValue(room.id);
+  await act(async () => root.render(<LanguageProvider><OnlineRoomsPage owner={owner}/></LanguageProvider>));
+  await act(async () => button("Tạo phòng").click());
+  const form = host.querySelector<HTMLFormElement>(".online-room-create-form")!;
+  const open = form.querySelector<HTMLInputElement>('input[type=url]')!;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  const write = (input: HTMLInputElement, value: string) => {
+    setValue.call(input,value); input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  await act(async () => {
+    write(form.querySelector("input")!, "Nhạc chung");
+    if (link) write(open,link);
+  });
+  if (video) await act(async () => write(form.querySelector("input[maxlength='96']")!, "Bản mở đầu"));
+  await act(async () => button("Tạo và vào phòng").click());
+  if (link.includes("example.com")) {
+    expect(mock.create).not.toHaveBeenCalled();
+    expect(form.textContent).toContain("hợp lệ");
+  } else if (list || video) {
+    expect(mock.create).toHaveBeenCalledWith(expect.objectContaining({
+      openingTrack: { video_id: video, playlist_id: list, title: video ? "Bản mở đầu" : "Danh sách YouTube Music" },
+    }));
+  } else {
+    expect(mock.create).toHaveBeenCalledWith(expect.objectContaining({ name: "Nhạc chung" }));
+    expect(mock.create.mock.calls[0][0].openingTrack).toBeUndefined();
+  }
 });
 
 it("creates a meeting with a table and lets people interact before connecting media", async () => {
@@ -293,8 +329,7 @@ const islandButton = (name: string) => [...island().querySelectorAll<HTMLButtonE
 it("retains the joined room and its player while opening Quiz and only releases the seat on Leave", async () => {
   await act(async () => root.render(workspacePages()));
   await act(async () => button("Vào Góc nhạc tập trung").click());
-  for (let n = 0; n < 8 && !button("Nghe cùng phòng"); n++) await tick();
-  await act(async () => button("Nghe cùng phòng").click());
+  for (let n = 0; n < 8 && !host.querySelector("[data-test-player]"); n++) await tick();
   const player = host.querySelector("[data-test-player]");
   const client = mock.join.mock.calls[0][1];
   await act(async () => button("Mở Quiz").click());
@@ -398,8 +433,7 @@ it("stops a room player when the host closes the room while the learner is on Qu
   mock.watch.mockImplementation((_id, listener) => { refresh.mockImplementation(listener); return () => {}; });
   await act(async () => root.render(workspacePages()));
   await act(async () => button("Vào Góc nhạc tập trung").click());
-  for (let n = 0; n < 8 && !button("Nghe cùng phòng"); n++) await tick();
-  await act(async () => button("Nghe cùng phòng").click());
+  for (let n = 0; n < 8 && !host.querySelector("[data-test-player]"); n++) await tick();
   await act(async () => button("Mở Quiz").click());
   mock.read.mockResolvedValue({ state: "closed" });
   await act(async () => refresh("room"));
