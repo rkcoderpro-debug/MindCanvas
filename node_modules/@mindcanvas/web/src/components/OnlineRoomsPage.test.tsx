@@ -325,7 +325,7 @@ function WorkspacePages() {
 }
 const workspacePages = () => <LanguageProvider><LearningNavigationProvider owner={owner}><WorkspacePages/></LearningNavigationProvider></LanguageProvider>;
 const island = () => document.querySelector<HTMLElement>(".room-island")!;
-const expandIsland = () => act(async () => island().querySelector<HTMLButtonElement>(".music-island-open")!.click());
+const toggleIsland = () => act(async () => island().querySelector<HTMLButtonElement>(".music-island-open")!.click());
 const islandButton = (name: string) => [...island().querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent === name)!;
 it("retains the joined room and its player while opening Quiz and only releases the seat on Leave", async () => {
   await act(async () => root.render(workspacePages()));
@@ -335,17 +335,18 @@ it("retains the joined room and its player while opening Quiz and only releases 
   const client = mock.join.mock.calls[0][1];
   await act(async () => button("Mở Quiz").click());
   expect(host.querySelector('[aria-label="Đáp án Quiz"]')).toBeTruthy();
+  expect(island().querySelector(".room-youtube-slot")).toBeTruthy();
+  await toggleIsland();
   expect(island().querySelector(".room-youtube-slot")).toBeNull();
   expect(host.querySelector("[data-test-player]")).toBe(player);
   expect(mock.leave).not.toHaveBeenCalled();
-  await expandIsland();
+  await toggleIsland();
   expect(island().querySelector(".room-youtube-slot")).toBeTruthy();
   await act(async () => islandButton("Quay lại phòng").click());
   expect(host.querySelector(".online-room-session")?.hasAttribute("hidden")).toBe(false);
   expect(host.querySelector("[data-test-player]")).toBe(player);
   expect(mock.join).toHaveBeenCalledTimes(1);
   await act(async () => button("Mở Quiz").click());
-  await expandIsland();
   await act(async () => islandButton("Rời phòng").click());
   expect(mock.leave).toHaveBeenCalledWith(room.id, client, true);
   expect(island()).toBeNull();
@@ -385,28 +386,19 @@ it("keeps a single LiveKit connection and screen preview in the island, then clo
   }
 });
 
-it("plays the separate official audio source without a player frame or interruption on Quiz", async () => {
-  const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
-  const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
-  try {
-    mock.read.mockResolvedValue({ ...fixture(), playback: { ...fixture().playback, video_id: "3Lfr3BhvkQY" } });
-    await act(async () => root.render(workspacePages()));
-    await act(async () => button("Vào Góc nhạc tập trung").click());
-    for (let n = 0; n < 8 && !button("Nghe piano nền"); n++) await tick();
-    await act(async () => button("Nghe piano nền").click());
-    const audio = host.querySelector("audio")!;
-    expect(audio.getAttribute("src")).toContain("mindcanvas-focus-piano.mp3");
-    expect(play).toHaveBeenCalled();
-    await act(async () => button("Mở Quiz").click());
-    expect(host.querySelector("audio")).toBe(audio);
-    expect(host.querySelector("[data-test-player]")).toBeNull();
-    expect(pause).not.toHaveBeenCalled();
-    expect(mock.leave).not.toHaveBeenCalled();
-    await act(async () => (island().querySelector(".music-island-open") as HTMLButtonElement).click());
-    await act(async () => islandButton("Rời phòng").click());
-    expect(pause).toHaveBeenCalledTimes(1);
-    expect(host.querySelector("audio")).toBeNull();
-  } finally { play.mockRestore(); pause.mockRestore(); }
+it("keeps the official room on YouTube without offering its separate piano audio", async () => {
+  mock.read.mockResolvedValue({ ...fixture(), playback: { ...fixture().playback, video_id: "3Lfr3BhvkQY" } });
+  await act(async () => root.render(workspacePages()));
+  await act(async () => button("Vào Góc nhạc tập trung").click());
+  for (let n = 0; n < 8 && !host.querySelector("[data-test-player]"); n++) await tick();
+  expect(host.querySelector("[data-test-player]")).toBeTruthy();
+  expect(host.querySelector("audio")).toBeNull();
+  expect(button("Nghe piano nền")).toBeUndefined();
+  expect(host.textContent).not.toContain("Piano nền là bản khác");
+  await act(async () => button("Mở Quiz").click());
+  expect(island().querySelector(".room-youtube-slot")).toBeTruthy();
+  expect(island().textContent).not.toContain("Nghe piano nền");
+  expect(mock.leave).not.toHaveBeenCalled();
 });
 
 it("asks before changing rooms and preserves the current seat if the user cancels", async () => {

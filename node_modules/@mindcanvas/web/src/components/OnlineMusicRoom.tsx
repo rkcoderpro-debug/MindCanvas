@@ -1,14 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Headphones, Link2, Lock, Lightbulb, Maximize2, MessageCircle, Minimize2, Music2, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, Volume2, VolumeX, X } from "lucide-react";
+import { Armchair, ArrowDown, ArrowUp, BookOpen, Check, Copy, Crown, DoorOpen, Link2, Lock, Lightbulb, Maximize2, MessageCircle, Minimize2, Music2, Plus, Radio, Send, SkipForward, Trash2, Users, Paperclip, FileText, Eye, Download, Flag, MicOff, ScreenShare, Video, Volume2, VolumeX, X } from "lucide-react";
 import { useOnlineRoom } from "../hooks/useOnlineRoom";
-import { OFFICIAL_PIANO_VIDEO, type MeetingCommand, loadRoomAvatars, deleteOnlineRoom, OnlineRoomError, roomIssue, prepareRoomMusicTrack, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
+import { type MeetingCommand, loadRoomAvatars, deleteOnlineRoom, OnlineRoomError, roomIssue, prepareRoomMusicTrack, type RoomAction, type RoomAttendee, type RoomLayout, type RoomMessage, type RoomSnapshot, type RoomReportReason, type MeetingRoomFile, MEETING_FILE_ACCEPT, MEETING_FILE_LIMIT } from "../lib/onlineRooms";
 import { onlineRoomUrl, type OnlineRoomLink } from "../lib/onlineRoomRoutes";
 import { copyTextWithFallback } from "../lib/share";
 import { PageBack } from "./PageNavigation";
 import { ProfileAvatar } from "./ProfileAvatar";
 import OnlineRoomYouTube from "./OnlineRoomYouTube";
 import RoomMusicFields from "./RoomMusicFields";
-import RoomBackgroundAudio from "./RoomBackgroundAudio";
 import RoomIsland from "./RoomIsland";
 import { useRoomAudioPriority } from "./MusicPlayer";
 import Dialog from "./Dialog";
@@ -101,7 +100,7 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const [layout, setLayout] = useState<RoomLayout | null>(() => storedLayout(isMeeting));
   const [panel, setPanel] = useState<Tab>("chat");
   const [av, setAv] = useState<Map<string,string>>(new Map());
-  const [background, setBackground] = useState(false);
+  const [roomVideoVisible, setRoomVideoVisible] = useState(false);
   const [volume, setVolume] = useState(.65);
   const [muted, setMuted] = useState(false);
   const [ambient, setAmbient] = useState(() => {
@@ -138,19 +137,17 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
   const showQueue = room.music_enabled && !room.official;
   const current = room.music_enabled && (playback.video_id || playback.playlist_id) ? playback : null;
   const displayedTitle = trackName?.revision === playback.revision ? trackName.title : playback.title;
-  const backgroundAvailable = room.official && room.music_enabled && current?.video_id === OFFICIAL_PIANO_VIDEO;
-  const audioOnly = Boolean(backgroundAvailable && background);
-  const youtubeRequested = Boolean(current && !audioOnly);
   const localVolume = muted ? 0 : volume;
   const playerSlot = foreground ? inlinePlayer : miniPlayer;
   const actionsSlot = foreground ? inlineActions : miniActions;
-  const projectedRoomAudio = !isMeeting && !!current && playback.playing && localVolume > 0;
+  const projectedRoomAudio = !isMeeting && !!current && playback.playing && localVolume > 0 &&
+    roomVideoVisible && (foreground || islandExpanded);
   useRoomAudioPriority(projectedRoomAudio);
   useEffect(() => {
     if (foreground) {
       setIslandExpanded(false);
     } else {
-      setIslandExpanded(isMeeting);
+      setIslandExpanded(isMeeting || Boolean(current));
       setShareShown(false); setConfirm(null); setReport(null);
     }
   // Choosing to collapse the player remains effective until the next change of screen.
@@ -166,9 +163,6 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
         value={localVolume} onChange={event => { setVolume(Number(event.target.value)); setMuted(false); }}/>
     </label>
   </>;
-  const sourceControl = backgroundAvailable && <button className="secondary-button" type="button" onClick={() => setBackground(!audioOnly)}>
-    <Music2 size={14}/>{audioOnly ? label("Đổi sang YouTube", "Switch to YouTube") : label("Nghe piano nền", "Play background piano")}
-  </button>;
   const readyTracks = queue.filter(track => track.status === "queued");
   const pendingTracks = queue.filter(track => track.status === "pending");
   const avatarSignature = JSON.stringify(members.map(person => [person.id, person.avatar_url, person.avatar_slot, person.avatar_revision]));
@@ -256,24 +250,22 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
     text: isMeeting ? label("Cuộc gọi và chat sẽ dừng cho mọi người. Liên kết mời sẽ hết hiệu lực.", "The call and chat will end for everyone. The invitation link will expire.") : label("Nhạc và chat sẽ dừng cho mọi người. Liên kết mời của phòng này sẽ hết hiệu lực.", "Music and chat will stop for everyone. This room's invitation link will stop working.") });
 
   return <div className="online-room-interior" data-layout={roomLayout} data-wide={wide} data-room-kind={room.kind}>
-    {!isMeeting && !foreground && <RoomIsland name={audioOnly ? label("Bình minh · Piano MindCanvas", "Daybreak · MindCanvas Piano") : displayedTitle || room.name} vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
+    {!isMeeting && !foreground && <RoomIsland name={displayedTitle || room.name} vi={vi} expanded={islandExpanded} setExpanded={setIslandExpanded}
       onRestore={restore} onLeave={exit} live={!reconnecting}
-      status={reconnecting ? label("Đang kết nối lại…", "Reconnecting…") : current && playback.playing
-        ? audioOnly ? label("Đang nghe piano nền", "Background piano playing") : label("YouTube · đang nghe cùng phòng", "YouTube · listening with the room")
+      status={reconnecting ? label("Đang kết nối lại…", "Reconnecting…") : roomVideoVisible && current && playback.playing
+        ? label("YouTube · đang nghe cùng phòng", "YouTube · listening with the room")
         : label("Vẫn ở trong phòng", "Still in the room")}>
       {current && <>
-        {youtubeRequested && <div ref={setMiniPlayer} className="room-youtube-slot"/>}
+        <div ref={setMiniPlayer} className="room-youtube-slot"/>
         <div ref={setMiniActions}/>
-        <div className="room-island-controls">{volumeControl}{sourceControl}</div>
-        {backgroundAvailable && <small>{label("Piano nền là bản khác video YouTube.", "Background piano is a separate track from the YouTube video.")}</small>}
+        <div className="room-island-controls">{volumeControl}</div>
       </>}
     </RoomIsland>}
-    {!isMeeting && current && youtubeRequested && <OnlineRoomYouTube key={current.playlist_id ?? current.video_id} playback={current} serverNow={serverNow}
+    {!isMeeting && current && <OnlineRoomYouTube key={current.playlist_id ?? current.video_id} playback={current} serverNow={serverNow}
       onEnded={onEnded}
       onTitle={(revision, title) => setTrackName(old => old?.revision === revision && old.title === title ? old : { revision, title })}
       vi={vi} slot={playerSlot} compact={!foreground} volume={localVolume} controlSlot={actionsSlot} ambient={ambient}
-      onShow={foreground ? () => inlinePlayer?.scrollIntoView({ block: "center" }) : restore}/>}
-    {!isMeeting && current && audioOnly && <RoomBackgroundAudio playback={current} serverNow={serverNow} volume={localVolume} slot={actionsSlot} vi={vi}/>}
+      onVisibilityChange={setRoomVideoVisible}/>}
     <header className="online-room-header">
       <div><span className="online-room-live-tag">{isMeeting ? <Video size={15}/> : <Radio size={15}/>} {isMeeting ? label("PHÒNG HỌC / HỌP", "STUDY / MEETING") : label("PHÒNG NGHE NHẠC", "MUSIC ROOM")}{room.visibility === "private" && <Lock size={13} aria-label={label("Phòng riêng", "Private room")}/>}</span>
         <h1 ref={heading} tabIndex={-1}>{room.name}</h1><p>{room.topic || `${label("Chủ phòng:", "Host:")} ${room.host_name}`}</p></div>
@@ -307,18 +299,14 @@ function RoomInterior({ snapshot, messages, owner, vi, action, meetingToken, mee
           {current ? <>
             <strong className="online-room-track-title">{displayedTitle || label("Video YouTube", "YouTube video")}</strong>
             {current.attribution && <small className="online-room-credit">{current.attribution}</small>}
-            {youtubeRequested ? <div ref={setInlinePlayer} className="room-youtube-slot in-room"/>
-              : <div className="online-room-board-invite"><Headphones size={31}/><p>
-                  {label("Bình minh · Piano MindCanvas", "Daybreak · MindCanvas Piano")}</p></div>}
+            <div ref={setInlinePlayer} className="room-youtube-slot in-room"/>
             <div className="online-room-player-local room-island-controls">
               {volumeControl}
-              {youtubeRequested && <button className="secondary-button" type="button" aria-pressed={ambient} onClick={toggleAmbient}>
+              <button className="secondary-button" type="button" aria-pressed={ambient} onClick={toggleAmbient}>
                 <Lightbulb size={16}/>{label("Ánh sáng nền", "Ambient light")}
-              </button>}
+              </button>
             </div>
             <div ref={setInlineActions}/>
-            {sourceControl}
-            {backgroundAvailable && <small className="room-audio-status">{label("Piano nền là bản khác video YouTube.", "Background piano is a separate track from the YouTube video.")}</small>}
           </> : <div className="online-room-board-invite"><BookOpen size={37}/>
             <strong>{room.music_enabled ? label("Chưa phát nhạc", "No music playing yet") : label("Cùng ngồi học nhé", "Let’s study together")}</strong>
             <p>{room.music_enabled ? label("Bài hát sẽ hiện ở đây khi chủ phòng chọn.", "A track will appear here when the host chooses one.")

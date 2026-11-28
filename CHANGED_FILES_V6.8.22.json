@@ -1,0 +1,67 @@
+{
+  "version": "6.8.22",
+  "baseVersion": "6.8.21",
+  "extractionRoot": "Project root containing package.json and apps/",
+  "files": [
+    {
+      "path": "RELEASE_V6.8.22.md",
+      "bytes": 618,
+      "sha256": "e383d0d7b2867dd4f87e95d4f974ec3770869488213a8c2d7b00bc059b8c321c"
+    },
+    {
+      "path": "apps/server/package.json",
+      "bytes": 849,
+      "sha256": "8efde59c444c95d4ad7118c740da8647fd704240eda38415731dfbb5d5618868"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 1142,
+      "sha256": "4765117f92fcb66853bcc924db52d6f83f5d40aa15d22f730bf973076a0aa060"
+    },
+    {
+      "path": "apps/web/scripts/responsive-check.mjs",
+      "bytes": 74830,
+      "sha256": "b8595f8205f3fda4a6ec788f7f88c6a94e84369b187c2f15461ecea7a79d097e"
+    },
+    {
+      "path": "apps/web/scripts/responsive/fixture.tsx",
+      "bytes": 16545,
+      "sha256": "c49c816128234302bc0b4ac571f8607c3ed668d3cfde35294a7ad27df44db864"
+    },
+    {
+      "path": "apps/web/src/components/OnlineMusicRoom.tsx",
+      "bytes": 52719,
+      "sha256": "38023947db2d8db1cdb4cac2372c74ca3fe07fab0baca680b8f1d2866f2def5d"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.test.tsx",
+      "bytes": 7665,
+      "sha256": "96fe055d5b32c1a97f3eb4988ff44185b5f62adeac4ce4f675e5c760894282a0"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomYouTube.tsx",
+      "bytes": 10897,
+      "sha256": "b66eaabfdd3f173b3545f0ceca8a4156befb0ecf991488195664f9e9c937c472"
+    },
+    {
+      "path": "apps/web/src/components/OnlineRoomsPage.test.tsx",
+      "bytes": 29499,
+      "sha256": "672bcc750be83cf08da24136bff2f61a8e96c8e22cfe4ab918f8b519375f6893"
+    },
+    {
+      "path": "apps/web/src/components/activityIsland.css",
+      "bytes": 4653,
+      "sha256": "c5876a626e467911b05efb86c72f85bd645e35523c439a950208a3cc8625ad3c"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 188553,
+      "sha256": "e3742171d3b7f1d6512b547d9b8168b105f2350a6db791459597518fc8a8b1f6"
+    },
+    {
+      "path": "package.json",
+      "bytes": 708,
+      "sha256": "abe81146b14613673df7e3958e7eb760ecbee156409b14c0202a0a4ed9ad05fa"
+    }
+  ]
+}

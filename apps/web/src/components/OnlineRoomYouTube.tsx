@@ -1,23 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, Maximize2, RefreshCw, Volume2 } from "lucide-react";
+import { ExternalLink, RefreshCw, Volume2 } from "lucide-react";
 import { usePlayerSlot } from "./usePlayerSlot";
 import { onlinePlaybackTime, youtubeRoomVideo, type RoomPlayback } from "../lib/onlineRooms";
 import { getYouTube, type Player } from "../lib/youtubeIframe";
 import { getYouTubeMusicTitle } from "../lib/youtubeMusicTitle";
 
-export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitle, vi, slot, compact, volume, controlSlot, ambient = false, onShow }: {
+export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitle, vi, slot, compact, volume, controlSlot, ambient = false, onVisibilityChange }: {
   playback: RoomPlayback; serverNow: () => number; onEnded: (revision: number, index: number, hasNext: boolean) => void | Promise<void>;
   onTitle?: (revision: number, title: string) => void; vi: boolean; slot: HTMLDivElement | null;
   compact: boolean; volume: number; controlSlot: HTMLElement | null;
-  ambient?: boolean; onShow?: () => void;
+  ambient?: boolean; onVisibilityChange?: (visible: boolean) => void;
 }) {
   const wrapper = useRef<HTMLDivElement>(null), player = useRef<Player | null>(null);
   const rect = usePlayerSlot(slot, 200, true);
-  const docked = !rect;
+  const videoInView = Boolean(rect);
   const [currentVideo, setCurrentVideo] = useState<{ revision: number; id: string }>();
-  const latest = useRef({ playback, serverNow, onEnded, onTitle, volume });
-  latest.current = { playback, serverNow, onEnded, onTitle, volume };
+  const latest = useRef({ playback, serverNow, onEnded, onTitle, volume, videoInView, onVisibilityChange });
+  latest.current = { playback, serverNow, onEnded, onTitle, volume, videoInView, onVisibilityChange };
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -46,7 +46,7 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitl
     iframe.src = `https://www.youtube.com/embed${playlist ? "" : "/" + video}?${params}`;
     container.replaceChildren(iframe);
 
-    const isVisible = () => document.visibilityState !== "hidden";
+    const isVisible = () => latest.current.videoInView && document.visibilityState !== "hidden";
     const publishTitle = (p: Player, revision: number, index: number) => {
       if (!playlist || index < 0 || namedRevision === revision) return;
       const href = p.getVideoUrl?.();
@@ -87,7 +87,11 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitl
     };
     apply.current = (activate = false) => { if (activate) { activationBlocked = false; requestedIndex = -1; } syncPlayer(); };
     // Visibility changes should not clear a browser's autoplay decision.
-    document.addEventListener("visibilitychange", syncPlayer);
+    const syncVisibility = () => {
+      latest.current.onVisibilityChange?.(isVisible());
+      syncPlayer();
+    };
+    document.addEventListener("visibilitychange", syncVisibility);
 
     const reportEnd = (p: Player, revision: number, index: number) => {
       if (reportedRevision === revision) return;
@@ -95,8 +99,9 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitl
       if (playlist && !items?.length) return;
       reportedRevision = revision;
       void Promise.resolve(latest.current.onEnded(revision, index, Boolean(items && index + 1 < items.length))).catch(() => {
-        if (!alive || !isVisible() || latest.current.playback.revision !== revision) return;
+        if (!alive || latest.current.playback.revision !== revision) return;
         reportedRevision = -1;
+        if (!isVisible()) return;
         endRetry = window.setTimeout(() => {
           if (alive && isVisible() && latest.current.playback.revision === revision) reportEnd(p, revision, index);
         }, 3000);
@@ -115,8 +120,8 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitl
         onStateChange: ({ data }) => {
           const p = player.current, current = latest.current.playback;
           if (!alive || failed || !p) return;
-          if (!isVisible()) { if (data === 1) p.pauseVideo(); return; }
-          if (!current.playing || reportedRevision === current.revision) return;
+          if (!isVisible() || !current.playing) { if (data === 1) p.pauseVideo(); return; }
+          if (reportedRevision === current.revision) return;
           const desired = current.playlist_index ?? 0;
           const index = playlist ? p.getPlaylistIndex() : 0;
           if (data === 1) {
@@ -146,38 +151,32 @@ export default function OnlineRoomYouTube({ playback, serverNow, onEnded, onTitl
     }).catch(fail);
     return () => {
       alive = false; window.clearTimeout(readyTimer); window.clearTimeout(endRetry);
-      document.removeEventListener("visibilitychange", syncPlayer);
+      document.removeEventListener("visibilitychange", syncVisibility);
       apply.current = () => {}; player.current = null;
       try { instance?.destroy(); } catch { /* iframe already detached */ }
       container.replaceChildren();
     };
   }, [video, playlist, playback.loop, retry, vi]);
-  useEffect(() => { apply.current(); }, [playback.revision, playback.playing]);
+  useEffect(() => { apply.current(); }, [playback.revision, playback.playing, videoInView]);
+  useEffect(() => {
+    onVisibilityChange?.(videoInView && document.visibilityState !== "hidden");
+  }, [onVisibilityChange, videoInView]);
   useEffect(() => { player.current?.setVolume(Math.round(volume * 100)); }, [volume]);
 
   const ambientVideo = video ?? (currentVideo?.revision === playback.revision ? currentVideo.id : undefined);
   return <>
-    {ambient && slot && !compact && !docked && createPortal(
+    {ambient && slot && !compact && videoInView && createPortal(
       <div className="room-ambient-light" aria-hidden="true">
         {ambientVideo && /^[A-Za-z0-9_-]{11}$/.test(ambientVideo) &&
           <img key={ambientVideo} src={`https://i.ytimg.com/vi/${ambientVideo}/mqdefault.jpg`} alt="" decoding="async" onError={event => { event.currentTarget.hidden = true; }}/>}
       </div>, slot)}
-    {createPortal(<div className={`room-youtube-float${docked ? " is-docked" : compact ? " on-island" : ""}`}
+    {createPortal(<div className={`room-youtube-float${compact ? " on-island" : ""}`}
       data-study-island-media={compact || undefined} data-clip={Boolean(rect?.clip) || undefined}
+      hidden={!videoInView} inert={!videoInView}
       style={rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height, clipPath: rect.clip } : undefined}>
-      {docked && <div className="room-youtube-dock-heading">
-        {blocked && !error
-          ? <button type="button" className="text-button" onClick={() => apply.current(true)}>
-              <Volume2 size={14}/>{vi ? "Bật âm thanh" : "Enable audio"}
-            </button>
-          : <span>{error ? (vi ? "Không phát được video" : "Video unavailable")
-              : playback.playing ? (vi ? "Đang nghe cùng phòng" : "Listening with the room") : (vi ? "Nhạc trong phòng" : "Room music")}</span>}
-        {onShow && <button className="icon-button" type="button" onClick={onShow}
-          aria-label={vi ? "Về khung video của phòng" : "Return to the room video"}><Maximize2 size={14}/></button>}
-      </div>}
       <div ref={wrapper} className="room-youtube-frame"/>
     </div>, document.body)}
-    {controlSlot && ((!docked && blocked) || error) && createPortal(<div className="room-youtube-controls">
+    {controlSlot && ((videoInView && blocked) || error) && createPortal(<div className="room-youtube-controls">
       {error ? <>
         <p className="online-room-player-note" role="status">{vi ? "Không phát được trong phòng. Nguồn nhạc có thể không cho phép nhúng." : "Playback failed. The source may not allow embedding."}</p>
         <div className="online-room-player-actions">

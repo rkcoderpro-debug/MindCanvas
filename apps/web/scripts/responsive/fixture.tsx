@@ -169,6 +169,7 @@ function MusicRoomFixture() {
     <div className="workspace-route-content" style={{ minHeight: 180 }}/>
     <OnlineMusicRoom link={{ id: "60000000-0000-4000-8000-000000000001" }} owner="host" vi foreground={foreground}
       onBack={() => {}} onMinimize={() => setForeground(false)} onRestore={() => setForeground(true)}/>
+    {foreground && <div aria-hidden="true" style={{ flex: "0 0 100dvh" }}/>}
   </div></main>;
 }
 
